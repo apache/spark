@@ -1903,7 +1903,7 @@ setMethod("except",
 #' }
 setMethod("write.df",
           signature(df = "DataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "append", ...){
+          function(df, path, source = NULL, mode = "error", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
@@ -1928,7 +1928,7 @@ setMethod("write.df",
 #' @export
 setMethod("saveDF",
           signature(df = "DataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "append", ...){
+          function(df, path, source = NULL, mode = "error", ...){
             write.df(df, path, source, mode, ...)
           })
 
@@ -1968,7 +1968,7 @@ setMethod("saveDF",
 setMethod("saveAsTable",
           signature(df = "DataFrame", tableName = "character", source = "character",
                     mode = "character"),
-          function(df, tableName, source = NULL, mode="append", ...){
+          function(df, tableName, source = NULL, mode="error", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
