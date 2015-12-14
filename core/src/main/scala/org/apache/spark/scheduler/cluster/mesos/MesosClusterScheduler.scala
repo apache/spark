@@ -422,6 +422,37 @@ private[spark] class MesosClusterScheduler(
     desc.schedulerProperties.get("spark.cores.max").map { v =>
       options ++= Seq("--total-executor-cores", v)
     }
+
+    /**
+      * The properties to pass along from Spark Submit to the Mesos Scheduler.
+      * http://spark.apache.org/docs/1.5.1/configuration.html#available-properties
+      */
+    val propertiesToPropagate = Set(
+      "spark.driver.extraClassPath",
+      "spark.driver.extraJavaOptions",
+      "spark.driver.extraLibraryPath",
+      "spark.driver.userClassPathFirst",
+      "spark.executor.extraClassPath",
+      "spark.executor.extraJavaOptions",
+      "spark.executor.extraLibraryPath",
+      "spark.executor.userClassPathFirst",
+      "spark.python.profile",
+      "spark.python.profile.dump",
+      "spark.python.worker.memory",
+      "spark.python.worker.reuse",
+      "spark.ui.killEnabled",
+      "spark.ui.port",
+      "spark.ui.retainedJobs",
+      "spark.ui.retainedStages",
+      "spark.worker.ui.retainedExecutors",
+      "spark.worker.ui.retainedDrivers"
+    )
+
+    desc.schedulerProperties
+      .filter({ case (k, v) => propertiesToPropagate.contains(k) || k.contains("spark.executorEnv") })
+      .foreach { case (key, value) =>
+        options ++= Seq("--conf", Seq(key, "=\"", value, "\"").mkString(""))
+      }
     options
   }
 
