@@ -98,7 +98,7 @@ abstract class DStream[T: ClassTag] (
   private[streaming] var checkpointDuration: Duration = null
   private[streaming] val checkpointData = new DStreamCheckpointData(this)
   @transient
-  private[streaming] var restoredFromCheckpointData = false
+  private var restoredFromCheckpointData = false
 
   // Reference to whole DStream graph
   private[streaming] var graph: DStreamGraph = null
