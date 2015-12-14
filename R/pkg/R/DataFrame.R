@@ -651,7 +651,6 @@ setMethod("write.parquet",
             invisible(callJMethod(write, "parquet", path))
           })
 
-#' @family DataFrame functions
 #' @rdname write.parquet
 #' @name saveAsParquetFile
 #' @export
@@ -659,7 +658,7 @@ setMethod("saveAsParquetFile",
           signature(x = "DataFrame", path = "character"),
           function(x, path) {
             .Deprecated("write.parquet")
-            write.parquet(path)
+            write.parquet(x, path)
           })
 
 #' Distinct

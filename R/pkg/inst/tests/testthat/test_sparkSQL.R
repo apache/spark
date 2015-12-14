@@ -371,22 +371,49 @@ test_that("Collect DataFrame with complex types", {
   expect_equal(bob$height, 176.5)
 })
 
-test_that("read.json()/jsonFile() and write.json()", {
+test_that("read/write json files", {
+  # Test read.df
+  df <- read.df(sqlContext, jsonPath, "json")
+  expect_is(df, "DataFrame")
+  expect_equal(count(df), 3)
+
+  # Test read.df with a user defined schema
+  schema <- structType(structField("name", type = "string"),
+                       structField("age", type = "double"))
+
+  df1 <- read.df(sqlContext, jsonPath, "json", schema)
+  expect_is(df1, "DataFrame")
+  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
+
+  # Test loadDF
+  df2 <- loadDF(sqlContext, jsonPath, "json", schema)
+  expect_is(df2, "DataFrame")
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
+
+  # Test read.json
   df <- read.json(sqlContext, jsonPath)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
-  # read.json()/jsonFile() works with multiple input paths
+
+  # Test write.df
   jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".json")
-  write.json(df, jsonPath2)
-  jsonDF1 <- read.json(sqlContext, c(jsonPath, jsonPath2))
+  write.df(df, jsonPath2, "json", mode="overwrite")
+
+  # Test write.json
+  jsonPath3 <- tempfile(pattern="jsonPath3", fileext=".json")
+  write.json(df, jsonPath3)
+
+  # Test read.json()/jsonFile() works with multiple input paths
+  jsonDF1 <- read.json(sqlContext, c(jsonPath2, jsonPath3))
   expect_is(jsonDF1, "DataFrame")
   expect_equal(count(jsonDF1), 6)
   # Suppress warnings because jsonFile is deprecated
-  jsonDF2 <- suppressWarnings(jsonFile(sqlContext, c(jsonPath, jsonPath2)))
+  jsonDF2 <- suppressWarnings(jsonFile(sqlContext, c(jsonPath2, jsonPath3)))
   expect_is(jsonDF2, "DataFrame")
   expect_equal(count(jsonDF2), 6)
 
   unlink(jsonPath2)
+  unlink(jsonPath3)
 })
 
 test_that("jsonRDD() on a RDD with json string", {
@@ -455,6 +482,7 @@ test_that("insertInto() on a registered table", {
   expect_equal(first(sql(sqlContext, "select * from table1 order by age"))$name, "Bob")
   dropTempTable(sqlContext, "table1")
 
+  unlink(jsonPath2)
   unlink(parquetPath2)
 })
 
@@ -846,33 +874,6 @@ test_that("column calculation", {
   d <- collect(select(df, alias(df$age + 1, "age2")))
   expect_equal(names(d), c("age2"))
   df2 <- select(df, lower(df$name), abs(df$age))
-  expect_is(df2, "DataFrame")
-  expect_equal(count(df2), 3)
-})
-
-test_that("read.df() from json file", {
-  df <- read.df(sqlContext, jsonPath, "json")
-  expect_is(df, "DataFrame")
-  expect_equal(count(df), 3)
-
-  # Check if we can apply a user defined schema
-  schema <- structType(structField("name", type = "string"),
-                       structField("age", type = "double"))
-
-  df1 <- read.df(sqlContext, jsonPath, "json", schema)
-  expect_is(df1, "DataFrame")
-  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
-
-  # Run the same with loadDF
-  df2 <- loadDF(sqlContext, jsonPath, "json", schema)
-  expect_is(df2, "DataFrame")
-  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
-})
-
-test_that("write.df() as parquet file", {
-  df <- read.df(sqlContext, jsonPath, "json")
-  write.df(df, parquetPath, "parquet", mode="overwrite")
-  df2 <- read.df(sqlContext, parquetPath, "parquet")
   expect_is(df2, "DataFrame")
   expect_equal(count(df2), 3)
 })
@@ -1449,20 +1450,19 @@ test_that("mutate(), transform(), rename() and names()", {
   detach(airquality)
 })
 
-test_that("write.df() on DataFrame and works with read.parquet", {
-  df <- read.json(sqlContext, jsonPath)
+test_that("read/write Parquet files", {
+  df <- read.df(sqlContext, jsonPath, "json")
+  # Test write.df and read.df
   write.df(df, parquetPath, "parquet", mode="overwrite")
-  parquetDF <- read.parquet(sqlContext, parquetPath)
-  expect_is(parquetDF, "DataFrame")
-  expect_equal(count(df), count(parquetDF))
-})
+  df2 <- read.df(sqlContext, parquetPath, "parquet")
+  expect_is(df2, "DataFrame")
+  expect_equal(count(df2), 3)
 
-test_that("read.parquet()/parquetFile() and write.parquet()/saveAsParquetFile()", {
-  df <- read.json(sqlContext, jsonPath)
+  # Test write.parquet/saveAsParquetFile and read.parquet/parquetFile
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
   write.parquet(df, parquetPath2)
   parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
-  write.parquet(df, parquetPath3)
+  suppressWarnings(saveAsParquetFile(df, parquetPath3))
   parquetDF <- read.parquet(sqlContext, c(parquetPath2, parquetPath3))
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
