@@ -1435,21 +1435,31 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
             StructField("dummy", StringType, true) :: Nil)
-        val jsonDF = sqlContext.read.schema(schema).json(additionalCorruptRecords)
-        jsonDF.registerTempTable("jsonTable")
 
-        // In HiveContext, backticks should be used to access columns starting with a underscore.
-        checkAnswer(
-          sql(
-            """
-              |SELECT dummy, _unparsed
-              |FROM jsonTable
-            """.stripMargin),
-          Row("test", null) ::
-          Row(null, """42""") ::
-          Row(null, """     ","ian":"test"}""") :: Nil
-        )
+        {
+          // We need to make sure we can infer the schema.
+          val jsonDF = sqlContext.read.json(additionalCorruptRecords)
+          assert(jsonDF.schema === schema)
+        }
 
+        {
+          val jsonDF = sqlContext.read.schema(schema).json(additionalCorruptRecords)
+          jsonDF.registerTempTable("jsonTable")
+
+          // In HiveContext, backticks should be used to access columns starting with a underscore.
+          checkAnswer(
+            sql(
+              """
+                |SELECT dummy, _unparsed
+                |FROM jsonTable
+              """.stripMargin),
+            Row("test", null) ::
+              Row(null, """[1,2,3]""") ::
+              Row(null, """":"test", "a":1}""") ::
+              Row(null, """42""") ::
+              Row(null, """     ","ian":"test"}""") :: Nil
+          )
+        }
       }
     }
   }

@@ -191,6 +191,8 @@ private[json] trait TestJsonData {
   def additionalCorruptRecords: RDD[String] =
     sqlContext.sparkContext.parallelize(
       """{"dummy":"test"}""" ::
+      """[1,2,3]""" ::
+      """":"test", "a":1}""" ::
       """42""" ::
       """     ","ian":"test"}""" :: Nil)
 
@@ -202,7 +204,6 @@ private[json] trait TestJsonData {
         """{"a": {"b": {}}}""" ::
         """{"b": [{"c": {}}]}""" ::
         """]""" :: Nil)
-
 
   lazy val singleRow: RDD[String] = sqlContext.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
