@@ -155,8 +155,9 @@ private[spark] case class SSLOptions(
     }
 
     val supported = enabledAlgorithms & providerAlgorithms
-    require(supported.nonEmpty, "SSLContext does not support any of the enabled algorithms: " +
-      enabledAlgorithms.mkString(","))
+    require(supported.nonEmpty || sys.env.contains("SPARK_TESTING"),
+      "SSLContext does not support any of the enabled algorithms: " +
+        enabledAlgorithms.mkString(","))
     supported
   }
 
