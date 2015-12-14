@@ -55,12 +55,12 @@ private[ml] object GradientBoostedTrees extends Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#run]].
+   * Java-friendly API for [[org.apache.spark.ml.tree.impl.GradientBoostedTrees!#run]].
    */
-//  @Since("1.7.0")
-//  def run(input: JavaRDD[LabeledPoint]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
-//    run(input.rdd)
-//  }
+  @Since("1.7.0")
+  def run(input: JavaRDD[LabeledPoint]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+    run(input.rdd)
+  }
 
   /**
    * Method to validate a gradient boosting model
@@ -97,12 +97,12 @@ private[ml] object GradientBoostedTrees extends Logging {
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#runWithValidation]].
    */
-//  @Since("1.7.0")
-//  def runWithValidation(
-//                         input: JavaRDD[LabeledPoint],
-//                         validationInput: JavaRDD[LabeledPoint]): GradientBoostedTreesModel = {
-//    runWithValidation(input.rdd, validationInput.rdd)
-//  }
+  @Since("1.7.0")
+  def runWithValidation(
+      input: JavaRDD[LabeledPoint],
+      validationInput: JavaRDD[LabeledPoint]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+    runWithValidation(input.rdd, validationInput.rdd)
+  }
 
   /**
    * Compute the initial predictions and errors for a dataset for the first
@@ -172,7 +172,7 @@ private[ml] object GradientBoostedTrees extends Logging {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
-zzzzzz
+
     boostingStrategy.assertValid()
 
     // Initialize gradient boosting parameters

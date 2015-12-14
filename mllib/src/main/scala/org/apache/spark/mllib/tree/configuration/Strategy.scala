@@ -133,7 +133,6 @@ class Strategy @Since("1.3.0") (
    * Check validity of parameters.
    * Throws exception if invalid.
    */
-  // TODO: changed scope
   private[spark] def assertValid(): Unit = {
     algo match {
       case Classification =>
