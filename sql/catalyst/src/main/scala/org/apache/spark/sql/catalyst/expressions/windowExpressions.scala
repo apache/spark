@@ -298,13 +298,38 @@ trait WindowFunction extends Expression {
  */
 abstract class OffsetWindowFunction
   extends Expression with WindowFunction with Unevaluable with ImplicitCastInputTypes {
+  /**
+   * Input expression to evaluate against a row which a number of rows below or above (depending on
+   * the value and sign of the offset) the current row.
+   */
   val input: Expression
+
+  /**
+   * Default result value for the function when the input expression returns NULL. The default will
+   * evaluated against the current row instead of the offset row.
+   */
   val default: Expression
+
+  /**
+   * (Foldable) expression that contains the number of rows between the current row and the row
+   * where the input expression is evaluated.
+   */
   val offset: Expression
-  val offsetSign: Int
+
+  /**
+   * Direction (above = 1/below = -1) of the number of rows between the current row and the row
+   * where the input expression is evaluated.
+   */
+  val direction: SortDirection
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
+  /*
+   * The result of an OffsetWindowFunction is dependent on the frame in which the
+   * OffsetWindowFunction is executed, the input expression and the default expression. Even when
+   * both the input and the default expression are foldable, the result is still not foldable due to
+   * the frame.
+   */
   override def foldable: Boolean = input.foldable && (default == null || default.foldable)
 
   override def nullable: Boolean = input.nullable && (default == null || default.nullable)
@@ -316,7 +341,10 @@ abstract class OffsetWindowFunction
       case x => throw new AnalysisException(
         s"Offset expression must be a foldable integer expression: $x")
     }
-    val boundary = ValueFollowing(offsetSign * offsetValue)
+    val boundary = direction match {
+      case Ascending => ValueFollowing(offsetValue)
+      case Descending => ValuePreceding(offsetValue)
+    }
     SpecifiedWindowFrame(RowFrame, boundary, boundary)
   }
 
@@ -337,7 +365,7 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
 
   def this() = this(Literal(null))
 
-  val offsetSign = 1
+  override val direction = Ascending
 }
 
 case class Lag(input: Expression, offset: Expression, default: Expression)
@@ -349,7 +377,7 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 
   def this() = this(Literal(null))
 
-  val offsetSign = -1
+  override val direction = Descending
 }
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
@@ -357,7 +385,9 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = false
-  override val mergeExpressions = Nil // TODO how to deal with this?
+  override def supportsPartial: Boolean = false
+  override lazy val mergeExpressions =
+    throw new UnsupportedOperationException("Window Functions do not support merging.")
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {
@@ -383,11 +413,13 @@ object SizeBasedWindowFunction {
 }
 
 case class RowNumber() extends RowNumberLike {
-  override val evaluateExpression = Cast(rowNumber, IntegerType)
+  override val evaluateExpression = rowNumber
 }
 
 case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def dataType: DataType = DoubleType
+  // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
+  // return the same value for equal values in the partition.
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
 }
@@ -395,7 +427,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
-  // Validate buckets.
+  // Validate buckets. Note that this could be relaxed, the bucket value only needs to constant
+  // for each partition.
   buckets.eval() match {
     case b: Int if b > 0 => // Ok
     case x => throw new AnalysisException(
@@ -439,27 +472,37 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
   override val evaluateExpression = bucket
 }
 
+/**
+ * A RankLike function is a WindowFunction that changes its value based on a change in the value of
+ * the order of the window in which is processed. For instance, when the value of 'x' changes in a
+ * window ordered by 'x' the rank function also changes. The size of the change of the rank function
+ * is (typically) not dependent on the size of the change in 'x'.
+ */
 abstract class RankLike extends AggregateWindowFunction {
-  override def children: Seq[Expression] = order
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
-  val order: Seq[Expression]
-  protected val orderAttrs = order.map{ expr =>
+  /** Store the values of the window 'order' expressions. */
+  protected val orderAttrs = children.map{ expr =>
     AttributeReference(expr.prettyString, expr.dataType)()
   }
 
-  protected val orderEquals = order.zip(orderAttrs)
+  /** Predicate that detects if the order attributes have changed. */
+  protected val orderEquals = children.zip(orderAttrs)
     .map(EqualNullSafe.tupled)
     .reduceOption(And)
     .getOrElse(Literal(true))
-  protected val orderInit = order.map(e => Literal.create(null, e.dataType))
+
+  protected val orderInit = children.map(e => Literal.create(null, e.dataType))
   protected val rank = AttributeReference("rank", IntegerType, nullable = false)()
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
   protected val zero = Literal(0)
   protected val one = Literal(1)
   protected val increaseRowNumber = Add(rowNumber, one)
 
-  /** Source of the rank value. */
+  /**
+   * Different RankLike implementations use different source expressions to update their rank value.
+   * Rank for instance uses the number of rows seen, whereas DenseRank uses the number of changes.
+   */
   protected def rankSource: Expression = rowNumber
 
   /** Increase the rank when the current rank == 0 or when the one of order attributes changes. */
@@ -467,27 +510,27 @@ abstract class RankLike extends AggregateWindowFunction {
 
   override val aggBufferAttributes: Seq[AttributeReference] = rank +: rowNumber +: orderAttrs
   override val initialValues = zero +: one +: orderInit
-  override val updateExpressions = increaseRank +: increaseRowNumber +: order
+  override val updateExpressions = increaseRank +: increaseRowNumber +: children
   override val evaluateExpression: Expression = rank
 
   def withOrder(order: Seq[Expression]): RankLike
 }
 
-case class Rank(order: Seq[Expression]) extends RankLike {
+case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
 }
 
-case class DenseRank(order: Seq[Expression]) extends RankLike {
+case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
   override protected def rankSource = Add(rank, one)
-  override val updateExpressions = increaseRank +: order
+  override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
 }
 
-case class PercentRank(order: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
+case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
   override def dataType: DataType = DoubleType

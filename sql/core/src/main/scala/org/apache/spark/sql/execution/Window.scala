@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.rdd.RDD
-
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -702,23 +702,26 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
 }
 
 /**
- * This class prepares and manages the processing of a number of aggregate functions.
+ * This class prepares and manages the processing of a number of [[AggregateFunction]]s within a
+ * single frame. The [[WindowFunctionFrame]] takes care of processing the frame in the correct way,
+ * this reduces the processing of a [[AggregateWindowFunction]] to processing the underlying
+ * [[AggregateFunction]]. All [[AggregateFunction]]s are processed in [[Complete]] mode.
  *
- * This implementation only supports evaluation in [[Complete]] mode. This is enough for
- * Window processing.
+ * [[SizeBasedWindowFunction]]s are initialized in a slightly different way. These functions
+ * require the size of the partition processed, this value is exposed to them when the processor is
+ * constructed.
  *
  * Processing of distinct aggregates is currently not supported.
  *
  * The implementation is split into an object which takes care of construction, and a the actual
- * processor class. Construction might be expensive and could be separated into a 'driver' and a
- * 'executor' part.
+ * processor class.
  */
 private[execution] object AggregateProcessor {
   def apply(functions: Array[Expression],
-    ordinal: Int,
-    inputAttributes: Seq[Attribute],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection):
-    AggregateProcessor = {
+      ordinal: Int,
+      inputAttributes: Seq[Attribute],
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection):
+      AggregateProcessor = {
     val aggBufferAttributes = mutable.Buffer.empty[AttributeReference]
     val initialValues = mutable.Buffer.empty[Expression]
     val updateExpressions = mutable.Buffer.empty[Expression]

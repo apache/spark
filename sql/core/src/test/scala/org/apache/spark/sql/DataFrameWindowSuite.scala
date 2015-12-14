@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, LongType, StructType}
 
 class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -234,5 +235,61 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
           sum($"value"),
           sum(sum($"value")).over(window) - sum($"value")),
       Seq(Row("a", 6, 9), Row("b", 9, 6)))
+  }
+
+  test("window function with udaf") {
+    val udaf = new UserDefinedAggregateFunction {
+      def inputSchema: StructType = new StructType()
+        .add("a", LongType)
+        .add("b", LongType)
+
+      def bufferSchema: StructType = new StructType()
+        .add("product", LongType)
+
+      def dataType: DataType = LongType
+
+      def deterministic: Boolean = true
+
+      def initialize(buffer: MutableAggregationBuffer): Unit = {
+        buffer(0) = 0L
+      }
+
+      def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+        if (!(input.isNullAt(0) || input.isNullAt(1))) {
+          buffer(0) = buffer.getLong(0) + input.getLong(0) * input.getLong(1)
+        }
+      }
+
+      def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+        buffer1(0) = buffer1.getLong(0) + buffer2.getLong(0)
+      }
+
+      def evaluate(buffer: Row): Any =
+        buffer.getLong(0)
+    }
+    val df = Seq(
+      ("a", 1, 1),
+      ("a", 1, 5),
+      ("a", 2, 10),
+      ("a", 2, -1),
+      ("b", 4, 7),
+      ("b", 3, 8),
+      ("b", 2, 4))
+      .toDF("key", "a", "b")
+    val window = Window.partitionBy($"key").orderBy($"a").rangeBetween(Long.MinValue, 0L)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"a",
+        $"b",
+        udaf($"a", $"b").over(window)),
+      Seq(
+        Row("a", 1, 1, 6),
+        Row("a", 1, 5, 6),
+        Row("a", 2, 10, 24),
+        Row("a", 2, -1, 24),
+        Row("b", 4, 7, 60),
+        Row("b", 3, 8, 32),
+        Row("b", 2, 4, 8)))
   }
 }
