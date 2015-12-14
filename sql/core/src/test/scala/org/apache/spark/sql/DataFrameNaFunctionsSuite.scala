@@ -194,4 +194,31 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out1(4) === Row("Amy", null, null))
     assert(out1(5) === Row(null, null, null))
   }
+
+  test("dropna with partitionBy and groupBy") {
+    withTempPath { dir =>
+      val df = sqlContext.range(10)
+      val df1 = df.withColumn("a", $"id".cast("int"))
+      df1.write.partitionBy("id").parquet(dir.getCanonicalPath)
+
+      val df2 = sqlContext.read.parquet(dir.getCanonicalPath)
+
+      val group = df2.na.drop().groupBy().count()
+      group.collect()
+    }
+  }
+
+  test("dropna with partitionBy") {
+    withTempPath { dir =>
+      val df = sqlContext.range(10)
+      val df1 = df.withColumn("a", $"id".cast("int"))
+      df1.write.partitionBy("id").parquet(dir.getCanonicalPath)
+
+      val df2 = sqlContext.read.parquet(dir.getCanonicalPath)
+
+      val group = df2.na.drop().count()
+
+    }
+  }
+
 }
