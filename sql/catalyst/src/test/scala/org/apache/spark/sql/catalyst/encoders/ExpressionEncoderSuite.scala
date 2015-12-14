@@ -30,7 +30,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.types.ArrayType
+import org.apache.spark.sql.types.{StructType, ArrayType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -145,6 +145,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   case class InnerClass(i: Int)
   productTest(InnerClass(1))
+  encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -236,6 +237,42 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     val intEnc = ExpressionEncoder[Int]
     val longEnc = ExpressionEncoder[Long]
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
+  }
+
+  test("nullable of encoder schema") {
+    def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {
+      assert(implicitly[ExpressionEncoder[T]].schema.map(_.nullable) === nullable.toSeq)
+    }
+
+    // test for flat encoders
+    checkNullable[Int](false)
+    checkNullable[Option[Int]](true)
+    checkNullable[java.lang.Integer](true)
+    checkNullable[String](true)
+
+    // test for product encoders
+    checkNullable[(String, Int)](true, false)
+    checkNullable[(Int, java.lang.Long)](false, true)
+
+    // test for nested product encoders
+    {
+      val schema = ExpressionEncoder[(Int, (String, Int))].schema
+      assert(schema(0).nullable === false)
+      assert(schema(1).nullable === true)
+      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
+      assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
+    }
+
+    // test for tupled encoders
+    {
+      val schema = ExpressionEncoder.tuple(
+        ExpressionEncoder[Int],
+        ExpressionEncoder[(String, Int)]).schema
+      assert(schema(0).nullable === false)
+      assert(schema(1).nullable === true)
+      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
+      assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
+    }
   }
 
   private val outers: ConcurrentMap[String, AnyRef] = new MapMaker().weakValues().makeMap()

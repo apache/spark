@@ -1143,7 +1143,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    new RowMatrix(rows.rdd, numRows, numCols)
+    new RowMatrix(rows.rdd.retag(classOf[Vector]), numRows, numCols)
   }
 
   /**
@@ -1191,7 +1191,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
     // We use DataFrames for serialization of IndexedRows to Python,
     // so return a DataFrame.
-    val sqlContext = new SQLContext(indexedRowMatrix.rows.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(indexedRowMatrix.rows.sparkContext)
     sqlContext.createDataFrame(indexedRowMatrix.rows)
   }
 
@@ -1201,7 +1201,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
     // We use DataFrames for serialization of MatrixEntry entries to
     // Python, so return a DataFrame.
-    val sqlContext = new SQLContext(coordinateMatrix.entries.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(coordinateMatrix.entries.sparkContext)
     sqlContext.createDataFrame(coordinateMatrix.entries)
   }
 
@@ -1211,7 +1211,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixBlocks(blockMatrix: BlockMatrix): DataFrame = {
     // We use DataFrames for serialization of sub-matrix blocks to
     // Python, so return a DataFrame.
-    val sqlContext = new SQLContext(blockMatrix.blocks.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(blockMatrix.blocks.sparkContext)
     sqlContext.createDataFrame(blockMatrix.blocks)
   }
 }

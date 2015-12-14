@@ -35,7 +35,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("Word2Vec") {
-    val sqlContext = new SQLContext(sc)
+
+    val sqlContext = this.sqlContext
     import sqlContext.implicits._
 
     val sentence = "a b " * 100 + "a c " * 10
@@ -77,7 +78,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("getVectors") {
 
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = this.sqlContext
     import sqlContext.implicits._
 
     val sentence = "a b " * 100 + "a c " * 10
@@ -118,7 +119,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("findSynonyms") {
 
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = this.sqlContext
     import sqlContext.implicits._
 
     val sentence = "a b " * 100 + "a c " * 10
@@ -141,7 +142,43 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     expectedSimilarity.zip(similarity).map {
       case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
     }
+  }
 
+  test("window size") {
+
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+
+    val sentence = "a q s t q s t b b b s t m s t m q " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setVectorSize(3)
+      .setWindowSize(2)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val (synonyms, similarity) = model.findSynonyms("a", 6).map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+
+    // Increase the window size
+    val biggerModel = new Word2Vec()
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .setWindowSize(10)
+      .fit(docDF)
+
+    val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+    // The similarity score should be very different with the larger window
+    assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
   }
 
   test("Word2Vec read/write") {
