@@ -13,11 +13,13 @@ In this section, we introduce the pipeline API for [clustering in mllib](mllib-c
 
 ## K-means
 
-K-means clustering with support for multiple parallel runs and a k-means++ like initialization mode 
-(the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,they are 
-executed together with joint passes over the data for efficiency.
+[k-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
+most commonly used clustering algorithms that clusters the data points into a
+predefined number of clusters. The MLlib implementation includes a parallelized
+variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
+called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
-`KMeans` is implemented as an `Estimator` and generates a `KMeansModel` as the base models.
+`KMeans` is implemented as an `Estimator` and generates a `KMeansModel` as the base model.
 
 ### Input Columns
 
@@ -57,7 +59,7 @@ executed together with joint passes over the data for efficiency.
       <td>predictionCol</td>
       <td>Int</td>
       <td>"prediction"</td>
-      <td>Predicted label</td>
+      <td>Predicted cluster center</td>
       <td></td>
     </tr>
   </tbody>
