@@ -176,6 +176,22 @@ class StandardScalerModel(JavaVectorTransformer):
 
     @property
     @since('1.6.0')
+    def withStd(self):
+        """
+        Returns if the model scales the data to unit standard deviation.
+        """
+        return self.call("withStd")
+
+    @property
+    @since('1.6.0')
+    def withMean(self):
+        """
+        Returns if the model centers the data before scaling.
+        """
+        return self.call("withMean")
+
+    @property
+    @since('1.6.0')
     def std(self):
         """
         Return the column standard deviation values. Only set if model was trained withStd.
@@ -217,6 +233,10 @@ class StandardScaler(object):
     4
     >>> int(model.mean[0]*10)
     9
+    >>> model.withStd
+    True
+    >>> model.withMean
+    True
 
     .. versionadded:: 1.2.0
     """
