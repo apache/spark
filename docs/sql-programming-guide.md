@@ -2150,6 +2150,8 @@ options.
      --conf spark.sql.hive.thriftServer.singleSession=true \
      ...
    {% endhighlight %}
+ - Since 1.6.1, withColumn method in sparkR supports adding new a column to or replacing existing columns
+   of the same name of a DataFrame.
 
  - From Spark 1.6, LongType casts to TimestampType expect seconds instead of microseconds. This
    change was made to match the behavior of Hive 1.2 for more consistent type casting to TimestampType
@@ -2183,6 +2185,7 @@ options.
    users can use `REFRESH TABLE` SQL command or `HiveContext`'s `refreshTable` method
    to include those new files to the table. For a DataFrame representing a JSON dataset, users need to recreate
    the DataFrame and the new DataFrame will include new files.
+ - DataFrame.withColumn method in pySpark supports adding new a column or replacing existing columns of the same name.
 
 ## Upgrading from Spark SQL 1.3 to 1.4
 
@@ -2260,6 +2263,15 @@ sqlContext.setConf("spark.sql.retainGroupColumns", "false")
 </div>
 
 </div>
+
+
+#### Behavior change on DataFrame.withColumn
+
+Prior to 1.4, DataFrame.withColumn() supports adding new a column only. The new column will always be added no
+matter whether there is any existing column of the same name or not. Since 1.4, DataFrame.withColumn() supports
+adding new a column or replacing existing columns of the same name.
+
+Note that this change is only for Scala API, not for PySpark and SparkR.
 
 
 ## Upgrading from Spark SQL 1.0-1.2 to 1.3
