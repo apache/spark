@@ -221,7 +221,7 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
     }
     val value = if (index < 0) None else getAsOpt[T](index)
 
-    value.asInstanceOf[Option[T]]
+    value
   }
 }
 

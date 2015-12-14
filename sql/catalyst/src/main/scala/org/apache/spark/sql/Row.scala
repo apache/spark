@@ -346,7 +346,7 @@ trait Row extends Serializable {
    * also returned if either the schema is not defined or else the given fieldName does not exist
    * in the schema.
    */
-  def getAsOpt[T](fieldName: String): Option[T] = None.asInstanceOf[Option[T]]
+  def getAsOpt[T](fieldName: String): Option[T] = None
 
   /**
    * Returns the value of a given fieldName.
