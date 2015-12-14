@@ -128,19 +128,31 @@
 
             {% if page.url contains "/ml" %}
               {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
+              <input id="nav-trigger" class="nav-trigger" checked="" type="checkbox">
+              <label for="nav-trigger"></label>
+                <div class="content-with-sidebar" id="content">
+                  {% if page.displayTitle %}
+                    <h1 class="title">{{ page.displayTitle }}</h1>
+                  {% else %}
+                    <h1 class="title">{{ page.title }}</h1>
+                  {% endif %}
+
+                  {{ content }}
+
+                </div> <!-- /container -->
+            {% else %}
+                <div class="content" id="content">
+                      {% if page.displayTitle %}
+                        <h1 class="title">{{ page.displayTitle }}</h1>
+                      {% else %}
+                        <h1 class="title">{{ page.title }}</h1>
+                      {% endif %}
+
+                      {{ content }}
+
+                </div> <!-- /container -->
             {% endif %}
 
-
-            <div class="container" id="content">
-              {% if page.displayTitle %}
-                <h1 class="title">{{ page.displayTitle }}</h1>
-              {% else %}
-                <h1 class="title">{{ page.title }}</h1>
-              {% endif %}
-
-              {{ content }}
-
-            </div> <!-- /container -->
         </div>
 
         <script src="js/vendor/jquery-1.8.0.min.js"></script>
