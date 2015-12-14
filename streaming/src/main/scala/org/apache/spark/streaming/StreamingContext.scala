@@ -892,12 +892,13 @@ object StreamingContext extends Logging {
   }
 
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
-    if (prefix == null) {
-      time.milliseconds.toString
-    } else if (suffix == null || suffix.length ==0) {
-      prefix + "-" + time.milliseconds
-    } else {
-      prefix + "-" + time.milliseconds + "." + suffix
+    var result = time.milliseconds.toString
+    if (prefix != null && prefix.length > 0) {
+      result = s"$prefix-$result"
     }
+    if (suffix != null && suffix.length > 0) {
+      result = s"$result.$suffix"
+    }
+    result
   }
 }
