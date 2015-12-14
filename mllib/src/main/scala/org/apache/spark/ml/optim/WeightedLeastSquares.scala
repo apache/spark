@@ -93,12 +93,12 @@ private[ml] class WeightedLeastSquares(
           s"training is not needed.")
         val coefficients = new DenseVector(Array.ofDim(k-1))
         val intercept = bBar
-        val diagInvAtWA = new DenseVector(Array.ofDim(k))
+        val diagInvAtWA = new DenseVector(Array(0D))
         return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
       }
       else {
       logWarning(s"The standard deviation of the label is zero. " +
-        "Consider setting FitIntercept=true.")
+        "Consider setting fitIntercept=true.")
       }
     }
 
@@ -111,7 +111,6 @@ private[ml] class WeightedLeastSquares(
         lambda *= aVar(j - 2)
       }
       if (standardizeLabel && bStd != 0) {
-        // TODO: handle the case when bStd = 0
         lambda /= bStd
       }
       aaValues(i) += lambda

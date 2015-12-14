@@ -47,8 +47,10 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
 
     /*
        R code:
-       same as above except make the label constant
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
        b <- c(17, 17, 17, 17)
+       w <- c(1, 2, 3, 4)
      */
     instancesConstLabel = sc.parallelize(Seq(
       Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
