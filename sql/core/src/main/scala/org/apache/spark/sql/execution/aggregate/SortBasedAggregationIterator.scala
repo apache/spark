@@ -24,37 +24,34 @@ import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 /**
  * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
- * sorted by values of [[groupingKeyAttributes]].
+ * sorted by values of [[groupingExpressions]].
  */
 class SortBasedAggregationIterator(
-    groupingKeyProjection: InternalRow => InternalRow,
-    groupingKeyAttributes: Seq[Attribute],
+    groupingExpressions: Seq[NamedExpression],
     valueAttributes: Seq[Attribute],
     inputIterator: Iterator[InternalRow],
-    nonCompleteAggregateExpressions: Seq[AggregateExpression],
-    nonCompleteAggregateAttributes: Seq[Attribute],
-    completeAggregateExpressions: Seq[AggregateExpression],
-    completeAggregateAttributes: Seq[Attribute],
+    aggregateExpressions: Seq[AggregateExpression],
+    aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    outputsUnsafeRows: Boolean,
     numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric)
   extends AggregationIterator(
-    groupingKeyAttributes,
+    groupingExpressions,
     valueAttributes,
-    nonCompleteAggregateExpressions,
-    nonCompleteAggregateAttributes,
-    completeAggregateExpressions,
-    completeAggregateAttributes,
+    aggregateExpressions,
+    aggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
-    newMutableProjection,
-    outputsUnsafeRows) {
+    newMutableProjection) {
 
-  override protected def newBuffer: MutableRow = {
-    val bufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
+  /**
+    * Creates a new aggregation buffer and initializes buffer values
+    * for all aggregate functions.
+    */
+  private def newBuffer: MutableRow = {
+    val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
@@ -76,10 +73,10 @@ class SortBasedAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // The partition key of the current partition.
-  private[this] var currentGroupingKey: InternalRow = _
+  private[this] var currentGroupingKey: UnsafeRow = _
 
   // The partition key of next partition.
-  private[this] var nextGroupingKey: InternalRow = _
+  private[this] var nextGroupingKey: UnsafeRow = _
 
   // The first row of next partition.
   private[this] var firstRowInNextGroup: InternalRow = _
@@ -94,7 +91,7 @@ class SortBasedAggregationIterator(
     if (inputIterator.hasNext) {
       initializeBuffer(sortBasedAggregationBuffer)
       val inputRow = inputIterator.next()
-      nextGroupingKey = groupingKeyProjection(inputRow).copy()
+      nextGroupingKey = groupingProjection(inputRow).copy()
       firstRowInNextGroup = inputRow.copy()
       numInputRows += 1
       sortedInputHasNewGroup = true
@@ -120,7 +117,7 @@ class SortBasedAggregationIterator(
     while (!findNextPartition && inputIterator.hasNext) {
       // Get the grouping key.
       val currentRow = inputIterator.next()
-      val groupingKey = groupingKeyProjection(currentRow)
+      val groupingKey = groupingProjection(currentRow)
       numInputRows += 1
 
       // Check if the current row belongs the current input row.
@@ -146,7 +143,7 @@ class SortBasedAggregationIterator(
 
   override final def hasNext: Boolean = sortedInputHasNewGroup
 
-  override final def next(): InternalRow = {
+  override final def next(): UnsafeRow = {
     if (hasNext) {
       // Process the current group.
       processCurrentSortedGroup()
@@ -162,8 +159,8 @@ class SortBasedAggregationIterator(
     }
   }
 
-  def outputForEmptyGroupingKeyWithoutInput(): InternalRow = {
+  def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     initializeBuffer(sortBasedAggregationBuffer)
-    generateOutput(new GenericInternalRow(0), sortBasedAggregationBuffer)
+    generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer)
   }
 }
