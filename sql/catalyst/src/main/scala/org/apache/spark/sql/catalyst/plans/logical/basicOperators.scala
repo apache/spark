@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
-import scala.collection.mutable.ArrayBuffer
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -36,7 +39,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 }
 
@@ -85,10 +88,20 @@ case class Generate(
 
     if (join) child.output ++ qualified else qualified
   }
+
+  override protected def otherJsonValues: JValue = {
+    ("generator-type" -> generator.getClass.getSimpleName) ~
+      ("join" -> join) ~
+      ("outer" -> outer) ~
+      ("qualifier" -> qualifier) ~
+      ("generator-output" -> generatorOutput.map(_.simpleString))
+  }
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override protected def otherJsonValues: JValue = "condition" -> condition.simpleString
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -152,6 +165,9 @@ case class Join(
       selfJoinResolved &&
       condition.forall(_.dataType == BooleanType)
   }
+
+  override protected def otherJsonValues: JValue =
+    ("join-type" -> joinType.toString) ~ ("condition" -> condition.map(_.simpleString))
 }
 
 /**
@@ -176,6 +192,13 @@ case class InsertIntoTable(
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
     case (childAttr, tableAttr) =>
       DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+  }
+
+  override protected def otherJsonValues: JValue = {
+    ("partition" -> partition) ~
+      ("overwrite" -> overwrite) ~
+      ("if-not-exists" -> ifNotExists) ~
+      ("table" -> table.jsonValue)
   }
 }
 
@@ -208,6 +231,9 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override protected def otherJsonValues: JValue =
+    ("ordering" -> order.map(_.simpleString)) ~ ("global" -> global)
 }
 
 case class Aggregate(
@@ -226,6 +252,11 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+
+  override protected def otherJsonValues: JValue = {
+    ("grouping-expressions" -> groupingExpressions.map(_.simpleString)) ~
+      ("aggregate-expressions" -> aggregateExpressions.map(_.simpleString))
+  }
 }
 
 case class Window(
@@ -356,6 +387,12 @@ case class GroupingSets(
 
   def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
     this.copy(aggregations = aggs)
+
+  override protected def otherJsonValues: JValue = {
+    ("bit-masks" -> bitmasks) ~
+      ("groupBy-expressions" -> groupByExprs.map(_.simpleString)) ~
+      ("aggregations" -> aggregations.map(_.simpleString))
+  }
 }
 
 /**
@@ -374,6 +411,11 @@ case class Cube(
 
   def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
     this.copy(aggregations = aggs)
+
+  override protected def otherJsonValues: JValue = {
+    ("groupBy-expressions" -> groupByExprs.map(_.simpleString)) ~
+      ("aggregations" -> aggregations.map(_.simpleString))
+  }
 }
 
 /**
@@ -393,6 +435,11 @@ case class Rollup(
 
   def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
     this.copy(aggregations = aggs)
+
+  override protected def otherJsonValues: JValue = {
+    ("groupBy-expressions" -> groupByExprs.map(_.simpleString)) ~
+      ("aggregations" -> aggregations.map(_.simpleString))
+  }
 }
 
 case class Pivot(
@@ -407,6 +454,13 @@ case class Pivot(
       aggregates.map(agg => AttributeReference(value + "_" + agg.prettyString, agg.dataType)())
     }
   }
+
+  override protected def otherJsonValues: JValue = {
+    ("groupBy-expressions" -> groupByExprs.map(_.simpleString)) ~
+      ("aggregates" -> aggregates.map(_.simpleString)) ~
+      ("pivot-column" -> pivotColumn.simpleString) ~
+      ("pivot-values" -> pivotValues.map(_.simpleString))
+  }
 }
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
@@ -417,10 +471,14 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  override protected def otherJsonValues: JValue = ("limit" -> limitExpr.simpleString)
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+
+  override protected def otherJsonValues: JValue = ("alias" -> alias)
 }
 
 /**
@@ -441,6 +499,13 @@ case class Sample(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+
+  override protected def otherJsonValues: JValue = {
+    ("lower-bound" -> lowerBound) ~
+      ("upper-bound" -> upperBound) ~
+      ("with-replacement" -> withReplacement) ~
+      ("seed" -> seed)
+  }
 }
 
 /**
@@ -459,6 +524,9 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override protected def otherJsonValues: JValue =
+    ("num-partitions" -> numPartitions) ~ ("shuffle" -> shuffle)
 }
 
 /**
