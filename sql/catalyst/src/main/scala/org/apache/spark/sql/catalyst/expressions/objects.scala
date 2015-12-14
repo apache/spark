@@ -463,7 +463,11 @@ case class MapObjects(
             $convertedArray[$loopIndex] = null;
           } else {
             ${genFunction.code}
-            $convertedArray[$loopIndex] = ${genFunction.value};
+            if (${genFunction.isNull}) {
+              $convertedArray[$loopIndex] = null;
+            } else {
+              $convertedArray[$loopIndex] = ${genFunction.value};
+            }
           }
 
           $loopIndex += 1;

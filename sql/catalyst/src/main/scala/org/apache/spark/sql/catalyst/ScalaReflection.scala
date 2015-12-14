@@ -61,6 +61,7 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< definitions.ByteTpe => ByteType
       case t if t <:< definitions.BooleanTpe => BooleanType
       case t if t <:< localTypeOf[Array[Byte]] => BinaryType
+      case t if t <:< localTypeOf[Decimal] => DecimalType.SYSTEM_DEFAULT
       case _ =>
         val className = getClassNameFromType(tpe)
         className match {
@@ -177,6 +178,7 @@ object ScalaReflection extends ScalaReflection {
       case _ => UpCast(expr, expected, walkedTypePath)
     }
 
+    val className = getClassNameFromType(tpe)
     tpe match {
       case t if !dataTypeFor(t).isInstanceOf[ObjectType] => getPath
 
@@ -372,6 +374,17 @@ object ScalaReflection extends ScalaReflection {
         } else {
           newInstance
         }
+
+      case t if Utils.classIsLoadable(className) &&
+        Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+        val udt = Utils.classForName(className)
+          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        val obj = NewInstance(
+          udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+          Nil,
+          false,
+          dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
     }
   }
 
@@ -406,11 +419,16 @@ object ScalaReflection extends ScalaReflection {
     def toCatalystArray(input: Expression, elementType: `Type`): Expression = {
       val externalDataType = dataTypeFor(elementType)
       val Schema(catalystType, nullable) = silentSchemaFor(elementType)
-      if (isNativeType(catalystType)) {
-        NewInstance(
+
+      if (isNativeType(catalystType) && !(elementType <:< localTypeOf[Option[_]])) {
+        val array = NewInstance(
           classOf[GenericArrayData],
           input :: Nil,
           dataType = ArrayType(catalystType, nullable))
+        expressions.If(
+          IsNull(input),
+          expressions.Literal.create(null, ArrayType(catalystType, nullable)),
+          array)
       } else {
         val clsName = getClassNameFromType(elementType)
         val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
@@ -421,46 +439,75 @@ object ScalaReflection extends ScalaReflection {
     if (!inputObject.dataType.isInstanceOf[ObjectType]) {
       inputObject
     } else {
+      val className = getClassNameFromType(tpe)
       tpe match {
         case t if t <:< localTypeOf[Option[_]] =>
           val TypeRef(_, _, Seq(optType)) = t
           optType match {
             // For primitive types we must manually unbox the value of the object.
             case t if t <:< definitions.IntTpe =>
-              Invoke(
-                UnwrapOption(ObjectType(classOf[java.lang.Integer]), inputObject),
-                "intValue",
-                IntegerType)
+              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Integer]), inputObject)
+              expressions.If(
+                IsNull(unwrapped),
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                Invoke(
+                  unwrapped,
+                  "intValue",
+                  IntegerType))
             case t if t <:< definitions.LongTpe =>
-              Invoke(
-                UnwrapOption(ObjectType(classOf[java.lang.Long]), inputObject),
-                "longValue",
-                LongType)
+              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Long]), inputObject)
+              expressions.If(
+                IsNull(unwrapped),
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                Invoke(
+                  unwrapped,
+                  "longValue",
+                  LongType))
             case t if t <:< definitions.DoubleTpe =>
-              Invoke(
-                UnwrapOption(ObjectType(classOf[java.lang.Double]), inputObject),
-                "doubleValue",
-                DoubleType)
+              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Double]), inputObject)
+              expressions.If(
+                IsNull(unwrapped),
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                Invoke(
+                  unwrapped,
+                  "doubleValue",
+                  DoubleType))
             case t if t <:< definitions.FloatTpe =>
-              Invoke(
-                UnwrapOption(ObjectType(classOf[java.lang.Float]), inputObject),
-                "floatValue",
-                FloatType)
+              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Float]), inputObject)
+              expressions.If(
+                IsNull(unwrapped),
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                Invoke(
+                  unwrapped,
+                  "floatValue",
+                  FloatType))
             case t if t <:< definitions.ShortTpe =>
-              Invoke(
-                UnwrapOption(ObjectType(classOf[java.lang.Short]), inputObject),
-                "shortValue",
-                ShortType)
+              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Short]), inputObject)
+              expressions.If(
+                IsNull(unwrapped),
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                Invoke(
+                  unwrapped,
+                  "shortValue",
+                  ShortType))
             case t if t <:< definitions.ByteTpe =>
-              Invoke(
-                UnwrapOption(ObjectType(classOf[java.lang.Byte]), inputObject),
-                "byteValue",
-                ByteType)
+              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Byte]), inputObject)
+              expressions.If(
+                IsNull(unwrapped),
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                Invoke(
+                 unwrapped,
+                  "byteValue",
+                  ByteType))
             case t if t <:< definitions.BooleanTpe =>
-              Invoke(
-                UnwrapOption(ObjectType(classOf[java.lang.Boolean]), inputObject),
-                "booleanValue",
-                BooleanType)
+              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Boolean]), inputObject)
+              expressions.If(
+                IsNull(unwrapped),
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                Invoke(
+                  unwrapped,
+                  "booleanValue",
+                  BooleanType))
 
             // For non-primitives, we can just extract the object from the Option and then recurse.
             case other =>
@@ -588,6 +635,17 @@ object ScalaReflection extends ScalaReflection {
           Invoke(inputObject, "byteValue", ByteType)
         case t if t <:< localTypeOf[java.lang.Boolean] =>
           Invoke(inputObject, "booleanValue", BooleanType)
+
+        case t if Utils.classIsLoadable(className) &&
+          Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+          val udt = Utils.classForName(className)
+            .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+          val obj = NewInstance(
+            udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+            Nil,
+            false,
+            dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+          Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
         case other =>
           throw new UnsupportedOperationException(
