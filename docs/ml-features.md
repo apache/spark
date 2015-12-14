@@ -63,7 +63,7 @@ the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for mor
 `Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
 transforms each document into a vector using the average of all words in the document; this vector
 can then be used for as features for prediction, document similarity calculations, etc.
-Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2Vec) for more
+Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2vec) for more
 details.
 
 In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
