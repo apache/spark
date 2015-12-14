@@ -18,8 +18,10 @@
 package org.apache.spark.examples.mllib
 
 // scalastyle:off println
+// $example on$
 import org.apache.spark.mllib.clustering.BisectingKMeans
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+// $example off$
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**

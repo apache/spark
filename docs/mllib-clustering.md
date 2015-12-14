@@ -720,6 +720,8 @@ sameModel = LDAModel.load(sc, "myModelPath")
 
 ## Bisecting k-means
 
+Bisecting K-means can often be much faster than regular K-means, but it will generally produce a different clustering.
+
 Bisecting k-means is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering).
 Hierarchical clustering is one of the most commonly used  method of cluster analysis which seeks to build a hierarchy of clusters.
 Strategies for hierarchical clustering generally fall into two types:
@@ -728,13 +730,12 @@ Strategies for hierarchical clustering generally fall into two types:
 - Divisive: This is a "top down" approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
 
 Bisecting k-means algorithm is a kind of divisive algorithms.
-Because it is too difficult to implement a agglomerative algorithm as a distributed algorithm on Spark.
 The implementation in MLlib has the following parameters:
 
-* *k* the desired number of leaf clusters (default: 4). The actual number could be smaller if there are no divisible leaf clusters.
-* *maxIterations* the max number of k-means iterations to split clusters (default: 20)
-* *minDivisibleClusterSize* the minimum number of points (if >= 1.0) or the minimum proportion of points (if < 1.0) of a divisible cluster (default: 1)
-* *seed* a random seed (default: hash value of the class name)
+* *k*: the desired number of leaf clusters (default: 4). The actual number could be smaller if there are no divisible leaf clusters.
+* *maxIterations*: the max number of k-means iterations to split clusters (default: 20)
+* *minDivisibleClusterSize*: the minimum number of points (if >= 1.0) or the minimum proportion of points (if < 1.0) of a divisible cluster (default: 1)
+* *seed*: a random seed (default: hash value of the class name)
 
 **Examples**
 
@@ -743,6 +744,12 @@ The implementation in MLlib has the following parameters:
 Refer to the [`BisectingKMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeans) and [`BisectingKMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeansModel) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/BisectingKMeansExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [`BisectingKMeans` Java docs](api/java/org/apache/spark/mllib/clustering/BisectingKMeans.html) and [`BisectingKMeansModel` Java docs](api/java/org/apache/spark/mllib/clustering/BisectingKMeansModel.html) for details on the API.
+
+{% include_example java/org/apache/spark/examples/mllib/JavaBisectingKMeansExample.java %}
 </div>
 </div>
 
