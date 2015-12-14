@@ -58,6 +58,48 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     assert(!preparedPlan.outputsUnsafeRows)
   }
 
+  test("coalesce can process unsafe rows") {
+    val plan = Coalesce(1, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 1)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("coalesce can process safe rows") {
+    val plan = Coalesce(1, outputsSafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).isEmpty)
+    assert(!preparedPlan.outputsUnsafeRows)
+  }
+
+  test("except can process unsafe rows") {
+    val plan = Except(outputsUnsafe, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 2)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("except can process safe rows") {
+    val plan = Except(outputsSafe, outputsSafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).isEmpty)
+    assert(!preparedPlan.outputsUnsafeRows)
+  }
+
+  test("intersect can process unsafe rows") {
+    val plan = Intersect(outputsUnsafe, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 2)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("intersect can process safe rows") {
+    val plan = Intersect(outputsSafe, outputsSafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).isEmpty)
+    assert(!preparedPlan.outputsUnsafeRows)
+  }
+
   test("execute() fails an assertion if inputs rows are of different formats") {
     val e = intercept[AssertionError] {
       Union(Seq(outputsSafe, outputsUnsafe)).execute()

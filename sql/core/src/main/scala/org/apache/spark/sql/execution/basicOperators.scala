@@ -250,7 +250,9 @@ case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
     child.execute().coalesce(numPartitions, shuffle = false)
   }
 
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
   override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -263,6 +265,10 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
+
+  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -275,6 +281,10 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
+
+  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
 }
 
 /**
