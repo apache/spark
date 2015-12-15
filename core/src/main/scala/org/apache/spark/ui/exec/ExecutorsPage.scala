@@ -23,7 +23,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
-import org.apache.spark.storage.StorageStatus
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -112,7 +111,7 @@ private[ui] class ExecutorsPage(
           </ul>
         </div>
       </div>
-      <div class="row">
+      <div class = "row">
         <div class="span12">
           {execTable}
         </div>
@@ -182,8 +181,8 @@ private[ui] class ExecutorsPage(
       }
       {
         if (threadDumpEnabled) {
-          val encodedId = URLEncoder.encode(info.id, "UTF-8")
           if (info.isActive) {
+            val encodedId = URLEncoder.encode(info.id, "UTF-8")
             <td>
               <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
             </td>
