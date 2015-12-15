@@ -194,50 +194,50 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     verify(driver, times(1)).reviveOffers()
   }
 
-  test("isOfferValidForScheduling return true when there is a valid offer") {
+  test("isOfferSatisfiesRequirements return true when there is a valid offer") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 10000, 5, sc))
+    assert(schedulerBackend.isOfferSatisfiesRequirements(true, "Slave1", 10000, 5, sc))
   }
 
-  test("isOfferValidForScheduling return false when offer do not meet constraints") {
+  test("isOfferSatisfiesRequirements return false when offer do not meet constraints") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(false, "Slave1", 10000, 5, sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(false, "Slave1", 10000, 5, sc) === false)
   }
 
-  test("isOfferValidForScheduling return false when memory in offer is less than required memory") {
+  test("isOfferSatisfiesRequirements return false when memory in offer is less than required memory") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 1, 5, sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(true, "Slave1", 1, 5, sc) === false)
   }
 
-  test("isOfferValidForScheduling return false when cpu in offer is less than required cpu") {
+  test("isOfferSatisfiesRequirements return false when cpu in offer is less than required cpu") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 10000, 0, sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(true, "Slave1", 10000, 0, sc) === false)
   }
 
-  test("isOfferValidForScheduling return false when offer is from slave already running" +
+  test("isOfferSatisfiesRequirements return false when offer is from slave already running" +
     " an executor") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
     schedulerBackend.slaveIdsWithExecutors += "Slave2"
 
-    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave2", 10000, 5, sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(true, "Slave2", 10000, 5, sc) === false)
   }
 
-  test("isOfferValidForScheduling return false when task is failed more than " +
+  test("isOfferSatisfiesRequirements return false when task is failed more than " +
     "MAX_SLAVE_FAILURES times on the given slave") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
     schedulerBackend.failuresBySlaveId("Slave3") = 2
 
-    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave3", 10000, 5, sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(true, "Slave3", 10000, 5, sc) === false)
   }
 
-  test("isOfferValidForScheduling return false when max core is already acquired") {
+  test("isOfferSatisfiesRequirements return false when max core is already acquired") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
     schedulerBackend.totalCoresAcquired = 10
 
-    assert(schedulerBackend.isOfferValidForScheduling(true, "Slave1", 10000, 5, sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(true, "Slave1", 10000, 5, sc) === false)
   }
 }
