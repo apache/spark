@@ -498,32 +498,29 @@ class DataFrame private[sql](
   def join(right: DataFrame, usingColumns: Seq[String], joinType: String): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
-    val innerJoined = sqlContext.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
+    val joined = sqlContext.executePlan(
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None)
+    ).analyzed.asInstanceOf[Join]
 
     // Project only one of the join columns.
     //
     // SPARK-12336: For outer joins, attributes of at least one child plan output will be forced to
     // be nullable. An `AttributeSet` is necessary so that we are not affected by different
     // nullability values.
-    val joinedCols = AttributeSet(usingColumns.map(col => withPlan(innerJoined.right).resolve(col)))
+    val joinedCols = AttributeSet(usingColumns.map(col => withPlan(joined.right).resolve(col)))
 
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
-        withPlan(innerJoined.left).resolve(col),
-        withPlan(innerJoined.right).resolve(col))
+        withPlan(joined.left).resolve(col),
+        withPlan(joined.right).resolve(col))
     }.reduceLeftOption[catalyst.expressions.BinaryExpression] { (cond, eqTo) =>
       catalyst.expressions.And(cond, eqTo)
     }
 
     withPlan {
-      val joined = Join(
-        innerJoined.left,
-        innerJoined.right,
-        joinType = JoinType(joinType),
-        condition)
-
-      Project(joined.output.filterNot(joinedCols.contains(_)), joined)
+      Project(
+        joined.output.filterNot(joinedCols.contains(_)),
+        joined.copy(condition = condition))
     }
   }
 
