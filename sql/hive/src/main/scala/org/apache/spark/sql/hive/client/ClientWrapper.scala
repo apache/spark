@@ -494,9 +494,9 @@ private[hive] class ClientWrapper(
           results
 
         case _ =>
-          if (state.out != null) {
+          if (state.err != null) {
             // scalastyle:off println
-            state.out.println(tokens(0) + " " + cmd_1)
+            state.err.println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
           }
           Seq(proc.run(cmd_1).getResponseCode.toString)
