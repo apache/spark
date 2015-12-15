@@ -31,8 +31,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
+ * mode (the k-means|| algorithm by Bahmani et al).
  *
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
@@ -251,7 +250,7 @@ class KMeans private (
     val iterationStartTime = System.nanoTime()
     val isSparse = data.take(1)(0).vector.isInstanceOf[SparseVector]
 
-    // Execute iterations of Lloyd's algorithm until all runs have converged
+    // Execute Lloyd's algorithm until converged or reached the max number of iterations
     while (iteration < maxIterations) {
       type WeightedPoint = (Vector, Long)
       def mergeContribs(x: WeightedPoint, y: WeightedPoint): WeightedPoint = {
@@ -273,7 +272,6 @@ class KMeans private (
 
         val vectorOfPoints = new ArrayBuffer[Vector]()
         val normOfPoints = new ArrayBuffer[Double]()
-
         var numRows = 0
 
         // Construct points matrix
@@ -283,11 +281,11 @@ class KMeans private (
           numRows += 1
         }
 
-        val block = if (isSparse) {
+        val pointMatrix = if (isSparse) {
           val coo = new ArrayBuffer[(Int, Int, Double)]()
           vectorOfPoints.zipWithIndex.foreach { v =>
             val sv = v._1.asInstanceOf[SparseVector]
-            (0 until sv.indices.size).foreach { i =>
+            sv.indices.indices.foreach { i =>
               coo.append((v._2, sv.indices(i), sv.values(i)))
             }
           }
@@ -306,24 +304,27 @@ class KMeans private (
         val centerMatrix = new DenseMatrix(dims, k, vectorOfCenters.toArray)
 
         val a2b2 = new ArrayBuffer[Double]()
+        val normOfPointsArray = normOfPoints.toArray
+        val normOfCentersArray = normOfCenters.toArray
         for (i <- 0 until k; j <- 0 until numRows) {
-          val a = normOfPoints.toArray.apply(j)
-          val b = normOfCenters.toArray.apply(i)
-          a2b2.append(a * a + b * b)
+          a2b2.append(normOfPointsArray(j) * normOfPointsArray(j) +
+            normOfCentersArray(i) * normOfCentersArray(i))
         }
 
-        val c = new DenseMatrix(numRows, k, a2b2.toArray)
-        gemm(-2.0, block, centerMatrix, 1.0, c)
+        val distanceMatrix = new DenseMatrix(numRows, k, a2b2.toArray)
+        gemm(-2.0, pointMatrix, centerMatrix, 1.0, distanceMatrix)
 
-        c.transpose.toArray.grouped(k).toArray.map(_.zipWithIndex.min).zipWithIndex.foreach { p =>
-          val cost = p._1._1
-          val bc = p._1._2
-          val index = p._2
-          costAccums += cost
-          val sum = sums(bc)
-          axpy(1.0, vectorOfPoints.toArray.apply(index), sum)
-          counts(bc) += 1
-        }
+        val vectorOfPointsArray = vectorOfPoints.toArray
+        distanceMatrix.transpose.toArray.grouped(k).toArray.map(_.zipWithIndex.min).zipWithIndex
+          .foreach { p =>
+            val cost = p._1._1
+            val bc = p._1._2
+            val index = p._2
+            costAccums += cost
+            val sum = sums(bc)
+            axpy(1.0, vectorOfPointsArray(index), sum)
+            counts(bc) += 1
+          }
 
         val contribs = for (j <- 0 until k) yield {
           (j, (sums(j), counts(j)))
@@ -354,33 +355,27 @@ class KMeans private (
 
     val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
     logInfo(s"Iterations took " + "%.3f".format(iterationTimeInSeconds) + " seconds.")
-
     if (iteration == maxIterations) {
       logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
     } else {
       logInfo(s"KMeans converged in $iteration iterations.")
     }
-
-    val minCost = costs
-    logInfo(s"The cost is $minCost.")
+    logInfo(s"The cost is $costs.")
 
     new KMeansModel(centers.map(_.vector))
   }
 
   /**
-   * Initialize `runs` sets of cluster centers at random.
+   * Initialize cluster centers at random.
    */
-  private def initRandom(data: RDD[VectorWithNorm])
-  : Array[VectorWithNorm] = {
-    // Sample all the cluster centers in one pass to avoid repeated scans
+  private def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
+    // Sample cluster centers in one pass
     val sample = data.takeSample(true, k, new XORShiftRandom(this.seed).nextInt()).toSeq
-    sample.map { v =>
-      new VectorWithNorm(Vectors.dense(v.vector.toArray), v.norm)
-    }.toArray
+    sample.map { v => new VectorWithNorm(Vectors.dense(v.vector.toArray), v.norm) }.toArray
   }
 
   /**
-   * Initialize `runs` sets of cluster centers using the k-means|| algorithm by Bahmani et al.
+   * Initialize cluster centers using the k-means|| algorithm by Bahmani et al.
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). This is a variant of k-means++ that tries
    * to find with dissimilar cluster centers by starting with a random center and then doing
    * passes where more centers are chosen with probability proportional to their squared distance
@@ -393,7 +388,7 @@ class KMeans private (
     val centers = ArrayBuffer.empty[VectorWithNorm]
     var costs = data.map(_ => Double.PositiveInfinity)
 
-    // Initialize each run's first center to a random point.
+    // Initialize first center to a random point.
     val seed = new XORShiftRandom(this.seed).nextInt()
     val sample = data.takeSample(true, 1, seed)(0)
     val newCenters = ArrayBuffer(sample.toDense)
@@ -404,8 +399,8 @@ class KMeans private (
       newCenters.clear()
     }
 
-    // On each step, sample 2 * k points on average for each run with probability proportional
-    // to their squared distance from that run's centers. Note that only distances between points
+    // On each step, sample 2 * k points on average with probability proportional
+    // to their squared distance from the centers. Note that only distances between points
     // and new centers are computed in each iteration.
     var step = 0
     while (step < initializationSteps) {
@@ -421,20 +416,18 @@ class KMeans private (
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
         pointsWithCosts.flatMap { case (p, c) =>
           val rs = rand.nextDouble() < 2.0 * c * k / sumCosts
-          if (rs) Some(p, rs) else None
+          if (rs) Some(p) else None
         }
       }.collect()
       mergeNewCenters()
-      chosen.foreach { case (p, rs) =>
-        newCenters += p.toDense
-      }
+      chosen.foreach { case p => newCenters += p.toDense }
       step += 1
     }
 
     mergeNewCenters()
     costs.unpersist(blocking = false)
 
-    // Finally, we might have a set of more than k candidate centers for each run; weigh each
+    // Finally, we might have a set of more than k candidate centers; weight each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
     val bcCenters = data.context.broadcast(centers)
@@ -443,7 +436,7 @@ class KMeans private (
     }.reduceByKey(_ + _).collectAsMap()
 
     val myCenters = centers.toArray
-    val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse(i, 0.0)).toArray
+    val myWeights = myCenters.indices.map(i => weightMap.getOrElse(i, 0.0)).toArray
     val finalCenters = LocalKMeans.kMeansPlusPlus(0, myCenters, myWeights, k, 30)
 
     finalCenters
