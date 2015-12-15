@@ -148,7 +148,7 @@ printSchema(people)
 </div>
 
 The data sources API can also be used to save out DataFrames into multiple file formats. For example we can save the DataFrame from the previous example
-to a Parquet file using `write.df`
+to a Parquet file using `write.df` (Before spark 1.7, mode's default value is 'append', we change it to 'error' to be consistent with scala api)
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
