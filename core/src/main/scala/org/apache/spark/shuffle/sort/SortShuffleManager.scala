@@ -79,6 +79,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
    */
   private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
 
+  override val shortShuffleMgrName: String = "sort"
+
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
   /**
@@ -159,8 +161,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     }
     true
   }
-
-  override val shortShuffleMgrName: String = "sort"
 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {

@@ -28,6 +28,10 @@ import org.apache.spark.{TaskContext, ShuffleDependency}
  * boolean isDriver as parameters.
  */
 private[spark] trait ShuffleManager {
+
+  /** Return short name for the ShuffleManager */
+  val shortShuffleMgrName: String
+
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
    */
@@ -59,9 +63,6 @@ private[spark] trait ShuffleManager {
    * Return a resolver capable of retrieving shuffle block data based on block coordinates.
    */
   def shuffleBlockResolver: ShuffleBlockResolver
-
-  /** Return short name for the ShuffleManager */
-  val shortShuffleMgrName: String
 
   /** Shut down this ShuffleManager. */
   def stop(): Unit
