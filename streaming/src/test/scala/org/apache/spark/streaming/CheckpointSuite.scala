@@ -42,7 +42,8 @@ import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, Utils}
 /**
  * A input stream that records the times of restore() invoked
  */
-private[streaming] class CheckpointInputDStream(ssc_ : StreamingContext) extends InputDStream[Int](ssc_) {
+private[streaming]
+class CheckpointInputDStream(ssc_ : StreamingContext) extends InputDStream[Int](ssc_) {
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
   override def start(): Unit = { }
   override def stop(): Unit = { }
@@ -130,7 +131,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     new StreamingContext(SparkContext.getOrCreate(conf), batchDuration)
   }
 
-  private def generateOutput[V: ClassTag](
+  protected def generateOutput[V: ClassTag](
       ssc: StreamingContext,
       targetBatchTime: Time,
       checkpointDir: String,
@@ -735,7 +736,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
     }
   }
 
-  test("DStream checkpoint invoke times") {
+  test("DStreamCheckpointData.restore invoking times") {
     var clock: ManualClock = null
     val outputBuffer = new ArrayBuffer[Seq[Int]] with SynchronizedBuffer[Seq[Int]]
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
@@ -746,41 +747,21 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
       val mappedDStream = inputDStream.map(_ + 100)
       val outputStream = new TestOutputStream(mappedDStream, outputBuffer)
       outputStream.register()
-      /// do more two times output
+      // do two more times output
       mappedDStream.foreachRDD(rdd => rdd.count())
       mappedDStream.foreachRDD(rdd => rdd.count())
       assert(checkpointData.restoredTimes === 0)
-      val startTime = System.currentTimeMillis()
-      ssc.start()
-      clock.advance(batchDuration.milliseconds)
-      clock.advance(batchDuration.milliseconds)
-      clock.advance(batchDuration.milliseconds)
-      while (outputStream.output.size < 3 &&
-          System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
-        logInfo("output.size = " + outputStream.output.size + ", numExpectedOutput = 3")
-        ssc.awaitTerminationOrTimeout(50)
-      }
-      ssc.stop()
-      assert(outputStream.output.flatten === Seq(101, 101, 101))
+      val batchDurationMillis = ssc.progressListener.batchDuration
+      generateOutput(ssc, Time(batchDurationMillis * 3), checkpointDir, stopSparkContext = true)
       assert(checkpointData.restoredTimes === 0)
     }
     logInfo("*********** RESTARTING ************")
     withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
-      clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
-      val checkpointData = ssc.graph.getInputStreams().head.asInstanceOf[CheckpointInputDStream].checkpointData
+      val checkpointData =
+        ssc.graph.getInputStreams().head.asInstanceOf[CheckpointInputDStream].checkpointData
       assert(checkpointData.restoredTimes === 1)
-      val startTime = System.currentTimeMillis()
       ssc.start()
-      clock.advance(batchDuration.milliseconds)
-      clock.advance(batchDuration.milliseconds)
-      while (outputStream.output.size < 3 &&
-          System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
-        logInfo("output.size = " + outputStream.output.size + ", numExpectedOutput = 3")
-        ssc.awaitTerminationOrTimeout(50)
-      }
       ssc.stop()
-      assert(outputStream.output.flatten === Seq(101, 101, 101))
       assert(checkpointData.restoredTimes === 1)
     }
   }
