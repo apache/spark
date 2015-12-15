@@ -296,14 +296,11 @@ case class UnwrapOption(
  * (in the case of reference types) equality with null.
  * @param child The expression to evaluate and wrap.
  */
-case class WrapOption(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+case class WrapOption(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
   override def nullable: Boolean = true
-
-  override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
