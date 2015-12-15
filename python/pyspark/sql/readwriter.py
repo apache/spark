@@ -494,7 +494,7 @@ class DataFrameWriter(object):
         self._jwrite.orc(path)
 
     @since(1.4)
-    def jdbc(self, url, table, mode=None, properties=None):
+    def jdbc(self, url, table, mode=None, properties=None, columnMapping=None):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster;\
@@ -511,13 +511,20 @@ class DataFrameWriter(object):
         :param properties: JDBC database connection arguments, a list of
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.
+        :param columnMapping: optional column name mapping from DF field names to 
+                              JDBC table column names.
         """
         if properties is None:
             properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
-        self._jwrite.mode(mode).jdbc(url, table, jprop)
+        if columnMapping is None:
+        	  columnMapping = dict()
+        jcolumnMapping = JavaClass("java.util.HashMap", self._sqlContext._sc._gateway._gateway_client)()
+        for k in columnMapping:
+            jcolumnMapping.put(k, columnMapping[k])
+        self._jwrite.mode(mode).jdbc(url, table, jprop, jcolumnMapping)
 
 
 def _test():

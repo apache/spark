@@ -96,6 +96,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
   }
 
+  test("Basic CREATE with columnMapping") {
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    val columnMapping = Map("name" -> "name", "id" -> "id")
+    df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties, columnMapping)
+    assert(2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+    assert(
+      2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
+  }
+
   test("CREATE with overwrite") {
     val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
     val df2 = sqlContext.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
