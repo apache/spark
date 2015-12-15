@@ -21,13 +21,12 @@ import java.io.FileNotFoundException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeoutException, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
-import scala.util.control.NonFatal
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -47,9 +46,6 @@ import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
-
-/** Exception thrown when trying to rebuild UI and event log is disabled */
-private[master] class RebuildUINoEventLogException extends Exception
 
 private[deploy] class Master(
     override val rpcEnv: RpcEnv,
@@ -940,33 +936,20 @@ private[deploy] class Master(
    */
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val futureUI = asyncRebuildSparkUI(app)
-
-    // Wait until the UI is rebuilt or cancelled, log status occasionally for apps with many events
-    var waitSec = 2
-    do {
-      try {
-        val ui = Await.result(futureUI, Duration(waitSec, TimeUnit.SECONDS))
-        return Some(ui)
-      } catch {
-        case te: TimeoutException =>
-          waitSec *= 2
-          logInfo(s"Application UI is rebuilding, will continue to wait $waitSec seconds")
-        case NonFatal(_) | _: InterruptedException =>
-          waitSec = 0
-      }
-    } while (waitSec > 0)
-    None
+    Await.result(futureUI, Duration.Inf)
   }
 
   /** Rebuild a new SparkUI asynchronously to not block RPC event loop */
-  private[master] def asyncRebuildSparkUI(app: ApplicationInfo): Future[SparkUI] = {
+  private[master] def asyncRebuildSparkUI(app: ApplicationInfo): Future[Option[SparkUI]] = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
+    val eventLogDir = app.desc.eventLogDir
+        .getOrElse {
+          // Event logging is disabled for this application
+          app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
+          return Future.successful(None)
+        }
     val futureUI = Future {
-
-      // Fail the future immediately if event logging is not enabled for this application
-      val eventLogDir = app.desc.eventLogDir.getOrElse(throw new RebuildUINoEventLogException)
-
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
         eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
@@ -991,10 +974,10 @@ private[deploy] class Master(
         logInput.close()
       }
 
-      ui
+      Some(ui)
     }(rebuildUIContext)
 
-    futureUI.onSuccess { case ui =>
+    futureUI.onSuccess { case Some(ui) =>
       appIdToUI.put(app.id, ui)
       self.send(AttachCompletedRebuildUI(app.id))
       // Application UI is successfully rebuilt, so link the Master UI to it
@@ -1003,10 +986,6 @@ private[deploy] class Master(
     }(ThreadUtils.sameThread)
 
     futureUI.onFailure {
-      case nev: RebuildUINoEventLogException =>
-        // Event logging is disabled for this application
-        app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
-
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
