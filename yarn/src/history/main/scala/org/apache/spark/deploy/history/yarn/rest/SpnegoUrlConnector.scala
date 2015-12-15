@@ -37,7 +37,8 @@ import org.apache.spark.Logging
  * Based on WebHFDS client code in
  * `org.apache.hadoop.hdfs.web.URLConnectionFactory`
  */
-private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator,
+private[spark] class SpnegoUrlConnector(
+  connConfigurator: ConnectionConfigurator,
   delegationToken: DelegationTokenAuthenticatedURL.Token) extends Logging {
 
   val secure = UserGroupInformation.isSecurityEnabled
@@ -48,7 +49,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
     if (secure)  {
       new LoggingKerberosDelegationTokenAuthenticator()
     } else {
-      new PseudoDelegationTokenAuthenticator
+      new PseudoDelegationTokenAuthenticator()
     }
 
   init()
@@ -68,7 +69,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    * @param isSpnego whether the url should be authenticated via SPNEGO
    * @return URLConnection
    * @throws IOException IO problems
-   * @throws AuthenticationException authenticaion failure
+   * @throws AuthenticationException authentication failure
    */
 
   def openConnection(url: URL, isSpnego: Boolean): URLConnection = {
@@ -76,13 +77,13 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
     require(url.getPort != 0, "no port")
     if (isSpnego) {
       logDebug(s"open AuthenticatedURL connection $url")
-      UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab
+      UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab()
       val authToken = new AuthenticatedURL.Token
       val authurl = new AuthenticatedURL(KerberosUgiAuthenticator, connConfigurator)
       authurl.openConnection(url, authToken)
     } else {
       logDebug(s"open URL connection $url")
-      val connection: URLConnection = url.openConnection
+      val connection = url.openConnection()
       connection match {
         case connection1: HttpURLConnection =>
           connConfigurator.configure(connection1)
@@ -122,8 +123,8 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
     val conn = callerUGI.doAs(new PrivilegedFunction(
       () => {
         try {
-          new AuthenticatedURL(KerberosUgiAuthenticator,
-            connConfigurator).openConnection(url, authToken)
+          new AuthenticatedURL(KerberosUgiAuthenticator, connConfigurator)
+              .openConnection(url, authToken)
         } catch {
           case ex: AuthenticationException =>
             // auth failure
@@ -184,7 +185,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
     payload: Array[Byte] = null,
     payloadContentType: String = ""): HttpOperationResponse = {
     var conn: HttpURLConnection = null
-    val outcome = new HttpOperationResponse
+    val outcome = new HttpOperationResponse()
     var resultCode = 0
     var body: Array[Byte] = null
     logDebug(s"$verb $url spnego=$secure")
@@ -285,10 +286,8 @@ private[spark] object SpnegoUrlConnector extends Logging {
   /**
    * Sets timeout parameters on the given URLConnection.
    *
-   * @param connection
-   * URLConnection to set
-   * @param socketTimeout
-   * the connection and read timeout of the connection.
+   * @param connection URLConnection to set
+   * @param socketTimeout the connection and read timeout of the connection.
    */
   def setTimeouts(connection: URLConnection, socketTimeout: Int) {
     connection.setConnectTimeout(socketTimeout)
@@ -323,7 +322,8 @@ private[spark] object SpnegoUrlConnector extends Logging {
    *
    * This uses `org.apache.hadoop.security.ssl.SSLFactory` to build an
    * SSL factory based on information provided in the Hadoop configuration
-   * object passed in.
+   * object passed in, including the hostname verifier specified
+   * in the configuration options.
    *
    * @param timeout timeout in millis
    * @param conf configuration
@@ -362,7 +362,7 @@ private[spark] object SpnegoUrlConnector extends Logging {
    * Uprate error codes 400 and up into exceptions, which are then thrown
    *
    * 1. 404 is converted to a `FileNotFoundException`
-   * 2. 401 & 404 to `UnauthorizedRequestException`
+   * 2. 401 and 404 to `UnauthorizedRequestException`
    * 3. All others above 400: `IOException`
    * 4. Any error code under 400 is not considered a failure; this function will return normally.
    *
@@ -421,9 +421,9 @@ private[spark] object SpnegoUrlConnector extends Logging {
     response.responseCode match {
       case HttpURLConnection.HTTP_UNAUTHORIZED =>
         true
-      case HttpURLConnection.HTTP_FORBIDDEN if message == ANONYMOUS_REQUESTS_DISALLOWED ||
-            message.contains(INVALID_SIGNATURE) =>
-        true
+      case HttpURLConnection.HTTP_FORBIDDEN
+        if message == ANONYMOUS_REQUESTS_DISALLOWED || message.contains(INVALID_SIGNATURE) =>
+          true
       case _ =>
         false
     }

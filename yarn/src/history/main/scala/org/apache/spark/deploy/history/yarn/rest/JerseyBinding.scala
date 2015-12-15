@@ -200,6 +200,7 @@ private[spark] object JerseyBinding extends Logging {
           ioe = new FileNotFoundException(
             s"Bad $verb request: status code $status against $url; $body")
           ioe.initCause(exception)
+
         case _ =>
           ioe = new IOException(errorText, exception)
 
