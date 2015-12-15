@@ -365,43 +365,43 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     new MesosSchedulerBackend(taskScheduler, sc, "master")
   }
 
-  test("isOfferValidForScheduling return true when there offer meet cpu and memory requirement") {
+  test("isOfferSatisfiesRequirements return true when there offer meet cpu and memory requirement") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling( 5, 10000, "Slave1", sc))
+    assert(schedulerBackend.isOfferSatisfiesRequirements( 5, 10000, "Slave1", sc))
   }
 
-  test("isOfferValidForScheduling return false when memory in offer is less than required memory") {
+  test("isOfferSatisfiesRequirements return false when memory in offer is less than required memory") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(5, 10, "Slave1", sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(5, 10, "Slave1", sc) === false)
   }
 
-  test("isOfferValidForScheduling return false when cpu in offer is less than required cpu") {
+  test("isOfferSatisfiesRequirements return false when cpu in offer is less than required cpu") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(0, 10000, "Slave1", sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(0, 10000, "Slave1", sc) === false)
   }
 
-  test("isOfferValidForScheduling return true when offer is from slave already running and" +
+  test("isOfferSatisfiesRequirements return true when offer is from slave already running and" +
     " cpu is less than minimum cpu per task an executor") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
     schedulerBackend.slaveIdToExecutorInfo("Slave2") = null
 
-    assert(schedulerBackend.isOfferValidForScheduling(2, 10000, "Slave2", sc) === true)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(2, 10000, "Slave2", sc) === true)
   }
 
-  test("isOfferValidForScheduling return false when offer is from slave already running but" +
+  test("isOfferSatisfiesRequirements return false when offer is from slave already running but" +
     " cpu is less than minimum cpu per task an executor") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
     schedulerBackend.slaveIdToExecutorInfo("Slave2") = null
 
-    assert(schedulerBackend.isOfferValidForScheduling(1, 10000, "Slave2", sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(1, 10000, "Slave2", sc) === false)
   }
 
 }
