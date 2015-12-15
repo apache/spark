@@ -206,7 +206,7 @@ private[streaming] class StateImpl[S] extends State[S] {
    * Update the internal data and flags in `this` to the given state that is going to be timed out.
    * This method allows `this` object to be reused across many state records.
    */
-  def wrapTiminoutState(newState: S): Unit = {
+  def wrapTimingOutState(newState: S): Unit = {
     this.state = newState
     defined = true
     timingOut = true
