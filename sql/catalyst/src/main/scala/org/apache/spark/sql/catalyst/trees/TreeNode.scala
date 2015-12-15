@@ -479,18 +479,24 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case (name, value: TreeNode[_]) if containsChild(value) => None
       case (name, value: TreeNode[_]) => Some(name -> value.allJsonValues)
       case (name, value: Seq[BaseType]) if value.toSet.subsetOf(children.toSet) => None
-      case (name, value: Seq[_]) =>
-        if (value.length > 0 && value(0).isInstanceOf[TreeNode[_]]) {
-          Some(name -> JArray(value.map(_.asInstanceOf[TreeNode[_]].allJsonValues).toList))
-        } else {
-          Some(name -> JArray(value.map(v => JString(v.toString)).toList))
-        }
-      case (name, value: Set[_]) =>
-        Some(name -> JArray(value.map(v => JString(v.toString)).toList))
-      case (name, value) => Some(name -> JString(value.toString))
+      case (name, value) => Some(name -> parseToJson(value))
     }
 
     JObject(("node-name" -> JString(nodeName)) :: jsonFields.toList)
+  }
+
+  private def parseToJson(obj: Any): JValue = obj match {
+    case n: TreeNode[_] => n.allJsonValues
+    case b: Boolean => JBool(b)
+    case b: Byte => JInt(b.toInt)
+    case s: Short => JInt(s.toInt)
+    case i: Int => JInt(i)
+    case l: Long => JInt(l)
+    case f: Float => JDouble(f)
+    case d: Double => JDouble(d)
+    case o: Option[_] => o.map(parseToJson).getOrElse(JNothing)
+    case t: Traversable[_] => JArray(t.map(parseToJson).toList)
+    case _ => JString(obj.toString)
   }
 
   private def allJsonValues: JValue = {

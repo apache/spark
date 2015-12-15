@@ -25,6 +25,9 @@ class TreeNodeJsonFormatSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("logical plan json format") {
-    println(testRelation.select(('a + 1).as("i"), ('a * 2).as("j")).sortBy('i.asc).toJSON)
+    val plan = testRelation.select(('a + 1).as("i"), ('a * 2).as("j")).sortBy('i.asc).analyze
+    // scalastyle:off println
+    println(plan.toJSON)
+    println(plan.treeString)
   }
 }
