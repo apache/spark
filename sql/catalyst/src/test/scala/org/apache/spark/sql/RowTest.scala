@@ -46,21 +46,21 @@ class RowTest extends FunSpec with Matchers {
       }
     }
 
-    it("getAsOpt[T]() can get values using indices.") {
-      noSchemaRow.getAsOpt[String](0) should be (Some("value1"))
-      noSchemaRow.getAsOpt[Double](1) should be (Some(1.0))
-      noSchemaRow.getAsOpt[Int](2) should be (Some(1))
+    it("getOption[T]() can get values using indices.") {
+      noSchemaRow.getOption[String](0) should be (Some("value1"))
+      noSchemaRow.getOption[Double](1) should be (Some(1.0))
+      noSchemaRow.getOption[Int](2) should be (Some(1))
     }
 
-    it("getAsOpt[T]() cannot get values using field names.") {
-      noSchemaRow.getAsOpt[String]("col1") should be (None)
-      noSchemaRow.getAsOpt[Double]("col2") should be (None)
-      noSchemaRow.getAsOpt[Int]("col3") should be (None)
+    it("getOption[T]() cannot get values using field names.") {
+      noSchemaRow.getOption[String]("col1") should be (None)
+      noSchemaRow.getOption[Double]("col2") should be (None)
+      noSchemaRow.getOption[Int]("col3") should be (None)
     }
 
-    it("getAsOpt[T]() returns None for non-existing columns.") {
-      noSchemaRow.getAsOpt[String](3) should be (None)
-      sampleRow.getAsOpt[Double]("col4") should be (None)
+    it("getOption[T]() returns None for non-existing columns.") {
+      noSchemaRow.getOption[String](3) should be (None)
+      sampleRow.getOption[Double]("col4") should be (None)
     }
   }
 
@@ -75,27 +75,27 @@ class RowTest extends FunSpec with Matchers {
       sampleRow.getAs[Int]("col3") shouldBe 1
     }
 
-    it("getAsOpt[T]() can get values using indices.") {
-      sampleRow.getAsOpt[String](0) should be (Some("value1"))
-      sampleRow.getAsOpt[Double](1) should be (Some(1.0))
-      sampleRow.getAsOpt[Int](2) should be (Some(1))
+    it("getOption[T]() can get values using indices.") {
+      sampleRow.getOption[String](0) should be (Some("value1"))
+      sampleRow.getOption[Double](1) should be (Some(1.0))
+      sampleRow.getOption[Int](2) should be (Some(1))
     }
 
-    it("getAsOpt[T]() can get values using field names.") {
-      sampleRow.getAsOpt[String]("col1") should be (Some("value1"))
-      sampleRow.getAsOpt[Double]("col2") should be (Some(1.0))
-      sampleRow.getAsOpt[Int]("col3") should be (Some(1))
+    it("getOption[T]() can get values using field names.") {
+      sampleRow.getOption[String]("col1") should be (Some("value1"))
+      sampleRow.getOption[Double]("col2") should be (Some(1.0))
+      sampleRow.getOption[Int]("col3") should be (Some(1))
     }
 
-    it("getAsOpt[T] retrieves an Optional value if the field name exists else returns None") {
-      sampleRow.getAsOpt[String]("col1") shouldBe Some("value1")
-      sampleRow.getAsOpt[Int]("col3") shouldBe Some(1)
-      sampleRow.getAsOpt[String]("col4") shouldBe None
+    it("getOption[T] retrieves an Optional value if the field name exists else returns None") {
+      sampleRow.getOption[String]("col1") shouldBe Some("value1")
+      sampleRow.getOption[Int]("col3") shouldBe Some(1)
+      sampleRow.getOption[String]("col4") shouldBe None
     }
 
-    it("getAsOpt[T] retrieves an Optional value if class cast is successful else returns None") {
-      sampleRow.getAsOpt[String]("col1") shouldBe Some("value1")
-      sampleRow.getAsOpt[Int]("col2") shouldBe Some(1)
+    it("getOption[T] retrieves an Optional value if class cast is successful else returns None") {
+      sampleRow.getOption[String]("col1") shouldBe Some("value1")
+      sampleRow.getOption[Int]("col2") shouldBe Some(1)
     }
 
     it("Accessing non existent field throws an exception") {

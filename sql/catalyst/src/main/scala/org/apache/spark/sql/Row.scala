@@ -320,7 +320,7 @@ trait Row extends Serializable {
    * Returns the Optional value at position i.
    * If the value is null or if it cannot be cast to the requested type, None is returned.
    */
-  def getAsOpt[T](i: Int): Option[T] = {
+  def getOption[T](i: Int): Option[T] = {
     val value = {
       if (i < length) {
         if (isNullAt(i)) None
@@ -346,7 +346,7 @@ trait Row extends Serializable {
    * also returned if either the schema is not defined or else the given fieldName does not exist
    * in the schema.
    */
-  def getAsOpt[T](fieldName: String): Option[T] = None
+  def getOption[T](fieldName: String): Option[T] = None
 
   /**
    * Returns the value of a given fieldName.
