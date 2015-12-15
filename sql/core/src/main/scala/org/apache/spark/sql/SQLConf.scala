@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -93,7 +94,7 @@ private[spark] object SQLConf {
           isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
         try {
-          v.toInt
+          Utils.byteStringAsBytes(v).toInt
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be int, but was $v")
@@ -107,7 +108,7 @@ private[spark] object SQLConf {
         isPublic: Boolean = true): SQLConfEntry[Long] =
       SQLConfEntry(key, defaultValue, { v =>
         try {
-          v.toLong
+          Utils.byteStringAsBytes(v)
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be long, but was $v")
