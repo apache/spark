@@ -251,25 +251,7 @@ case class ExpressionEncoder[T](
 
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
-    if (!analyzedPlan.resolved) {
-      analyzedPlan match {
-        // Looked for UpCasts. If these still exist, it indicates they could not resolve and
-        // something about the schemas is mismatched.
-        case p @ Project(projectList, _) => {
-          p.projectList.foreach { e: NamedExpression => e.foreach { _ match {
-            case u @ UpCast(child, dataType, walkedTypePath) => {
-              throw new AnalysisException(s"Cannot resolve `${child.prettyString}`. " +
-                "The type path of the target object is:\n" +
-                walkedTypePath.mkString("", "\n", "\n") +
-                "Ensure that the input schema contains this field.\n - Input schema is " +
-                schema.map { f => f.name + ": " + f.dataType }.mkString(", "))
-            }
-            case _ =>
-          }
-        }}
-      }}
-    }
-
+    SimpleAnalyzer.checkAnalysis(analyzedPlan)
     val optimizedPlan = SimplifyCasts(analyzedPlan)
 
     // In order to construct instances of inner classes (for example those declared in a REPL cell),
