@@ -89,6 +89,7 @@ object Cast {
   private def forceNullable(from: DataType, to: DataType) = (from, to) match {
     case (StringType, _: NumericType) => true
     case (StringType, TimestampType) => true
+    case (StringType, BooleanType) => true
     case (DoubleType, TimestampType) => true
     case (FloatType, TimestampType) => true
     case (StringType, DateType) => true
