@@ -67,7 +67,7 @@ private[streaming] object MapWithStateRDDRecord {
     // data returned
     if (removeTimedoutData && timeoutThresholdTime.isDefined) {
       newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
-        wrappedState.wrapTiminoutState(state)
+        wrappedState.wrapTimingOutState(state)
         val returned = mappingFunction(batchTime, key, None, wrappedState)
         mappedData ++= returned
         newStateMap.remove(key)

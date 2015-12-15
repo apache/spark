@@ -125,7 +125,7 @@ class MapWithStateSuite extends SparkFunSuite
     state.remove()
     testState(None, shouldBeRemoved = true)
 
-    state.wrapTiminoutState(3)
+    state.wrapTimingOutState(3)
     testState(Some(3), shouldBeTimingOut = true)
   }
 
