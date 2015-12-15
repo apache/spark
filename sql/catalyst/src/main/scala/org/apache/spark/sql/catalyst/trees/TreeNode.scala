@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import org.apache.spark.sql.catalyst.JavaTypeInference
+
 import scala.collection.Map
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.types.{StructType, DataType}
@@ -463,4 +468,40 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
     s"$nodeName(${args.mkString(",")})"
   }
+
+  private[sql] def jsonValue: JValue = {
+    val fieldNames = JavaTypeInference.getConstructorParaNames(getClass)
+    val fieldValues = productIterator.toSeq ++ otherCopyArgs
+    assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
+      fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
+
+    val jsonFields: Seq[JField] = fieldNames.zip(fieldValues).flatMap {
+      case (name, value: TreeNode[_]) if containsChild(value) => None
+      case (name, value: TreeNode[_]) => Some(name -> value.allJsonValues)
+      case (name, value: Seq[BaseType]) if value.toSet.subsetOf(children.toSet) => None
+      case (name, value: Seq[_]) =>
+        if (value.length > 0 && value(0).isInstanceOf[TreeNode[_]]) {
+          Some(name -> JArray(value.map(_.asInstanceOf[TreeNode[_]].allJsonValues).toList))
+        } else {
+          Some(name -> JArray(value.map(v => JString(v.toString)).toList))
+        }
+      case (name, value: Set[_]) =>
+        Some(name -> JArray(value.map(v => JString(v.toString)).toList))
+      case (name, value) => Some(name -> JString(value.toString))
+    }
+
+    JObject(("node-name" -> JString(nodeName)) :: jsonFields.toList)
+  }
+
+  private def allJsonValues: JValue = {
+    val jsonValues = scala.collection.mutable.ArrayBuffer.empty[JValue]
+    def collectJsonValue(node: BaseType): Unit = {
+      jsonValues += node.jsonValue.merge(JObject("num-children" -> JInt(node.children.length)))
+      node.children.foreach(collectJsonValue)
+    }
+    collectJsonValue(this)
+    jsonValues
+  }
+
+  def toJSON: String = pretty(render(allJsonValues))
 }

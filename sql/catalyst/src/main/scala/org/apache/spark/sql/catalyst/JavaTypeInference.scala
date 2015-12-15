@@ -21,6 +21,8 @@ import java.beans.{PropertyDescriptor, Introspector}
 import java.lang.{Iterable => JIterable}
 import java.util.{Iterator => JIterator, Map => JMap, List => JList}
 
+import com.thoughtworks.paranamer.{BytecodeReadingParanamer, CachingParanamer, Paranamer}
+
 import scala.language.existentials
 
 import com.google.common.reflect.TypeToken
@@ -404,5 +406,12 @@ object JavaTypeInference {
           }
       }
     }
+  }
+
+  private val paranamer: Paranamer = new BytecodeReadingParanamer()
+
+  def getConstructorParaNames(cls: Class[_]): Seq[String] = {
+    val ctr = cls.getConstructors.maxBy(_.getParameterCount)
+    paranamer.lookupParameterNames(ctr)
   }
 }
