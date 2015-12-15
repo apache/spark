@@ -35,26 +35,23 @@ import scala.collection.{Map, mutable}
 import scala.reflect.ClassTag
 
 /**
-  * ReliableKafkaReceiver offers the ability to reliably store data into BlockManager
-  * without loss.
-  * It is turned off by default and will be enabled when
-  * spark.streaming.receiver.writeAheadLog.enable is true. The difference compared to KafkaReceiver
-  * is that this receiver manages topic-partition/offset itself and updates the offset information
-  * after data is reliably stored as write-ahead log. Offsets will only be updated when data is
-  * reliably stored, so the potential data loss problem of KafkaReceiver can be eliminated.
-  *
-  * Note: ReliableKafkaReceiver will set auto.commit.enable to false to turn off automatic offset
-  * commit mechanism in Kafka consumer. So setting this configuration manually within kafkaParams
-  * will not take effect.
-  */
+ * ReliableKafkaReceiver offers the ability to reliably store data into BlockManager
+ * without loss.
+ * It is turned off by default and will be enabled when
+ * spark.streaming.receiver.writeAheadLog.enable is true. The difference compared to KafkaReceiver
+ * is that this receiver manages topic-partition/offset itself and updates the offset information
+ * after data is reliably stored as write-ahead log. Offsets will only be updated when data is
+ * reliably stored, so the potential data loss problem of KafkaReceiver can be eliminated.
+ *
+ * Note: ReliableKafkaReceiver will set auto.commit.enable to false to turn off automatic offset
+ * commit mechanism in Kafka consumer. So setting this configuration manually within kafkaParams
+ * will not take effect.
+ */
 private[streaming]
-class ReliableKafkaReceiver[
-K: ClassTag,
-V: ClassTag](
-              kafkaParams: Map[String, String],
-              topics: Map[String, Int],
-              storageLevel: StorageLevel)
-  extends Receiver[(K, V)](storageLevel) with Logging {
+class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
+    kafkaParams: Map[String, String],
+    topics: Map[String, Int],
+    storageLevel: StorageLevel) extends Receiver[(K, V)](storageLevel) with Logging {
 
   private val groupId = kafkaParams("group.id")
   private val AUTO_OFFSET_COMMIT = ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG
@@ -68,35 +65,34 @@ V: ClassTag](
 
   private val KAFKA_DEFAULT_POLL_TIME: String = "0"
   private val pollTime = kafkaParams.get("spark.kafka.poll.time")
-    .getOrElse(KAFKA_DEFAULT_POLL_TIME).toInt
+   .getOrElse(KAFKA_DEFAULT_POLL_TIME).toInt
 
   /**
-    * A HashMap to manage the offset for each topic/partition, this HashMap is called in
-    * synchronized block, so mutable HashMap will not meet concurrency issue.
-    */
+   * A HashMap to manage the offset for each topic/partition, this HashMap is called in
+   * synchronized block, so mutable HashMap will not meet concurrency issue.
+   */
   private var topicPartitionOffsetMap: mutable.HashMap[TopicAndPartition, Long] = null
 
   /** A concurrent HashMap to store the stream block id and related offset snapshot. */
   private var blockOffsetMap: ConcurrentHashMap[StreamBlockId, Map[TopicAndPartition, Long]] = null
 
   /**
-    * Manage the BlockGenerator in receiver itself for better managing block store and offset
-    * commit.
-    */
+   * Manage the BlockGenerator in receiver itself for better managing block store and offset
+   * commit.
+   */
   private var blockGenerator: BlockGenerator = null
 
   /** Thread pool running the handlers for receiving message from multiple topics and partitions. */
   private var messageHandlerThreadPool: ThreadPoolExecutor = null
 
   private var topicAndPartitionConsumerMap:
-  mutable.HashMap[TopicAndPartition, KafkaConsumer[K, V]] = null
+    mutable.HashMap[TopicAndPartition, KafkaConsumer[K, V]] = null
 
   private var consumerAndLockMap:
-  mutable.HashMap[KafkaConsumer[K, V], ReentrantLock] = null
+    mutable.HashMap[KafkaConsumer[K, V], ReentrantLock] = null
 
   override def onStart(): Unit = {
     logInfo(s"Starting Kafka Consumer Stream with group: $groupId")
-    logWarning("[!] -> Starting 0.9 ReliableKafkaReceiver")
     // Initialize the topic-partition / offset hash map.
     topicPartitionOffsetMap = new mutable.HashMap[TopicAndPartition, Long]
 
@@ -111,7 +107,7 @@ V: ClassTag](
 
     if (kafkaParams.contains(AUTO_OFFSET_COMMIT) && kafkaParams(AUTO_OFFSET_COMMIT) == "true") {
       logWarning(s"$AUTO_OFFSET_COMMIT should be set to false in ReliableKafkaReceiver, " +
-        "otherwise we will manually set it to false to turn off auto offset commit in Kafka")
+       "otherwise we will manually set it to false to turn off auto offset commit in Kafka")
     }
 
     props = new Properties()
@@ -171,8 +167,7 @@ V: ClassTag](
   }
 
   /** Store a Kafka message and the associated metadata as a tuple. */
-  private def storeMessageAndMetadata(
-                                       msgAndMetadata: MessageAndMetadata[K, V]): Unit = {
+  private def storeMessageAndMetadata(msgAndMetadata: MessageAndMetadata[K, V]): Unit = {
     val topicAndPartition = TopicAndPartition(msgAndMetadata.topic, msgAndMetadata.partition)
     val data = (msgAndMetadata.key, msgAndMetadata.message)
     val metadata = (topicAndPartition, msgAndMetadata.offset)
@@ -192,9 +187,9 @@ V: ClassTag](
   }
 
   /**
-    * Remember the current offsets for each topic and partition. This is called when a block is
-    * generated.
-    */
+   * Remember the current offsets for each topic and partition. This is called when a block is
+   * generated.
+   */
   private def rememberBlockOffsets(blockId: StreamBlockId): Unit = {
     // Get a snapshot of current offset map and store with related block id.
     val offsetSnapshot = topicPartitionOffsetMap.toMap
@@ -203,12 +198,13 @@ V: ClassTag](
   }
 
   /**
-    * Store the ready-to-be-stored block and commit the related offsets to zookeeper. This method
-    * will try a fixed number of times to push the block. If the push fails,
-    * the receiver is stopped.
-    */
-  private def storeBlockAndCommitOffset(blockId: StreamBlockId,
-                                        arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+   * Store the ready-to-be-stored block and commit the related offsets to Kafka. This method
+   * will try a fixed number of times to push the block. If the push fails,
+   * the receiver is stopped.
+   */
+  private def storeBlockAndCommitOffset(
+    blockId: StreamBlockId,
+    arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
     var count = 0
     var pushed = false
     var exception: Exception = null
@@ -231,13 +227,13 @@ V: ClassTag](
   }
 
   /**
-    * Commit the offset of Kafka's topic/partition, the commit mechanism follow Kafka 0.8.x's
-    * metadata schema in Zookeeper.
-    */
+   * Commit the offset of Kafka's topic/partition
+   */
   private def commitOffset(offsetMap: Map[TopicAndPartition, Long]): Unit = {
     val offsets = new util.HashMap[TopicPartition, OffsetAndMetadata]()
     for ((topicAndPart, offset) <- offsetMap) {
-      val kafkaConsumer = topicAndPartitionConsumerMap.get(topicAndPart).get // todo: remove get
+      val kafkaConsumer = topicAndPartitionConsumerMap.getOrElse(topicAndPart,
+        throw new RuntimeException(s"Failed to get consumer for $topicAndPart"))
 
       val topicPartition = new TopicPartition(topicAndPart.topic, topicAndPart.partition)
       val offsetAndMetadata = new OffsetAndMetadata(offset)

@@ -18,9 +18,8 @@
 package org.apache.spark.streaming.kafka.v09
 
 import kafka.common.TopicAndPartition
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
+import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.spark._
-import org.apache.spark.streaming.kafka.v09.{HasOffsetRanges, KafkaTestUtils, KafkaUtils, OffsetRange}
 import org.scalatest.BeforeAndAfterAll
 
 import scala.util.Random
@@ -65,8 +64,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "10000"
-    )
+      "spark.kafka.poll.time" -> "10000")
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
@@ -97,7 +95,6 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
     val topic = s"new_topicboundary-${Random.nextInt}"
@@ -112,8 +109,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000"
-    )
+      "spark.kafka.poll.time" -> "1000")
 
     val kc = new KafkaCluster(kafkaParams)
 
@@ -164,14 +160,14 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       kc.getCommittedOffsets(topicPartitions).right.toOption.orElse(
         kc.getEarliestOffsets(topicPartitions).right.toOption.map { offs =>
           offs.map(kv => kv._1 -> kv._2)
-        }
-      )
+        })
     }
     kc.getPartitions(topics).right.toOption.flatMap { topicPartitions =>
       consumerOffsets(topicPartitions).flatMap { from =>
         kc.getLatestOffsets(topicPartitions).right.toOption.map { until =>
-          val offsetRanges = from.map { case (tp: TopicAndPartition, fromOffset: Long) =>
-            OffsetRange(tp.topic, tp.partition, fromOffset, until(tp))
+          val offsetRanges = from.map {
+            case (tp: TopicAndPartition, fromOffset: Long) =>
+              OffsetRange(tp.topic, tp.partition, fromOffset, until(tp))
           }.toArray
 
           KafkaUtils.createRDD[String, String, String](

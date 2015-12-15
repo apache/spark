@@ -19,9 +19,8 @@ package org.apache.spark.streaming.kafka.v09
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.kafka.v09.{KafkaTestUtils, KafkaUtils}
-import org.apache.spark.streaming.{Milliseconds, StreamingContext}
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.streaming.{ Milliseconds, StreamingContext }
+import org.apache.spark.{ SparkConf, SparkFunSuite }
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 
@@ -67,8 +66,7 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "100"
-    )
+      "spark.kafka.poll.time" -> "100")
 
     val stream = KafkaUtils.createStream[String, String](
       ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)

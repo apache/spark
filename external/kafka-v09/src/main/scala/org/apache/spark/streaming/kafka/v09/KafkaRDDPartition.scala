@@ -20,18 +20,18 @@ package org.apache.spark.streaming.kafka.v09
 import org.apache.spark.Partition
 
 /** @param topic kafka topic name
-  * @param partition kafka partition id
-  * @param fromOffset inclusive starting offset
-  * @param untilOffset exclusive ending offset
-  */
+ *  @param partition kafka partition id
+ *  @param fromOffset inclusive starting offset
+ *  @param untilOffset exclusive ending offset
+ */
 private[kafka]
 class KafkaRDDPartition(
-                         val index: Int,
-                         val topic: String,
-                         val partition: Int,
-                         val fromOffset: Long,
-                         val untilOffset: Long
-                         ) extends Partition {
+    val index: Int,
+    val topic: String,
+    val partition: Int,
+    val fromOffset: Long,
+    val untilOffset: Long
+  ) extends Partition {
   /** Number of messages this partition refers to */
   def count(): Long = untilOffset - fromOffset
 }

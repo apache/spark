@@ -31,14 +31,14 @@ import scala.collection.Map
 import scala.reflect.ClassTag
 
 /**
-  * Input stream that pulls messages from a Kafka Broker.
-  *
-  * @param kafkaParams Map of kafka configuration parameters.
-  *                    See: http://kafka.apache.org/configuration.html
-  * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-  *               in its own thread.
-  * @param storageLevel RDD storage level.
-  */
+ * Input stream that pulls messages from a Kafka Broker.
+ *
+ * @param kafkaParams Map of kafka configuration parameters.
+ *                    See: http://kafka.apache.org/configuration.html
+ * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+ *               in its own thread.
+ * @param storageLevel RDD storage level.
+ */
 private[streaming]
 class KafkaInputDStream[
 K: ClassTag,

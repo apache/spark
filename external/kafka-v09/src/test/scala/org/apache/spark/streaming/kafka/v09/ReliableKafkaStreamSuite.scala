@@ -23,11 +23,11 @@ import kafka.common.TopicAndPartition
 import kafka.utils.ZkUtils
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Milliseconds, StreamingContext}
+import org.apache.spark.streaming.{ Milliseconds, StreamingContext }
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{ SparkConf, SparkFunSuite }
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.{ BeforeAndAfter, BeforeAndAfterAll }
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -35,7 +35,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 class ReliableKafkaStreamSuite extends SparkFunSuite
-with BeforeAndAfterAll with BeforeAndAfter with Eventually {
+  with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
   private val sparkConf = new SparkConf()
     .setMaster("local[4]")
@@ -53,7 +53,7 @@ with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
   private var kc: KafkaCluster[_, _] = null
 
-  override def beforeAll() : Unit = {
+  override def beforeAll(): Unit = {
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
 
@@ -67,13 +67,12 @@ with BeforeAndAfterAll with BeforeAndAfter with Eventually {
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "100"
-    )
+      "spark.kafka.poll.time" -> "100")
 
     kc = new KafkaCluster(kafkaParams)
 
     tempDirectory = Utils.createTempDir()
-     zkUtils = ZkUtils(kafkaTestUtils.zookeeperClient, false)
+    zkUtils = ZkUtils(kafkaTestUtils.zookeeperClient, false)
   }
 
   override def afterAll(): Unit = {
@@ -130,9 +129,10 @@ with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
   test("Reliable Kafka input stream with multiple topics") {
     val topics = Map("new_topic1" -> 1, "new_topic2" -> 1, "new_topic3" -> 1)
-    topics.foreach { case (t, _) =>
-      kafkaTestUtils.createTopic(t)
-      kafkaTestUtils.sendMessages(t, data)
+    topics.foreach {
+      case (t, _) =>
+        kafkaTestUtils.createTopic(t)
+        kafkaTestUtils.sendMessages(t, data)
     }
 
     // Before started, verify all the group/topic/partition offsets are 0.
@@ -149,7 +149,6 @@ with BeforeAndAfterAll with BeforeAndAfter with Eventually {
       topics.foreach { case (t, _) => assert(getCommitOffset(t, 0) === Some(29L)) }
     }
   }
-
 
   /** Getting partition offset from Zookeeper. */
   private def getCommitOffset(topic: String, partition: Int): Option[Long] = {

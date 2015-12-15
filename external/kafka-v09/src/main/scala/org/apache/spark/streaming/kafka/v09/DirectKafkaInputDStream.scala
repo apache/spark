@@ -29,33 +29,32 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 /**
-  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
-  * each given Kafka topic/partition corresponds to an RDD partition.
-  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
-  *  of messages
-  * per second that each '''partition''' will accept.
-  * Starting offsets are specified in advance,
-  * and this DStream is not responsible for committing offsets,
-  * so that you can control exactly-once semantics.
-  * For an easy interface to Kafka-managed offsets,
-  *  see {@link org.apache.spark.streaming.kafka.KafkaCluster}
-  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-  * configuration parameters</a>.
-  *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
-  *  starting point of the stream
-  */
+ * A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
+ * each given Kafka topic/partition corresponds to an RDD partition.
+ * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
+ * of messages
+ * per second that each '''partition''' will accept.
+ * Starting offsets are specified in advance,
+ * and this DStream is not responsible for committing offsets,
+ * so that you can control exactly-once semantics.
+ * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+ *                    configuration parameters</a>.
+ *                    Requires "metadata.broker.list" or "bootstrap.servers" to be set
+ *                    with Kafka broker(s),
+ *                    NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+ * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
+ *                    starting point of the stream
+ */
 private[streaming]
 class DirectKafkaInputDStream[
-K: ClassTag,
-V: ClassTag,
-R: ClassTag](
-              @transient ssc_ : StreamingContext,
-              val kafkaParams: Map[String, String],
-              val fromOffsets: Map[TopicAndPartition, Long],
-              messageHandler: ConsumerRecord[K, V] => R
-            ) extends InputDStream[R](ssc_) with Logging {
+  K: ClassTag,
+  V: ClassTag,
+  R: ClassTag](
+    @transient ssc_ : StreamingContext,
+    val kafkaParams: Map[String, String],
+    val fromOffsets: Map[TopicAndPartition, Long],
+    messageHandler: ConsumerRecord[K, V] => R
+  ) extends InputDStream[R](ssc_) with Logging {
 
   val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
@@ -68,8 +67,8 @@ R: ClassTag](
 
 
   /**
-    * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
-    */
+   * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
+   */
   override protected[streaming] val rateController: Option[RateController] = {
     if (RateController.isBackPressureEnabled(ssc.conf)) {
       Some(new DirectKafkaRateController(id,
@@ -83,6 +82,7 @@ R: ClassTag](
 
   private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRatePerPartition", 0)
+
   protected def maxMessagesPerPartition: Option[Long] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
     val numPartitions = currentOffsets.keys.size
@@ -174,7 +174,7 @@ R: ClassTag](
       }
     }
 
-    override def cleanup(time: Time) { }
+    override def cleanup(time: Time) {}
 
     override def restore() {
       // this is assuming that the topics don't change during execution, which is true currently
@@ -189,10 +189,11 @@ R: ClassTag](
   }
 
   /**
-    * A RateController to retrieve the rate from RateEstimator.
-    */
+   * A RateController to retrieve the rate from RateEstimator.
+   */
   private[streaming] class DirectKafkaRateController(id: Int, estimator: RateEstimator)
     extends RateController(id, estimator) {
     override def publish(rate: Long): Unit = ()
   }
+
 }

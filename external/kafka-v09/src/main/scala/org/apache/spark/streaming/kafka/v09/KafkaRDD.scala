@@ -17,53 +17,53 @@
 
 package org.apache.spark.streaming.kafka.v09
 
-import java.util.{Collections, Properties}
+import java.util.{ Collections, Properties }
 
 import kafka.common.TopicAndPartition
-import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{ ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.TopicPartition
-import org.apache.spark.partial.{BoundedDouble, PartialResult}
+import org.apache.spark.partial.{ BoundedDouble, PartialResult }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.kafka.v09.KafkaCluster.toTopicPart
 import org.apache.spark.util.NextIterator
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
+import org.apache.spark.{ Logging, Partition, SparkContext, TaskContext }
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 /**
-  * A batch-oriented interface for consuming from Kafka.
-  * Starting and ending offsets are specified in advance,
-  * so that you can control exactly-once semantics.
-  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-  * configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers" to be set
-  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
-  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-  */
+ * A batch-oriented interface for consuming from Kafka.
+ * Starting and ending offsets are specified in advance,
+ * so that you can control exactly-once semantics.
+ * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+ *                    configuration parameters</a>. Requires "bootstrap.servers" to be set
+ *                    with Kafka broker(s) specified in host1:port1,host2:port2 form.
+ * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+ */
 private[kafka]
-class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark](
-          sc: SparkContext,
-          kafkaParams: Map[String, String],
-          val offsetRanges: Array[OffsetRange],
-          messageHandler: ConsumerRecord[K, V] => R
-     ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
+class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
+    sc: SparkContext,
+    kafkaParams: Map[String, String],
+    val offsetRanges: Array[OffsetRange],
+    messageHandler: ConsumerRecord[K, V] => R
+  ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
 
   private val KAFKA_DEFAULT_POLL_TIME: String = "0"
   private val pollTime = kafkaParams.get("spark.kafka.poll.time")
     .getOrElse(KAFKA_DEFAULT_POLL_TIME).toInt
 
   override def getPartitions: Array[Partition] = {
-    offsetRanges.zipWithIndex.map { case (o, i) =>
-      new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset)
+    offsetRanges.zipWithIndex.map {
+      case (o, i) =>
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset)
     }.toArray
   }
 
   override def count(): Long = offsetRanges.map(_.count).sum
 
   override def countApprox(
-                            timeout: Long,
-                            confidence: Double = 0.95
-                          ): PartialResult[BoundedDouble] = {
+      timeout: Long,
+      confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val c = count
     new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
   }
@@ -127,10 +127,10 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark](
   }
 
   private class KafkaRDDIterator(
-                                  part: KafkaRDDPartition,
-                                  context: TaskContext) extends NextIterator[R] {
+      part: KafkaRDDPartition,
+      context: TaskContext) extends NextIterator[R] {
 
-    context.addTaskCompletionListener{ context => closeIfNeeded() }
+    context.addTaskCompletionListener { context => closeIfNeeded() }
 
     log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
       s"offsets ${part.fromOffset} -> ${part.untilOffset}")
@@ -173,34 +173,32 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark](
       }
     }
   }
+
 }
 
 private[kafka]
 object KafkaRDD {
 
   /**
-    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-    * configuration parameters</a>.
-    *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-    *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-    * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
-    *  starting point of the batch
-    * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
-    *  ending point of the batch
-    */
-  def apply[
-  K: ClassTag,
-  V: ClassTag,
-  R: ClassTag](
-                sc: SparkContext,
-                kafkaParams: Map[String, String],
-                fromOffsets: Map[TopicAndPartition, Long],
-                untilOffsets: Map[TopicAndPartition, Long],
-                messageHandler: ConsumerRecord[K, V] => R
-              ): KafkaRDD[K, V, R] = {
-    val offsetRanges = fromOffsets.map { case (tp, fo) =>
-      val uo = untilOffsets(tp)
-      OffsetRange(tp.topic, tp.partition, fo, uo)
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   *                    configuration parameters</a>.
+   *                    Requires "bootstrap.servers" to be set with Kafka broker(s),
+   *                    NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
+   *                    starting point of the batch
+   * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
+   *                     ending point of the batch
+   */
+  def apply[K: ClassTag, V: ClassTag, R: ClassTag](
+      sc: SparkContext,
+      kafkaParams: Map[String, String],
+      fromOffsets: Map[TopicAndPartition, Long],
+      untilOffsets: Map[TopicAndPartition, Long],
+      messageHandler: ConsumerRecord[K, V] => R): KafkaRDD[K, V, R] = {
+    val offsetRanges = fromOffsets.map {
+      case (tp, fo) =>
+        val uo = untilOffsets(tp)
+        OffsetRange(tp.topic, tp.partition, fo, uo)
     }.toArray
 
     new KafkaRDD[K, V, R](sc, kafkaParams, offsetRanges, messageHandler)

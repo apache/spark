@@ -32,15 +32,15 @@ import scala.reflect._
 import scala.util.control.NonFatal
 
 /**
-  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-  *                    configuration parameters</a>.
-  *                    Requires "metadata.broker.list" or "bootstrap.servers"
-  *                    to be set with Kafka broker(s),
-  *                    NOT zookeeper servers, specified in host1:port1,host2:port2 form
-  */
+ * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+ *                    configuration parameters</a>.
+ *                    Requires "bootstrap.servers" to be set with Kafka broker(s),
+ *                    NOT zookeeper servers, specified in host1:port1,host2:port2 form
+ */
 private[spark]
 class KafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String])
   extends Serializable {
+
   import KafkaCluster.{Err, SeekType, toTopicPart}
 
   def getLatestOffsets(topicPartitions: Set[TopicAndPartition]):

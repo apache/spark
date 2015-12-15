@@ -20,7 +20,6 @@ package org.apache.spark.examples.streaming
 
 import java.util.HashMap
 
-import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.{ProducerConfig, KafkaProducer, ProducerRecord}
 
 import org.apache.spark.streaming._
@@ -28,18 +27,18 @@ import org.apache.spark.streaming.kafka._
 import org.apache.spark.SparkConf
 
 /**
-  * Consumes messages from one or more topics in Kafka and does wordcount.
-  * Usage: KafkaWordCount <zkQuorum> <group> <topics> <numThreads>
-  *   <zkQuorum> is a list of one or more zookeeper servers that make quorum
-  *   <group> is the name of kafka consumer group
-  *   <topics> is a list of one or more kafka topics to consume from
-  *   <numThreads> is the number of threads the kafka consumer should use
-  *
-  * Example:
-  *    `$ bin/run-example \
-  *      org.apache.spark.examples.streaming.KafkaWordCount zoo01,zoo02,zoo03 \
-  *      my-consumer-group topic1,topic2 1`
-  */
+ * Consumes messages from one or more topics in Kafka and does wordcount.
+ * Usage: KafkaWordCount <zkQuorum> <group> <topics> <numThreads>
+ *   <zkQuorum> is a list of one or more zookeeper servers that make quorum
+ *   <group> is the name of kafka consumer group
+ *   <topics> is a list of one or more kafka topics to consume from
+ *   <numThreads> is the number of threads the kafka consumer should use
+ *
+ * Example:
+ *    `$ bin/run-example \
+ *      org.apache.spark.examples.streaming.KafkaWordCount zoo01,zoo02,zoo03 \
+ *      my-consumer-group topic1,topic2 1`
+ */
 object KafkaWordCount {
   def main(args: Array[String]) {
     if (args.length < 4) {
@@ -67,18 +66,18 @@ object KafkaWordCount {
 }
 
 /**
-  * Consumes messages from one or more topics in Kafka and does wordcount.
-  * Usage: NewKafkaWordCount <brokers> <group> <topics> <numThreads>
-  *   <brokers> is a list of one or more zookeeper servers that make quorum
-  *   <group> is the name of kafka consumer group
-  *   <topics> is a list of one or more kafka topics to consume from
-  *   <numThreads> is the number of threads the kafka consumer should use
-  *
-  * Example:
-  *    `$ bin/run-example \
-  *      org.apache.spark.examples.streaming.NewKafkaWordCount broker1,broker2,broker3 \
-  *      my-consumer-group topic1,topic2 1`
-  */
+ * Consumes messages from one or more topics in Kafka and does wordcount.
+ * Usage: v09KafkaWordCount <brokers> <group> <topics> <numThreads>
+ *   <brokers> is a list of one or more brokers servers
+ *   <group> is the name of kafka consumer group
+ *   <topics> is a list of one or more kafka topics to consume from
+ *   <numThreads> is the number of threads the kafka consumer should use
+ *
+ * Example:
+ *    `$ bin/run-example \
+ *      org.apache.spark.examples.streaming.v09KafkaWordCount broker01,broker02,broker03 \
+ *      my-consumer-group topic1,topic2 1`
+ */
 object v09KafkaWordCount {
   def main(args: Array[String]) {
     import org.apache.spark.streaming.kafka.v09._

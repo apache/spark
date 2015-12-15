@@ -20,7 +20,6 @@ package org.apache.spark.streaming.kafka.v09
 import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.streaming.kafka.v09.KafkaTestUtils
 import org.scalatest.BeforeAndAfterAll
 
 import scala.util.Random
@@ -43,8 +42,7 @@ class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer"
-    )
+        "org.apache.kafka.common.serialization.StringDeserializer")
     newKc = new KafkaCluster(kafkaParams)
   }
 
@@ -62,6 +60,5 @@ class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
     val latest = newKc.getLatestOffsets(Set(topicPartition)).right.get
     assert(latest(topicPartition) === 1, "didn't get latest")
   }
-
 
 }

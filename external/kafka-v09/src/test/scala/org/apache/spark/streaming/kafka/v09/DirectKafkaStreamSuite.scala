@@ -21,16 +21,16 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
 import kafka.common.TopicAndPartition
-import org.apache.kafka.clients.consumer.{ConsumerRecord, ConsumerConfig}
+import org.apache.kafka.clients.consumer.{ ConsumerRecord, ConsumerConfig }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.streaming.scheduler.{StreamingListenerBatchCompleted, StreamingListenerBatchStarted, StreamingListenerBatchSubmitted, StreamingListener}
-import org.apache.spark.streaming.{Time, Milliseconds, StreamingContext}
+import org.apache.spark.streaming.scheduler.{ StreamingListenerBatchCompleted, StreamingListenerBatchStarted, StreamingListenerBatchSubmitted, StreamingListener }
+import org.apache.spark.streaming.{ Time, Milliseconds, StreamingContext }
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkContext, SparkConf, Logging, SparkFunSuite}
+import org.apache.spark.{ SparkContext, SparkConf, Logging, SparkFunSuite }
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.{ BeforeAndAfter, BeforeAndAfterAll }
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -78,7 +78,6 @@ class DirectKafkaStreamSuite
     }
   }
 
-
   test("basic stream receiving with multiple topics and earliest starting offset") {
     val topics = Set("new_basic1", "new_basic2", "new_basic3")
     val data = Map("a" -> 7, "b" -> 9)
@@ -94,8 +93,7 @@ class DirectKafkaStreamSuite
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000"
-    )
+      "spark.kafka.poll.time" -> "1000")
 
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
@@ -129,8 +127,9 @@ class DirectKafkaStreamSuite
 
       // Verify whether number of elements in each partition
       // matches with the corresponding offset range
-      collected.foreach { case (partSize, rangeSize) =>
-        assert(partSize === rangeSize, "offset ranges are wrong")
+      collected.foreach {
+        case (partSize, rangeSize) =>
+          assert(partSize === rangeSize, "offset ranges are wrong")
       }
     }
     stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
@@ -154,8 +153,7 @@ class DirectKafkaStreamSuite
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "100"
-    )
+      "spark.kafka.poll.time" -> "100")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
       kc.getLatestOffsets(Set(topicPartition)).right.get.get(topicPartition).get
@@ -177,8 +175,7 @@ class DirectKafkaStreamSuite
     assert(
       stream.asInstanceOf[DirectKafkaInputDStream[_, _, _]]
         .fromOffsets(topicPartition) >= offsetBeforeStart,
-      "Start offset not from latest"
-    )
+      "Start offset not from latest")
 
     val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
     stream.map {
@@ -193,7 +190,6 @@ class DirectKafkaStreamSuite
     assert(!collectedData.contains("a"))
   }
 
-
   test("creating stream by offset") {
     val topic = "new_offset"
     val topicPartition = TopicAndPartition(topic, 0)
@@ -206,8 +202,7 @@ class DirectKafkaStreamSuite
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "100"
-    )
+      "spark.kafka.poll.time" -> "100")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
       kc.getLatestOffsets(Set(topicPartition)).right.get.get(topicPartition).get
@@ -230,8 +225,7 @@ class DirectKafkaStreamSuite
     assert(
       stream.asInstanceOf[DirectKafkaInputDStream[_, _, _]]
         .fromOffsets(topicPartition) >= offsetBeforeStart,
-      "Start offset not from latest"
-    )
+      "Start offset not from latest")
 
     val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
     stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
@@ -257,8 +251,7 @@ class DirectKafkaStreamSuite
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000"
-    )
+      "spark.kafka.poll.time" -> "1000")
 
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
@@ -313,8 +306,7 @@ class DirectKafkaStreamSuite
       offsetRangesBeforeStop.head._2.forall {
         _.fromOffset === 0
       },
-      "starting offset not zero"
-    )
+      "starting offset not zero")
     ssc.stop()
     logInfo("====== RESTARTING ========")
 
@@ -330,8 +322,7 @@ class DirectKafkaStreamSuite
       recoveredOffsetRanges.forall { or =>
         earlierOffsetRangesAsSets.contains((or._1, or._2.toSet))
       },
-      "Recovered ranges are not the same as the ones generated"
-    )
+      "Recovered ranges are not the same as the ones generated")
     // Restart context, give more data and verify the total at the end
     // If the total is write that means each records has been received only once
     ssc.start()
@@ -356,8 +347,7 @@ class DirectKafkaStreamSuite
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000"
-    )
+      "spark.kafka.poll.time" -> "1000")
 
     import DirectKafkaStreamSuite._
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
@@ -397,8 +387,7 @@ class DirectKafkaStreamSuite
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000"
-    )
+      "spark.kafka.poll.time" -> "1000")
 
     val batchIntervalMilliseconds = 100
     val estimator = new ConstantEstimator(100)
@@ -449,8 +438,8 @@ class DirectKafkaStreamSuite
     Seq(100, 50, 20).foreach { rate =>
       collectedData.clear() // Empty this buffer on each pass.
       estimator.updateRate(rate) // Set a new rate.
-    // Expect blocks of data equal to "rate", scaled by the interval length in secs.
-    val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
+      // Expect blocks of data equal to "rate", scaled by the interval length in secs.
+      val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
       kafkaTestUtils.sendMessages(topic, messages)
       eventually(timeout(5.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
@@ -464,8 +453,7 @@ class DirectKafkaStreamSuite
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */
-  private def getOffsetRanges[K, V](kafkaStream: DStream[(K, V)]):
-  Seq[(Time, Array[OffsetRange])] = {
+  private def getOffsetRanges[K, V](kafkaStream: DStream[(K, V)]): Seq[(Time, Array[OffsetRange])] = {
     kafkaStream.generatedRDDs.mapValues { rdd =>
       rdd.asInstanceOf[KafkaRDD[K, V, (K, V)]].offsetRanges
     }.toSeq.sortBy {
@@ -506,10 +494,9 @@ private[streaming] class ConstantEstimator(@volatile private var rate: Long)
   }
 
   def compute(
-               time: Long,
-               elements: Long,
-               processingDelay: Long,
-               schedulingDelay: Long): Option[Double] = Some(rate)
+    time: Long,
+    elements: Long,
+    processingDelay: Long,
+    schedulingDelay: Long): Option[Double] = Some(rate)
 }
-
 
