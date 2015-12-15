@@ -369,21 +369,21 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling( 5, 10000, "Slave1", sc))
+    assert(schedulerBackend.isOfferSatisfiesRequirements( 5, 10000, "Slave1", sc))
   }
 
   test("isOfferValidForScheduling return false when memory in offer is less than required memory") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(5, 10, "Slave1", sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(5, 10, "Slave1", sc) === false)
   }
 
   test("isOfferValidForScheduling return false when cpu in offer is less than required cpu") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
-    assert(schedulerBackend.isOfferValidForScheduling(0, 10000, "Slave1", sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(0, 10000, "Slave1", sc) === false)
   }
 
   test("isOfferValidForScheduling return true when offer is from slave already running and" +
@@ -392,7 +392,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
     schedulerBackend.slaveIdToExecutorInfo("Slave2") = null
 
-    assert(schedulerBackend.isOfferValidForScheduling(2, 10000, "Slave2", sc) === true)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(2, 10000, "Slave2", sc) === true)
   }
 
   test("isOfferValidForScheduling return false when offer is from slave already running but" +
@@ -401,7 +401,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
     schedulerBackend.slaveIdToExecutorInfo("Slave2") = null
 
-    assert(schedulerBackend.isOfferValidForScheduling(1, 10000, "Slave2", sc) === false)
+    assert(schedulerBackend.isOfferSatisfiesRequirements(1, 10000, "Slave2", sc) === false)
   }
 
 }
