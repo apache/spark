@@ -421,6 +421,13 @@ setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
+#' @rdname dropduplicates
+#' @export
+setGeneric("dropDuplicates",
+           function(x, colNames = columns(x)) {
+             standardGeneric("dropDuplicates")
+           })
+
 #' @rdname nafunctions
 #' @export
 setGeneric("dropna",
