@@ -1575,6 +1575,36 @@ setMethod("where",
             filter(x, condition)
           })
 
+#' dropDuplicates
+#'
+#' Returns a new DataFrame with duplicate rows removed, considering only
+#' the subset of columns.
+#'
+#' @param x A DataFrame.
+#' @param colnames A character vector of column names.
+#' @return A DataFrame with duplicate rows removed.
+#' @family DataFrame functions
+#' @rdname dropduplicates
+#' @name dropDuplicates
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlContext, path)
+#' dropDuplicates(df)
+#' dropDuplicates(df, c("col1", "col2"))
+#' }
+setMethod("dropDuplicates",
+          signature(x = "DataFrame"),
+          function(x, colNames = columns(x)) {
+            stopifnot(class(colNames) == "character")
+
+            sdf <- callJMethod(x@sdf, "dropDuplicates", as.list(colNames))
+            dataFrame(sdf)
+          })
+
 #' Join
 #'
 #' Join two DataFrames based on the given join expression.

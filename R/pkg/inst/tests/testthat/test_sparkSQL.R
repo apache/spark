@@ -698,7 +698,7 @@ test_that("head() and first() return the correct data", {
   expect_equal(ncol(testFirst), 2)
 })
 
-test_that("distinct() and unique on DataFrames", {
+test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
   lines <- c("{\"name\":\"Michael\"}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"Justin\", \"age\":19}",
@@ -714,6 +714,42 @@ test_that("distinct() and unique on DataFrames", {
   uniques2 <- unique(df)
   expect_is(uniques2, "DataFrame")
   expect_equal(count(uniques2), 3)
+
+  # Test dropDuplicates()
+  df <- createDataFrame(
+    sqlContext,
+    list(
+      list(2, 1, 2), list(1, 1, 1),
+      list(1, 2, 1), list(2, 1, 2),
+      list(2, 2, 2), list(2, 2, 1),
+      list(2, 1, 1), list(1, 1, 2),
+      list(1, 2, 2), list(1, 2, 1)),
+    schema = c("key", "value1", "value2"))
+  result <- collect(dropDuplicates(df))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 1, 2), c(1, 2, 1),
+    c(1, 2, 2), c(2, 1, 1), c(2, 1, 2),
+    c(2, 2, 1), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, c("key", "value1")))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, "key"))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(2, 1, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
 })
 
 test_that("sample on a DataFrame", {
