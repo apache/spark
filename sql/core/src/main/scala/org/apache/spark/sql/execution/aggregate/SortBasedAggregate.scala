@@ -29,8 +29,10 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 case class SortBasedAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
-    aggregateExpressions: Seq[AggregateExpression],
-    aggregateAttributes: Seq[Attribute],
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
+    nonCompleteAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression],
+    completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
@@ -40,8 +42,10 @@ case class SortBasedAggregate(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def outputsUnsafeRows: Boolean = true
+  override def outputsUnsafeRows: Boolean = false
+
   override def canProcessUnsafeRows: Boolean = false
+
   override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
@@ -72,24 +76,31 @@ case class SortBasedAggregate(
       if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
-        Iterator[UnsafeRow]()
+        Iterator[InternalRow]()
       } else {
+        val groupingKeyProjection =
+          UnsafeProjection.create(groupingExpressions, child.output)
+
         val outputIter = new SortBasedAggregationIterator(
-          groupingExpressions,
+          groupingKeyProjection,
+          groupingExpressions.map(_.toAttribute),
           child.output,
           iter,
-          aggregateExpressions,
-          aggregateAttributes,
+          nonCompleteAggregateExpressions,
+          nonCompleteAggregateAttributes,
+          completeAggregateExpressions,
+          completeAggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
           newMutableProjection,
+          outputsUnsafeRows,
           numInputRows,
           numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
           numOutputRows += 1
-          Iterator[UnsafeRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
+          Iterator[InternalRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
         } else {
           outputIter
         }
@@ -98,7 +109,7 @@ case class SortBasedAggregate(
   }
 
   override def simpleString: String = {
-    val allAggregateExpressions = aggregateExpressions
+    val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
 
     val keyString = groupingExpressions.mkString("[", ",", "]")
     val functionString = allAggregateExpressions.mkString("[", ",", "]")

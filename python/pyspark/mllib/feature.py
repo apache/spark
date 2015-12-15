@@ -504,8 +504,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         jmodel = sc._jvm.org.apache.spark.mllib.feature \
             .Word2VecModel.load(sc._jsc.sc(), path)
-        model = sc._jvm.Word2VecModelWrapper(jmodel)
-        return Word2VecModel(model)
+        return Word2VecModel(jmodel)
 
 
 @ignore_unicode_prefix
@@ -547,9 +546,6 @@ class Word2Vec(object):
     >>> sameModel = Word2VecModel.load(sc, path)
     >>> model.transform("a") == sameModel.transform("a")
     True
-    >>> syms = sameModel.findSynonyms("a", 2)
-    >>> [s[0] for s in syms]
-    [u'b', u'c']
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)

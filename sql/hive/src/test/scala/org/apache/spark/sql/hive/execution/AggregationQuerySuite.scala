@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
@@ -551,73 +552,80 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("single distinct column set") {
-    // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  min(distinct value1),
-          |  sum(distinct value1),
-          |  avg(value1),
-          |  avg(value2),
-          |  max(distinct value1)
-          |FROM agg2
-        """.stripMargin),
-      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
+    Seq(true, false).foreach { specializeSingleDistinctAgg =>
+      val conf =
+        (SQLConf.SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING.key,
+          specializeSingleDistinctAgg.toString)
+      withSQLConf(conf) {
+        // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  min(distinct value1),
+              |  sum(distinct value1),
+              |  avg(value1),
+              |  avg(value2),
+              |  max(distinct value1)
+              |FROM agg2
+            """.stripMargin),
+          Row(-60, 70.0, 101.0/9.0, 5.6, 100))
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  mydoubleavg(distinct value1),
-          |  avg(value1),
-          |  avg(value2),
-          |  key,
-          |  mydoubleavg(value1 - 1),
-          |  mydoubleavg(distinct value1) * 0.1,
-          |  avg(value1 + value2)
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
-        Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
-        Row(null, null, 3.0, 3, null, null, null) ::
-        Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  mydoubleavg(distinct value1),
+              |  avg(value1),
+              |  avg(value2),
+              |  key,
+              |  mydoubleavg(value1 - 1),
+              |  mydoubleavg(distinct value1) * 0.1,
+              |  avg(value1 + value2)
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
+            Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
+            Row(null, null, 3.0, 3, null, null, null) ::
+            Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  mydoubleavg(distinct value1),
-          |  mydoublesum(value2),
-          |  mydoublesum(distinct value1),
-          |  mydoubleavg(distinct value1),
-          |  mydoubleavg(value1)
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
-        Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
-        Row(3, null, 3.0, null, null, null) ::
-        Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  key,
+              |  mydoubleavg(distinct value1),
+              |  mydoublesum(value2),
+              |  mydoublesum(distinct value1),
+              |  mydoubleavg(distinct value1),
+              |  mydoubleavg(value1)
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
+            Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
+            Row(3, null, 3.0, null, null, null) ::
+            Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  count(value1),
-          |  count(*),
-          |  count(1),
-          |  count(DISTINCT value1),
-          |  key
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(3, 3, 3, 2, 1) ::
-        Row(3, 4, 4, 2, 2) ::
-        Row(0, 2, 2, 0, 3) ::
-        Row(3, 4, 4, 3, null) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  count(value1),
+              |  count(*),
+              |  count(1),
+              |  count(DISTINCT value1),
+              |  key
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(3, 3, 3, 2, 1) ::
+            Row(3, 4, 4, 2, 2) ::
+            Row(0, 2, 2, 0, 3) ::
+            Row(3, 4, 4, 3, null) :: Nil)
+      }
+    }
   }
 
   test("single distinct multiple columns set") {

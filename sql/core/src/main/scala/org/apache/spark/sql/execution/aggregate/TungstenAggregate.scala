@@ -30,18 +30,21 @@ import org.apache.spark.sql.types.StructType
 case class TungstenAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
-    aggregateExpressions: Seq[AggregateExpression],
-    aggregateAttributes: Seq[Attribute],
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
+    nonCompleteAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression],
+    completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
 
   private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+    (nonCompleteAggregateExpressions ++ completeAggregateExpressions)
+      .flatMap(_.aggregateFunction.aggBufferAttributes)
   }
 
-  require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
+  require(TungstenAggregate.supportsAggregate(groupingExpressions, aggregateBufferAttributes))
 
   override private[sql] lazy val metrics = Map(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
@@ -50,7 +53,9 @@ case class TungstenAggregate(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   override def outputsUnsafeRows: Boolean = true
+
   override def canProcessUnsafeRows: Boolean = true
+
   override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
@@ -89,8 +94,10 @@ case class TungstenAggregate(
         val aggregationIterator =
           new TungstenAggregationIterator(
             groupingExpressions,
-            aggregateExpressions,
-            aggregateAttributes,
+            nonCompleteAggregateExpressions,
+            nonCompleteAggregateAttributes,
+            completeAggregateExpressions,
+            completeAggregateAttributes,
             initialInputBufferOffset,
             resultExpressions,
             newMutableProjection,
@@ -112,7 +119,7 @@ case class TungstenAggregate(
   }
 
   override def simpleString: String = {
-    val allAggregateExpressions = aggregateExpressions
+    val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
 
     testFallbackStartsAt match {
       case None =>
@@ -128,7 +135,9 @@ case class TungstenAggregate(
 }
 
 object TungstenAggregate {
-  def supportsAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+  def supportsAggregate(
+    groupingExpressions: Seq[Expression],
+    aggregateBufferAttributes: Seq[Attribute]): Boolean = {
     val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
     UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema)
   }

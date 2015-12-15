@@ -59,7 +59,7 @@ public class JavaBinarizerExample {
     DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
     DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
     for (Row r : binarizedFeatures.collect()) {
-      Double binarized_value = r.getDouble(0);
+    Double binarized_value = r.getDouble(0);
       System.out.println(binarized_value);
     }
     // $example off$

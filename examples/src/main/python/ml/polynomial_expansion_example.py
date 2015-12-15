@@ -30,9 +30,9 @@ if __name__ == "__main__":
 
     # $example on$
     df = sqlContext\
-        .createDataFrame([(Vectors.dense([-2.0, 2.3]),),
-                          (Vectors.dense([0.0, 0.0]),),
-                          (Vectors.dense([0.6, -1.1]),)],
+        .createDataFrame([(Vectors.dense([-2.0, 2.3]), ),
+                          (Vectors.dense([0.0, 0.0]), ),
+                          (Vectors.dense([0.6, -1.1]), )],
                          ["features"])
     px = PolynomialExpansion(degree=2, inputCol="features", outputCol="polyFeatures")
     polyDF = px.transform(df)

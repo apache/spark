@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
- * The base class of [[SortBasedAggregationIterator]] and [[TungstenAggregationIterator]].
+ * The base class of [[SortBasedAggregationIterator]].
  * It mainly contains two parts:
  * 1. It initializes aggregate functions.
  * 2. It creates two functions, `processRow` and `generateOutput` based on [[AggregateMode]] of
@@ -33,58 +33,64 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
  *    is used to generate result.
  */
 abstract class AggregationIterator(
-    groupingExpressions: Seq[NamedExpression],
-    inputAttributes: Seq[Attribute],
-    aggregateExpressions: Seq[AggregateExpression],
-    aggregateAttributes: Seq[Attribute],
+    groupingKeyAttributes: Seq[Attribute],
+    valueAttributes: Seq[Attribute],
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
+    nonCompleteAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression],
+    completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection))
-  extends Iterator[UnsafeRow] with Logging {
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    outputsUnsafeRows: Boolean)
+  extends Iterator[InternalRow] with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
   // Initializing functions.
   ///////////////////////////////////////////////////////////////////////////
 
+  // An Seq of all AggregateExpressions.
+  // It is important that all AggregateExpressions with the mode Partial, PartialMerge or Final
+  // are at the beginning of the allAggregateExpressions.
+  protected val allAggregateExpressions =
+    nonCompleteAggregateExpressions ++ completeAggregateExpressions
+
+  require(
+    allAggregateExpressions.map(_.mode).distinct.length <= 2,
+    s"$allAggregateExpressions are not supported becuase they have more than 2 distinct modes.")
+
   /**
-    * The following combinations of AggregationMode are supported:
-    * - Partial
-    * - PartialMerge (for single distinct)
-    * - Partial and PartialMerge (for single distinct)
-    * - Final
-    * - Complete (for SortBasedAggregate with functions that does not support Partial)
-    * - Final and Complete (currently not used)
-    *
-    * TODO: AggregateMode should have only two modes: Update and Merge, AggregateExpression
-    * could have a flag to tell it's final or not.
-    */
-  {
-    val modes = aggregateExpressions.map(_.mode).distinct.toSet
-    require(modes.size <= 2,
-      s"$aggregateExpressions are not supported because they have more than 2 distinct modes.")
-    require(modes.subsetOf(Set(Partial, PartialMerge)) || modes.subsetOf(Set(Final, Complete)),
-      s"$aggregateExpressions can't have Partial/PartialMerge and Final/Complete in the same time.")
-  }
+   * The distinct modes of AggregateExpressions. Right now, we can handle the following mode:
+   *  - Partial-only: all AggregateExpressions have the mode of Partial;
+   *  - PartialMerge-only: all AggregateExpressions have the mode of PartialMerge);
+   *  - Final-only: all AggregateExpressions have the mode of Final;
+   *  - Final-Complete: some AggregateExpressions have the mode of Final and
+   *    others have the mode of Complete;
+   *  - Complete-only: nonCompleteAggregateExpressions is empty and we have AggregateExpressions
+   *    with mode Complete in completeAggregateExpressions; and
+   *  - Grouping-only: there is no AggregateExpression.
+   */
+  protected val aggregationMode: (Option[AggregateMode], Option[AggregateMode]) =
+    nonCompleteAggregateExpressions.map(_.mode).distinct.headOption ->
+      completeAggregateExpressions.map(_.mode).distinct.headOption
 
   // Initialize all AggregateFunctions by binding references if necessary,
   // and set inputBufferOffset and mutableBufferOffset.
-  protected def initializeAggregateFunctions(
-      expressions: Seq[AggregateExpression],
-      startingInputBufferOffset: Int): Array[AggregateFunction] = {
+  protected val allAggregateFunctions: Array[AggregateFunction] = {
     var mutableBufferOffset = 0
-    var inputBufferOffset: Int = startingInputBufferOffset
-    val functions = new Array[AggregateFunction](expressions.length)
+    var inputBufferOffset: Int = initialInputBufferOffset
+    val functions = new Array[AggregateFunction](allAggregateExpressions.length)
     var i = 0
-    while (i < expressions.length) {
-      val func = expressions(i).aggregateFunction
-      val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
+    while (i < allAggregateExpressions.length) {
+      val func = allAggregateExpressions(i).aggregateFunction
+      val funcWithBoundReferences: AggregateFunction = allAggregateExpressions(i).mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
           // this function is Partial or Complete because we will call eval of this
           // function's children in the update method of this aggregate function.
           // Those eval calls require BoundReferences to work.
-          BindReferences.bindReference(func, inputAttributes)
+          BindReferences.bindReference(func, valueAttributes)
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
@@ -111,18 +117,15 @@ abstract class AggregationIterator(
     functions
   }
 
-  protected val aggregateFunctions: Array[AggregateFunction] =
-    initializeAggregateFunctions(aggregateExpressions, initialInputBufferOffset)
-
   // Positions of those imperative aggregate functions in allAggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
   // func2 and func3 are imperative aggregate functions.
   // ImperativeAggregateFunctionPositions will be [1, 2].
-  protected[this] val allImperativeAggregateFunctionPositions: Array[Int] = {
+  private[this] val allImperativeAggregateFunctionPositions: Array[Int] = {
     val positions = new ArrayBuffer[Int]()
     var i = 0
-    while (i < aggregateFunctions.length) {
-      aggregateFunctions(i) match {
+    while (i < allAggregateFunctions.length) {
+      allAggregateFunctions(i) match {
         case agg: DeclarativeAggregate =>
         case _ => positions += i
       }
@@ -131,9 +134,17 @@ abstract class AggregationIterator(
     positions.toArray
   }
 
+  // All AggregateFunctions functions with mode Partial, PartialMerge, or Final.
+  private[this] val nonCompleteAggregateFunctions: Array[AggregateFunction] =
+    allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
+
+  // All imperative aggregate functions with mode Partial, PartialMerge, or Final.
+  private[this] val nonCompleteImperativeAggregateFunctions: Array[ImperativeAggregate] =
+    nonCompleteAggregateFunctions.collect { case func: ImperativeAggregate => func }
+
   // The projection used to initialize buffer values for all expression-based aggregates.
-  protected[this] val expressionAggInitialProjection = {
-    val initExpressions = aggregateFunctions.flatMap {
+  private[this] val expressionAggInitialProjection = {
+    val initExpressions = allAggregateFunctions.flatMap {
       case ae: DeclarativeAggregate => ae.initialValues
       // For the positions corresponding to imperative aggregate functions, we'll use special
       // no-op expressions which are ignored during projection code-generation.
@@ -143,111 +154,247 @@ abstract class AggregationIterator(
   }
 
   // All imperative AggregateFunctions.
-  protected[this] val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
+  private[this] val allImperativeAggregateFunctions: Array[ImperativeAggregate] =
     allImperativeAggregateFunctionPositions
-      .map(aggregateFunctions)
+      .map(allAggregateFunctions)
       .map(_.asInstanceOf[ImperativeAggregate])
 
-  // Initializing functions used to process a row.
-  protected def generateProcessRow(
-      expressions: Seq[AggregateExpression],
-      functions: Seq[AggregateFunction],
-      inputAttributes: Seq[Attribute]): (MutableRow, InternalRow) => Unit = {
-    val joinedRow = new JoinedRow
-    if (expressions.nonEmpty) {
-      val mergeExpressions = functions.zipWithIndex.flatMap {
-        case (ae: DeclarativeAggregate, i) =>
-          expressions(i).mode match {
-            case Partial | Complete => ae.updateExpressions
-            case PartialMerge | Final => ae.mergeExpressions
-          }
-        case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
-      }
-      val updateFunctions = functions.zipWithIndex.collect {
-        case (ae: ImperativeAggregate, i) =>
-          expressions(i).mode match {
-            case Partial | Complete =>
-              (buffer: MutableRow, row: InternalRow) => ae.update(buffer, row)
-            case PartialMerge | Final =>
-              (buffer: MutableRow, row: InternalRow) => ae.merge(buffer, row)
-          }
-      }
-      // This projection is used to merge buffer values for all expression-based aggregates.
-      val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
-      val updateProjection =
-        newMutableProjection(mergeExpressions, aggregationBufferSchema ++ inputAttributes)()
+  ///////////////////////////////////////////////////////////////////////////
+  // Methods and fields used by sub-classes.
+  ///////////////////////////////////////////////////////////////////////////
 
-      (currentBuffer: MutableRow, row: InternalRow) => {
-        // Process all expression-based aggregate functions.
-        updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
-        // Process all imperative aggregate functions.
-        var i = 0
-        while (i < updateFunctions.length) {
-          updateFunctions(i)(currentBuffer, row)
-          i += 1
+  // Initializing functions used to process a row.
+  protected val processRow: (MutableRow, InternalRow) => Unit = {
+    val rowToBeProcessed = new JoinedRow
+    val aggregationBufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
+    aggregationMode match {
+      // Partial-only
+      case (Some(Partial), None) =>
+        val updateExpressions = nonCompleteAggregateFunctions.flatMap {
+          case ae: DeclarativeAggregate => ae.updateExpressions
+          case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }
-      }
-    } else {
+        val expressionAggUpdateProjection =
+          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
+
+        (currentBuffer: MutableRow, row: InternalRow) => {
+          expressionAggUpdateProjection.target(currentBuffer)
+          // Process all expression-based aggregate functions.
+          expressionAggUpdateProjection(rowToBeProcessed(currentBuffer, row))
+          // Process all imperative aggregate functions.
+          var i = 0
+          while (i < nonCompleteImperativeAggregateFunctions.length) {
+            nonCompleteImperativeAggregateFunctions(i).update(currentBuffer, row)
+            i += 1
+          }
+        }
+
+      // PartialMerge-only or Final-only
+      case (Some(PartialMerge), None) | (Some(Final), None) =>
+        val inputAggregationBufferSchema = if (initialInputBufferOffset == 0) {
+          // If initialInputBufferOffset, the input value does not contain
+          // grouping keys.
+          // This part is pretty hacky.
+          allAggregateFunctions.flatMap(_.inputAggBufferAttributes).toSeq
+        } else {
+          groupingKeyAttributes ++ allAggregateFunctions.flatMap(_.inputAggBufferAttributes)
+        }
+        // val inputAggregationBufferSchema =
+        //  groupingKeyAttributes ++
+        //    allAggregateFunctions.flatMap(_.cloneBufferAttributes)
+        val mergeExpressions = nonCompleteAggregateFunctions.flatMap {
+          case ae: DeclarativeAggregate => ae.mergeExpressions
+          case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+        }
+        // This projection is used to merge buffer values for all expression-based aggregates.
+        val expressionAggMergeProjection =
+          newMutableProjection(
+            mergeExpressions,
+            aggregationBufferSchema ++ inputAggregationBufferSchema)()
+
+        (currentBuffer: MutableRow, row: InternalRow) => {
+          // Process all expression-based aggregate functions.
+          expressionAggMergeProjection.target(currentBuffer)(rowToBeProcessed(currentBuffer, row))
+          // Process all imperative aggregate functions.
+          var i = 0
+          while (i < nonCompleteImperativeAggregateFunctions.length) {
+            nonCompleteImperativeAggregateFunctions(i).merge(currentBuffer, row)
+            i += 1
+          }
+        }
+
+      // Final-Complete
+      case (Some(Final), Some(Complete)) =>
+        val completeAggregateFunctions: Array[AggregateFunction] =
+          allAggregateFunctions.takeRight(completeAggregateExpressions.length)
+        // All imperative aggregate functions with mode Complete.
+        val completeImperativeAggregateFunctions: Array[ImperativeAggregate] =
+          completeAggregateFunctions.collect { case func: ImperativeAggregate => func }
+
+        // The first initialInputBufferOffset values of the input aggregation buffer is
+        // for grouping expressions and distinct columns.
+        val groupingAttributesAndDistinctColumns = valueAttributes.take(initialInputBufferOffset)
+
+        val completeOffsetExpressions =
+          Seq.fill(completeAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
+        // We do not touch buffer values of aggregate functions with the Final mode.
+        val finalOffsetExpressions =
+          Seq.fill(nonCompleteAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
+
+        val mergeInputSchema =
+          aggregationBufferSchema ++
+            groupingAttributesAndDistinctColumns ++
+            nonCompleteAggregateFunctions.flatMap(_.inputAggBufferAttributes)
+        val mergeExpressions =
+          nonCompleteAggregateFunctions.flatMap {
+            case ae: DeclarativeAggregate => ae.mergeExpressions
+            case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          } ++ completeOffsetExpressions
+        val finalExpressionAggMergeProjection =
+          newMutableProjection(mergeExpressions, mergeInputSchema)()
+
+        val updateExpressions =
+          finalOffsetExpressions ++ completeAggregateFunctions.flatMap {
+            case ae: DeclarativeAggregate => ae.updateExpressions
+            case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          }
+        val completeExpressionAggUpdateProjection =
+          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
+
+        (currentBuffer: MutableRow, row: InternalRow) => {
+          val input = rowToBeProcessed(currentBuffer, row)
+          // For all aggregate functions with mode Complete, update buffers.
+          completeExpressionAggUpdateProjection.target(currentBuffer)(input)
+          var i = 0
+          while (i < completeImperativeAggregateFunctions.length) {
+            completeImperativeAggregateFunctions(i).update(currentBuffer, row)
+            i += 1
+          }
+
+          // For all aggregate functions with mode Final, merge buffers.
+          finalExpressionAggMergeProjection.target(currentBuffer)(input)
+          i = 0
+          while (i < nonCompleteImperativeAggregateFunctions.length) {
+            nonCompleteImperativeAggregateFunctions(i).merge(currentBuffer, row)
+            i += 1
+          }
+        }
+
+      // Complete-only
+      case (None, Some(Complete)) =>
+        val completeAggregateFunctions: Array[AggregateFunction] =
+          allAggregateFunctions.takeRight(completeAggregateExpressions.length)
+        // All imperative aggregate functions with mode Complete.
+        val completeImperativeAggregateFunctions: Array[ImperativeAggregate] =
+          completeAggregateFunctions.collect { case func: ImperativeAggregate => func }
+
+        val updateExpressions =
+          completeAggregateFunctions.flatMap {
+            case ae: DeclarativeAggregate => ae.updateExpressions
+            case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          }
+        val completeExpressionAggUpdateProjection =
+          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
+
+        (currentBuffer: MutableRow, row: InternalRow) => {
+          val input = rowToBeProcessed(currentBuffer, row)
+          // For all aggregate functions with mode Complete, update buffers.
+          completeExpressionAggUpdateProjection.target(currentBuffer)(input)
+          var i = 0
+          while (i < completeImperativeAggregateFunctions.length) {
+            completeImperativeAggregateFunctions(i).update(currentBuffer, row)
+            i += 1
+          }
+        }
+
       // Grouping only.
-      (currentBuffer: MutableRow, row: InternalRow) => {}
+      case (None, None) => (currentBuffer: MutableRow, row: InternalRow) => {}
+
+      case other =>
+        sys.error(
+          s"Could not evaluate ${nonCompleteAggregateExpressions} because we do not " +
+            s"support evaluate modes $other in this iterator.")
     }
   }
-
-  protected val processRow: (MutableRow, InternalRow) => Unit =
-    generateProcessRow(aggregateExpressions, aggregateFunctions, inputAttributes)
-
-  protected val groupingProjection: UnsafeProjection =
-    UnsafeProjection.create(groupingExpressions, inputAttributes)
-  protected val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
   // Initializing the function used to generate the output row.
-  protected def generateResultProjection(): (UnsafeRow, MutableRow) => UnsafeRow = {
-    val joinedRow = new JoinedRow
-    val modes = aggregateExpressions.map(_.mode).distinct
-    val bufferAttributes = aggregateFunctions.flatMap(_.aggBufferAttributes)
-    if (modes.contains(Final) || modes.contains(Complete)) {
-      val evalExpressions = aggregateFunctions.map {
-        case ae: DeclarativeAggregate => ae.evaluateExpression
-        case agg: AggregateFunction => NoOp
-      }
-      val aggregateResult = new SpecificMutableRow(aggregateAttributes.map(_.dataType))
-      val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)()
-      expressionAggEvalProjection.target(aggregateResult)
-
-      val resultProjection =
-        UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateAttributes)
-
-      (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
-        // Generate results for all expression-based aggregate functions.
-        expressionAggEvalProjection(currentBuffer)
-        // Generate results for all imperative aggregate functions.
-        var i = 0
-        while (i < allImperativeAggregateFunctions.length) {
-          aggregateResult.update(
-            allImperativeAggregateFunctionPositions(i),
-            allImperativeAggregateFunctions(i).eval(currentBuffer))
-          i += 1
-        }
-        resultProjection(joinedRow(currentGroupingKey, aggregateResult))
-      }
-    } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
-      val resultProjection = UnsafeProjection.create(
-        groupingAttributes ++ bufferAttributes,
-        groupingAttributes ++ bufferAttributes)
-      (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
-        resultProjection(joinedRow(currentGroupingKey, currentBuffer))
-      }
+  protected val generateOutput: (InternalRow, MutableRow) => InternalRow = {
+    val rowToBeEvaluated = new JoinedRow
+    val safeOutputRow = new SpecificMutableRow(resultExpressions.map(_.dataType))
+    val mutableOutput = if (outputsUnsafeRows) {
+      UnsafeProjection.create(resultExpressions.map(_.dataType).toArray).apply(safeOutputRow)
     } else {
+      safeOutputRow
+    }
+
+    aggregationMode match {
+      // Partial-only or PartialMerge-only: every output row is basically the values of
+      // the grouping expressions and the corresponding aggregation buffer.
+      case (Some(Partial), None) | (Some(PartialMerge), None) =>
+        // Because we cannot copy a joinedRow containing a UnsafeRow (UnsafeRow does not
+        // support generic getter), we create a mutable projection to output the
+        // JoinedRow(currentGroupingKey, currentBuffer)
+        val bufferSchema = nonCompleteAggregateFunctions.flatMap(_.aggBufferAttributes)
+        val resultProjection =
+          newMutableProjection(
+            groupingKeyAttributes ++ bufferSchema,
+            groupingKeyAttributes ++ bufferSchema)()
+        resultProjection.target(mutableOutput)
+
+        (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
+          resultProjection(rowToBeEvaluated(currentGroupingKey, currentBuffer))
+          // rowToBeEvaluated(currentGroupingKey, currentBuffer)
+        }
+
+      // Final-only, Complete-only and Final-Complete: every output row contains values representing
+      // resultExpressions.
+      case (Some(Final), None) | (Some(Final) | None, Some(Complete)) =>
+        val bufferSchemata =
+          allAggregateFunctions.flatMap(_.aggBufferAttributes)
+        val evalExpressions = allAggregateFunctions.map {
+          case ae: DeclarativeAggregate => ae.evaluateExpression
+          case agg: AggregateFunction => NoOp
+        }
+        val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferSchemata)()
+        val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
+        // TODO: Use unsafe row.
+        val aggregateResult = new SpecificMutableRow(aggregateResultSchema.map(_.dataType))
+        expressionAggEvalProjection.target(aggregateResult)
+        val resultProjection =
+          newMutableProjection(
+            resultExpressions, groupingKeyAttributes ++ aggregateResultSchema)()
+        resultProjection.target(mutableOutput)
+
+        (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
+          // Generate results for all expression-based aggregate functions.
+          expressionAggEvalProjection(currentBuffer)
+          // Generate results for all imperative aggregate functions.
+          var i = 0
+          while (i < allImperativeAggregateFunctions.length) {
+            aggregateResult.update(
+              allImperativeAggregateFunctionPositions(i),
+              allImperativeAggregateFunctions(i).eval(currentBuffer))
+            i += 1
+          }
+          resultProjection(rowToBeEvaluated(currentGroupingKey, aggregateResult))
+        }
+
       // Grouping-only: we only output values of grouping expressions.
-      val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
-      (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
-        resultProjection(currentGroupingKey)
-      }
+      case (None, None) =>
+        val resultProjection =
+          newMutableProjection(resultExpressions, groupingKeyAttributes)()
+        resultProjection.target(mutableOutput)
+
+        (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
+          resultProjection(currentGroupingKey)
+        }
+
+      case other =>
+        sys.error(
+          s"Could not evaluate ${nonCompleteAggregateExpressions} because we do not " +
+            s"support evaluate modes $other in this iterator.")
     }
   }
-
-  protected val generateOutput: (UnsafeRow, MutableRow) => UnsafeRow =
-    generateResultProjection()
 
   /** Initializes buffer values for all aggregate functions. */
   protected def initializeBuffer(buffer: MutableRow): Unit = {
@@ -258,4 +405,10 @@ abstract class AggregationIterator(
       i += 1
     }
   }
+
+  /**
+   * Creates a new aggregation buffer and initializes buffer values
+   * for all aggregate functions.
+   */
+  protected def newBuffer: MutableRow
 }

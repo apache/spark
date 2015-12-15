@@ -545,48 +545,6 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("network events between non-client-mode RpcEnvs") {
-    val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
-    env.setupEndpoint("network-events-non-client", new ThreadSafeRpcEndpoint {
-      override val rpcEnv = env
-
-      override def receive: PartialFunction[Any, Unit] = {
-        case "hello" =>
-        case m => events += "receive" -> m
-      }
-
-      override def onConnected(remoteAddress: RpcAddress): Unit = {
-        events += "onConnected" -> remoteAddress
-      }
-
-      override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-        events += "onDisconnected" -> remoteAddress
-      }
-
-      override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
-        events += "onNetworkError" -> remoteAddress
-      }
-
-    })
-
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = false)
-    // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(
-      "local", env.address, "network-events-non-client")
-    val remoteAddress = anotherEnv.address
-    rpcEndpointRef.send("hello")
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(events.contains(("onConnected", remoteAddress)))
-    }
-
-    anotherEnv.shutdown()
-    anotherEnv.awaitTermination()
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(events.contains(("onConnected", remoteAddress)))
-      assert(events.contains(("onDisconnected", remoteAddress)))
-    }
-  }
-
   test("sendWithReply: unserializable error") {
     env.setupEndpoint("sendWithReply-unserializable-error", new RpcEndpoint {
       override val rpcEnv = env
