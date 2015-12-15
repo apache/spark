@@ -783,7 +783,9 @@ class BackfillJob(BaseJob):
                     self.logger.error(
                         "The airflow run command failed "
                         "at reporting an error. This should not occur "
-                        "in normal circustances. State is {}".format(ti.state))
+                        "in normal circumstances. Task state is '{}',"
+                        "reported state is '{}'. TI is {}"
+                        "".format(ti.state, state, ti))
 
             msg = (
                 "[backfill progress] "

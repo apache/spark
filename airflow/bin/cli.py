@@ -80,7 +80,7 @@ def backfill(args):
 
 
 def trigger_dag(args):
-    
+
     session = settings.Session()
     # TODO: verify dag_id
     execution_date = datetime.now()
@@ -261,7 +261,7 @@ def list_tasks(args):
 
 
 def test(args):
-    
+
     args.execution_date = dateutil.parser.parse(args.execution_date)
     dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
@@ -307,7 +307,7 @@ def clear(args):
 
 def webserver(args):
     print(settings.HEADER)
-    
+
     from airflow.www.app import cached_app
     app = cached_app(configuration)
     workers = args.workers or configuration.get('webserver', 'workers')
@@ -330,7 +330,6 @@ def webserver(args):
 
 def scheduler(args):
     print(settings.HEADER)
-    
     job = jobs.SchedulerJob(
         dag_id=args.dag_id,
         subdir=process_subdir(args.subdir),
@@ -419,7 +418,7 @@ def flower(args):
 
 def kerberos(args):
     print(settings.HEADER)
-    
+
     import airflow.security.kerberos
     airflow.security.kerberos.run()
 

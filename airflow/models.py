@@ -229,8 +229,7 @@ class DagBag(LoggingMixin):
 
         tis = (
             session.query(TI)
-            .join(LJ)
-            .filter(TI.job_id == LJ.id)
+            .join(LJ, TI.job_id == LJ.id)
             .filter(TI.state == State.RUNNING)
             .filter(
                 or_(
