@@ -86,7 +86,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       }
 
       // need to add projections from combineFilters in
-      val combineProjections = projects.toSet.union(combineFilters.flatMap(_.references).toSet).toSeq
+      val combineProjections =
+        projects.toSet.union(combineFilters.flatMap(_.references).toSet).toSeq
       val scan = buildPartitionedTableScan(
         l,
         combineProjections,
