@@ -139,7 +139,7 @@ class SparkSubmitSuite
   test("specify deploy mode through configuration") {
     val clArgs = Seq(
       "--master", "yarn",
-      "--conf", "spark.deployMode=client",
+      "--conf", "spark.submit.deployMode=client",
       "--class", "org.SomeClass",
       "thejar.jar"
     )
@@ -153,7 +153,7 @@ class SparkSubmitSuite
     val clArgs1 = Seq(
       "--master", "yarn",
       "--deploy-mode", "cluster",
-      "--conf", "spark.deployMode=client",
+      "--conf", "spark.submit.deployMode=client",
       "-class", "org.SomeClass",
       "thejar.jar"
     )

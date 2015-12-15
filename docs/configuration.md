@@ -117,15 +117,6 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.deployMode</code></td>
-  <td>(none)</td>
-  <td>
-    The deploy mode of Spark driver program, either "client" or "cluster",
-    Which means to launch driver program locally ("client")
-    or remotely ("cluster") on one of the nodes inside the cluster.
-  </td>
-</tr>
-<tr>
   <td><code>spark.driver.cores</code></td>
   <td>1</td>
   <td>
@@ -199,6 +190,15 @@ of the most common options to set are:
   <td>
     The cluster manager to connect to. See the list of
     <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.submit.deployMode</code></td>
+  <td>(none)</td>
+  <td>
+    The deploy mode of Spark driver program, either "client" or "cluster",
+    Which means to launch driver program locally ("client")
+    or remotely ("cluster") on one of the nodes inside the cluster.
   </td>
 </tr>
 </table>

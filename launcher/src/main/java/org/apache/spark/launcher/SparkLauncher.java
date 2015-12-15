@@ -41,7 +41,7 @@ public class SparkLauncher {
   public static final String SPARK_MASTER = "spark.master";
 
   /** The Spark deploy mode. */
-  public static final String DEPLOY_MODE = "spark.deployMode";
+  public static final String DEPLOY_MODE = "spark.submit.deployMode";
 
   /** Configuration key for the driver memory. */
   public static final String DRIVER_MEMORY = "spark.driver.memory";
