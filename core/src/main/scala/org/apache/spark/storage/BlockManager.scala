@@ -578,9 +578,18 @@ private[spark] class BlockManager(
     doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
   }
 
+  private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
+    // Since block managers can share an identical host, we put these preferred
+    // locations first.
+    val locs = Random.shuffle(master.getLocations(blockId))
+    val preferredLocs = locs.filter(loc => blockManagerId.host == loc.host)
+    val otherLocs = locs.filter(loc => blockManagerId.host != loc.host)
+    preferredLocs ++ otherLocs
+  }
+
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     require(blockId != null, "BlockId is null")
-    val locations = Random.shuffle(master.getLocations(blockId))
+    val locations = getLocations(blockId)
     var numFetchFailures = 0
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
