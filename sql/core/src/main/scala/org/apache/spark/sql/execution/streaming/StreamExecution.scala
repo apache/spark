@@ -40,6 +40,12 @@ class EventTimeSource(val max: Accumulator[LongWatermark]) extends Source with S
   override def toString: String = "EventTime"
 }
 
+/**
+ * Manages the execution of a streaming Spark SQL query that is occuring in a separate thread.
+ * Unlike a standard query, a streaming query executes repeatedly each time new data arrives at
+ * [[Source]] present in the query plan. Whenever new data arrives, a [[QueryExecution]] is created
+ * and the results are committed transactionally to the given [[Sink]].
+ */
 class StreamExecution(
     sqlContext: SQLContext,
     private[sql] val logicalPlan: LogicalPlan,
