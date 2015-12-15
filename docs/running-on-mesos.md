@@ -373,6 +373,20 @@ See the [configuration page](configuration.html) for information on Spark config
     </ul>
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.coarse.coresPerExecutor.max</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    The maximum number of cores to use on each Spark executor. Coarse-grained mode only.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.coarse.executors.max</code></td>
+  <td>1</td>
+  <td>
+    The maximum number of executors that Spark will run on each Mesos slave. Coarse-grained mode only.
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging
