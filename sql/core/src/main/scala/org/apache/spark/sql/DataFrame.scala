@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{OutputStreamWriter, Writer, OutputStream, CharArrayWriter}
+import java.io.CharArrayWriter
 import java.util.Properties
 
 import scala.language.implicitConversions
@@ -161,10 +161,10 @@ class DataFrame private[sql](
   }
 
   /**
-    * Alias on showString for user convenience
+    * Compose the string representing rows for output
     */
   def showString(): String = {
-    showString(20, true);
+    showString(20);
   }
 
   /**
