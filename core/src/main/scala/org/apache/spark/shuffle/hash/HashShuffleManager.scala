@@ -71,7 +71,7 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
     fileShuffleBlockResolver
   }
 
-  override def shortShuffleMgrName: String = "hash"
+  override val shortShuffleMgrName: String = "hash"
 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
