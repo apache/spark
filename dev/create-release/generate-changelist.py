@@ -31,8 +31,8 @@ import time
 import traceback
 
 SPARK_HOME = os.environ["SPARK_HOME"]
-NEW_RELEASE_VERSION = "1.0.0"
-PREV_RELEASE_GIT_TAG = "v0.9.1"
+NEW_RELEASE_VERSION = "1.6.0"
+PREV_RELEASE_GIT_TAG = "v1.5.2"
 
 CHANGELIST = "CHANGES.txt"
 OLD_CHANGELIST = "%s.old" % (CHANGELIST)
