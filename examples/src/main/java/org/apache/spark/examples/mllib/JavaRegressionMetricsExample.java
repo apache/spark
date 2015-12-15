@@ -43,8 +43,9 @@ public class JavaRegressionMetricsExample {
         public LabeledPoint call(String line) {
           String[] parts = line.split(" ");
           double[] v = new double[parts.length - 1];
-          for (int i = 1; i < parts.length - 1; i++)
+          for (int i = 1; i < parts.length - 1; i++) {
             v[i - 1] = Double.parseDouble(parts[i].split(":")[1]);
+          }
           return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
         }
       }

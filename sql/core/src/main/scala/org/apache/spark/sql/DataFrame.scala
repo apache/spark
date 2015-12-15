@@ -609,7 +609,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sortWithinPartitions(sortCol: String, sortCols: String*): DataFrame = {
-    sortWithinPartitions(sortCol, sortCols : _*)
+    sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
   /**
@@ -1261,16 +1261,24 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(colName: String): DataFrame = {
+    drop(Seq(colName) : _*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with columns dropped.
+   * This is a no-op if schema doesn't contain column name(s).
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def drop(colNames: String*): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldDrop = schema.exists(f => resolver(f.name, colName))
-    if (shouldDrop) {
-      val colsAfterDrop = schema.filter { field =>
-        val name = field.name
-        !resolver(name, colName)
-      }.map(f => Column(f.name))
-      select(colsAfterDrop : _*)
-    } else {
+    val remainingCols =
+      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
+    if (remainingCols.size == this.schema.size) {
       this
+    } else {
+      this.select(remainingCols: _*)
     }
   }
 
@@ -1412,6 +1420,19 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def first(): Row = head()
+
+  /**
+   * Concise syntax for chaining custom transformations.
+   * {{{
+   *   def featurize(ds: DataFrame) = ...
+   *
+   *   df
+   *     .transform(featurize)
+   *     .transform(...)
+   * }}}
+   * @since 1.6.0
+   */
+  def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
 
   /**
    * Returns a new RDD by applying a function to all rows of this DataFrame.
@@ -1584,6 +1605,7 @@ class DataFrame private[sql](
   def distinct(): DataFrame = dropDuplicates()
 
   /**
+   * Persist this [[DataFrame]] with the default storage level (`MEMORY_AND_DISK`).
    * @group basic
    * @since 1.3.0
    */
@@ -1593,12 +1615,17 @@ class DataFrame private[sql](
   }
 
   /**
+   * Persist this [[DataFrame]] with the default storage level (`MEMORY_AND_DISK`).
    * @group basic
    * @since 1.3.0
    */
   def cache(): this.type = persist()
 
   /**
+   * Persist this [[DataFrame]] with the given storage level.
+   * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+   *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+   *                 `MEMORY_AND_DISK_2`, etc.
    * @group basic
    * @since 1.3.0
    */
@@ -1608,6 +1635,8 @@ class DataFrame private[sql](
   }
 
   /**
+   * Mark the [[DataFrame]] as non-persistent, and remove all blocks for it from memory and disk.
+   * @param blocking Whether to block until all blocks are deleted.
    * @group basic
    * @since 1.3.0
    */
@@ -1617,6 +1646,7 @@ class DataFrame private[sql](
   }
 
   /**
+   * Mark the [[DataFrame]] as non-persistent, and remove all blocks for it from memory and disk.
    * @group basic
    * @since 1.3.0
    */
