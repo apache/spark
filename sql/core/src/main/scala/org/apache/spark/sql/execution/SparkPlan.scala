@@ -68,6 +68,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Return all metadata that describes more details of this SparkPlan.
+   */
+  private[sql] def metadata: Map[String, String] = Map.empty
+
+  /**
    * Return all metrics containing metrics of this SparkPlan.
    */
   private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty

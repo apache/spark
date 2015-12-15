@@ -146,12 +146,10 @@ private[deploy] class Worker(
   // A thread pool for registering with masters. Because registering with a master is a blocking
   // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
   // time so that we can register with all masters.
-  private val registerMasterThreadPool = new ThreadPoolExecutor(
-    0,
-    masterRpcAddresses.size, // Make sure we can register with all masters at the same time
-    60L, TimeUnit.SECONDS,
-    new SynchronousQueue[Runnable](),
-    ThreadUtils.namedThreadFactory("worker-register-master-threadpool"))
+  private val registerMasterThreadPool = ThreadUtils.newDaemonCachedThreadPool(
+    "worker-register-master-threadpool",
+    masterRpcAddresses.size // Make sure we can register with all masters at the same time
+  )
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -692,7 +690,7 @@ private[deploy] object Worker extends Logging {
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
     val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
-      args.memory, args.masters, args.workDir)
+      args.memory, args.masters, args.workDir, conf = conf)
     rpcEnv.awaitTermination()
   }
 
