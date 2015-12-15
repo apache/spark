@@ -16,7 +16,7 @@ import subprocess
 import sys
 from time import sleep
 
-from sqlalchemy import Column, Integer, String, DateTime, func, Index, and_, or_
+from sqlalchemy import Column, Integer, String, DateTime, func, Index, or_
 from sqlalchemy.orm.session import make_transient
 
 from airflow import executors, models, settings, utils
@@ -355,14 +355,22 @@ class SchedulerJob(BaseJob):
         if dag.schedule_interval:
             DagRun = models.DagRun
             session = settings.Session()
-            qry = session.query(func.count()).filter(
+            qry = session.query(DagRun).filter(
                 DagRun.dag_id == dag.dag_id,
                 DagRun.external_trigger == False,
                 DagRun.state == State.RUNNING,
             )
-            active_runs = qry.scalar()
-            if active_runs >= dag.max_active_runs:
+            active_runs = qry.all()
+            if len(active_runs) >= dag.max_active_runs:
                 return
+            for dr in active_runs:
+                if (
+                        dr.start_date and dag.dagrun_timeout and
+                        dr.start_date < datetime.now() - dag.dagrun_timeout):
+                    dr.state = State.FAILED
+                    dr.end_date = datetime.now()
+            session.commit()
+
             qry = session.query(func.max(DagRun.execution_date)).filter_by(
                     dag_id = dag.dag_id).filter(
                         or_(DagRun.external_trigger == False,

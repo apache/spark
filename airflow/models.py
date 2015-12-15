@@ -88,6 +88,7 @@ def clear_task_instances(tis, session, activate_dag_runs=True):
         ).all()
         for dr in drs:
             dr.state = State.RUNNING
+            dr.start_date = datetime.now()
 
 
 class DagBag(LoggingMixin):
@@ -219,32 +220,35 @@ class DagBag(LoggingMixin):
         """
         from airflow.jobs import LocalTaskJob as LJ
         self.logger.info("Finding 'running' jobs without a recent heartbeat")
+        TI = TaskInstance
         secs = (
             configuration.getint('scheduler', 'job_heartbeat_sec') * 3) + 120
         limit_dttm = datetime.now() - timedelta(seconds=secs)
         self.logger.info(
             "Failing jobs without heartbeat after {}".format(limit_dttm))
-        jobs = (
-            session
-            .query(LJ)
+
+        tis = (
+            session.query(TI)
+            .join(LJ)
+            .filter(TI.job_id == LJ.id)
+            .filter(TI.state == State.RUNNING)
             .filter(
-                LJ.state == State.RUNNING,
-                LJ.latest_heartbeat < limit_dttm)
+                or_(
+                    LJ.state != State.RUNNING,
+                    LJ.latest_heartbeat < limit_dttm,
+                ))
             .all()
         )
-        for job in jobs:
-            ti = session.query(TaskInstance).filter_by(
-                job_id=job.id, state=State.RUNNING).first()
-            self.logger.info("Failing job_id '{}'".format(job.id))
+
+        for ti in tis:
             if ti and ti.dag_id in self.dags:
                 dag = self.dags[ti.dag_id]
                 if ti.task_id in dag.task_ids:
                     task = dag.get_task(ti.task_id)
                     ti.task = task
                     ti.handle_failure("{} killed as zombie".format(ti))
-                    self.logger.info('Marked zombie job {} as failed'.format(ti))
-            else:
-                job.state = State.FAILED
+                    self.logger.info(
+                        'Marked zombie job {} as failed'.format(ti))
         session.commit()
 
     def bag_dag(self, dag, parent_dag, root_dag):
@@ -317,8 +321,8 @@ class DagBag(LoggingMixin):
                                 [re.findall(p, filepath) for p in patterns]):
                             self.process_file(
                                 filepath, only_if_updated=only_if_updated)
-                    except:
-                        pass
+                    except Exception as e:
+                        logging.warning(e)
 
     def deactivate_inactive_dags(self):
         active_dag_ids = [dag.dag_id for dag in list(self.dags.values())]
@@ -1959,6 +1963,9 @@ class DAG(LoggingMixin):
         number of DAG runs in a running state, the scheduler won't create
         new active DAG runs
     :type max_active_runs: int
+    :param dagrun_timeout: specify how long a DagRun should be up before
+        timing out / failing, so that new DagRuns can be created
+    :type dagrun_timeout: datetime.timedelta
     """
 
     def __init__(
@@ -1972,6 +1979,7 @@ class DAG(LoggingMixin):
             concurrency=configuration.getint('core', 'dag_concurrency'),
             max_active_runs=configuration.getint(
                 'core', 'max_active_runs_per_dag'),
+            dagrun_timeout=None,
             params=None):
 
         self.user_defined_macros = user_defined_macros
@@ -1998,6 +2006,7 @@ class DAG(LoggingMixin):
         self.safe_dag_id = dag_id.replace('.', '__dot__')
         self.concurrency = concurrency
         self.max_active_runs = max_active_runs
+        self.dagrun_timeout = dagrun_timeout
 
         self._comps = {
             'dag_id',
@@ -2705,6 +2714,8 @@ class DagRun(Base):
     id = Column(Integer, primary_key=True)
     dag_id = Column(String(ID_LEN))
     execution_date = Column(DateTime, default=datetime.now())
+    start_date = Column(DateTime, default=datetime.now())
+    end_date = Column(DateTime)
     state = Column(String(50), default=State.RUNNING)
     run_id = Column(String(ID_LEN))
     external_trigger = Column(Boolean, default=True)
@@ -2713,7 +2724,6 @@ class DagRun(Base):
     __table_args__ = (
         Index('dr_run_id', dag_id, run_id, unique=True),
     )
-    
 
     def __repr__(self):
         return (
