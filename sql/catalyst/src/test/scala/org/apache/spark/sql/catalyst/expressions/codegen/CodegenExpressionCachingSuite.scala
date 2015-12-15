@@ -34,12 +34,6 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
-  test("GenerateProjection should initialize expressions") {
-    val expr = And(NondeterministicExpression(), NondeterministicExpression())
-    val instance = GenerateProjection.generate(Seq(expr))
-    assert(instance.apply(null).getBoolean(0) === false)
-  }
-
   test("GenerateMutableProjection should initialize expressions") {
     val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GenerateMutableProjection.generate(Seq(expr))()
@@ -60,18 +54,6 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     val expr2 = MutableExpression()
     expr2.mutableState = true
     val instance2 = UnsafeProjection.create(Seq(expr2))
-    assert(instance1.apply(null).getBoolean(0) === false)
-    assert(instance2.apply(null).getBoolean(0) === true)
-  }
-
-  test("GenerateProjection should not share expression instances") {
-    val expr1 = MutableExpression()
-    val instance1 = GenerateProjection.generate(Seq(expr1))
-    assert(instance1.apply(null).getBoolean(0) === false)
-
-    val expr2 = MutableExpression()
-    expr2.mutableState = true
-    val instance2 = GenerateProjection.generate(Seq(expr2))
     assert(instance1.apply(null).getBoolean(0) === false)
     assert(instance2.apply(null).getBoolean(0) === true)
   }

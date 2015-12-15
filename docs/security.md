@@ -170,14 +170,6 @@ configure those ports.
     instead.</td>
   </tr>
   <tr>
-    <td>Executor</td>
-    <td>Driver</td>
-    <td>(random)</td>
-    <td>Class file server</td>
-    <td><code>spark.replClassServer.port</code></td>
-    <td>Jetty-based. Only used in Spark shells.</td>
-  </tr>
-  <tr>
     <td>Executor / Driver</td>
     <td>Executor / Driver</td>
     <td>(random)</td>

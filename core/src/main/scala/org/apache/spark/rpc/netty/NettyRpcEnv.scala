@@ -241,16 +241,14 @@ private[netty] class NettyRpcEnv(
     promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
-  private[netty] def serialize(content: Any): Array[Byte] = {
-    val buffer = javaSerializerInstance.serialize(content)
-    java.util.Arrays.copyOfRange(
-      buffer.array(), buffer.arrayOffset + buffer.position, buffer.arrayOffset + buffer.limit)
+  private[netty] def serialize(content: Any): ByteBuffer = {
+    javaSerializerInstance.serialize(content)
   }
 
-  private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: Array[Byte]): T = {
+  private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
     NettyRpcEnv.currentClient.withValue(client) {
       deserialize { () =>
-        javaSerializerInstance.deserialize[T](ByteBuffer.wrap(bytes))
+        javaSerializerInstance.deserialize[T](bytes)
       }
     }
   }
@@ -555,9 +553,12 @@ private[netty] class NettyRpcHandler(
   // A variable to track whether we should dispatch the RemoteProcessConnected message.
   private val clients = new ConcurrentHashMap[TransportClient, JBoolean]()
 
+  // A variable to track the remote RpcEnv addresses of all clients
+  private val remoteAddresses = new ConcurrentHashMap[RpcAddress, RpcAddress]()
+
   override def receive(
       client: TransportClient,
-      message: Array[Byte],
+      message: ByteBuffer,
       callback: RpcResponseCallback): Unit = {
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postRemoteMessage(messageToDispatch, callback)
@@ -565,12 +566,12 @@ private[netty] class NettyRpcHandler(
 
   override def receive(
       client: TransportClient,
-      message: Array[Byte]): Unit = {
+      message: ByteBuffer): Unit = {
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postOneWayMessage(messageToDispatch)
   }
 
-  private def internalReceive(client: TransportClient, message: Array[Byte]): RequestMessage = {
+  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
@@ -582,6 +583,12 @@ private[netty] class NettyRpcHandler(
       // Create a new message with the socket address of the client as the sender.
       RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content)
     } else {
+      // The remote RpcEnv listens to some port, we should also fire a RemoteProcessConnected for
+      // the listening address
+      val remoteEnvAddress = requestMessage.senderAddress
+      if (remoteAddresses.putIfAbsent(clientAddr, remoteEnvAddress) == null) {
+        dispatcher.postToAll(RemoteProcessConnected(remoteEnvAddress))
+      }
       requestMessage
     }
   }
@@ -593,6 +600,12 @@ private[netty] class NettyRpcHandler(
     if (addr != null) {
       val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
       dispatcher.postToAll(RemoteProcessConnectionError(cause, clientAddr))
+      // If the remove RpcEnv listens to some address, we should also fire a
+      // RemoteProcessConnectionError for the remote RpcEnv listening address
+      val remoteEnvAddress = remoteAddresses.get(clientAddr)
+      if (remoteEnvAddress != null) {
+        dispatcher.postToAll(RemoteProcessConnectionError(cause, remoteEnvAddress))
+      }
     } else {
       // If the channel is closed before connecting, its remoteAddress will be null.
       // See java.net.Socket.getRemoteSocketAddress
@@ -608,6 +621,12 @@ private[netty] class NettyRpcHandler(
       val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
       nettyEnv.removeOutbox(clientAddr)
       dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
+      val remoteEnvAddress = remoteAddresses.remove(clientAddr)
+      // If the remove RpcEnv listens to some address, we should also  fire a
+      // RemoteProcessDisconnected for the remote RpcEnv listening address
+      if (remoteEnvAddress != null) {
+        dispatcher.postToAll(RemoteProcessDisconnected(remoteEnvAddress))
+      }
     } else {
       // If the channel is closed before connecting, its remoteAddress will be null. In this case,
       // we can ignore it since we don't fire "Associated".

@@ -339,6 +339,15 @@ class SQLContext private[sql](
   }
 
   /**
+    * Returns true if the [[Queryable]] is currently cached in-memory.
+    * @group cachemgmt
+    * @since 1.3.0
+    */
+  private[sql] def isCached(qName: Queryable): Boolean = {
+    cacheManager.lookupCachedData(qName).nonEmpty
+  }
+
+  /**
    * Caches the specified table in-memory.
    * @group cachemgmt
    * @since 1.3.0
@@ -1236,6 +1245,7 @@ class SQLContext private[sql](
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       SQLContext.clearInstantiatedContext()
+      SQLContext.clearSqlListener()
     }
   })
 
