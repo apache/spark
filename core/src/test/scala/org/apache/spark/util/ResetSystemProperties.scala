@@ -45,7 +45,7 @@ private[spark] trait ResetSystemProperties extends BeforeAndAfterEach { this: Su
   var oldProperties: Properties = null
 
   override def beforeEach(): Unit = {
-    // we need SerializationUtils.clone instead of `new Properties(System.getProperties()` because
+    // we need SerializationUtils.clone instead of `new Properties(System.getProperties())` because
     // the later way of creating a copy does not copy the properties but it initializes a new
     // Properties object with the given properties as defaults. They are not recognized at all
     // by standard Scala wrapper over Java Properties then.
