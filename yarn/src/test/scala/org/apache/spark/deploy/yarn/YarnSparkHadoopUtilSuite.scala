@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
@@ -258,6 +259,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     assertNestedHiveException(intercept[InvocationTargetException] {
       util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
     })
+    // expect exception trapping code to unwind this hive-side exception
     assertNestedHiveException(intercept[InvocationTargetException] {
       util.obtainTokenForHiveMetastore(hadoopConf)
     })
@@ -272,16 +274,6 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       fail("Not a hive exception", inner)
     }
     inner
-  }
-
-  test("Obtain tokens For HBase") {
-    val hadoopConf = new Configuration()
-    hadoopConf.set("hbase.security.authentication", "kerberos")
-    val util = new YarnSparkHadoopUtil
-    intercept[ClassNotFoundException] {
-      util.obtainTokenForHBaseInner(hadoopConf)
-    }
-    util.obtainTokenForHBase(hadoopConf) should be (None)
   }
 
   // This test needs to live here because it depends on isYarnMode returning true, which can only

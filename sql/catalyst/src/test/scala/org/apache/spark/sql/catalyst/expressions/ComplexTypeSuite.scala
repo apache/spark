@@ -79,8 +79,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     def getStructField(expr: Expression, fieldName: String): GetStructField = {
       expr.dataType match {
         case StructType(fields) =>
-          val index = fields.indexWhere(_.name == fieldName)
-          GetStructField(expr, index)
+          val field = fields.find(_.name == fieldName).get
+          GetStructField(expr, field, fields.indexOf(field))
       }
     }
 

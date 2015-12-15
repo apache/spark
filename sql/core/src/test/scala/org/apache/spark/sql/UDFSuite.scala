@@ -232,19 +232,4 @@ class UDFSuite extends QueryTest with SharedSQLContext {
            | (SELECT complexDataFunc(m, a, b) AS t FROM complexData) tmp
           """.stripMargin).toDF(), complexData.select("m", "a", "b"))
   }
-
-  test("SPARK-11716 UDFRegistration does not include the input data type in returned UDF") {
-    val myUDF = sqlContext.udf.register("testDataFunc", (n: Int, s: String) => { (n, s.toInt) })
-
-    // Without the fix, this will fail because we fail to cast data type of b to string
-    // because myUDF does not know its input data type. With the fix, this query should not
-    // fail.
-    checkAnswer(
-      testData2.select(myUDF($"a", $"b").as("t")),
-      testData2.selectExpr("struct(a, b)"))
-
-    checkAnswer(
-      sql("SELECT tmp.t.* FROM (SELECT testDataFunc(a, b) AS t from testData2) tmp").toDF(),
-      testData2)
-  }
 }

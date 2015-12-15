@@ -206,7 +206,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
    * @param centralMoments Length `momentOrder + 1` array of central moments (un-normalized)
    *                       needed to compute the aggregate stat.
    */
-  def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Any
+  def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Double
 
   override final def eval(buffer: InternalRow): Any = {
     val n = buffer.getDouble(nOffset)

@@ -323,11 +323,6 @@ private[spark] object SQLConf {
       "option must be set in Hadoop Configuration.  2. This option overrides " +
       "\"spark.sql.sources.outputCommitterClass\".")
 
-  val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = booleanConf(
-    key = "spark.sql.parquet.enableUnsafeRowRecordReader",
-    defaultValue = Some(true),
-    doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
-
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
     doc = "When true, enable filter pushdown for ORC files.")
@@ -451,7 +446,7 @@ private[spark] object SQLConf {
 
   val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
     booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
-      defaultValue = Some(false),
+      defaultValue = Some(true),
       isPublic = false,
       doc = "When true, if a query only has a single distinct column and it has " +
         "grouping expressions, we will use our planner rule to handle this distinct " +

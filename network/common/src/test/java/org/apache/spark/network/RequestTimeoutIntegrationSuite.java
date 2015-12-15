@@ -31,7 +31,6 @@ import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.junit.*;
-import static org.junit.Assert.*;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -61,7 +60,7 @@ public class RequestTimeoutIntegrationSuite {
   public void setUp() throws Exception {
     Map<String, String> configMap = Maps.newHashMap();
     configMap.put("spark.shuffle.io.connectionTimeout", "2s");
-    conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
+    conf = new TransportConf(new MapConfigProvider(configMap));
 
     defaultManager = new StreamManager() {
       @Override
@@ -85,16 +84,13 @@ public class RequestTimeoutIntegrationSuite {
   @Test
   public void timeoutInactiveRequests() throws Exception {
     final Semaphore semaphore = new Semaphore(1);
-    final int responseSize = 16;
+    final byte[] response = new byte[16];
     RpcHandler handler = new RpcHandler() {
       @Override
-      public void receive(
-          TransportClient client,
-          ByteBuffer message,
-          RpcResponseCallback callback) {
+      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
         try {
           semaphore.tryAcquire(FOREVER, TimeUnit.MILLISECONDS);
-          callback.onSuccess(ByteBuffer.allocate(responseSize));
+          callback.onSuccess(response);
         } catch (InterruptedException e) {
           // do nothing
         }
@@ -114,15 +110,15 @@ public class RequestTimeoutIntegrationSuite {
     // First completes quickly (semaphore starts at 1).
     TestCallback callback0 = new TestCallback();
     synchronized (callback0) {
-      client.sendRpc(ByteBuffer.allocate(0), callback0);
+      client.sendRpc(new byte[0], callback0);
       callback0.wait(FOREVER);
-      assertEquals(responseSize, callback0.successLength);
+      assert (callback0.success.length == response.length);
     }
 
     // Second times out after 2 seconds, with slack. Must be IOException.
     TestCallback callback1 = new TestCallback();
     synchronized (callback1) {
-      client.sendRpc(ByteBuffer.allocate(0), callback1);
+      client.sendRpc(new byte[0], callback1);
       callback1.wait(4 * 1000);
       assert (callback1.failure != null);
       assert (callback1.failure instanceof IOException);
@@ -135,16 +131,13 @@ public class RequestTimeoutIntegrationSuite {
   @Test
   public void timeoutCleanlyClosesClient() throws Exception {
     final Semaphore semaphore = new Semaphore(0);
-    final int responseSize = 16;
+    final byte[] response = new byte[16];
     RpcHandler handler = new RpcHandler() {
       @Override
-      public void receive(
-          TransportClient client,
-          ByteBuffer message,
-          RpcResponseCallback callback) {
+      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
         try {
           semaphore.tryAcquire(FOREVER, TimeUnit.MILLISECONDS);
-          callback.onSuccess(ByteBuffer.allocate(responseSize));
+          callback.onSuccess(response);
         } catch (InterruptedException e) {
           // do nothing
         }
@@ -165,7 +158,7 @@ public class RequestTimeoutIntegrationSuite {
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     TestCallback callback0 = new TestCallback();
     synchronized (callback0) {
-      client0.sendRpc(ByteBuffer.allocate(0), callback0);
+      client0.sendRpc(new byte[0], callback0);
       callback0.wait(FOREVER);
       assert (callback0.failure instanceof IOException);
       assert (!client0.isActive());
@@ -177,10 +170,10 @@ public class RequestTimeoutIntegrationSuite {
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     TestCallback callback1 = new TestCallback();
     synchronized (callback1) {
-      client1.sendRpc(ByteBuffer.allocate(0), callback1);
+      client1.sendRpc(new byte[0], callback1);
       callback1.wait(FOREVER);
-      assertEquals(responseSize, callback1.successLength);
-      assertNull(callback1.failure);
+      assert (callback1.success.length == response.length);
+      assert (callback1.failure == null);
     }
   }
 
@@ -198,10 +191,7 @@ public class RequestTimeoutIntegrationSuite {
     };
     RpcHandler handler = new RpcHandler() {
       @Override
-      public void receive(
-          TransportClient client,
-          ByteBuffer message,
-          RpcResponseCallback callback) {
+      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
 
@@ -228,10 +218,9 @@ public class RequestTimeoutIntegrationSuite {
 
     synchronized (callback0) {
       // not complete yet, but should complete soon
-      assertEquals(-1, callback0.successLength);
-      assertNull(callback0.failure);
+      assert (callback0.success == null && callback0.failure == null);
       callback0.wait(2 * 1000);
-      assertTrue(callback0.failure instanceof IOException);
+      assert (callback0.failure instanceof IOException);
     }
 
     synchronized (callback1) {
@@ -246,13 +235,13 @@ public class RequestTimeoutIntegrationSuite {
    */
   class TestCallback implements RpcResponseCallback, ChunkReceivedCallback {
 
-    int successLength = -1;
+    byte[] success;
     Throwable failure;
 
     @Override
-    public void onSuccess(ByteBuffer response) {
+    public void onSuccess(byte[] response) {
       synchronized(this) {
-        successLength = response.remaining();
+        success = response;
         this.notifyAll();
       }
     }
@@ -269,7 +258,7 @@ public class RequestTimeoutIntegrationSuite {
     public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
       synchronized(this) {
         try {
-          successLength = buffer.nioByteBuffer().remaining();
+          success = buffer.nioByteBuffer().array();
           this.notifyAll();
         } catch (IOException e) {
           // weird

@@ -86,7 +86,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, map") {
     val ds = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11).toDS()
     val grouped = ds.groupBy(_ % 2)
-    val agged = grouped.mapGroups { case (g, iter) =>
+    val agged = grouped.map { case (g, iter) =>
       val name = if (g == 0) "even" else "odd"
       (name, iter.size)
     }
@@ -99,7 +99,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, flatMap") {
     val ds = Seq("a", "b", "c", "xyz", "hello").toDS()
     val grouped = ds.groupBy(_.length)
-    val agged = grouped.flatMapGroups { case (g, iter) => Iterator(g.toString, iter.mkString) }
+    val agged = grouped.flatMap { case (g, iter) => Iterator(g.toString, iter.mkString) }
 
     checkAnswer(
       agged,

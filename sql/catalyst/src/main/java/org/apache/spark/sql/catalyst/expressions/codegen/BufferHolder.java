@@ -17,28 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 
 /**
- * A helper class to manage the row buffer when construct unsafe rows.
+ * A helper class to manage the row buffer used in `GenerateUnsafeProjection`.
+ *
+ * Note that it is only used in `GenerateUnsafeProjection`, so it's safe to mark member variables
+ * public for ease of use.
  */
 public class BufferHolder {
-  public byte[] buffer;
+  public byte[] buffer = new byte[64];
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
 
-  public BufferHolder() {
-    this(64);
-  }
-
-  public BufferHolder(int size) {
-    buffer = new byte[size];
-  }
-
-  /**
-   * Grows the buffer to at least neededSize. If row is non-null, points the row to the buffer.
-   */
-  public void grow(int neededSize, UnsafeRow row) {
+  public void grow(int neededSize) {
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
@@ -50,22 +41,11 @@ public class BufferHolder {
         Platform.BYTE_ARRAY_OFFSET,
         totalSize());
       buffer = tmp;
-      if (row != null) {
-        row.pointTo(buffer, length * 2);
-      }
     }
-  }
-
-  public void grow(int neededSize) {
-    grow(neededSize, null);
   }
 
   public void reset() {
     cursor = Platform.BYTE_ARRAY_OFFSET;
-  }
-  public void resetTo(int offset) {
-    assert(offset <= buffer.length);
-    cursor = Platform.BYTE_ARRAY_OFFSET + offset;
   }
 
   public int totalSize() {

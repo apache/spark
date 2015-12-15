@@ -35,7 +35,7 @@ public class PackedRecordPointerSuite {
 
   @Test
   public void heap() throws IOException {
-    final SparkConf conf = new SparkConf().set("spark.memory.offHeap.enabled", "false");
+    final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128, null);
@@ -54,9 +54,7 @@ public class PackedRecordPointerSuite {
 
   @Test
   public void offHeap() throws IOException {
-    final SparkConf conf = new SparkConf()
-      .set("spark.memory.offHeap.enabled", "true")
-      .set("spark.memory.offHeap.size", "10000");
+    final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "true");
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock page0 = memoryManager.allocatePage(128, null);

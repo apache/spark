@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Experimental
 final class VectorSlicer(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Transformer with HasInputCol with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("vectorSlicer"))
 
@@ -153,11 +153,10 @@ final class VectorSlicer(override val uid: String)
   override def copy(extra: ParamMap): VectorSlicer = defaultCopy(extra)
 }
 
-@Since("1.6.0")
-object VectorSlicer extends DefaultParamsReadable[VectorSlicer] {
+private[feature] object VectorSlicer {
 
   /** Return true if given feature indices are valid */
-  private[feature] def validIndices(indices: Array[Int]): Boolean = {
+  def validIndices(indices: Array[Int]): Boolean = {
     if (indices.isEmpty) {
       true
     } else {
@@ -166,10 +165,7 @@ object VectorSlicer extends DefaultParamsReadable[VectorSlicer] {
   }
 
   /** Return true if given feature names are valid */
-  private[feature] def validNames(names: Array[String]): Boolean = {
+  def validNames(names: Array[String]): Boolean = {
     names.forall(_.nonEmpty) && names.length == names.distinct.length
   }
-
-  @Since("1.6.0")
-  override def load(path: String): VectorSlicer = super.load(path)
 }

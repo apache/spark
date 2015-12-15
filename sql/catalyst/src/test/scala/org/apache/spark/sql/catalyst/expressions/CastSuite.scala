@@ -258,8 +258,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast from int 2") {
     checkEvaluation(cast(1, LongType), 1.toLong)
-    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
-    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
+    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1.toLong)
+    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -2.toLong)
 
     checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
@@ -348,14 +348,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-      5.toShort)
+      0.toShort)
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", TimestampType), ByteType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
       ByteType), TimestampType), LongType), StringType), ShortType),
-      5.toShort)
+      0.toShort)
 
     checkEvaluation(cast("23", DoubleType), 23d)
     checkEvaluation(cast("23", IntegerType), 23)
@@ -479,12 +479,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, LongType), 15.toLong)
     checkEvaluation(cast(ts, FloatType), 15.003f)
     checkEvaluation(cast(ts, DoubleType), 15.003)
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
-    checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+      DateTimeUtils.fromJavaTimestamp(ts))
+    checkEvaluation(cast(cast(tss, LongType), TimestampType), DateTimeUtils.fromJavaTimestamp(ts))
     checkEvaluation(
       cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)
@@ -734,7 +732,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val complex = Literal.create(
       Row(
         Seq("123", "true", "f"),
-        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Map("a" ->"123", "b" -> "true", "c" -> "f"),
         Row(0)),
       StructType(Seq(
         StructField("a",

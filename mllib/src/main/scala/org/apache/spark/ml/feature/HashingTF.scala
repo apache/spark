@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, udf}
@@ -33,8 +33,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  */
 @Experimental
-class HashingTF(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+class HashingTF(override val uid: String) extends Transformer with HasInputCol with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("hashingTF"))
 
@@ -77,11 +76,4 @@ class HashingTF(override val uid: String)
   }
 
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
-}
-
-@Since("1.6.0")
-object HashingTF extends DefaultParamsReadable[HashingTF] {
-
-  @Since("1.6.0")
-  override def load(path: String): HashingTF = super.load(path)
 }

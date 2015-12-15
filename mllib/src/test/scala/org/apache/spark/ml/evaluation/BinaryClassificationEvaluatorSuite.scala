@@ -19,21 +19,10 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class BinaryClassificationEvaluatorSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class BinaryClassificationEvaluatorSuite extends SparkFunSuite {
 
   test("params") {
     ParamsSuite.checkParams(new BinaryClassificationEvaluator)
-  }
-
-  test("read/write") {
-    val evaluator = new BinaryClassificationEvaluator()
-      .setRawPredictionCol("myRawPrediction")
-      .setLabelCol("myLabel")
-      .setMetricName("areaUnderPR")
-    testDefaultReadWrite(evaluator)
   }
 }

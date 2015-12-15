@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -30,8 +30,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * @see [[RegexTokenizer]]
  */
 @Experimental
-class Tokenizer(override val uid: String)
-  extends UnaryTransformer[String, Seq[String], Tokenizer] with DefaultParamsWritable {
+class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
   def this() = this(Identifiable.randomUID("tok"))
 
@@ -48,13 +47,6 @@ class Tokenizer(override val uid: String)
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
 }
 
-@Since("1.6.0")
-object Tokenizer extends DefaultParamsReadable[Tokenizer] {
-
-  @Since("1.6.0")
-  override def load(path: String): Tokenizer = super.load(path)
-}
-
 /**
  * :: Experimental ::
  * A regex based tokenizer that extracts tokens either by using the provided regex pattern to split
@@ -64,7 +56,7 @@ object Tokenizer extends DefaultParamsReadable[Tokenizer] {
  */
 @Experimental
 class RegexTokenizer(override val uid: String)
-  extends UnaryTransformer[String, Seq[String], RegexTokenizer] with DefaultParamsWritable {
+  extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
   def this() = this(Identifiable.randomUID("regexTok"))
 
@@ -139,11 +131,4 @@ class RegexTokenizer(override val uid: String)
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
-}
-
-@Since("1.6.0")
-object RegexTokenizer extends DefaultParamsReadable[RegexTokenizer] {
-
-  @Since("1.6.0")
-  override def load(path: String): RegexTokenizer = super.load(path)
 }

@@ -64,10 +64,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   private val listenerBus = scheduler.sc.listenerBus
 
-  // Executors we have requested the cluster manager to kill that have not died yet; maps
-  // the executor ID to whether it was explicitly killed by the driver (and thus shouldn't
-  // be considered an app-related failure).
-  private val executorsPendingToRemove = new HashMap[String, Boolean]
+  // Executors we have requested the cluster manager to kill that have not died yet
+  private val executorsPendingToRemove = new HashSet[String]
 
   // A map to store hostname with its possible task number running on it
   protected var hostToLocalTaskCount: Map[String, Int] = Map.empty
@@ -252,15 +250,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
-          val killed = CoarseGrainedSchedulerBackend.this.synchronized {
+          CoarseGrainedSchedulerBackend.this.synchronized {
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
+            executorsPendingToRemove -= executorId
             executorsPendingLossReason -= executorId
-            executorsPendingToRemove.remove(executorId).getOrElse(false)
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
-          scheduler.executorLost(executorId, if (killed) ExecutorKilled else reason)
+          scheduler.executorLost(executorId, reason)
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
         case None => logInfo(s"Asked to remove non-existent executor $executorId")
@@ -271,7 +269,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
      * Stop making resource offers for the given executor. The executor is marked as lost with
      * the loss reason still pending.
      *
-     * @return Whether executor should be disabled
+     * @return Whether executor was alive.
      */
     protected def disableExecutor(executorId: String): Boolean = {
       val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
@@ -279,9 +277,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorsPendingLossReason += executorId
           true
         } else {
-          // Returns true for explicitly killed executors, we also need to get pending loss reasons;
-          // For others return false.
-          executorsPendingToRemove.contains(executorId)
+          false
         }
       }
 
@@ -338,25 +334,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     } catch {
       case e: Exception =>
         throw new SparkException("Error stopping standalone scheduler's driver endpoint", e)
-    }
-  }
-
-  /**
-   * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
-   * be called in the yarn-client mode when AM re-registers after a failure, also dynamic
-   * allocation is enabled.
-   * */
-  protected def reset(): Unit = synchronized {
-    if (Utils.isDynamicAllocationEnabled(conf)) {
-      numPendingExecutors = 0
-      executorsPendingToRemove.clear()
-
-      // Remove all the lingering executors that should be removed but not yet. The reason might be
-      // because (1) disconnected event is not yet received; (2) executors die silently.
-      executorDataMap.toMap.foreach { case (eid, _) =>
-        driverEndpoint.askWithRetry[Boolean](
-          RemoveExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered.")))
-      }
     }
   }
 
@@ -474,25 +451,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the kill request is acknowledged.
    */
   final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
-    killExecutors(executorIds, replace = false, force = false)
+    killExecutors(executorIds, replace = false)
   }
 
   /**
    * Request that the cluster manager kill the specified executors.
    *
-   * When asking the executor to be replaced, the executor loss is considered a failure, and
-   * killed tasks that are running on the executor will count towards the failure limits. If no
-   * replacement is being requested, then the tasks will not count towards the limit.
-   *
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones
-   * @param force whether to force kill busy executors
    * @return whether the kill request is acknowledged.
    */
-  final def killExecutors(
-      executorIds: Seq[String],
-      replace: Boolean,
-      force: Boolean): Boolean = synchronized {
+  final def killExecutors(executorIds: Seq[String], replace: Boolean): Boolean = synchronized {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
     val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
     unknownExecutors.foreach { id =>
@@ -500,11 +469,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
-    // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
-    val executorsToKill = knownExecutors
-      .filter { id => !executorsPendingToRemove.contains(id) }
-      .filter { id => force || !scheduler.isExecutorBusy(id) }
-    executorsToKill.foreach { id => executorsPendingToRemove(id) = !replace }
+    val executorsToKill = knownExecutors.filter { id => !executorsPendingToRemove.contains(id) }
+    executorsPendingToRemove ++= executorsToKill
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
     // with the cluster manager to avoid allocating new ones. When computing the new target,

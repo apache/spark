@@ -51,7 +51,7 @@ object ExtractValue {
       case (StructType(fields), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, ordinal, Some(fieldName))
+        GetStructField(child, fields(ordinal).copy(name = fieldName), ordinal)
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
@@ -97,18 +97,18 @@ object ExtractValue {
  * Returns the value of fields in the Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
- *
- * Note that we can pass in the field name directly to keep case preserving in `toString`.
- * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
+ * TODO: Unify with [[GetInternalRowField]], remove the need to specify a [[StructField]].
  */
-case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
+case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   extends UnaryExpression {
 
-  private lazy val field = child.dataType.asInstanceOf[StructType](ordinal)
-
-  override def dataType: DataType = field.dataType
+  override def dataType: DataType = child.dataType match {
+    case s: StructType => s(ordinal).dataType
+    // This is a hack to avoid breaking existing code until we remove the need for the struct field
+    case _ => field.dataType
+  }
   override def nullable: Boolean = child.nullable || field.nullable
-  override def toString: String = s"$child.${name.getOrElse(field.name)}"
+  override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, field.dataType)

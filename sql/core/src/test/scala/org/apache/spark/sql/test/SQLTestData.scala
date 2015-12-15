@@ -281,7 +281,6 @@ private[sql] trait SQLTestData { self =>
     person
     salary
     complexData
-    courseSales
   }
 }
 

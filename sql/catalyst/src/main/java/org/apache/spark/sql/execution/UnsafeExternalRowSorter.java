@@ -51,7 +51,7 @@ final class UnsafeExternalRowSorter {
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
-  public abstract static class PrefixComputer {
+  public static abstract class PrefixComputer {
     abstract long computePrefix(InternalRow row);
   }
 

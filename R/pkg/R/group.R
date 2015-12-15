@@ -68,7 +68,7 @@ setMethod("count",
             dataFrame(callJMethod(x@sgd, "count"))
           })
 
-#' summarize
+#' Agg
 #'
 #' Aggregates on the entire DataFrame without groups.
 #' The resulting DataFrame will also contain the grouping columns.
@@ -78,14 +78,12 @@ setMethod("count",
 #'
 #' @param x a GroupedData
 #' @return a DataFrame
-#' @rdname summarize
-#' @name agg
+#' @rdname agg
 #' @family agg_funcs
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
-#'  df3 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
-#'  df4 <- summarize(df, ageSum = max(df$age))
+#'  df2 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
 #' }
 setMethod("agg",
           signature(x = "GroupedData"),
@@ -112,8 +110,8 @@ setMethod("agg",
             dataFrame(sdf)
           })
 
-#' @rdname summarize
-#' @name summarize
+#' @rdname agg
+#' @aliases agg
 setMethod("summarize",
           signature(x = "GroupedData"),
           function(x, ...) {

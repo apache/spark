@@ -327,15 +327,6 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.nodeLabelExpression</code></td>
-  <td>(none)</td>
-  <td>
-  A YARN node label expression that restricts the set of nodes AM will be scheduled on.
-  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
-  running against earlier versions, this property will be ignored.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
   <td>(none)</td>
   <td>
@@ -358,14 +349,14 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>
   The full path to the file that contains the keytab for the principal specified above.
   This keytab will be copied to the node running the YARN Application Master via the Secure Distributed Cache,
-  for renewing the login tickets and the delegation tokens periodically. (Works also with the "local" master)
+  for renewing the login tickets and the delegation tokens periodically.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.principal</code></td>
   <td>(none)</td>
   <td>
-  Principal to be used to login to KDC, while running on secure HDFS. (Works also with the "local" master)
+  Principal to be used to login to KDC, while running on secure HDFS.
   </td>
 </tr>
 <tr>

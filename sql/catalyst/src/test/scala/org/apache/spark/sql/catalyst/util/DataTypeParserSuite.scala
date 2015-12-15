@@ -49,9 +49,7 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
-  checkDataType("ChaR(5)", StringType)
   checkDataType("varchAr(20)", StringType)
-  checkDataType("cHaR(27)", StringType)
   checkDataType("BINARY", BinaryType)
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
@@ -85,8 +83,7 @@ class DataTypeParserSuite extends SparkFunSuite {
       |struct<
       |  struct:struct<deciMal:DECimal, anotherDecimal:decimAL(5,2)>,
       |  MAP:Map<timestamp, varchar(10)>,
-      |  arrAy:Array<double>,
-      |  anotherArray:Array<char(9)>>
+      |  arrAy:Array<double>>
     """.stripMargin,
     StructType(
       StructField("struct",
@@ -94,8 +91,7 @@ class DataTypeParserSuite extends SparkFunSuite {
           StructField("deciMal", DecimalType.USER_DEFAULT, true) ::
           StructField("anotherDecimal", DecimalType(5, 2), true) :: Nil), true) ::
       StructField("MAP", MapType(TimestampType, StringType), true) ::
-      StructField("arrAy", ArrayType(DoubleType, true), true) ::
-      StructField("anotherArray", ArrayType(StringType, true), true) :: Nil)
+      StructField("arrAy", ArrayType(DoubleType, true), true) :: Nil)
   )
   // A column name can be a reserved word in our DDL parser and SqlParser.
   checkDataType(

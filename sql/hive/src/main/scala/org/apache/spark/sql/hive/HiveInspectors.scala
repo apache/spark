@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructField, _}
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
@@ -61,7 +61,6 @@ import org.apache.spark.unsafe.types.UTF8String
  * Primitive Type
  *   Java Boxed Primitives:
  *       org.apache.hadoop.hive.common.type.HiveVarchar
- *       org.apache.hadoop.hive.common.type.HiveChar
  *       java.lang.String
  *       java.lang.Integer
  *       java.lang.Boolean
@@ -76,7 +75,6 @@ import org.apache.spark.unsafe.types.UTF8String
  *       java.sql.Timestamp
  *   Writables:
  *       org.apache.hadoop.hive.serde2.io.HiveVarcharWritable
- *       org.apache.hadoop.hive.serde2.io.HiveCharWritable
  *       org.apache.hadoop.io.Text
  *       org.apache.hadoop.io.IntWritable
  *       org.apache.hadoop.hive.serde2.io.DoubleWritable
@@ -95,8 +93,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *   Struct: Object[] / java.util.List / java POJO
  *   Union: class StandardUnion { byte tag; Object object }
  *
- * NOTICE: HiveVarchar/HiveChar is not supported by catalyst, it will be simply considered as
- *  String type.
+ * NOTICE: HiveVarchar is not supported by catalyst, it will be simply considered as String type.
  *
  *
  * 2. Hive ObjectInspector is a group of flexible APIs to inspect value in different data
@@ -140,7 +137,6 @@ import org.apache.spark.unsafe.types.UTF8String
  * Primitive Object Inspectors:
  *     WritableConstantStringObjectInspector
  *     WritableConstantHiveVarcharObjectInspector
- *     WritableConstantHiveCharObjectInspector
  *     WritableConstantHiveDecimalObjectInspector
  *     WritableConstantTimestampObjectInspector
  *     WritableConstantIntObjectInspector
@@ -263,8 +259,6 @@ private[hive] trait HiveInspectors {
       UTF8String.fromString(poi.getWritableConstantValue.toString)
     case poi: WritableConstantHiveVarcharObjectInspector =>
       UTF8String.fromString(poi.getWritableConstantValue.getHiveVarchar.getValue)
-    case poi: WritableConstantHiveCharObjectInspector =>
-      UTF8String.fromString(poi.getWritableConstantValue.getHiveChar.getValue)
     case poi: WritableConstantHiveDecimalObjectInspector =>
       HiveShim.toCatalystDecimal(
         PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
@@ -309,14 +303,10 @@ private[hive] trait HiveInspectors {
     case _ if data == null => null
     case poi: VoidObjectInspector => null // always be null for void object inspector
     case pi: PrimitiveObjectInspector => pi match {
-      // We think HiveVarchar/HiveChar is also a String
+      // We think HiveVarchar is also a String
       case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
         UTF8String.fromString(hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue)
       case hvoi: HiveVarcharObjectInspector =>
-        UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
-      case hvoi: HiveCharObjectInspector if hvoi.preferWritable() =>
-        UTF8String.fromString(hvoi.getPrimitiveWritableObject(data).getHiveChar.getValue)
-      case hvoi: HiveCharObjectInspector =>
         UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
         UTF8String.fromString(x.getPrimitiveWritableObject(data).toString)
@@ -383,15 +373,6 @@ private[hive] trait HiveInspectors {
         if (o != null) {
           val s = o.asInstanceOf[UTF8String].toString
           new HiveVarchar(s, s.size)
-        } else {
-          null
-        }
-
-    case _: JavaHiveCharObjectInspector =>
-      (o: Any) =>
-        if (o != null) {
-          val s = o.asInstanceOf[UTF8String].toString
-          new HiveChar(s, s.size)
         } else {
           null
         }

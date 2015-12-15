@@ -52,7 +52,7 @@ private[kafka] class KafkaTestUtils extends Logging {
   // Zookeeper related configurations
   private val zkHost = "localhost"
   private var zkPort: Int = 0
-  private val zkConnectionTimeout = 60000
+  private val zkConnectionTimeout = 6000
   private val zkSessionTimeout = 6000
 
   private var zookeeper: EmbeddedZookeeper = _
@@ -151,7 +151,7 @@ private[kafka] class KafkaTestUtils extends Logging {
     }
   }
 
-  /** Create a Kafka topic and wait until it is propagated to the whole cluster */
+  /** Create a Kafka topic and wait until it propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
     AdminUtils.createTopic(zkClient, topic, 1, 1)
     // wait until metadata is propagated

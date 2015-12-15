@@ -90,4 +90,3 @@ object DecisionTreeClassificationExample {
     // $example off$
   }
 }
-// scalastyle:on println

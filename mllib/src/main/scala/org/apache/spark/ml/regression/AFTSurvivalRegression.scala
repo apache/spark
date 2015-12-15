@@ -21,20 +21,20 @@ import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
-import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.ml.{Model, Estimator}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util._
-import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.mllib.linalg.{BLAS, Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{Logging, SparkException}
 
 /**
  * Params for accelerated failure time (AFT) regression.
@@ -120,8 +120,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 @Experimental
 @Since("1.6.0")
 class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
-  with DefaultParamsWritable with Logging {
+  extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with Logging {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("aftSurvReg"))
@@ -244,13 +243,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   override def copy(extra: ParamMap): AFTSurvivalRegression = defaultCopy(extra)
 }
 
-@Since("1.6.0")
-object AFTSurvivalRegression extends DefaultParamsReadable[AFTSurvivalRegression] {
-
-  @Since("1.6.0")
-  override def load(path: String): AFTSurvivalRegression = super.load(path)
-}
-
 /**
  * :: Experimental ::
  * Model produced by [[AFTSurvivalRegression]].
@@ -262,7 +254,7 @@ class AFTSurvivalRegressionModel private[ml] (
     @Since("1.6.0") val coefficients: Vector,
     @Since("1.6.0") val intercept: Double,
     @Since("1.6.0") val scale: Double)
-  extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with MLWritable {
+  extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams {
 
   /** @group setParam */
   @Since("1.6.0")
@@ -319,58 +311,6 @@ class AFTSurvivalRegressionModel private[ml] (
   override def copy(extra: ParamMap): AFTSurvivalRegressionModel = {
     copyValues(new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale), extra)
       .setParent(parent)
-  }
-
-  @Since("1.6.0")
-  override def write: MLWriter =
-    new AFTSurvivalRegressionModel.AFTSurvivalRegressionModelWriter(this)
-}
-
-@Since("1.6.0")
-object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel] {
-
-  @Since("1.6.0")
-  override def read: MLReader[AFTSurvivalRegressionModel] = new AFTSurvivalRegressionModelReader
-
-  @Since("1.6.0")
-  override def load(path: String): AFTSurvivalRegressionModel = super.load(path)
-
-  /** [[MLWriter]] instance for [[AFTSurvivalRegressionModel]] */
-  private[AFTSurvivalRegressionModel] class AFTSurvivalRegressionModelWriter (
-      instance: AFTSurvivalRegressionModel
-    ) extends MLWriter with Logging {
-
-    private case class Data(coefficients: Vector, intercept: Double, scale: Double)
-
-    override protected def saveImpl(path: String): Unit = {
-      // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: coefficients, intercept, scale
-      val data = Data(instance.coefficients, instance.intercept, instance.scale)
-      val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-    }
-  }
-
-  private class AFTSurvivalRegressionModelReader extends MLReader[AFTSurvivalRegressionModel] {
-
-    /** Checked against metadata when loading model */
-    private val className = classOf[AFTSurvivalRegressionModel].getName
-
-    override def load(path: String): AFTSurvivalRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
-      val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
-        .select("coefficients", "intercept", "scale").head()
-      val coefficients = data.getAs[Vector](0)
-      val intercept = data.getDouble(1)
-      val scale = data.getDouble(2)
-      val model = new AFTSurvivalRegressionModel(metadata.uid, coefficients, intercept, scale)
-
-      DefaultParamsReader.getAndSetParams(model, metadata)
-      model
-    }
   }
 }
 

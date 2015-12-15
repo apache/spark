@@ -66,7 +66,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 case class Like(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+  extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
@@ -117,7 +117,7 @@ case class Like(left: Expression, right: Expression)
 
 
 case class RLike(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+  extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)

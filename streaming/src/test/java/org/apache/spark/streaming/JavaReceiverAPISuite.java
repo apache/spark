@@ -23,7 +23,6 @@ import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import static org.junit.Assert.*;
 
-import com.google.common.io.Closeables;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -122,19 +121,14 @@ public class JavaReceiverAPISuite implements Serializable {
 
     private void receive() {
       try {
-        Socket socket = null;
-        BufferedReader in = null;
-        try {
-          socket = new Socket(host, port);
-          in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-          String userInput;
-          while ((userInput = in.readLine()) != null) {
-            store(userInput);
-          }
-        } finally {
-          Closeables.close(in, /* swallowIOException = */ true);
-          Closeables.close(socket,  /* swallowIOException = */ true);
+        Socket socket = new Socket(host, port);
+        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        String userInput;
+        while ((userInput = in.readLine()) != null) {
+          store(userInput);
         }
+        in.close();
+        socket.close();
       } catch(ConnectException ce) {
         ce.printStackTrace();
         restart("Could not connect", ce);

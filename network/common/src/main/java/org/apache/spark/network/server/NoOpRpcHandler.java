@@ -1,3 +1,5 @@
+package org.apache.spark.network.server;
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -15,10 +17,6 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.server;
-
-import java.nio.ByteBuffer;
-
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 
@@ -31,7 +29,7 @@ public class NoOpRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+  public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
     throw new UnsupportedOperationException("Cannot handle messages");
   }
 

@@ -65,15 +65,6 @@ trait PredicateHelper {
     }
   }
 
-  // Substitute any known alias from a map.
-  protected def replaceAlias(
-      condition: Expression,
-      aliases: AttributeMap[Expression]): Expression = {
-    condition.transform {
-      case a: Attribute => aliases.getOrElse(a, a)
-    }
-  }
-
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
    * can be used to determine when it is acceptable to move expression evaluation within a query

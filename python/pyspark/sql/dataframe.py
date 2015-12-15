@@ -213,7 +213,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -277,7 +277,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
+            port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
@@ -761,7 +761,7 @@ class DataFrame(object):
         +-------+------------------+-----+
         |  count|                 2|    2|
         |   mean|               3.5| null|
-        | stddev|2.1213203435596424| null|
+        | stddev|2.1213203435596424|  NaN|
         |    min|                 2|Alice|
         |    max|                 5|  Bob|
         +-------+------------------+-----+

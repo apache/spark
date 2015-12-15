@@ -47,7 +47,7 @@ application is not running tasks on a machine, other applications may run tasks 
 is useful when you expect large numbers of not overly active applications, such as shell sessions from
 separate users. However, it comes with a risk of less predictable latency, because it may take a while for
 an application to gain back cores on one node when it has work to do. To use this mode, simply use a
-`mesos://` URL and set `spark.mesos.coarse` to false.
+`mesos://` URL without setting `spark.mesos.coarse` to true.
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying

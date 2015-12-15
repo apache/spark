@@ -17,7 +17,7 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{RejectedExecutionException, ThreadPoolExecutor}
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.{Iterator => JIterator}
 
 import scala.collection.JavaConverters._
@@ -34,10 +34,9 @@ import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This class manages write ahead log files.
- *
- *  - Writes records (bytebuffers) to periodically rotating log files.
- *  - Recovers the log files and the reads the recovered records upon failures.
- *  - Cleans up old log files.
+ * - Writes records (bytebuffers) to periodically rotating log files.
+ * - Recovers the log files and the reads the recovered records upon failures.
+ * - Cleans up old log files.
  *
  * Uses [[org.apache.spark.streaming.util.FileBasedWriteAheadLogWriter]] to write
  * and [[org.apache.spark.streaming.util.FileBasedWriteAheadLogReader]] to read.
@@ -177,16 +176,10 @@ private[streaming] class FileBasedWriteAheadLog(
     }
     oldLogFiles.foreach { logInfo =>
       if (!executionContext.isShutdown) {
-        try {
-          val f = Future { deleteFile(logInfo) }(executionContext)
-          if (waitForCompletion) {
-            import scala.concurrent.duration._
-            Await.ready(f, 1 second)
-          }
-        } catch {
-          case e: RejectedExecutionException =>
-            logWarning("Execution context shutdown before deleting old WriteAheadLogs. " +
-              "This would not affect recovery correctness.", e)
+        val f = Future { deleteFile(logInfo) }(executionContext)
+        if (waitForCompletion) {
+          import scala.concurrent.duration._
+          Await.ready(f, 1 second)
         }
       }
     }

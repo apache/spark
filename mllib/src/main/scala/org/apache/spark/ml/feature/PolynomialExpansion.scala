@@ -19,10 +19,10 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{ParamMap, IntParam, ParamValidators}
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Experimental
 class PolynomialExpansion(override val uid: String)
-  extends UnaryTransformer[Vector, Vector, PolynomialExpansion] with DefaultParamsWritable {
+  extends UnaryTransformer[Vector, Vector, PolynomialExpansion] {
 
   def this() = this(Identifiable.randomUID("poly"))
 
@@ -77,8 +77,7 @@ class PolynomialExpansion(override val uid: String)
  * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
  * current index and increment it properly for sparse input.
  */
-@Since("1.6.0")
-object PolynomialExpansion extends DefaultParamsReadable[PolynomialExpansion] {
+private[feature] object PolynomialExpansion {
 
   private def choose(n: Int, k: Int): Int = {
     Range(n, n - k, -1).product / Range(k, 1, -1).product
@@ -170,14 +169,11 @@ object PolynomialExpansion extends DefaultParamsReadable[PolynomialExpansion] {
     new SparseVector(polySize - 1, polyIndices.result(), polyValues.result())
   }
 
-  private[feature] def expand(v: Vector, degree: Int): Vector = {
+  def expand(v: Vector, degree: Int): Vector = {
     v match {
       case dv: DenseVector => expand(dv, degree)
       case sv: SparseVector => expand(sv, degree)
       case _ => throw new IllegalArgumentException
     }
   }
-
-  @Since("1.6.0")
-  override def load(path: String): PolynomialExpansion = super.load(path)
 }

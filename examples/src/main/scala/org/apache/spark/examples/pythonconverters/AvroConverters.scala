@@ -79,10 +79,7 @@ object AvroConversionUtil extends Serializable {
 
   def unpackBytes(obj: Any): Array[Byte] = {
     val bytes: Array[Byte] = obj match {
-      case buf: java.nio.ByteBuffer =>
-        val arr = new Array[Byte](buf.remaining())
-        buf.get(arr)
-        arr
+      case buf: java.nio.ByteBuffer => buf.array()
       case arr: Array[Byte] => arr
       case other => throw new SparkException(
         s"Unknown BYTES type ${other.getClass.getName}")

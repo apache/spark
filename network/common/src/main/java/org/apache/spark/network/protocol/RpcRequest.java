@@ -17,25 +17,26 @@
 
 package org.apache.spark.network.protocol;
 
+import java.util.Arrays;
+
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-
-import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
  * A generic RPC which is handled by a remote {@link org.apache.spark.network.server.RpcHandler}.
  * This will correspond to a single
  * {@link org.apache.spark.network.protocol.ResponseMessage} (either success or failure).
  */
-public final class RpcRequest extends AbstractMessage implements RequestMessage {
+public final class RpcRequest implements RequestMessage {
   /** Used to link an RPC request with its response. */
   public final long requestId;
 
-  public RpcRequest(long requestId, ManagedBuffer message) {
-    super(message, true);
+  /** Serialized message to send to remote RpcHandler. */
+  public final byte[] message;
+
+  public RpcRequest(long requestId, byte[] message) {
     this.requestId = requestId;
+    this.message = message;
   }
 
   @Override
@@ -43,36 +44,31 @@ public final class RpcRequest extends AbstractMessage implements RequestMessage 
 
   @Override
   public int encodedLength() {
-    // The integer (a.k.a. the body size) is not really used, since that information is already
-    // encoded in the frame length. But this maintains backwards compatibility with versions of
-    // RpcRequest that use Encoders.ByteArrays.
-    return 8 + 4;
+    return 8 + Encoders.ByteArrays.encodedLength(message);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
-    // See comment in encodedLength().
-    buf.writeInt((int) body().size());
+    Encoders.ByteArrays.encode(buf, message);
   }
 
   public static RpcRequest decode(ByteBuf buf) {
     long requestId = buf.readLong();
-    // See comment in encodedLength().
-    buf.readInt();
-    return new RpcRequest(requestId, new NettyManagedBuffer(buf.retain()));
+    byte[] message = Encoders.ByteArrays.decode(buf);
+    return new RpcRequest(requestId, message);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(requestId, body());
+    return Objects.hashCode(requestId, Arrays.hashCode(message));
   }
 
   @Override
   public boolean equals(Object other) {
     if (other instanceof RpcRequest) {
       RpcRequest o = (RpcRequest) other;
-      return requestId == o.requestId && super.equals(o);
+      return requestId == o.requestId && Arrays.equals(message, o.message);
     }
     return false;
   }
@@ -81,7 +77,7 @@ public final class RpcRequest extends AbstractMessage implements RequestMessage 
   public String toString() {
     return Objects.toStringHelper(this)
       .add("requestId", requestId)
-      .add("body", body())
+      .add("message", message)
       .toString();
   }
 }

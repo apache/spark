@@ -160,12 +160,7 @@ object SparkBuild extends PomBuild {
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
-      "-source", javacJVMVersion.value
-    ),
-    // This -target option cannot be set in the Compile configuration scope since `javadoc` doesn't
-    // play nicely with it; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629 for
-    // additional discussion and explanation.
-    javacOptions in (Compile, compile) ++= Seq(
+      "-source", javacJVMVersion.value,
       "-target", javacJVMVersion.value
     ),
 
@@ -535,8 +530,6 @@ object Unidoc {
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("akka")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/examples")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/memory")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/shuffle")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
@@ -554,9 +547,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn),
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
@@ -639,6 +632,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.master.rest.enabled=false",
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
+    javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test += "-Dderby.system.durability=test",

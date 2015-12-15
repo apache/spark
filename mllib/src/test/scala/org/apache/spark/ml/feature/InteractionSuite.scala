@@ -19,7 +19,6 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
 
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite
@@ -27,7 +26,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.functions.col
 
-class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new Interaction())
   }
@@ -162,12 +161,5 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
         new NumericAttribute(Some("a_2:b_0_1:c"), Some(8)),
         new NumericAttribute(Some("a_2:b_1:c"), Some(9))))
     assert(attrs === expectedAttrs)
-  }
-
-  test("read/write") {
-    val t = new Interaction()
-      .setInputCols(Array("myInputCol", "myInputCol2"))
-      .setOutputCol("myOutputCol")
-    testDefaultReadWrite(t)
   }
 }

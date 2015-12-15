@@ -93,9 +93,9 @@ class SparkFlumeEvent() extends Externalizable {
 
   /* Serialize to bytes. */
   def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    val body = event.getBody
-    out.writeInt(body.remaining())
-    Utils.writeByteBuffer(body, out)
+    val body = event.getBody.array()
+    out.writeInt(body.length)
+    out.write(body)
 
     val numHeaders = event.getHeaders.size()
     out.writeInt(numHeaders)

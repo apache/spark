@@ -66,33 +66,6 @@ class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFun
   }
 }
 
-class ScalaAggregateFunctionWithoutInputSchema extends UserDefinedAggregateFunction {
-
-  def inputSchema: StructType = StructType(Nil)
-
-  def bufferSchema: StructType = StructType(StructField("value", LongType) :: Nil)
-
-  def dataType: DataType = LongType
-
-  def deterministic: Boolean = true
-
-  def initialize(buffer: MutableAggregationBuffer): Unit = {
-    buffer.update(0, 0L)
-  }
-
-  def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
-    buffer.update(0, input.getAs[Seq[Row]](0).map(_.getAs[Int]("v")).sum + buffer.getLong(0))
-  }
-
-  def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
-    buffer1.update(0, buffer1.getLong(0) + buffer2.getLong(0))
-  }
-
-  def evaluate(buffer: Row): Any = {
-    buffer.getLong(0)
-  }
-}
-
 class LongProductSum extends UserDefinedAggregateFunction {
   def inputSchema: StructType = new StructType()
     .add("a", LongType)
@@ -159,22 +132,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
-    val data3 = Seq[(Seq[Integer], Integer, Integer)](
-      (Seq[Integer](1, 1), 10, -10),
-      (Seq[Integer](null), -60, 60),
-      (Seq[Integer](1, 1), 30, -30),
-      (Seq[Integer](1), 30, 30),
-      (Seq[Integer](2), 1, 1),
-      (null, -10, 10),
-      (Seq[Integer](2, 3), -1, null),
-      (Seq[Integer](2, 3), 1, 1),
-      (Seq[Integer](2, 3, 4), null, 1),
-      (Seq[Integer](null), 100, -10),
-      (Seq[Integer](3), null, 3),
-      (null, null, null),
-      (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
-    data3.write.saveAsTable("agg3")
-
     val emptyDF = sqlContext.createDataFrame(
       sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
@@ -189,7 +146,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   override def afterAll(): Unit = {
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
-    sqlContext.sql("DROP TABLE IF EXISTS agg3")
     sqlContext.dropTempTable("emptyTable")
   }
 
@@ -309,41 +265,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, 2) ::
         Row(100, null) ::
         Row(null, 3) ::
-        Row(null, null) :: Nil)
-
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT DISTINCT key
-          |FROM agg3
-        """.stripMargin),
-      Row(Seq[Integer](1, 1)) ::
-        Row(Seq[Integer](null)) ::
-        Row(Seq[Integer](1)) ::
-        Row(Seq[Integer](2)) ::
-        Row(null) ::
-        Row(Seq[Integer](2, 3)) ::
-        Row(Seq[Integer](2, 3, 4)) ::
-        Row(Seq[Integer](3)) :: Nil)
-
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT value1, key
-          |FROM agg3
-          |GROUP BY value1, key
-        """.stripMargin),
-      Row(10, Seq[Integer](1, 1)) ::
-        Row(-60, Seq[Integer](null)) ::
-        Row(30, Seq[Integer](1, 1)) ::
-        Row(30, Seq[Integer](1)) ::
-        Row(1, Seq[Integer](2)) ::
-        Row(-10, null) ::
-        Row(-1, Seq[Integer](2, 3)) ::
-        Row(1, Seq[Integer](2, 3)) ::
-        Row(null, Seq[Integer](2, 3, 4)) ::
-        Row(100, Seq[Integer](null)) ::
-        Row(null, Seq[Integer](3)) ::
         Row(null, null) :: Nil)
   }
 
@@ -885,43 +806,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       )
     }
   }
-
-  test("udaf without specifying inputSchema") {
-    withTempTable("noInputSchemaUDAF") {
-      sqlContext.udf.register("noInputSchema", new ScalaAggregateFunctionWithoutInputSchema)
-
-      val data =
-        Row(1, Seq(Row(1), Row(2), Row(3))) ::
-          Row(1, Seq(Row(4), Row(5), Row(6))) ::
-          Row(2, Seq(Row(-10))) :: Nil
-      val schema =
-        StructType(
-          StructField("key", IntegerType) ::
-            StructField("myArray",
-              ArrayType(StructType(StructField("v", IntegerType) :: Nil))) :: Nil)
-      sqlContext.createDataFrame(
-        sparkContext.parallelize(data, 2),
-        schema)
-        .registerTempTable("noInputSchemaUDAF")
-
-      checkAnswer(
-        sqlContext.sql(
-          """
-            |SELECT key, noInputSchema(myArray)
-            |FROM noInputSchemaUDAF
-            |GROUP BY key
-          """.stripMargin),
-        Row(1, 21) :: Row(2, -10) :: Nil)
-
-      checkAnswer(
-        sqlContext.sql(
-          """
-            |SELECT noInputSchema(myArray)
-            |FROM noInputSchemaUDAF
-          """.stripMargin),
-        Row(11) :: Nil)
-    }
-  }
 }
 
 
@@ -932,27 +816,29 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>
-      withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> fallbackStartsAt.toString) {
-        // Create a new df to make sure its physical operator picks up
-        // spark.sql.TungstenAggregate.testFallbackStartsAt.
-        // todo: remove it?
-        val newActual = DataFrame(sqlContext, actual.logicalPlan)
+      sqlContext.setConf(
+        "spark.sql.TungstenAggregate.testFallbackStartsAt",
+        fallbackStartsAt.toString)
 
-        QueryTest.checkAnswer(newActual, expectedAnswer) match {
-          case Some(errorMessage) =>
-            val newErrorMessage =
-              s"""
-                |The following aggregation query failed when using TungstenAggregate with
-                |controlled fallback (it falls back to sort-based aggregation once it has processed
-                |$fallbackStartsAt input rows). The query is
-                |${actual.queryExecution}
-                |
-                |$errorMessage
-              """.stripMargin
+      // Create a new df to make sure its physical operator picks up
+      // spark.sql.TungstenAggregate.testFallbackStartsAt.
+      // todo: remove it?
+      val newActual = DataFrame(sqlContext, actual.logicalPlan)
 
-            fail(newErrorMessage)
-          case None =>
-        }
+      QueryTest.checkAnswer(newActual, expectedAnswer) match {
+        case Some(errorMessage) =>
+          val newErrorMessage =
+            s"""
+              |The following aggregation query failed when using TungstenAggregate with
+              |controlled fallback (it falls back to sort-based aggregation once it has processed
+              |$fallbackStartsAt input rows). The query is
+              |${actual.queryExecution}
+              |
+              |$errorMessage
+            """.stripMargin
+
+          fail(newErrorMessage)
+        case None =>
       }
     }
   }

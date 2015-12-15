@@ -45,7 +45,7 @@ private[mllib] class BinaryClassificationPMMLModelExport(
        val fields = new SArray[FieldName](model.weights.size)
        val dataDictionary = new DataDictionary
        val miningSchema = new MiningSchema
-       val regressionTableYES = new RegressionTable(model.intercept).setTargetCategory("1")
+       val regressionTableYES = new RegressionTable(model.intercept).withTargetCategory("1")
        var interceptNO = threshold
        if (RegressionNormalizationMethodType.LOGIT == normalizationMethod) {
          if (threshold <= 0) {
@@ -56,35 +56,35 @@ private[mllib] class BinaryClassificationPMMLModelExport(
            interceptNO = -math.log(1 / threshold - 1)
          }
        }
-       val regressionTableNO = new RegressionTable(interceptNO).setTargetCategory("0")
+       val regressionTableNO = new RegressionTable(interceptNO).withTargetCategory("0")
        val regressionModel = new RegressionModel()
-         .setFunctionName(MiningFunctionType.CLASSIFICATION)
-         .setMiningSchema(miningSchema)
-         .setModelName(description)
-         .setNormalizationMethod(normalizationMethod)
-         .addRegressionTables(regressionTableYES, regressionTableNO)
+         .withFunctionName(MiningFunctionType.CLASSIFICATION)
+         .withMiningSchema(miningSchema)
+         .withModelName(description)
+         .withNormalizationMethod(normalizationMethod)
+         .withRegressionTables(regressionTableYES, regressionTableNO)
 
        for (i <- 0 until model.weights.size) {
          fields(i) = FieldName.create("field_" + i)
-         dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+         dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
          miningSchema
-           .addMiningFields(new MiningField(fields(i))
-           .setUsageType(FieldUsageType.ACTIVE))
-         regressionTableYES.addNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
+           .withMiningFields(new MiningField(fields(i))
+           .withUsageType(FieldUsageType.ACTIVE))
+         regressionTableYES.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
        }
 
        // add target field
        val targetField = FieldName.create("target")
        dataDictionary
-         .addDataFields(new DataField(targetField, OpType.CATEGORICAL, DataType.STRING))
+         .withDataFields(new DataField(targetField, OpType.CATEGORICAL, DataType.STRING))
        miningSchema
-         .addMiningFields(new MiningField(targetField)
-         .setUsageType(FieldUsageType.TARGET))
+         .withMiningFields(new MiningField(targetField)
+         .withUsageType(FieldUsageType.TARGET))
 
-       dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
+       dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
 
        pmml.setDataDictionary(dataDictionary)
-       pmml.addModels(regressionModel)
+       pmml.withModels(regressionModel)
      }
   }
 }

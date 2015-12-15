@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import org.slf4j.Logger;
@@ -90,11 +89,11 @@ public class OneForOneBlockFetcher {
       throw new IllegalArgumentException("Zero-sized blockIds array");
     }
 
-    client.sendRpc(openMessage.toByteBuffer(), new RpcResponseCallback() {
+    client.sendRpc(openMessage.toByteArray(), new RpcResponseCallback() {
       @Override
-      public void onSuccess(ByteBuffer response) {
+      public void onSuccess(byte[] response) {
         try {
-          streamHandle = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
+          streamHandle = (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response);
           logger.trace("Successfully opened blocks {}, preparing to fetch chunks.", streamHandle);
 
           // Immediately request all chunks -- we expect that the total size of the request is

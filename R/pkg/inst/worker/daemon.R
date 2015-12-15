@@ -18,11 +18,10 @@
 # Worker daemon
 
 rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
-dirs <- strsplit(rLibDir, ",")[[1]]
-script <- file.path(dirs[[1]], "SparkR", "worker", "worker.R")
+script <- paste(rLibDir, "SparkR/worker/worker.R", sep = "/")
 
 # preload SparkR package, speedup worker
-.libPaths(c(dirs, .libPaths()))
+.libPaths(c(rLibDir, .libPaths()))
 suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))

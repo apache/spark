@@ -45,31 +45,31 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
       val miningSchema = new MiningSchema
       val regressionTable = new RegressionTable(model.intercept)
       val regressionModel = new RegressionModel()
-        .setFunctionName(MiningFunctionType.REGRESSION)
-        .setMiningSchema(miningSchema)
-        .setModelName(description)
-        .addRegressionTables(regressionTable)
+        .withFunctionName(MiningFunctionType.REGRESSION)
+        .withMiningSchema(miningSchema)
+        .withModelName(description)
+        .withRegressionTables(regressionTable)
 
       for (i <- 0 until model.weights.size) {
         fields(i) = FieldName.create("field_" + i)
-        dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+        dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
-          .addMiningFields(new MiningField(fields(i))
-          .setUsageType(FieldUsageType.ACTIVE))
-        regressionTable.addNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
+          .withMiningFields(new MiningField(fields(i))
+          .withUsageType(FieldUsageType.ACTIVE))
+        regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
       }
 
       // for completeness add target field
       val targetField = FieldName.create("target")
-      dataDictionary.addDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
+      dataDictionary.withDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
       miningSchema
-        .addMiningFields(new MiningField(targetField)
-        .setUsageType(FieldUsageType.TARGET))
+        .withMiningFields(new MiningField(targetField)
+        .withUsageType(FieldUsageType.TARGET))
 
-      dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
+      dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
 
       pmml.setDataDictionary(dataDictionary)
-      pmml.addModels(regressionModel)
+      pmml.withModels(regressionModel)
     }
   }
 }

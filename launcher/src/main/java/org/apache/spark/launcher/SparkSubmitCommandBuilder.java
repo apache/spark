@@ -77,7 +77,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   final List<String> sparkArgs;
-  private final boolean printInfo;
+  private final boolean printHelp;
 
   /**
    * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
@@ -88,7 +88,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<String>();
-    this.printInfo = false;
+    this.printHelp = false;
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
@@ -108,14 +108,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     OptionParser parser = new OptionParser();
     parser.parse(submitArgs);
-    this.printInfo = parser.infoRequested;
+    this.printHelp = parser.helpRequested;
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env) throws IOException {
-    if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printInfo) {
+    if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printHelp) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printInfo) {
+    } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printHelp) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -311,7 +311,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    boolean infoRequested = false;
+    boolean helpRequested = false;
 
     @Override
     protected boolean handle(String opt, String value) {
@@ -344,10 +344,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           appResource = specialClasses.get(value);
         }
       } else if (opt.equals(HELP) || opt.equals(USAGE_ERROR)) {
-        infoRequested = true;
-        sparkArgs.add(opt);
-      } else if (opt.equals(VERSION)) {
-        infoRequested = true;
+        helpRequested = true;
         sparkArgs.add(opt);
       } else {
         sparkArgs.add(opt);

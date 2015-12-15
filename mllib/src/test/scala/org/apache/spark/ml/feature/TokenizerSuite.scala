@@ -21,30 +21,20 @@ import scala.beans.BeanInfo
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 @BeanInfo
 case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
 
-class TokenizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class TokenizerSuite extends SparkFunSuite {
 
   test("params") {
     ParamsSuite.checkParams(new Tokenizer)
   }
-
-  test("read/write") {
-    val t = new Tokenizer()
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
-    testDefaultReadWrite(t)
-  }
 }
 
-class RegexTokenizerSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
-
+class RegexTokenizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.RegexTokenizerSuite._
 
   test("params") {
@@ -90,17 +80,6 @@ class RegexTokenizerSuite
       TokenizerTestData("java scala", Array("java", "scala"))
     ))
     testRegexTokenizer(tokenizer, dataset)
-  }
-
-  test("read/write") {
-    val t = new RegexTokenizer()
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
-      .setMinTokenLength(2)
-      .setGaps(false)
-      .setPattern("hi")
-      .setToLowercase(false)
-    testDefaultReadWrite(t)
   }
 }
 

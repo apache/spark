@@ -1,21 +1,21 @@
 ---
 layout: global
-title: PMML model export - spark.mllib
-displayTitle: PMML model export - spark.mllib
+title: PMML model export - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - PMML model export
 ---
 
 * Table of contents
 {:toc}
 
-## `spark.mllib` supported models
+## MLlib supported models
 
-`spark.mllib` supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)).
+MLlib supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)).
 
-The table below outlines the `spark.mllib` models that can be exported to PMML and their equivalent PMML model.
+The table below outlines the MLlib models that can be exported to PMML and their equivalent PMML model.
 
 <table class="table">
   <thead>
-    <tr><th>`spark.mllib` model</th><th>PMML model</th></tr>
+    <tr><th>MLlib model</th><th>PMML model</th></tr>
   </thead>
   <tbody>
     <tr>

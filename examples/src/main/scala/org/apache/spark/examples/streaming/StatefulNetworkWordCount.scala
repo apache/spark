@@ -49,7 +49,7 @@ object StatefulNetworkWordCount {
     val ssc = new StreamingContext(sparkConf, Seconds(1))
     ssc.checkpoint(".")
 
-    // Initial state RDD for mapWithState operation
+    // Initial RDD input to trackStateByKey
     val initialRDD = ssc.sparkContext.parallelize(List(("hello", 1), ("world", 1)))
 
     // Create a ReceiverInputDStream on target ip:port and count the
@@ -58,17 +58,17 @@ object StatefulNetworkWordCount {
     val words = lines.flatMap(_.split(" "))
     val wordDstream = words.map(x => (x, 1))
 
-    // Update the cumulative count using mapWithState
+    // Update the cumulative count using updateStateByKey
     // This will give a DStream made of state (which is the cumulative count of the words)
-    val mappingFunc = (word: String, one: Option[Int], state: State[Int]) => {
+    val trackStateFunc = (batchTime: Time, word: String, one: Option[Int], state: State[Int]) => {
       val sum = one.getOrElse(0) + state.getOption.getOrElse(0)
       val output = (word, sum)
       state.update(sum)
-      output
+      Some(output)
     }
 
-    val stateDstream = wordDstream.mapWithState(
-      StateSpec.function(mappingFunc).initialState(initialRDD))
+    val stateDstream = wordDstream.trackStateByKey(
+      StateSpec.function(trackStateFunc).initialState(initialRDD))
     stateDstream.print()
     ssc.start()
     ssc.awaitTermination()

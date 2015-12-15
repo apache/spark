@@ -24,13 +24,7 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * User-defined function.
- * @param function  The user defined scala function to run.
- *                  Note that if you use primitive parameters, you are not able to check if it is
- *                  null or not, and the UDF will return null for you if the primitive input is
- *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
- * @param children  The input expressions of this UDF.
- * @param inputTypes  The expected input types of this UDF.
  */
 case class ScalaUDF(
     function: AnyRef,
@@ -1029,27 +1023,21 @@ case class ScalaUDF(
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString
-    val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
-      val eval = evals(i)
-      val argTerm = ctx.freshName("arg")
-      val convert = s"Object $argTerm = ${eval.isNull} ? null : $converter.apply(${eval.value});"
-      (convert, argTerm)
-    }.unzip
+    val funcArguments = converterTerms.zip(evals).map {
+      case (converter, eval) => s"$converter.apply(${eval.value})"
+    }.mkString(",")
+    val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
+      s"(${ctx.boxedType(ctx.javaType(dataType))})${catalystConverterTerm}" +
+        s".apply($funcTerm.apply($funcArguments));"
 
-    val callFunc = s"${ctx.boxedType(dataType)} $resultTerm = " +
-      s"(${ctx.boxedType(dataType)})${catalystConverterTerm}" +
-        s".apply($funcTerm.apply(${funcArguments.mkString(", ")}));"
+    evalCode + s"""
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      Boolean ${ev.isNull};
 
-    s"""
-      $evalCode
-      ${converters.mkString("\n")}
       $callFunc
 
-      boolean ${ev.isNull} = $resultTerm == null;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = $resultTerm;
-      }
+      ${ev.value} = $resultTerm;
+      ${ev.isNull} = $resultTerm == null;
     """
   }
 

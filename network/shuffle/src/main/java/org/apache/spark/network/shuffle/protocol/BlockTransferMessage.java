@@ -17,8 +17,6 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import java.nio.ByteBuffer;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -55,7 +53,7 @@ public abstract class BlockTransferMessage implements Encodable {
   // NB: Java does not support static methods in interfaces, so we must put this in a static class.
   public static class Decoder {
     /** Deserializes the 'type' byte followed by the message itself. */
-    public static BlockTransferMessage fromByteBuffer(ByteBuffer msg) {
+    public static BlockTransferMessage fromByteArray(byte[] msg) {
       ByteBuf buf = Unpooled.wrappedBuffer(msg);
       byte type = buf.readByte();
       switch (type) {
@@ -70,12 +68,12 @@ public abstract class BlockTransferMessage implements Encodable {
   }
 
   /** Serializes the 'type' byte followed by the message itself. */
-  public ByteBuffer toByteBuffer() {
+  public byte[] toByteArray() {
     // Allow room for encoded message, plus the type byte
     ByteBuf buf = Unpooled.buffer(encodedLength() + 1);
     buf.writeByte(type().id);
     encode(buf);
     assert buf.writableBytes() == 0 : "Writable bytes remain: " + buf.writableBytes();
-    return buf.nioBuffer();
+    return buf.array();
   }
 }

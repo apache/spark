@@ -41,8 +41,7 @@ import org.apache.parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetO
  *   no safe way undo a failed appending job (that's why both `abortTask()` and `abortJob()` are
  *   left empty).
  */
-private[datasources] class DirectParquetOutputCommitter(
-    outputPath: Path, context: TaskAttemptContext)
+private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {
   val LOG = Log.getLog(classOf[ParquetOutputCommitter])
 

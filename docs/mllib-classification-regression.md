@@ -1,10 +1,10 @@
 ---
 layout: global
-title: Classification and Regression - spark.mllib
-displayTitle: Classification and Regression - spark.mllib
+title: Classification and Regression - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Classification and Regression
 ---
 
-The `spark.mllib` package supports various methods for 
+MLlib supports various methods for 
 [binary classification](http://en.wikipedia.org/wiki/Binary_classification),
 [multiclass
 classification](http://en.wikipedia.org/wiki/Multiclass_classification), and

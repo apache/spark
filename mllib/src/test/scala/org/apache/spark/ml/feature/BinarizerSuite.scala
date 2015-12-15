@@ -69,10 +69,10 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("read/write") {
-    val t = new Binarizer()
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
+    val binarizer = new Binarizer()
+      .setInputCol("feature")
+      .setOutputCol("binarized_feature")
       .setThreshold(0.1)
-    testDefaultReadWrite(t)
+    testDefaultReadWrite(binarizer)
   }
 }

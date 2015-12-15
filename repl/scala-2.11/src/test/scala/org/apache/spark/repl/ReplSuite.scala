@@ -54,7 +54,8 @@ class ReplSuite extends SparkFunSuite {
       new SparkILoop(in, new PrintWriter(out))
     }
     org.apache.spark.repl.Main.interp = interp
-    Main.main(Array("-classpath", classpath)) // call main
+    Main.s.processArguments(List("-classpath", classpath), true)
+    Main.main(Array()) // call main
     org.apache.spark.repl.Main.interp = null
 
     if (oldExecutorClasspath != null) {

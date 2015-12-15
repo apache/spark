@@ -24,8 +24,6 @@ import scala.util.Try
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataOutputStream
 
-import org.apache.spark.util.Utils
-
 /**
  * A writer for writing byte-buffers to a write ahead log file.
  */
@@ -50,7 +48,17 @@ private[streaming] class FileBasedWriteAheadLogWriter(path: String, hadoopConf: 
     val lengthToWrite = data.remaining()
     val segment = new FileBasedWriteAheadLogSegment(path, nextOffset, lengthToWrite)
     stream.writeInt(lengthToWrite)
-    Utils.writeByteBuffer(data, stream: OutputStream)
+    if (data.hasArray) {
+      stream.write(data.array())
+    } else {
+      // If the buffer is not backed by an array, we transfer using temp array
+      // Note that despite the extra array copy, this should be faster than byte-by-byte copy
+      while (data.hasRemaining) {
+        val array = new Array[Byte](data.remaining)
+        data.get(array)
+        stream.write(array)
+      }
+    }
     flush()
     nextOffset = stream.getPos()
     segment

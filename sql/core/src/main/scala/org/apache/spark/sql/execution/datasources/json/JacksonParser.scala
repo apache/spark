@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.ByteArrayOutputStream
-import scala.collection.mutable.ArrayBuffer
 
 import com.fasterxml.jackson.core._
+
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,23 +32,18 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-object JacksonParser {
-
-  def parse(
-      input: RDD[String],
+private[sql] object JacksonParser {
+  def apply(
+      json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String,
-      configOptions: JSONOptions): RDD[InternalRow] = {
-
-    input.mapPartitions { iter =>
-      parseJson(iter, schema, columnNameOfCorruptRecords, configOptions)
-    }
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
+    parseJson(json, schema, columnNameOfCorruptRecords)
   }
 
   /**
    * Parse the current token (and related children) according to a desired schema
    */
-  def convertField(
+  private[sql] def convertField(
       factory: JsonFactory,
       parser: JsonParser,
       schema: DataType): Any = {
@@ -230,10 +226,9 @@ object JacksonParser {
   }
 
   private def parseJson(
-      input: Iterator[String],
+      json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String,
-      configOptions: JSONOptions): Iterator[InternalRow] = {
+      columnNameOfCorruptRecords: String): RDD[InternalRow] = {
 
     def failedRecord(record: String): Seq[InternalRow] = {
       // create a row even if no corrupt record column is present
@@ -246,36 +241,37 @@ object JacksonParser {
       Seq(row)
     }
 
-    val factory = new JsonFactory()
-    configOptions.setJacksonOptions(factory)
+    json.mapPartitions { iter =>
+      val factory = new JsonFactory()
 
-    input.flatMap { record =>
-      if (record.trim.isEmpty) {
-        Nil
-      } else {
-        try {
-          Utils.tryWithResource(factory.createParser(record)) { parser =>
-            parser.nextToken()
+      iter.flatMap { record =>
+        if (record.trim.isEmpty) {
+          Nil
+        } else {
+          try {
+            Utils.tryWithResource(factory.createParser(record)) { parser =>
+              parser.nextToken()
 
-            convertField(factory, parser, schema) match {
-              case null => failedRecord(record)
-              case row: InternalRow => row :: Nil
-              case array: ArrayData =>
-                if (array.numElements() == 0) {
-                  Nil
-                } else {
-                  array.toArray[InternalRow](schema)
-                }
-              case _ =>
-                sys.error(
-                  s"Failed to parse record $record. Please make sure that each line of " +
-                    "the file (or each string in the RDD) is a valid JSON object or " +
-                    "an array of JSON objects.")
+              convertField(factory, parser, schema) match {
+                case null => failedRecord(record)
+                case row: InternalRow => row :: Nil
+                case array: ArrayData =>
+                  if (array.numElements() == 0) {
+                    Nil
+                  } else {
+                    array.toArray[InternalRow](schema)
+                  }
+                case _ =>
+                  sys.error(
+                    s"Failed to parse record $record. Please make sure that each line of " +
+                      "the file (or each string in the RDD) is a valid JSON object or " +
+                      "an array of JSON objects.")
+              }
             }
+          } catch {
+            case _: JsonProcessingException =>
+              failedRecord(record)
           }
-        } catch {
-          case _: JsonProcessingException =>
-            failedRecord(record)
         }
       }
     }

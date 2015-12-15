@@ -19,11 +19,9 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class SQLTransformerSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class SQLTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
     ParamsSuite.checkParams(new SQLTransformer())
@@ -42,11 +40,5 @@ class SQLTransformerSuite
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
     assert(result.collect().toSeq == expected.collect().toSeq)
-  }
-
-  test("read/write") {
-    val t = new SQLTransformer()
-      .setStatement("select * from __THIS__")
-    testDefaultReadWrite(t)
   }
 }

@@ -80,11 +80,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
 
   private var partitionedDF: DataFrame = _
 
-  private val partitionedDataSchema: StructType =
-    new StructType()
-      .add("a", IntegerType)
-      .add("b", IntegerType)
-      .add("c", StringType)
+  private val partitionedDataSchema: StructType = StructType('a.int :: 'b.int :: 'c.string :: Nil)
 
   protected override def beforeAll(): Unit = {
     this.tempPath = Utils.createTempDir()

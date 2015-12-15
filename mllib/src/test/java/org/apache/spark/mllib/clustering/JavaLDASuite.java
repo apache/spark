@@ -144,7 +144,7 @@ public class JavaLDASuite implements Serializable {
   }
 
   @Test
-  public void onlineOptimizerCompatibility() {
+  public void OnlineOptimizerCompatibility() {
     int k = 3;
     double topicSmoothing = 1.2;
     double termSmoothing = 1.2;

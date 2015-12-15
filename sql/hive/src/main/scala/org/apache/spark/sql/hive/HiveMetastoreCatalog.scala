@@ -411,12 +411,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     // evil case insensitivity issue, which is reconciled within `ParquetRelation`.
     val parquetOptions = Map(
       ParquetRelation.METASTORE_SCHEMA -> metastoreSchema.json,
-      ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
-      ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
-        metastoreRelation.tableName,
-        Some(metastoreRelation.databaseName)
-      ).unquotedString
-    )
+      ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString)
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
 
@@ -809,13 +804,12 @@ private[hive] case class MetastoreRelation
 
       val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
       sd.setSerdeInfo(serdeInfo)
-      // maps and lists should be set only after all elements are ready (see HIVE-7975)
       serdeInfo.setSerializationLib(p.storage.serde)
 
       val serdeParameters = new java.util.HashMap[String, String]()
+      serdeInfo.setParameters(serdeParameters)
       table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
       p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-      serdeInfo.setParameters(serdeParameters)
 
       new Partition(hiveQlTable, tPartition)
     }

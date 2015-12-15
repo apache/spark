@@ -27,7 +27,7 @@ if not (ENV['SKIP_API'] == '1')
     cd("..")
 
     puts "Running 'build/sbt -Pkinesis-asl clean compile unidoc' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt -Pkinesis-asl clean compile unidoc") || raise("Unidoc generation failed")
+    puts `build/sbt -Pkinesis-asl clean compile unidoc`
 
     puts "Moving back into docs dir."
     cd("docs")
@@ -117,7 +117,7 @@ if not (ENV['SKIP_API'] == '1')
 
   puts "Moving to python/docs directory and building sphinx."
   cd("../python/docs")
-  system("make html") || raise("Python doc generation failed")
+  puts `make html`
 
   puts "Moving back into home dir."
   cd("../../")
@@ -131,7 +131,7 @@ if not (ENV['SKIP_API'] == '1')
   # Build SparkR API docs
   puts "Moving to R directory and building roxygen docs."
   cd("R")
-  system("./create-docs.sh") || raise("R doc generation failed")
+  puts `./create-docs.sh`
 
   puts "Moving back into home dir."
   cd("../")

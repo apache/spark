@@ -23,7 +23,6 @@ import org.mockito.Matchers.any
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
 import org.apache.spark.metrics.source.JvmSource
@@ -58,7 +57,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
-    val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
+    val taskBinary = sc.broadcast(closureSerializer.serialize((rdd, func)).array)
     val task = new ResultTask[String, String](
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, Seq.empty)
     intercept[RuntimeException] {

@@ -71,11 +71,6 @@ private[spark] class HttpFileServer(
     serverUri + "/jars/" + file.getName
   }
 
-  def addDirectory(path: String, resourceBase: String): String = {
-    httpServer.addDirectory(path, resourceBase)
-    serverUri + path
-  }
-
   def addFileToDir(file: File, dir: File) : String = {
     // Check whether the file is a directory. If it is, throw a more meaningful exception.
     // If we don't catch this, Guava throws a very confusing error message:

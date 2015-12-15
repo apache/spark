@@ -89,8 +89,6 @@ private[spark] class ExecutorAllocationManager(
   private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
   private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors",
     Integer.MAX_VALUE)
-  private val initialNumExecutors = conf.getInt("spark.dynamicAllocation.initialExecutors",
-    minNumExecutors)
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
   private val schedulerBacklogTimeoutS = conf.getTimeAsSeconds(
@@ -123,7 +121,8 @@ private[spark] class ExecutorAllocationManager(
 
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
-  private var numExecutorsTarget = initialNumExecutors
+  private var numExecutorsTarget =
+    conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
 
   // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
@@ -239,19 +238,6 @@ private[spark] class ExecutorAllocationManager(
   def stop(): Unit = {
     executor.shutdown()
     executor.awaitTermination(10, TimeUnit.SECONDS)
-  }
-
-  /**
-   * Reset the allocation manager to the initial state. Currently this will only be called in
-   * yarn-client mode when AM re-registers after a failure.
-   */
-  def reset(): Unit = synchronized {
-    initializing = true
-    numExecutorsTarget = initialNumExecutors
-    numExecutorsToAdd = 1
-
-    executorsPendingToRemove.clear()
-    removeTimes.clear()
   }
 
   /**
@@ -384,7 +370,6 @@ private[spark] class ExecutorAllocationManager(
     } else {
       logWarning(
         s"Unable to reach the cluster manager to request $numExecutorsTarget total executors!")
-      numExecutorsTarget = oldNumExecutorsTarget
       0
     }
   }
@@ -524,7 +509,6 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
     removeTimes.remove(executorId)
-    executorsPendingToRemove.remove(executorId)
   }
 
   /**

@@ -112,8 +112,8 @@ public final class JavaSqlNetworkWordCount {
 
 /** Lazily instantiated singleton instance of SQLContext */
 class JavaSQLContextSingleton {
-  private static transient SQLContext instance = null;
-  public static SQLContext getInstance(SparkContext sparkContext) {
+  static private transient SQLContext instance = null;
+  static public SQLContext getInstance(SparkContext sparkContext) {
     if (instance == null) {
       instance = new SQLContext(sparkContext);
     }

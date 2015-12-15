@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Ensembles - spark.mllib
-displayTitle: Ensembles - spark.mllib
+title: Ensembles - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Ensembles
 ---
 
 * Table of contents
@@ -9,7 +9,7 @@ displayTitle: Ensembles - spark.mllib
 
 An [ensemble method](http://en.wikipedia.org/wiki/Ensemble_learning)
 is a learning algorithm which creates a model composed of a set of other base models.
-`spark.mllib` supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest).
+MLlib supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest).
 Both use [decision trees](mllib-decision-tree.html) as their base models.
 
 ## Gradient-Boosted Trees vs. Random Forests
@@ -33,9 +33,9 @@ Like decision trees, random forests handle categorical features,
 extend to the multiclass classification setting, do not require
 feature scaling, and are able to capture non-linearities and feature interactions.
 
-`spark.mllib` supports random forests for binary and multiclass classification and for regression,
+MLlib supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
-`spark.mllib` implements random forests using the existing [decision tree](mllib-decision-tree.html)
+MLlib implements random forests using the existing [decision tree](mllib-decision-tree.html)
 implementation.  Please see the decision tree guide for more information on trees.
 
 ### Basic algorithm
@@ -155,9 +155,9 @@ Like decision trees, GBTs handle categorical features,
 extend to the multiclass classification setting, do not require
 feature scaling, and are able to capture non-linearities and feature interactions.
 
-`spark.mllib` supports GBTs for binary classification and for regression,
+MLlib supports GBTs for binary classification and for regression,
 using both continuous and categorical features.
-`spark.mllib` implements GBTs using the existing [decision tree](mllib-decision-tree.html) implementation.  Please see the decision tree guide for more information on trees.
+MLlib implements GBTs using the existing [decision tree](mllib-decision-tree.html) implementation.  Please see the decision tree guide for more information on trees.
 
 *Note*: GBTs do not yet support multiclass classification.  For multiclass problems, please use
 [decision trees](mllib-decision-tree.html) or [Random Forests](mllib-ensembles.html#Random-Forest).
@@ -171,7 +171,7 @@ The specific mechanism for re-labeling instances is defined by a loss function (
 
 #### Losses
 
-The table below lists the losses currently supported by GBTs in `spark.mllib`.
+The table below lists the losses currently supported by GBTs in MLlib.
 Note that each loss is applicable to one of classification or regression, not both.
 
 Notation: $N$ = number of instances. $y_i$ = label of instance $i$.  $x_i$ = features of instance $i$.  $F(x_i)$ = model's predicted label for instance $i$.

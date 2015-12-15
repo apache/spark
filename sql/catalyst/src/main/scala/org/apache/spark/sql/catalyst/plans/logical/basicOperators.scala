@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.util.collection.OpenHashSet
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -92,10 +92,8 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output: Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
-      leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
-    }
+  // TODO: These aren't really the same attributes as nullability etc might change.
+  final override def output: Seq[Attribute] = left.output
 
   final override lazy val resolved: Boolean =
     childrenResolved &&
@@ -117,10 +115,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
-case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-  /** We don't use right.output because those rows get excluded from the set. */
-  override def output: Seq[Attribute] = left.output
-}
+case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
 case class Join(
   left: LogicalPlan,
@@ -249,12 +244,12 @@ private[sql] object Expand {
    */
   private def buildNonSelectExprSet(
       bitmask: Int,
-      exprs: Seq[Expression]): ArrayBuffer[Expression] = {
-    val set = new ArrayBuffer[Expression](2)
+      exprs: Seq[Expression]): OpenHashSet[Expression] = {
+    val set = new OpenHashSet[Expression](2)
 
     var bit = exprs.length - 1
     while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 0) set += exprs(bit)
+      if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
       bit -= 1
     }
 
@@ -284,7 +279,7 @@ private[sql] object Expand {
 
       (child.output :+ gid).map(expr => expr transformDown {
         // TODO this causes a problem when a column is used both for grouping and aggregation.
-        case x: Expression if nonSelectedGroupExprSet.exists(_.semanticEquals(x)) =>
+        case x: Expression if nonSelectedGroupExprSet.contains(x) =>
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
           Literal.create(null, expr.dataType)
@@ -327,10 +322,6 @@ trait GroupingAnalytics extends UnaryNode {
   def aggregations: Seq[NamedExpression]
 
   override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
-
-  // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
-  // will change in analysis.
-  override lazy val resolved: Boolean = false
 
   def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics
 }
@@ -553,22 +544,19 @@ case class MapGroups[K, T, U](
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
-  def apply[Key, Left, Right, Result : Encoder](
-      func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
-      keyEnc: ExpressionEncoder[Key],
-      leftEnc: ExpressionEncoder[Left],
-      rightEnc: ExpressionEncoder[Right],
+  def apply[K : Encoder, Left : Encoder, Right : Encoder, R : Encoder](
+      func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],
       left: LogicalPlan,
-      right: LogicalPlan): CoGroup[Key, Left, Right, Result] = {
+      right: LogicalPlan): CoGroup[K, Left, Right, R] = {
     CoGroup(
       func,
-      keyEnc,
-      leftEnc,
-      rightEnc,
-      encoderFor[Result],
-      encoderFor[Result].schema.toAttributes,
+      encoderFor[K],
+      encoderFor[Left],
+      encoderFor[Right],
+      encoderFor[R],
+      encoderFor[R].schema.toAttributes,
       leftGroup,
       rightGroup,
       left,
@@ -580,12 +568,12 @@ object CoGroup {
  * A relation produced by applying `func` to each grouping key and associated values from left and
  * right children.
  */
-case class CoGroup[Key, Left, Right, Result](
-    func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
-    keyEnc: ExpressionEncoder[Key],
+case class CoGroup[K, Left, Right, R](
+    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
+    kEncoder: ExpressionEncoder[K],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
-    resultEnc: ExpressionEncoder[Result],
+    rEncoder: ExpressionEncoder[R],
     output: Seq[Attribute],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],

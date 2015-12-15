@@ -82,7 +82,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val code = s"""
-      public java.lang.Object generate($exprType[] expr) {
+      public Object generate($exprType[] expr) {
         return new SpecificMutableProjection(expr);
       }
 
@@ -109,7 +109,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           return (InternalRow) mutableRow;
         }
 
-        public java.lang.Object apply(java.lang.Object _i) {
+        public Object apply(Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allProjections
           // copy all the results into MutableRow

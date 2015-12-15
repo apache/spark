@@ -19,21 +19,10 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class MulticlassClassificationEvaluatorSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class MulticlassClassificationEvaluatorSuite extends SparkFunSuite {
 
   test("params") {
     ParamsSuite.checkParams(new MulticlassClassificationEvaluator)
-  }
-
-  test("read/write") {
-    val evaluator = new MulticlassClassificationEvaluator()
-      .setPredictionCol("myPrediction")
-      .setLabelCol("myLabel")
-      .setMetricName("recall")
-    testDefaultReadWrite(evaluator)
   }
 }

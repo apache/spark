@@ -27,13 +27,10 @@ import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
 private[netty] sealed trait InboxMessage
 
-private[netty] case class OneWayMessage(
-    senderAddress: RpcAddress,
-    content: Any) extends InboxMessage
-
-private[netty] case class RpcMessage(
+private[netty] case class ContentMessage(
     senderAddress: RpcAddress,
     content: Any,
+    needReply: Boolean,
     context: NettyRpcCallContext) extends InboxMessage
 
 private[netty] case object OnStart extends InboxMessage
@@ -99,23 +96,28 @@ private[netty] class Inbox(
     while (true) {
       safelyCall(endpoint) {
         message match {
-          case RpcMessage(_sender, content, context) =>
+          case ContentMessage(_sender, content, needReply, context) =>
+            // The partial function to call
+            val pf = if (needReply) endpoint.receiveAndReply(context) else endpoint.receive
             try {
-              endpoint.receiveAndReply(context).applyOrElse[Any, Unit](content, { msg =>
+              pf.applyOrElse[Any, Unit](content, { msg =>
                 throw new SparkException(s"Unsupported message $message from ${_sender}")
               })
+              if (!needReply) {
+                context.finish()
+              }
             } catch {
               case NonFatal(e) =>
-                context.sendFailure(e)
+                if (needReply) {
+                  // If the sender asks a reply, we should send the error back to the sender
+                  context.sendFailure(e)
+                } else {
+                  context.finish()
+                }
                 // Throw the exception -- this exception will be caught by the safelyCall function.
                 // The endpoint's onError function will be called.
                 throw e
             }
-
-          case OneWayMessage(_sender, content) =>
-            endpoint.receive.applyOrElse[Any, Unit](content, { msg =>
-              throw new SparkException(s"Unsupported message $message from ${_sender}")
-            })
 
           case OnStart =>
             endpoint.onStart()

@@ -21,6 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -127,45 +128,6 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       } else {
         None
       }
-    case _ => None
-  }
-}
-
-/**
-  * A pattern that collects the filter and inner joins.
-  *
-  *          Filter
-  *            |
-  *        inner Join
-  *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
-  *      Filter   plan2
-  *        |
-  *  inner join
-  *      /    \
-  *   plan0    plan1
-  *
-  * Note: This pattern currently only works for left-deep trees.
-  */
-object ExtractFiltersAndInnerJoins extends PredicateHelper {
-
-  // flatten all inner joins, which are next to each other
-  def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
-    case Join(left, right, Inner, cond) =>
-      val (plans, conditions) = flattenJoin(left)
-      (plans ++ Seq(right), conditions ++ cond.toSeq)
-
-    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
-      val (plans, conditions) = flattenJoin(j)
-      (plans, conditions ++ splitConjunctivePredicates(filterCondition))
-
-    case _ => (Seq(plan), Seq())
-  }
-
-  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
-      Some(flattenJoin(f))
-    case j @ Join(_, _, Inner, _) =>
-      Some(flattenJoin(j))
     case _ => None
   }
 }

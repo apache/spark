@@ -298,11 +298,8 @@ case class GetJsonObject(json: Expression, path: Expression)
 
       case (FIELD_NAME, Named(name) :: xs) if p.getCurrentName == name =>
         // exact field match
-        if (p.nextToken() != JsonToken.VALUE_NULL) {
-          evaluatePath(p, g, style, xs)
-        } else {
-          false
-        }
+        p.nextToken()
+        evaluatePath(p, g, style, xs)
 
       case (FIELD_NAME, Wildcard :: xs) =>
         // wildcard field match

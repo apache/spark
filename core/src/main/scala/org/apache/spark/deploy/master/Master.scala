@@ -253,18 +253,9 @@ private[deploy] class Master(
       execOption match {
         case Some(exec) => {
           val appInfo = idToApp(appId)
-          val oldState = exec.state
           exec.state = state
-
-          if (state == ExecutorState.RUNNING) {
-            if (oldState != ExecutorState.LAUNCHING) {
-              logWarning(s"Executor $execId state transfer from $oldState to RUNNING is unexpected")
-            }
-            appInfo.resetRetryCount()
-          }
-
+          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
           exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
-
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
             logInfo(s"Removing executor ${exec.fullId} because it is $state")
@@ -711,8 +702,8 @@ private[deploy] class Master(
     worker.addExecutor(exec)
     worker.endpoint.send(LaunchExecutor(masterUrl,
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
-    exec.application.driver.send(
-      ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
+    exec.application.driver.send(ExecutorAdded(
+      exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
   private def registerWorker(worker: WorkerInfo): Boolean = {
@@ -935,7 +926,7 @@ private[deploy] class Master(
         }
 
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
+          eventLogDir, app.id, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
           EventLoggingListener.IN_PROGRESS))

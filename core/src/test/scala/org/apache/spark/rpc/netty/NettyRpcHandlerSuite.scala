@@ -18,7 +18,6 @@
 package org.apache.spark.rpc.netty
 
 import java.net.InetSocketAddress
-import java.nio.ByteBuffer
 
 import io.netty.channel.Channel
 import org.mockito.Mockito._
@@ -26,19 +25,17 @@ import org.mockito.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.client.{TransportResponseHandler, TransportClient}
-import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc._
 
 class NettyRpcHandlerSuite extends SparkFunSuite {
 
   val env = mock(classOf[NettyRpcEnv])
-  val sm = mock(classOf[StreamManager])
-  when(env.deserialize(any(classOf[TransportClient]), any(classOf[ByteBuffer]))(any()))
-    .thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null))
+  when(env.deserialize(any(classOf[TransportClient]), any(classOf[Array[Byte]]))(any())).
+    thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null, false))
 
   test("receive") {
     val dispatcher = mock(classOf[Dispatcher])
-    val nettyRpcHandler = new NettyRpcHandler(dispatcher, env, sm)
+    val nettyRpcHandler = new NettyRpcHandler(dispatcher, env)
 
     val channel = mock(classOf[Channel])
     val client = new TransportClient(channel, mock(classOf[TransportResponseHandler]))
@@ -50,7 +47,7 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
 
   test("connectionTerminated") {
     val dispatcher = mock(classOf[Dispatcher])
-    val nettyRpcHandler = new NettyRpcHandler(dispatcher, env, sm)
+    val nettyRpcHandler = new NettyRpcHandler(dispatcher, env)
 
     val channel = mock(classOf[Channel])
     val client = new TransportClient(channel, mock(classOf[TransportResponseHandler]))

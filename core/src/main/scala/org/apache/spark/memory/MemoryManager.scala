@@ -50,7 +50,7 @@ private[spark] abstract class MemoryManager(
 
   storageMemoryPool.incrementPoolSize(storageMemory)
   onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)
-  offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeap.size", 0))
+  offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
 
   /**
    * Total available memory for storage, in bytes. This amount can vary over time, depending on
@@ -77,7 +77,9 @@ private[spark] abstract class MemoryManager(
   def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+  }
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
@@ -107,7 +109,12 @@ private[spark] abstract class MemoryManager(
   def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      memoryMode: MemoryMode): Long
+      memoryMode: MemoryMode): Long = synchronized {
+    memoryMode match {
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+    }
+  }
 
   /**
    * Release numBytes of execution memory belonging to the given task.
@@ -182,13 +189,7 @@ private[spark] abstract class MemoryManager(
    * sun.misc.Unsafe.
    */
   final val tungstenMemoryMode: MemoryMode = {
-    if (conf.getBoolean("spark.memory.offHeap.enabled", false)) {
-      require(conf.getSizeAsBytes("spark.memory.offHeap.size", 0) > 0,
-        "spark.memory.offHeap.size must be > 0 when spark.memory.offHeap.enabled == true")
-      MemoryMode.OFF_HEAP
-    } else {
-      MemoryMode.ON_HEAP
-    }
+    if (conf.getBoolean("spark.unsafe.offHeap", false)) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
   }
 
   /**

@@ -241,10 +241,6 @@ object DateTimeUtils {
           i += 3
         } else if (i < 2) {
           if (b == '-') {
-            if (i == 0 && j != 4) {
-              // year should have exact four digits
-              return None
-            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
@@ -312,24 +308,15 @@ object DateTimeUtils {
     }
 
     segments(i) = currentSegmentValue
-    if (!justTime && i == 0 && j != 4) {
-      // year should have exact four digits
-      return None
-    }
 
     while (digitsMilli < 6) {
       segments(6) *= 10
       digitsMilli += 1
     }
 
-    if (!justTime && (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 ||
+    if (!justTime && (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 ||
         segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) {
       return None
-    }
-
-    // Instead of return None, we truncate the fractional seconds to prevent inserting NULL
-    if (segments(6) > 999999) {
-      segments(6) = segments(6).toString.take(6).toInt
     }
 
     if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
@@ -381,10 +368,6 @@ object DateTimeUtils {
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
-        if (i == 0 && j != 4) {
-          // year should have exact four digits
-          return None
-        }
         segments(i) = currentSegmentValue
         currentSegmentValue = 0
         i += 1
@@ -398,12 +381,8 @@ object DateTimeUtils {
       }
       j += 1
     }
-    if (i == 0 && j != 4) {
-      // year should have exact four digits
-      return None
-    }
     segments(i) = currentSegmentValue
-    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
+    if (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
@@ -416,19 +395,16 @@ object DateTimeUtils {
   /**
    * Returns the microseconds since year zero (-17999) from microseconds since epoch.
    */
-  private def absoluteMicroSecond(microsec: SQLTimestamp): SQLTimestamp = {
+  def absoluteMicroSecond(microsec: SQLTimestamp): SQLTimestamp = {
     microsec + toYearZero * MICROS_PER_DAY
-  }
-
-  private def localTimestamp(microsec: SQLTimestamp): SQLTimestamp = {
-    absoluteMicroSecond(microsec) + defaultTimeZone.getOffset(microsec / 1000) * 1000L
   }
 
   /**
    * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
    */
   def getHours(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND / 3600) % 24).toInt
+    val localTs = absoluteMicroSecond(microsec) + defaultTimeZone.getOffset(microsec / 1000) * 1000L
+    ((localTs / MICROS_PER_SECOND / 3600) % 24).toInt
   }
 
   /**
@@ -436,7 +412,8 @@ object DateTimeUtils {
    * microseconds.
    */
   def getMinutes(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND / 60) % 60).toInt
+    val localTs = absoluteMicroSecond(microsec) + defaultTimeZone.getOffset(microsec / 1000) * 1000L
+    ((localTs / MICROS_PER_SECOND / 60) % 60).toInt
   }
 
   /**
@@ -444,7 +421,7 @@ object DateTimeUtils {
    * microseconds.
    */
   def getSeconds(microsec: SQLTimestamp): Int = {
-    ((localTimestamp(microsec) / MICROS_PER_SECOND) % 60).toInt
+    ((absoluteMicroSecond(microsec) / MICROS_PER_SECOND) % 60).toInt
   }
 
   private[this] def isLeapYear(year: Int): Boolean = {

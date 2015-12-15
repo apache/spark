@@ -45,8 +45,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
-  private val transportConf =
-    SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
+  private val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext =
     new TransportContext(transportConf, blockHandler, true)

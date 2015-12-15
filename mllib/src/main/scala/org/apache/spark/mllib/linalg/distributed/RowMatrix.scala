@@ -368,8 +368,7 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the top k principal components and a vector of proportions of
-   * variance explained by each principal component.
+   * Computes the top k principal components.
    * Rows correspond to observations and columns correspond to variables.
    * The principal components are stored a local matrix of size n-by-k.
    * Each column corresponds for one principal component,
@@ -380,40 +379,22 @@ class RowMatrix @Since("1.0.0") (
    * Note that this cannot be computed on matrices with more than 65535 columns.
    *
    * @param k number of top principal components.
-   * @return a matrix of size n-by-k, whose columns are principal components, and
-   * a vector of values which indicate how much variance each principal component
-   * explains
+   * @return a matrix of size n-by-k, whose columns are principal components
    */
-  @Since("1.6.0")
-  def computePrincipalComponentsAndExplainedVariance(k: Int): (Matrix, Vector) = {
+  @Since("1.0.0")
+  def computePrincipalComponents(k: Int): Matrix = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
 
     val Cov = computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
 
-    val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
-
-    val eigenSum = s.data.sum
-    val explainedVariance = s.data.map(_ / eigenSum)
+    val brzSvd.SVD(u: BDM[Double], _, _) = brzSvd(Cov)
 
     if (k == n) {
-      (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
+      Matrices.dense(n, k, u.data)
     } else {
-      (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
-        Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+      Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k))
     }
-  }
-
-  /**
-   * Computes the top k principal components only.
-   *
-   * @param k number of top principal components.
-   * @return a matrix of size n-by-k, whose columns are principal components
-   * @see computePrincipalComponentsAndExplainedVariance
-   */
-  @Since("1.0.0")
-  def computePrincipalComponents(k: Int): Matrix = {
-    computePrincipalComponentsAndExplainedVariance(k)._1
   }
 
   /**

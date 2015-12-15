@@ -29,7 +29,7 @@ import org.apache.spark.SparkConf;
 // $example off$
 
 public class JavaRecommendationExample {
-  public static void main(String[] args) {
+  public static void main(String args[]) {
     // $example on$
     SparkConf conf = new SparkConf().setAppName("Java Collaborative Filtering Example");
     JavaSparkContext jsc = new JavaSparkContext(conf);

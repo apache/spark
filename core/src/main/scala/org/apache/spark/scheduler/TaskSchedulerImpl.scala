@@ -87,8 +87,8 @@ private[spark] class TaskSchedulerImpl(
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
 
-  // Number of tasks running on each executor
-  private val executorIdToTaskCount = new HashMap[String, Int]
+  // Which executor IDs we have executors on
+  val activeExecutorIds = new HashSet[String]
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
@@ -254,7 +254,6 @@ private[spark] class TaskSchedulerImpl(
             val tid = task.taskId
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
-            executorIdToTaskCount(execId) += 1
             executorsByHost(host) += execId
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
@@ -283,7 +282,7 @@ private[spark] class TaskSchedulerImpl(
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
-      executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
+      activeExecutorIds += o.executorId
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -332,8 +331,7 @@ private[spark] class TaskSchedulerImpl(
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
-
-          if (executorIdToTaskCount.contains(execId)) {
+          if (activeExecutorIds.contains(execId)) {
             removeExecutor(execId,
               SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
             failedExecutor = Some(execId)
@@ -343,11 +341,7 @@ private[spark] class TaskSchedulerImpl(
           case Some(taskSet) =>
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetManager.remove(tid)
-              taskIdToExecutorId.remove(tid).foreach { execId =>
-                if (executorIdToTaskCount.contains(execId)) {
-                  executorIdToTaskCount(execId) -= 1
-                }
-              }
+              taskIdToExecutorId.remove(tid)
             }
             if (state == TaskState.FINISHED) {
               taskSet.removeRunningTask(tid)
@@ -468,27 +462,26 @@ private[spark] class TaskSchedulerImpl(
     var failedExecutor: Option[String] = None
 
     synchronized {
-      if (executorIdToTaskCount.contains(executorId)) {
+      if (activeExecutorIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
-        logExecutorLoss(executorId, hostPort, reason)
+        logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
         removeExecutor(executorId, reason)
         failedExecutor = Some(executorId)
       } else {
-        executorIdToHost.get(executorId) match {
-          case Some(hostPort) =>
-            // If the host mapping still exists, it means we don't know the loss reason for the
-            // executor. So call removeExecutor() to update tasks running on that executor when
-            // the real loss reason is finally known.
-            logExecutorLoss(executorId, hostPort, reason)
-            removeExecutor(executorId, reason)
+         executorIdToHost.get(executorId) match {
+           case Some(_) =>
+             // If the host mapping still exists, it means we don't know the loss reason for the
+             // executor. So call removeExecutor() to update tasks running on that executor when
+             // the real loss reason is finally known.
+             removeExecutor(executorId, reason)
 
-          case None =>
-            // We may get multiple executorLost() calls with different loss reasons. For example,
-            // one may be triggered by a dropped connection from the slave while another may be a
-            // report of executor termination from Mesos. We produce log messages for both so we
-            // eventually report the termination reason.
-            logError(s"Lost an executor $executorId (already removed): $reason")
-        }
+           case None =>
+             // We may get multiple executorLost() calls with different loss reasons. For example,
+             // one may be triggered by a dropped connection from the slave while another may be a
+             // report of executor termination from Mesos. We produce log messages for both so we
+             // eventually report the termination reason.
+             logError("Lost an executor " + executorId + " (already removed): " + reason)
+         }
       }
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
@@ -498,26 +491,13 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  private def logExecutorLoss(
-      executorId: String,
-      hostPort: String,
-      reason: ExecutorLossReason): Unit = reason match {
-    case LossReasonPending =>
-      logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
-    case ExecutorKilled =>
-      logInfo(s"Executor $executorId on $hostPort killed by driver.")
-    case _ =>
-      logError(s"Lost executor $executorId on $hostPort: $reason")
-  }
-
   /**
    * Remove an executor from all our data structures and mark it as lost. If the executor's loss
    * reason is not yet known, do not yet remove its association with its host nor update the status
    * of any running tasks, since the loss reason defines whether we'll fail those tasks.
    */
   private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
-    executorIdToTaskCount -= executorId
-
+    activeExecutorIds -= executorId
     val host = executorIdToHost(executorId)
     val execs = executorsByHost.getOrElse(host, new HashSet)
     execs -= executorId
@@ -554,11 +534,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def isExecutorAlive(execId: String): Boolean = synchronized {
-    executorIdToTaskCount.contains(execId)
-  }
-
-  def isExecutorBusy(execId: String): Boolean = synchronized {
-    executorIdToTaskCount.getOrElse(execId, -1) > 0
+    activeExecutorIds.contains(execId)
   }
 
   // By default, rack is unknown

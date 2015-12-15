@@ -35,7 +35,6 @@ public class UnsafeRowWriter {
   // The offset of the global buffer where we start to write this row.
   private int startingOffset;
   private int nullBitsSize;
-  private UnsafeRow row;
 
   public void initialize(BufferHolder holder, int numFields) {
     this.holder = holder;
@@ -44,7 +43,7 @@ public class UnsafeRowWriter {
 
     // grow the global buffer to make sure it has enough space to write fixed-length data.
     final int fixedSize = nullBitsSize + 8 * numFields;
-    holder.grow(fixedSize, row);
+    holder.grow(fixedSize);
     holder.cursor += fixedSize;
 
     // zero-out the null bits region
@@ -53,18 +52,11 @@ public class UnsafeRowWriter {
     }
   }
 
-  public void initialize(UnsafeRow row, BufferHolder holder, int numFields) {
-    initialize(holder, numFields);
-    this.row = row;
-  }
-
   private void zeroOutPaddingBytes(int numBytes) {
     if ((numBytes & 0x07) > 0) {
       Platform.putLong(holder.buffer, holder.cursor + ((numBytes >> 3) << 3), 0L);
     }
   }
-
-  public BufferHolder holder() { return holder; }
 
   public boolean isNullAt(int ordinal) {
     return BitSetMethods.isSet(holder.buffer, startingOffset, ordinal);
@@ -98,7 +90,7 @@ public class UnsafeRowWriter {
 
     if (remainder > 0) {
       final int paddingBytes = 8 - remainder;
-      holder.grow(paddingBytes, row);
+      holder.grow(paddingBytes);
 
       for (int i = 0; i < paddingBytes; i++) {
         Platform.putByte(holder.buffer, holder.cursor, (byte) 0);
@@ -161,7 +153,7 @@ public class UnsafeRowWriter {
       }
     } else {
       // grow the global buffer before writing data.
-      holder.grow(16, row);
+      holder.grow(16);
 
       // zero-out the bytes
       Platform.putLong(holder.buffer, holder.cursor, 0L);
@@ -193,7 +185,7 @@ public class UnsafeRowWriter {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
-    holder.grow(roundedSize, row);
+    holder.grow(roundedSize);
 
     zeroOutPaddingBytes(numBytes);
 
@@ -214,7 +206,7 @@ public class UnsafeRowWriter {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
-    holder.grow(roundedSize, row);
+    holder.grow(roundedSize);
 
     zeroOutPaddingBytes(numBytes);
 
@@ -230,7 +222,7 @@ public class UnsafeRowWriter {
 
   public void write(int ordinal, CalendarInterval input) {
     // grow the global buffer before writing data.
-    holder.grow(16, row);
+    holder.grow(16);
 
     // Write the months and microseconds fields of Interval to the variable length portion.
     Platform.putLong(holder.buffer, holder.cursor, input.months);

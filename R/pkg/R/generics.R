@@ -133,11 +133,7 @@ setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 # @export
 setGeneric("name", function(x) { standardGeneric("name") })
 
-# @rdname getNumPartitions
-# @export
-setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
-
-# @rdname getNumPartitions
+# @rdname numPartitions
 # @export
 setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
 
@@ -389,22 +385,6 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
-#' @rdname columns
-#' @export
-setGeneric("colnames", function(x, do.NULL = TRUE, prefix = "col") { standardGeneric("colnames") })
-
-#' @rdname columns
-#' @export
-setGeneric("colnames<-", function(x, value) { standardGeneric("colnames<-") })
-
-#' @rdname coltypes
-#' @export
-setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
-
-#' @rdname coltypes
-#' @export
-setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
-
 #' @rdname schema
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
@@ -415,9 +395,9 @@ setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("corr", function(x, ...) {standardGeneric("corr") })
+setGeneric("corr", function(x, col1, col2, method = "pearson") {standardGeneric("corr") })
 
-#' @rdname summary
+#' @rdname describe
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
@@ -479,11 +459,11 @@ setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
-#' @rdname merge
+#' rdname merge
 #' @export
 setGeneric("merge")
 
-#' @rdname mutate
+#' @rdname withColumn
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
@@ -495,7 +475,7 @@ setGeneric("orderBy", function(x, col) { standardGeneric("orderBy") })
 #' @export
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
-#' @rdname rename
+#' @rdname withColumnRenamed
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -559,7 +539,7 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 
 # @rdname subset
 # @export
-setGeneric("subset", function(x, ...) { standardGeneric("subset") })
+setGeneric("subset", function(x, subset, select, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
@@ -573,7 +553,7 @@ setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
-#' @rdname rbind
+#' @rdname unionAll
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
@@ -585,7 +565,7 @@ setGeneric("where", function(x, condition) { standardGeneric("where") })
 #' @export
 setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
 
-#' @rdname rename
+#' @rdname withColumnRenamed
 #' @export
 setGeneric("withColumnRenamed",
            function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
@@ -627,10 +607,6 @@ setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname column
 #' @export
-setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
-
-#' @rdname column
-#' @export
 setGeneric("isNull", function(x) { standardGeneric("isNull") })
 
 #' @rdname column
@@ -667,10 +643,6 @@ setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 #' @rdname approxCountDistinct
 #' @export
 setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
-
-#' @rdname array_contains
-#' @export
-setGeneric("array_contains", function(x, value) { standardGeneric("array_contains") })
 
 #' @rdname ascii
 #' @export
@@ -724,9 +696,9 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
-#' @rdname cume_dist
+#' @rdname cumeDist
 #' @export
-setGeneric("cume_dist", function(x) { standardGeneric("cume_dist") })
+setGeneric("cumeDist", function(x) { standardGeneric("cumeDist") })
 
 #' @rdname datediff
 #' @export
@@ -752,17 +724,9 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
-#' @rdname decode
+#' @rdname denseRank
 #' @export
-setGeneric("decode", function(x, charset) { standardGeneric("decode") })
-
-#' @rdname dense_rank
-#' @export
-setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
-
-#' @rdname encode
-#' @export
-setGeneric("encode", function(x, charset) { standardGeneric("encode") })
+setGeneric("denseRank", function(x) { standardGeneric("denseRank") })
 
 #' @rdname explode
 #' @export
@@ -812,9 +776,9 @@ setGeneric("initcap", function(x) { standardGeneric("initcap") })
 #' @export
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
-#' @rdname is.nan
+#' @rdname isNaN
 #' @export
-setGeneric("isnan", function(x) { standardGeneric("isnan") })
+setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
 #' @rdname kurtosis
 #' @export
@@ -822,7 +786,7 @@ setGeneric("kurtosis", function(x) { standardGeneric("kurtosis") })
 
 #' @rdname lag
 #' @export
-setGeneric("lag", function(x, ...) { standardGeneric("lag") })
+setGeneric("lag", function(x, offset, defaultValue = NULL) { standardGeneric("lag") })
 
 #' @rdname last
 #' @export
@@ -904,9 +868,9 @@ setGeneric("ntile", function(x) { standardGeneric("ntile") })
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
-#' @rdname percent_rank
+#' @rdname percentRank
 #' @export
-setGeneric("percent_rank", function(x) { standardGeneric("percent_rank") })
+setGeneric("percentRank", function(x) { standardGeneric("percentRank") })
 
 #' @rdname pmod
 #' @export
@@ -945,9 +909,9 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 #' @export
 setGeneric("rint", function(x, ...) { standardGeneric("rint") })
 
-#' @rdname row_number
+#' @rdname rowNumber
 #' @export
-setGeneric("row_number", function(x) { standardGeneric("row_number") })
+setGeneric("rowNumber", function(x) { standardGeneric("rowNumber") })
 
 #' @rdname rpad
 #' @export
@@ -997,10 +961,6 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @export
 setGeneric("skewness", function(x) { standardGeneric("skewness") })
 
-#' @rdname sort_array
-#' @export
-setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
-
 #' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
@@ -1016,10 +976,6 @@ setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
 #' @rdname stddev_samp
 #' @export
 setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
-
-#' @rdname struct
-#' @export
-setGeneric("struct", function(x, ...) { standardGeneric("struct") })
 
 #' @rdname substring_index
 #' @export
@@ -1098,10 +1054,6 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("glm")
 
-#' @rdname predict
-#' @export
-setGeneric("predict", function(object, ...) { standardGeneric("predict") })
-
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
@@ -1117,3 +1069,7 @@ setGeneric("attach")
 #' @rdname with
 #' @export
 setGeneric("with")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })

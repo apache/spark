@@ -40,7 +40,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
 
   override def beforeAll(): Unit = {
     runIfTestsEnabled("Prepare KinesisTestUtils") {
-      testUtils = new KPLBasedKinesisTestUtils()
+      testUtils = new KinesisTestUtils()
       testUtils.createStream()
 
       shardIdToDataAndSeqNumbers = testUtils.pushData(testData, aggregate = aggregateTestData)

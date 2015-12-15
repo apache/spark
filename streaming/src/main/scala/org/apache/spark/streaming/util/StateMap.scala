@@ -59,7 +59,7 @@ private[streaming] object StateMap {
   def create[K: ClassTag, S: ClassTag](conf: SparkConf): StateMap[K, S] = {
     val deltaChainThreshold = conf.getInt("spark.streaming.sessionByKey.deltaChainThreshold",
       DELTA_CHAIN_LENGTH_THRESHOLD)
-    new OpenHashMapBasedStateMap[K, S](deltaChainThreshold)
+    new OpenHashMapBasedStateMap[K, S](64, deltaChainThreshold)
   }
 }
 
@@ -79,7 +79,7 @@ private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMa
 /** Implementation of StateMap based on Spark's [[org.apache.spark.util.collection.OpenHashMap]] */
 private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     @transient @volatile var parentStateMap: StateMap[K, S],
-    initialCapacity: Int = DEFAULT_INITIAL_CAPACITY,
+    initialCapacity: Int = 64,
     deltaChainThreshold: Int = DELTA_CHAIN_LENGTH_THRESHOLD
   ) extends StateMap[K, S] { self =>
 
@@ -89,14 +89,12 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     deltaChainThreshold = deltaChainThreshold)
 
   def this(deltaChainThreshold: Int) = this(
-    initialCapacity = DEFAULT_INITIAL_CAPACITY, deltaChainThreshold = deltaChainThreshold)
+    initialCapacity = 64, deltaChainThreshold = deltaChainThreshold)
 
   def this() = this(DELTA_CHAIN_LENGTH_THRESHOLD)
 
-  require(initialCapacity >= 1, "Invalid initial capacity")
-  require(deltaChainThreshold >= 1, "Invalid delta chain threshold")
-
-  @transient @volatile private var deltaMap = new OpenHashMap[K, StateInfo[S]](initialCapacity)
+  @transient @volatile private var deltaMap =
+    new OpenHashMap[K, StateInfo[S]](initialCapacity)
 
   /** Get the session data if it exists */
   override def get(key: K): Option[S] = {
@@ -286,10 +284,9 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     // Read the data of the parent map. Keep reading records, until the limiter is reached
     // First read the approximate number of records to expect and allocate properly size
     // OpenHashMap
-    val parentStateMapSizeHint = inputStream.readInt()
-    val newStateMapInitialCapacity = math.max(parentStateMapSizeHint, DEFAULT_INITIAL_CAPACITY)
+    val parentSessionStoreSizeHint = inputStream.readInt()
     val newParentSessionStore = new OpenHashMapBasedStateMap[K, S](
-      initialCapacity = newStateMapInitialCapacity, deltaChainThreshold)
+      initialCapacity = parentSessionStoreSizeHint, deltaChainThreshold)
 
     // Read the records until the limit marking object has been reached
     var parentSessionLoopDone = false
@@ -341,6 +338,4 @@ private[streaming] object OpenHashMapBasedStateMap {
   class LimitMarker(val num: Int) extends Serializable
 
   val DELTA_CHAIN_LENGTH_THRESHOLD = 20
-
-  val DEFAULT_INITIAL_CAPACITY = 64
 }

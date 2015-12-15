@@ -235,17 +235,17 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) =>
-      expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+      expressions.toSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => this.semanticEquals(o)
+    case o: HashPartitioning => this == o
     case _ => false
   }
 
   override def guarantees(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => this.semanticEquals(o)
+    case o: HashPartitioning => this == o
     case _ => false
   }
 
@@ -276,17 +276,17 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case ClusteredDistribution(requiredClustering) =>
-      ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+      ordering.map(_.child).toSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: RangePartitioning => this.semanticEquals(o)
+    case o: RangePartitioning => this == o
     case _ => false
   }
 
   override def guarantees(other: Partitioning): Boolean = other match {
-    case o: RangePartitioning => this.semanticEquals(o)
+    case o: RangePartitioning => this == o
     case _ => false
   }
 }

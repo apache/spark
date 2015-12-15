@@ -42,28 +42,25 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
    * data to 'out', in order to enable zero-copy transfer.
    */
   @Override
-  public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) throws Exception {
+  public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) {
     Object body = null;
     long bodyLength = 0;
     boolean isBodyInFrame = false;
 
-    // If the message has a body, take it out to enable zero-copy transfer for the payload.
-    if (in.body() != null) {
+    // Detect ResponseWithBody messages and get the data buffer out of them.
+    // The body is used in order to enable zero-copy transfer for the payload.
+    if (in instanceof ResponseWithBody) {
+      ResponseWithBody resp = (ResponseWithBody) in;
       try {
-        bodyLength = in.body().size();
-        body = in.body().convertToNetty();
-        isBodyInFrame = in.isBodyInFrame();
+        bodyLength = resp.body.size();
+        body = resp.body.convertToNetty();
+        isBodyInFrame = resp.isBodyInFrame;
       } catch (Exception e) {
-        if (in instanceof AbstractResponseMessage) {
-          AbstractResponseMessage resp = (AbstractResponseMessage) in;
-          // Re-encode this message as a failure response.
-          String error = e.getMessage() != null ? e.getMessage() : "null";
-          logger.error(String.format("Error processing %s for client %s",
-            in, ctx.channel().remoteAddress()), e);
-          encode(ctx, resp.createFailureResponse(error), out);
-        } else {
-          throw e;
-        }
+        // Re-encode this message as a failure response.
+        String error = e.getMessage() != null ? e.getMessage() : "null";
+        logger.error(String.format("Error processing %s for client %s",
+          resp, ctx.channel().remoteAddress()), e);
+        encode(ctx, resp.createFailureResponse(error), out);
         return;
       }
     }

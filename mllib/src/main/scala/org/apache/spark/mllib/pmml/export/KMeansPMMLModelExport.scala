@@ -42,42 +42,42 @@ private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLMode
       val dataDictionary = new DataDictionary
       val miningSchema = new MiningSchema
       val comparisonMeasure = new ComparisonMeasure()
-        .setKind(ComparisonMeasure.Kind.DISTANCE)
-        .setMeasure(new SquaredEuclidean())
+        .withKind(ComparisonMeasure.Kind.DISTANCE)
+        .withMeasure(new SquaredEuclidean())
       val clusteringModel = new ClusteringModel()
-        .setModelName("k-means")
-        .setMiningSchema(miningSchema)
-        .setComparisonMeasure(comparisonMeasure)
-        .setFunctionName(MiningFunctionType.CLUSTERING)
-        .setModelClass(ClusteringModel.ModelClass.CENTER_BASED)
-        .setNumberOfClusters(model.clusterCenters.length)
+        .withModelName("k-means")
+        .withMiningSchema(miningSchema)
+        .withComparisonMeasure(comparisonMeasure)
+        .withFunctionName(MiningFunctionType.CLUSTERING)
+        .withModelClass(ClusteringModel.ModelClass.CENTER_BASED)
+        .withNumberOfClusters(model.clusterCenters.length)
 
       for (i <- 0 until clusterCenter.size) {
         fields(i) = FieldName.create("field_" + i)
-        dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+        dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
-          .addMiningFields(new MiningField(fields(i))
-          .setUsageType(FieldUsageType.ACTIVE))
-        clusteringModel.addClusteringFields(
-          new ClusteringField(fields(i)).setCompareFunction(CompareFunctionType.ABS_DIFF))
+          .withMiningFields(new MiningField(fields(i))
+          .withUsageType(FieldUsageType.ACTIVE))
+        clusteringModel.withClusteringFields(
+          new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF))
       }
 
-      dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
+      dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
 
-      for (i <- model.clusterCenters.indices) {
+      for (i <- 0 until model.clusterCenters.length) {
         val cluster = new Cluster()
-          .setName("cluster_" + i)
-          .setArray(new org.dmg.pmml.Array()
-          .setType(Array.Type.REAL)
-          .setN(clusterCenter.size)
-          .setValue(model.clusterCenters(i).toArray.mkString(" ")))
+          .withName("cluster_" + i)
+          .withArray(new org.dmg.pmml.Array()
+          .withType(Array.Type.REAL)
+          .withN(clusterCenter.size)
+          .withValue(model.clusterCenters(i).toArray.mkString(" ")))
         // we don't have the size of the single cluster but only the centroids (withValue)
         // .withSize(value)
-        clusteringModel.addClusters(cluster)
+        clusteringModel.withClusters(cluster)
       }
 
       pmml.setDataDictionary(dataDictionary)
-      pmml.addModels(clusteringModel)
+      pmml.withModels(clusteringModel)
     }
   }
 }

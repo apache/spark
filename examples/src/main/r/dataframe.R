@@ -35,7 +35,7 @@ printSchema(df)
 
 # Create a DataFrame from a JSON file
 path <- file.path(Sys.getenv("SPARK_HOME"), "examples/src/main/resources/people.json")
-peopleDF <- read.json(sqlContext, path)
+peopleDF <- jsonFile(sqlContext, path)
 printSchema(peopleDF)
 
 # Register this DataFrame as a table.

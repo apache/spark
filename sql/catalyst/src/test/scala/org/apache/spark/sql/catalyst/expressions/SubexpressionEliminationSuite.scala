@@ -25,18 +25,14 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     val a: AttributeReference = AttributeReference("name", IntegerType)()
     val b1 = a.withName("name2").withExprId(id)
     val b2 = a.withExprId(id)
-    val b3 = a.withQualifiers("qualifierName" :: Nil)
 
     assert(b1 != b2)
     assert(a != b1)
     assert(b1.semanticEquals(b2))
     assert(!b1.semanticEquals(a))
     assert(a.hashCode != b1.hashCode)
-    assert(b1.hashCode != b2.hashCode)
+    assert(b1.hashCode == b2.hashCode)
     assert(b1.semanticHash() == b2.semanticHash())
-    assert(a != b3)
-    assert(a.hashCode != b3.hashCode)
-    assert(a.semanticEquals(b3))
   }
 
   test("Expression Equivalence - basic") {

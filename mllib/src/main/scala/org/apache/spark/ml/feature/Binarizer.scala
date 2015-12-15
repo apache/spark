@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Experimental
 final class Binarizer(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Transformer with Writable with HasInputCol with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("binarizer"))
 
@@ -86,11 +86,11 @@ final class Binarizer(override val uid: String)
   }
 
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
 }
 
-@Since("1.6.0")
-object Binarizer extends DefaultParamsReadable[Binarizer] {
+object Binarizer extends Readable[Binarizer] {
 
-  @Since("1.6.0")
-  override def load(path: String): Binarizer = super.load(path)
+  override def read: Reader[Binarizer] = new DefaultParamsReader[Binarizer]
 }

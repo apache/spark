@@ -23,5 +23,5 @@ import java.io.Serializable;
  * A function with no return value.
  */
 public interface VoidFunction<T> extends Serializable {
-  void call(T t) throws Exception;
+  public void call(T t) throws Exception;
 }

@@ -18,14 +18,13 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 
-class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var data: Array[Vector] = _
   @transient var dataFrame: DataFrame = _
@@ -104,14 +103,6 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     assertTypeOfVector(data, result)
 
     assertValues(result, l1Normalized)
-  }
-
-  test("read/write") {
-    val t = new Normalizer()
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
-      .setP(3.0)
-    testDefaultReadWrite(t)
   }
 }
 

@@ -122,27 +122,23 @@ class StateMapSuite extends SparkFunSuite {
 
   test("OpenHashMapBasedStateMap - serializing and deserializing") {
     val map1 = new OpenHashMapBasedStateMap[Int, Int]()
-    testSerialization(map1, "error deserializing and serialized empty map")
-
     map1.put(1, 100, 1)
     map1.put(2, 200, 2)
-    testSerialization(map1, "error deserializing and serialized map with data + no delta")
 
     val map2 = map1.copy()
-    // Do not test compaction
-    assert(map2.asInstanceOf[OpenHashMapBasedStateMap[_, _]].shouldCompact === false)
-    testSerialization(map2, "error deserializing and serialized map with 1 delta + no new data")
-
     map2.put(3, 300, 3)
     map2.put(4, 400, 4)
-    testSerialization(map2, "error deserializing and serialized map with 1 delta + new data")
 
     val map3 = map2.copy()
-    assert(map3.asInstanceOf[OpenHashMapBasedStateMap[_, _]].shouldCompact === false)
-    testSerialization(map3, "error deserializing and serialized map with 2 delta + no new data")
     map3.put(3, 600, 3)
     map3.remove(2)
-    testSerialization(map3, "error deserializing and serialized map with 2 delta + new data")
+
+    // Do not test compaction
+    assert(map3.asInstanceOf[OpenHashMapBasedStateMap[_, _]].shouldCompact === false)
+
+    val deser_map3 = Utils.deserialize[StateMap[Int, Int]](
+      Utils.serialize(map3), Thread.currentThread().getContextClassLoader)
+    assertMap(deser_map3, map3, 1, "Deserialized map not same as original map")
   }
 
   test("OpenHashMapBasedStateMap - serializing and deserializing with compaction") {
@@ -160,9 +156,11 @@ class StateMapSuite extends SparkFunSuite {
     assert(map.deltaChainLength > deltaChainThreshold)
     assert(map.shouldCompact === true)
 
-    val deser_map = testSerialization(map, "Deserialized + compacted map not same as original map")
+    val deser_map = Utils.deserialize[OpenHashMapBasedStateMap[Int, Int]](
+      Utils.serialize(map), Thread.currentThread().getContextClassLoader)
     assert(deser_map.deltaChainLength < deltaChainThreshold)
     assert(deser_map.shouldCompact === false)
+    assertMap(deser_map, map, 1, "Deserialized + compacted map not same as original map")
   }
 
   test("OpenHashMapBasedStateMap - all possible sequences of operations with copies ") {
@@ -265,14 +263,6 @@ class StateMapSuite extends SparkFunSuite {
         "State map does not match reference map after copying")
     }
     assertMap(stateMap, refMap.toMap, time, "Final state map does not match reference map")
-  }
-
-  private def testSerialization[MapType <: StateMap[Int, Int]](
-    map: MapType, msg: String): MapType = {
-    val deserMap = Utils.deserialize[MapType](
-      Utils.serialize(map), Thread.currentThread().getContextClassLoader)
-    assertMap(deserMap, map, 1, msg)
-    deserMap
   }
 
   // Assert whether all the data and operations on a state map matches that of a reference state map

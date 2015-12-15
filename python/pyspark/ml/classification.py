@@ -36,8 +36,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassif
 @inherit_doc
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
-                         HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol):
+                         HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds):
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -45,11 +44,11 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
-    >>> lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
+    ...     Row(label=1.0, features=Vectors.dense(1.0)),
+    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]).toDF()
+    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> model = lr.fit(df)
-    >>> model.coefficients
+    >>> model.weights
     DenseVector([5.5...])
     >>> model.intercept
     -2.68...
@@ -81,12 +80,12 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  threshold=0.5, thresholds=None, probabilityCol="probability",
-                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None):
+                 rawPredictionCol="rawPrediction", standardization=True):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, thresholds=None, probabilityCol="probability", \
-                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None)
+                 rawPredictionCol="rawPrediction", standardization=True)
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
@@ -106,12 +105,12 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   threshold=0.5, thresholds=None, probabilityCol="probability",
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None):
+                  rawPredictionCol="rawPrediction", standardization=True):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   threshold=0.5, thresholds=None, probabilityCol="probability", \
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None)
+                  rawPredictionCol="rawPrediction", standardization=True)
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """

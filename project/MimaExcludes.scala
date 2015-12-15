@@ -54,12 +54,14 @@ object MimaExcludes {
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
       MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
       Seq(
-        // MiMa does not deal properly with sealed traits
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticCostFun.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.add"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticAggregator.count"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
-      ) ++ Seq(
-        // SPARK-11530
-        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this")
       ) ++ Seq(
         // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
         // This class is marked as `private` but MiMa still seems to be confused by the change.
@@ -111,8 +113,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
         ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSQLParser")
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$")
       ) ++ Seq(
         // SPARK-11485
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df"),
@@ -135,39 +136,8 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
       ) ++ Seq (
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.status.api.v1.ApplicationInfo.this"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.status.api.v1.StageData.this")
-      ) ++ Seq(
-        // SPARK-11766 add toJson to Vector
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.mllib.linalg.Vector.toJson")
-      ) ++ Seq(
-        // SPARK-9065 Support message handler in Kafka Python API
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
-      ) ++ Seq(
-        // SPARK-4557 Changed foreachRDD to use VoidFunction
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.streaming.api.java.JavaDStreamLike.foreachRDD")
-      ) ++ Seq(
-        // SPARK-11996 Make the executor thread dump work again
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint$"),
-        ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
-        ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
-      ) ++ Seq(
-        // SPARK-3580 Add getNumPartitions method to JavaRDD
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
-      ) ++
-      // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
-      // private class.
-      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
+          "org.apache.spark.status.api.v1.ApplicationInfo.this")
+      )
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),

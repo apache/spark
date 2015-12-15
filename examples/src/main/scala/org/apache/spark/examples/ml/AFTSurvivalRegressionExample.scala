@@ -59,4 +59,4 @@ object AFTSurvivalRegressionExample {
     sc.stop()
   }
 }
-// scalastyle:on println
+// scalastyle:off println

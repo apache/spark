@@ -18,7 +18,4 @@
 library(testthat)
 library(SparkR)
 
-# Turn all warnings into errors
-options("warn" = 2)
-
 test_package("SparkR")

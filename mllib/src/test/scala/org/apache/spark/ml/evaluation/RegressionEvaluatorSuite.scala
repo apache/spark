@@ -20,12 +20,10 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class RegressionEvaluatorSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
     ParamsSuite.checkParams(new RegressionEvaluator)
@@ -65,22 +63,14 @@ class RegressionEvaluatorSuite
 
     // default = rmse
     val evaluator = new RegressionEvaluator()
-    assert(evaluator.evaluate(predictions) ~== 0.1013829 absTol 0.01)
+    assert(evaluator.evaluate(predictions) ~== 0.1019382 absTol 0.001)
 
     // r2 score
     evaluator.setMetricName("r2")
-    assert(evaluator.evaluate(predictions) ~== 0.9998387 absTol 0.01)
+    assert(evaluator.evaluate(predictions) ~== 0.9998196 absTol 0.001)
 
     // mae
     evaluator.setMetricName("mae")
-    assert(evaluator.evaluate(predictions) ~== 0.08399089 absTol 0.01)
-  }
-
-  test("read/write") {
-    val evaluator = new RegressionEvaluator()
-      .setPredictionCol("myPrediction")
-      .setLabelCol("myLabel")
-      .setMetricName("r2")
-    testDefaultReadWrite(evaluator)
+    assert(evaluator.evaluate(predictions) ~== 0.08036075 absTol 0.001)
   }
 }

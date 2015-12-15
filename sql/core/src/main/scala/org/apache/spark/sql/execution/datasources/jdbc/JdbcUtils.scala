@@ -21,10 +21,9 @@ import java.sql.{Connection, PreparedStatement}
 import java.util.Properties
 
 import scala.util.Try
-import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -56,7 +55,7 @@ object JdbcUtils extends Logging {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String): Unit = {
-    conn.createStatement.executeUpdate(s"DROP TABLE $table")
+    conn.prepareStatement(s"DROP TABLE $table").executeUpdate()
   }
 
   /**
@@ -71,35 +70,6 @@ object JdbcUtils extends Logging {
       fieldsLeft = fieldsLeft - 1
     }
     conn.prepareStatement(sql.toString())
-  }
-
-  /**
-   * Retrieve standard jdbc types.
-   * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
-   * @return The default JdbcType for this DataType
-   */
-  def getCommonJDBCType(dt: DataType): Option[JdbcType] = {
-    dt match {
-      case IntegerType => Option(JdbcType("INTEGER", java.sql.Types.INTEGER))
-      case LongType => Option(JdbcType("BIGINT", java.sql.Types.BIGINT))
-      case DoubleType => Option(JdbcType("DOUBLE PRECISION", java.sql.Types.DOUBLE))
-      case FloatType => Option(JdbcType("REAL", java.sql.Types.FLOAT))
-      case ShortType => Option(JdbcType("INTEGER", java.sql.Types.SMALLINT))
-      case ByteType => Option(JdbcType("BYTE", java.sql.Types.TINYINT))
-      case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
-      case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
-      case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
-      case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
-      case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
-      case t: DecimalType => Option(
-        JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
-      case _ => None
-    }
-  }
-
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
-    dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
   }
 
   /**
@@ -122,23 +92,11 @@ object JdbcUtils extends Logging {
       iterator: Iterator[Row],
       rddSchema: StructType,
       nullTypes: Array[Int],
-      batchSize: Int,
-      dialect: JdbcDialect): Iterator[Byte] = {
+      batchSize: Int): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
-    val supportsTransactions = try {
-      conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
-      conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Exception while detecting transaction support", e)
-        true
-    }
-
     try {
-      if (supportsTransactions) {
-        conn.setAutoCommit(false) // Everything in the same db transaction.
-      }
+      conn.setAutoCommit(false) // Everything in the same db transaction.
       val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0
@@ -163,11 +121,6 @@ object JdbcUtils extends Logging {
                 case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
-                case ArrayType(et, _) =>
-                  val array = conn.createArrayOf(
-                    getJdbcType(et, dialect).databaseTypeDefinition.toLowerCase,
-                    row.getSeq[AnyRef](i).toArray)
-                  stmt.setArray(i + 1, array)
                 case _ => throw new IllegalArgumentException(
                   s"Can't translate non-null value for field $i")
               }
@@ -187,18 +140,14 @@ object JdbcUtils extends Logging {
       } finally {
         stmt.close()
       }
-      if (supportsTransactions) {
-        conn.commit()
-      }
+      conn.commit()
       committed = true
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
         // let the exception through unless rollback() or close() want to
         // tell the user about another problem.
-        if (supportsTransactions) {
-          conn.rollback()
-        }
+        conn.rollback()
         conn.close()
       } else {
         // The stage must succeed.  We cannot propagate any exception close() might throw.
@@ -220,7 +169,23 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
       val name = field.name
-      val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
+      val typ: String =
+        dialect.getJDBCType(field.dataType).map(_.databaseTypeDefinition).getOrElse(
+          field.dataType match {
+            case IntegerType => "INTEGER"
+            case LongType => "BIGINT"
+            case DoubleType => "DOUBLE PRECISION"
+            case FloatType => "REAL"
+            case ShortType => "INTEGER"
+            case ByteType => "BYTE"
+            case BooleanType => "BIT(1)"
+            case StringType => "TEXT"
+            case BinaryType => "BLOB"
+            case TimestampType => "TIMESTAMP"
+            case DateType => "DATE"
+            case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
+            case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
+          })
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }}
@@ -237,7 +202,23 @@ object JdbcUtils extends Logging {
       properties: Properties = new Properties()) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
-      getJdbcType(field.dataType, dialect).jdbcNullType
+      dialect.getJDBCType(field.dataType).map(_.jdbcNullType).getOrElse(
+        field.dataType match {
+          case IntegerType => java.sql.Types.INTEGER
+          case LongType => java.sql.Types.BIGINT
+          case DoubleType => java.sql.Types.DOUBLE
+          case FloatType => java.sql.Types.REAL
+          case ShortType => java.sql.Types.INTEGER
+          case ByteType => java.sql.Types.INTEGER
+          case BooleanType => java.sql.Types.BIT
+          case StringType => java.sql.Types.CLOB
+          case BinaryType => java.sql.Types.BLOB
+          case TimestampType => java.sql.Types.TIMESTAMP
+          case DateType => java.sql.Types.DATE
+          case t: DecimalType => java.sql.Types.DECIMAL
+          case _ => throw new IllegalArgumentException(
+            s"Can't translate null value for field $field")
+        })
     }
 
     val rddSchema = df.schema
@@ -245,7 +226,7 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
     }
   }
 

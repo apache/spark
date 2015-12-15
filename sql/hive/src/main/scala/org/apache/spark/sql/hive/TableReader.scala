@@ -382,9 +382,6 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
         case oi: HiveVarcharObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) =>
             row.update(ordinal, UTF8String.fromString(oi.getPrimitiveJavaObject(value).getValue))
-        case oi: HiveCharObjectInspector =>
-          (value: Any, row: MutableRow, ordinal: Int) =>
-            row.update(ordinal, UTF8String.fromString(oi.getPrimitiveJavaObject(value).getValue))
         case oi: HiveDecimalObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) =>
             row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))

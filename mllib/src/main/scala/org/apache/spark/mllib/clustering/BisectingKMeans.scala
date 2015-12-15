@@ -214,7 +214,7 @@ class BisectingKMeans private (
   }
 
   /**
-   * Java-friendly version of [[run()]].
+   * Java-friendly version of [[run(RDD[Vector])*]]
    */
   def run(data: JavaRDD[Vector]): BisectingKMeansModel = run(data.rdd)
 }
@@ -407,7 +407,7 @@ private object BisectingKMeans extends Serializable {
  */
 @Since("1.6.0")
 @Experimental
-private[clustering] class ClusteringTreeNode private[clustering] (
+class ClusteringTreeNode private[clustering] (
     val index: Int,
     val size: Long,
     private val centerWithNorm: VectorWithNorm,

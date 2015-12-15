@@ -42,8 +42,9 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   lazy val optimizedPlan: LogicalPlan = sqlContext.optimizer.execute(withCachedData)
 
+  // TODO: Don't just pick the first one...
   lazy val sparkPlan: SparkPlan = {
-    SQLContext.setActive(sqlContext)
+    SparkPlan.currentContext.set(sqlContext)
     sqlContext.planner.plan(optimizedPlan).next()
   }
 

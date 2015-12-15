@@ -57,9 +57,7 @@ private[spark] object ShutdownHookManager extends Logging {
   // Add a shutdown hook to delete the temp dirs when the JVM exits
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
     logInfo("Shutdown hook called")
-    // we need to materialize the paths to delete because deleteRecursively removes items from
-    // shutdownDeletePaths as we are traversing through it.
-    shutdownDeletePaths.toArray.foreach { dirPath =>
+    shutdownDeletePaths.foreach { dirPath =>
       try {
         logInfo("Deleting directory " + dirPath)
         Utils.deleteRecursively(new File(dirPath))
@@ -206,7 +204,7 @@ private[spark] object ShutdownHookManager extends Logging {
 private [util] class SparkShutdownHookManager {
 
   private val hooks = new PriorityQueue[SparkShutdownHook]()
-  @volatile private var shuttingDown = false
+  private var shuttingDown = false
 
   /**
    * Install a hook to run at shutdown and run all registered hooks in order. Hadoop 1.x does not
@@ -232,27 +230,28 @@ private [util] class SparkShutdownHookManager {
     }
   }
 
-  def runAll(): Unit = {
+  def runAll(): Unit = synchronized {
     shuttingDown = true
-    var nextHook: SparkShutdownHook = null
-    while ({ nextHook = hooks.synchronized { hooks.poll() }; nextHook != null }) {
-      Try(Utils.logUncaughtExceptions(nextHook.run()))
+    while (!hooks.isEmpty()) {
+      Try(Utils.logUncaughtExceptions(hooks.poll().run()))
     }
   }
 
-  def add(priority: Int, hook: () => Unit): AnyRef = {
-    hooks.synchronized {
-      if (shuttingDown) {
-        throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
-      }
-      val hookRef = new SparkShutdownHook(priority, hook)
-      hooks.add(hookRef)
-      hookRef
-    }
+  def add(priority: Int, hook: () => Unit): AnyRef = synchronized {
+    checkState()
+    val hookRef = new SparkShutdownHook(priority, hook)
+    hooks.add(hookRef)
+    hookRef
   }
 
-  def remove(ref: AnyRef): Boolean = {
-    hooks.synchronized { hooks.remove(ref) }
+  def remove(ref: AnyRef): Boolean = synchronized {
+    hooks.remove(ref)
+  }
+
+  private def checkState(): Unit = {
+    if (shuttingDown) {
+      throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
+    }
   }
 
 }

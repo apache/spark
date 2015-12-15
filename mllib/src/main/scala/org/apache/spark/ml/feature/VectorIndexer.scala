@@ -22,14 +22,12 @@ import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
-
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, Params}
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.udf
@@ -95,7 +93,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  */
 @Experimental
 class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerModel]
-  with VectorIndexerParams with DefaultParamsWritable {
+  with VectorIndexerParams {
 
   def this() = this(Identifiable.randomUID("vecIdx"))
 
@@ -138,11 +136,7 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
   override def copy(extra: ParamMap): VectorIndexer = defaultCopy(extra)
 }
 
-@Since("1.6.0")
-object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
-
-  @Since("1.6.0")
-  override def load(path: String): VectorIndexer = super.load(path)
+private object VectorIndexer {
 
   /**
    * Helper class for tracking unique values for each feature.
@@ -152,7 +146,7 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
    * @param numFeatures  This class fails if it encounters a Vector whose length is not numFeatures.
    * @param maxCategories  This class caps the number of unique values collected at maxCategories.
    */
-  private class CategoryStats(private val numFeatures: Int, private val maxCategories: Int)
+  class CategoryStats(private val numFeatures: Int, private val maxCategories: Int)
     extends Serializable {
 
     /** featureValueSets[feature index] = set of unique values */
@@ -258,9 +252,7 @@ class VectorIndexerModel private[ml] (
     override val uid: String,
     val numFeatures: Int,
     val categoryMaps: Map[Int, Map[Double, Int]])
-  extends Model[VectorIndexerModel] with VectorIndexerParams with MLWritable {
-
-  import VectorIndexerModel._
+  extends Model[VectorIndexerModel] with VectorIndexerParams {
 
   /** Java-friendly version of [[categoryMaps]] */
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
@@ -416,48 +408,4 @@ class VectorIndexerModel private[ml] (
     val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
     copyValues(copied, extra).setParent(parent)
   }
-
-  @Since("1.6.0")
-  override def write: MLWriter = new VectorIndexerModelWriter(this)
-}
-
-@Since("1.6.0")
-object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
-
-  private[VectorIndexerModel]
-  class VectorIndexerModelWriter(instance: VectorIndexerModel) extends MLWriter {
-
-    private case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
-
-    override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.numFeatures, instance.categoryMaps)
-      val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-    }
-  }
-
-  private class VectorIndexerModelReader extends MLReader[VectorIndexerModel] {
-
-    private val className = classOf[VectorIndexerModel].getName
-
-    override def load(path: String): VectorIndexerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
-        .select("numFeatures", "categoryMaps")
-        .head()
-      val numFeatures = data.getAs[Int](0)
-      val categoryMaps = data.getAs[Map[Int, Map[Double, Int]]](1)
-      val model = new VectorIndexerModel(metadata.uid, numFeatures, categoryMaps)
-      DefaultParamsReader.getAndSetParams(model, metadata)
-      model
-    }
-  }
-
-  @Since("1.6.0")
-  override def read: MLReader[VectorIndexerModel] = new VectorIndexerModelReader
-
-  @Since("1.6.0")
-  override def load(path: String): VectorIndexerModel = super.load(path)
 }

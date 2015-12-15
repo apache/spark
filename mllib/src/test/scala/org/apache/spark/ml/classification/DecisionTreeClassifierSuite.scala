@@ -73,7 +73,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       .setMaxDepth(2)
       .setMaxBins(100)
       .setSeed(1)
-    val categoricalFeatures = Map(0 -> 3, 1 -> 3)
+    val categoricalFeatures = Map(0 -> 3, 1-> 3)
     val numClasses = 2
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
   }
@@ -214,7 +214,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       .setMaxBins(2)
       .setMaxDepth(2)
       .setMinInstancesPerNode(2)
-    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
+    val categoricalFeatures = Map(0 -> 2, 1-> 2)
     val numClasses = 2
     compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }

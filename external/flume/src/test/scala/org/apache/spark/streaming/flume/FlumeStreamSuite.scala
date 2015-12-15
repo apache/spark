@@ -22,6 +22,7 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets
 import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.socket.SocketChannel
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
@@ -30,7 +31,6 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, TestOutputStream}
 
@@ -63,7 +63,7 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
           event =>
             event.getHeaders.get("test") should be("header")
         }
-        val output = outputEvents.map(event => JavaUtils.bytesToString(event.getBody))
+        val output = outputEvents.map(event => new String(event.getBody.array(), Charsets.UTF_8))
         output should be (input)
       }
     } finally {

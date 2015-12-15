@@ -332,6 +332,11 @@ private[sql] case class ScalaUDAF(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  require(
+    children.length == udaf.inputSchema.length,
+    s"$udaf only accepts ${udaf.inputSchema.length} arguments, " +
+      s"but ${children.length} are provided.")
+
   override def nullable: Boolean = true
 
   override def dataType: DataType = udaf.dataType

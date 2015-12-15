@@ -23,14 +23,20 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
+
+object SparkPlan {
+  protected[sql] val currentContext = new ThreadLocal[SQLContext]()
+}
 
 /**
  * The base class for physical operators.
@@ -43,7 +49,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] final val sqlContext = SQLContext.getActive().getOrElse(null)
+  protected[spark] final val sqlContext = SparkPlan.currentContext.get()
 
   protected def sparkContext = sqlContext.sparkContext
 
@@ -63,14 +69,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /** Overridden make copy also propogates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
-    SQLContext.setActive(sqlContext)
+    SparkPlan.currentContext.set(sqlContext)
     super.makeCopy(newArgs)
   }
-
-  /**
-   * Return all metadata that describes more details of this SparkPlan.
-   */
-  private[sql] def metadata: Map[String, String] = Map.empty
 
   /**
    * Return all metrics containing metrics of this SparkPlan.
@@ -220,6 +221,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
 
+  protected def newProjection(
+      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
+    log.debug(s"Creating Projection: $expressions, inputSchema: $inputSchema")
+    try {
+      GenerateProjection.generate(expressions, inputSchema)
+    } catch {
+      case e: Exception =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate projection, fallback to interpret", e)
+          new InterpretedProjection(expressions, inputSchema)
+        }
+    }
+  }
+
   protected def newMutableProjection(
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
@@ -265,7 +282,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         }
     }
   }
-
   /**
    * Creates a row ordering for the given schema, in natural ascending order.
    */

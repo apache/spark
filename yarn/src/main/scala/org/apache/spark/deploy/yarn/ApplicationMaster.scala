@@ -117,10 +117,6 @@ private[spark] class ApplicationMaster(
 
   private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
 
-  def getAttemptId(): ApplicationAttemptId = {
-    client.getAttemptId()
-  }
-
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -600,12 +596,11 @@ private[spark] class ApplicationMaster(
               localityAwareTasks, hostToLocalTaskCount)) {
               resetAllocatorInterval()
             }
-            context.reply(true)
 
           case None =>
             logWarning("Container allocator is not ready to request executors yet.")
-            context.reply(false)
         }
+        context.reply(true)
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
@@ -665,10 +660,6 @@ object ApplicationMaster extends Logging {
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
     master.sparkContextStopped(sc)
-  }
-
-  private[spark] def getAttemptId(): ApplicationAttemptId = {
-    master.getAttemptId
   }
 
 }

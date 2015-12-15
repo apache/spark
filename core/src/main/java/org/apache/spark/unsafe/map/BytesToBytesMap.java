@@ -24,7 +24,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -273,7 +272,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
             }
           }
           try {
-            Closeables.close(reader, /* swallowIOException = */ false);
             reader = spillWriters.getFirst().getReader(blockManager);
             recordsInPage = -1;
           } catch (IOException e) {
@@ -320,11 +318,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
         try {
           reader.loadNext();
         } catch (IOException e) {
-          try {
-            reader.close();
-          } catch(IOException e2) {
-            logger.error("Error while closing spill reader", e2);
-          }
           // Scala iterator does not handle exception
           Platform.throwException(e);
         }

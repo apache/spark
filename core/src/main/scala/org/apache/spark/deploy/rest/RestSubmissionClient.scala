@@ -19,19 +19,16 @@ package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
-import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.base.Charsets
 
+import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion, SparkConf}
 
 /**
  * A client that submits applications to a [[RestSubmissionServer]].
@@ -228,8 +225,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
    * Exposed for testing.
    */
   private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
-    import scala.concurrent.ExecutionContext.Implicits.global
-    val responseFuture = Future {
+    try {
       val dataStream =
         if (connection.getResponseCode == HttpServletResponse.SC_OK) {
           connection.getInputStream
@@ -255,15 +251,11 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
           throw new SubmitRestProtocolException(
             s"Message received from server was not a response:\n${unexpected.toJson}")
       }
-    }
-
-    try { Await.result(responseFuture, 10.seconds) } catch {
+    } catch {
       case unreachable @ (_: FileNotFoundException | _: SocketException) =>
         throw new SubmitRestConnectionException("Unable to connect to server", unreachable)
       case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
         throw new SubmitRestProtocolException("Malformed response received from server", malformed)
-      case timeout: TimeoutException =>
-        throw new SubmitRestConnectionException("No response from server", timeout)
     }
   }
 

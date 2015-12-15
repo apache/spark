@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import scala.util.control.NonFatal
-
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StructType
+
+import scala.util.control.NonFatal
 
 /** A trait that holds shared code between DataFrames and Datasets. */
 private[sql] trait Queryable {
   def schema: StructType
   def queryExecution: QueryExecution
-  def sqlContext: SQLContext
 
   override def toString: String = {
     try {
@@ -36,10 +34,4 @@ private[sql] trait Queryable {
         s"Invalid tree; ${e.getMessage}:\n$queryExecution"
     }
   }
-
-  def printSchema(): Unit
-
-  def explain(extended: Boolean): Unit
-
-  def explain(): Unit
 }

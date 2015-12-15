@@ -30,14 +30,19 @@ private[mllib] trait PMMLModelExport {
    * Holder of the exported model in PMML format
    */
   @BeanProperty
-  val pmml: PMML = {
+  val pmml: PMML = new PMML
+
+  pmml.setVersion("4.2")
+  setHeader(pmml)
+
+  private def setHeader(pmml: PMML): Unit = {
     val version = getClass.getPackage.getImplementationVersion
-    val app = new Application("Apache Spark MLlib").setVersion(version)
+    val app = new Application().withName("Apache Spark MLlib").withVersion(version)
     val timestamp = new Timestamp()
-      .addContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
+      .withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
     val header = new Header()
-      .setApplication(app)
-      .setTimestamp(timestamp)
-    new PMML("4.2", header, null)
+      .withApplication(app)
+      .withTimestamp(timestamp)
+    pmml.setHeader(header)
   }
 }

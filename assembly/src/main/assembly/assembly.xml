@@ -32,7 +32,7 @@
       <directory>
         ${project.parent.basedir}/core/src/main/resources/org/apache/spark/ui/static/
       </directory>
-      <outputDirectory>ui-resources/org/apache/spark/ui/static</outputDirectory>
+      <outputDirectory>/ui-resources/org/apache/spark/ui/static</outputDirectory>
       <includes>
         <include>**/*</include>
       </includes>
@@ -41,7 +41,7 @@
       <directory>
         ${project.parent.basedir}/sbin/
       </directory>
-      <outputDirectory>sbin</outputDirectory>
+      <outputDirectory>/sbin</outputDirectory>
       <includes>
         <include>**/*</include>
       </includes>
@@ -50,7 +50,7 @@
       <directory>
         ${project.parent.basedir}/bin/
       </directory>
-      <outputDirectory>bin</outputDirectory>
+      <outputDirectory>/bin</outputDirectory>
       <includes>
         <include>**/*</include>
       </includes>
@@ -59,7 +59,7 @@
       <directory>
         ${project.parent.basedir}/assembly/target/${spark.jar.dir}
       </directory>
-      <outputDirectory></outputDirectory>
+      <outputDirectory>/</outputDirectory>
       <includes>
         <include>${spark.jar.basename}</include>
       </includes>

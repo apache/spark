@@ -252,19 +252,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
-  test("SPARK-11997 parquet with null partition values") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      sqlContext.range(1, 3)
-        .selectExpr("if(id % 2 = 0, null, id) AS n", "id")
-        .write.partitionBy("n").parquet(path)
-
-      checkAnswer(
-        sqlContext.read.parquet(path).filter("n is null"),
-        Row(2, null))
-    }
-  }
-
   // This test case is ignored because of parquet-mr bug PARQUET-370
   ignore("SPARK-10301 requested schema clipping - schemas with disjoint sets of fields") {
     withTempPath { dir =>

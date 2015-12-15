@@ -37,26 +37,26 @@ public abstract class WriteAheadLog {
    * ensure that the written data is durable and readable (using the record handle) by the
    * time this function returns.
    */
-  public abstract WriteAheadLogRecordHandle write(ByteBuffer record, long time);
+  abstract public WriteAheadLogRecordHandle write(ByteBuffer record, long time);
 
   /**
    * Read a written record based on the given record handle.
    */
-  public abstract ByteBuffer read(WriteAheadLogRecordHandle handle);
+  abstract public ByteBuffer read(WriteAheadLogRecordHandle handle);
 
   /**
    * Read and return an iterator of all the records that have been written but not yet cleaned up.
    */
-  public abstract Iterator<ByteBuffer> readAll();
+  abstract public Iterator<ByteBuffer> readAll();
 
   /**
    * Clean all the records that are older than the threshold time. It can wait for
    * the completion of the deletion.
    */
-  public abstract void clean(long threshTime, boolean waitForCompletion);
+  abstract public void clean(long threshTime, boolean waitForCompletion);
 
   /**
    * Close this log and release any resources.
    */
-  public abstract void close();
+  abstract public void close();
 }

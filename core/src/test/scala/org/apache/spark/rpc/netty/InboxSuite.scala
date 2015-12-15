@@ -35,7 +35,7 @@ class InboxSuite extends SparkFunSuite {
     val dispatcher = mock(classOf[Dispatcher])
 
     val inbox = new Inbox(endpointRef, endpoint)
-    val message = OneWayMessage(null, "hi")
+    val message = ContentMessage(null, "hi", false, null)
     inbox.post(message)
     inbox.process(dispatcher)
     assert(inbox.isEmpty)
@@ -55,7 +55,7 @@ class InboxSuite extends SparkFunSuite {
     val dispatcher = mock(classOf[Dispatcher])
 
     val inbox = new Inbox(endpointRef, endpoint)
-    val message = RpcMessage(null, "hi", null)
+    val message = ContentMessage(null, "hi", true, null)
     inbox.post(message)
     inbox.process(dispatcher)
     assert(inbox.isEmpty)
@@ -83,7 +83,7 @@ class InboxSuite extends SparkFunSuite {
       new Thread {
         override def run(): Unit = {
           for (_ <- 0 until 100) {
-            val message = OneWayMessage(null, "hi")
+            val message = ContentMessage(null, "hi", false, null)
             inbox.post(message)
           }
           exitLatch.countDown()

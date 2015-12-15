@@ -168,28 +168,20 @@ class GroupedData(object):
         """
 
     @since(1.6)
-    def pivot(self, pivot_col, values=None):
-        """
-        Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
-        There are two versions of pivot function: one that requires the caller to specify the list
-        of distinct values to pivot on, and one that does not. The latter is more concise but less
-        efficient, because Spark needs to first compute the list of distinct values internally.
+    def pivot(self, pivot_col, *values):
+        """Pivots a column of the current DataFrame and preform the specified aggregation.
 
-        :param pivot_col: Name of the column to pivot.
-        :param values: List of values that will be translated to columns in the output DataFrame.
-
-        // Compute the sum of earnings for each year by course with each course as a separate column
-        >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
+        :param pivot_col: Column to pivot
+        :param values: Optional list of values of pivotColumn that will be translated to columns in
+            the output data frame. If values are not provided the method with do an immediate call
+            to .distinct() on the pivot column.
+        >>> df4.groupBy("year").pivot("course", "dotNET", "Java").sum("earnings").collect()
         [Row(year=2012, dotNET=15000, Java=20000), Row(year=2013, dotNET=48000, Java=30000)]
-
-        // Or without specifying column values (less efficient)
         >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
-        if values is None:
-            jgd = self._jdf.pivot(pivot_col)
-        else:
-            jgd = self._jdf.pivot(pivot_col, values)
+        jgd = self._jdf.pivot(_to_java_column(pivot_col),
+                              _to_seq(self.sql_ctx._sc, values, _create_column_from_literal))
         return GroupedData(jgd, self.sql_ctx)
 
 

@@ -23,28 +23,49 @@ import org.apache.spark.Logging
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
 
-private[netty] abstract class NettyRpcCallContext(override val senderAddress: RpcAddress)
+private[netty] abstract class NettyRpcCallContext(
+    endpointRef: NettyRpcEndpointRef,
+    override val senderAddress: RpcAddress,
+    needReply: Boolean)
   extends RpcCallContext with Logging {
 
   protected def send(message: Any): Unit
 
   override def reply(response: Any): Unit = {
-    send(response)
+    if (needReply) {
+      send(AskResponse(endpointRef, response))
+    } else {
+      throw new IllegalStateException(
+        s"Cannot send $response to the sender because the sender does not expect a reply")
+    }
   }
 
   override def sendFailure(e: Throwable): Unit = {
-    send(RpcFailure(e))
+    if (needReply) {
+      send(AskResponse(endpointRef, RpcFailure(e)))
+    } else {
+      logError(e.getMessage, e)
+      throw new IllegalStateException(
+        "Cannot send reply to the sender because the sender won't handle it")
+    }
   }
 
+  def finish(): Unit = {
+    if (!needReply) {
+      send(Ack(endpointRef))
+    }
+  }
 }
 
 /**
  * If the sender and the receiver are in the same process, the reply can be sent back via `Promise`.
  */
 private[netty] class LocalNettyRpcCallContext(
+    endpointRef: NettyRpcEndpointRef,
     senderAddress: RpcAddress,
+    needReply: Boolean,
     p: Promise[Any])
-  extends NettyRpcCallContext(senderAddress) {
+  extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
 
   override protected def send(message: Any): Unit = {
     p.success(message)
@@ -56,9 +77,11 @@ private[netty] class LocalNettyRpcCallContext(
  */
 private[netty] class RemoteNettyRpcCallContext(
     nettyEnv: NettyRpcEnv,
+    endpointRef: NettyRpcEndpointRef,
     callback: RpcResponseCallback,
-    senderAddress: RpcAddress)
-  extends NettyRpcCallContext(senderAddress) {
+    senderAddress: RpcAddress,
+    needReply: Boolean)
+  extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
 
   override protected def send(message: Any): Unit = {
     val reply = nettyEnv.serialize(message)

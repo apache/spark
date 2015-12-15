@@ -419,7 +419,7 @@ public class ExternalShuffleBlockResolver {
 
   public static class StoreVersion {
 
-    static final byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
+    final static byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
 
     public final int major;
     public final int minor;

@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaRDDLike}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3, VoidFunction => JVoidFunction, VoidFunction2 => JVoidFunction2, _}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3, _}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.java.JavaDStream._
@@ -308,10 +308,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
-   *
-   * @deprecated  As of release 1.6.0, replaced by foreachRDD(JVoidFunction)
    */
-  @deprecated("Use foreachRDD(foreachFunc: JVoidFunction[R])", "1.6.0")
   def foreachRDD(foreachFunc: JFunction[R, Void]) {
     dstream.foreachRDD(rdd => foreachFunc.call(wrapRDD(rdd)))
   }
@@ -319,27 +316,8 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
-   *
-   * @deprecated  As of release 1.6.0, replaced by foreachRDD(JVoidFunction2)
    */
-  @deprecated("Use foreachRDD(foreachFunc: JVoidFunction2[R, Time])", "1.6.0")
   def foreachRDD(foreachFunc: JFunction2[R, Time, Void]) {
-    dstream.foreachRDD((rdd, time) => foreachFunc.call(wrapRDD(rdd), time))
-  }
-
-  /**
-   * Apply a function to each RDD in this DStream. This is an output operator, so
-   * 'this' DStream will be registered as an output stream and therefore materialized.
-   */
-  def foreachRDD(foreachFunc: JVoidFunction[R]) {
-    dstream.foreachRDD(rdd => foreachFunc.call(wrapRDD(rdd)))
-  }
-
-  /**
-   * Apply a function to each RDD in this DStream. This is an output operator, so
-   * 'this' DStream will be registered as an output stream and therefore materialized.
-   */
-  def foreachRDD(foreachFunc: JVoidFunction2[R, Time]) {
     dstream.foreachRDD((rdd, time) => foreachFunc.call(wrapRDD(rdd), time))
   }
 

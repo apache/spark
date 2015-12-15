@@ -62,15 +62,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val first = children(0)
-    val rest = children.drop(1)
-    val firstEval = first.gen(ctx)
     s"""
-      ${firstEval.code}
-      boolean ${ev.isNull} = ${firstEval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
     """ +
-      rest.map { e =>
+    children.map { e =>
       val eval = e.gen(ctx)
       s"""
         if (${ev.isNull}) {

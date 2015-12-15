@@ -134,12 +134,12 @@ private[hive] class SparkExecuteStatementOperation(
 
   def getResultSetSchema: TableSchema = resultSchema
 
-  override def runInternal(): Unit = {
+  override def run(): Unit = {
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
-      execute()
+      runInternal()
     } else {
       val sparkServiceUGI = Utils.getUGI()
 
@@ -151,7 +151,7 @@ private[hive] class SparkExecuteStatementOperation(
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
               try {
-                execute()
+                runInternal()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
@@ -188,7 +188,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def execute(): Unit = {
+  override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)

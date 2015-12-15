@@ -17,6 +17,5 @@
 
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.dstream import DStream
-from pyspark.streaming.listener import StreamingListener
 
-__all__ = ['StreamingContext', 'DStream', 'StreamingListener']
+__all__ = ['StreamingContext', 'DStream']

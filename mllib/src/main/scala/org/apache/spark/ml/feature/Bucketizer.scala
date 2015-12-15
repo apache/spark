@@ -20,12 +20,12 @@ package org.apache.spark.ml.feature
 import java.{util => ju}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  */
 @Experimental
 final class Bucketizer(override val uid: String)
-  extends Model[Bucketizer] with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Model[Bucketizer] with HasInputCol with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("bucketizer"))
 
@@ -95,10 +95,9 @@ final class Bucketizer(override val uid: String)
   }
 }
 
-object Bucketizer extends DefaultParamsReadable[Bucketizer] {
-
+private[feature] object Bucketizer {
   /** We require splits to be of length >= 3 and to be in strictly increasing order. */
-  private[feature] def checkSplits(splits: Array[Double]): Boolean = {
+  def checkSplits(splits: Array[Double]): Boolean = {
     if (splits.length < 3) {
       false
     } else {
@@ -116,7 +115,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
    * Binary searching in several buckets to place each data point.
    * @throws SparkException if a feature is < splits.head or > splits.last
    */
-  private[feature] def binarySearchForBuckets(splits: Array[Double], feature: Double): Double = {
+  def binarySearchForBuckets(splits: Array[Double], feature: Double): Double = {
     if (feature == splits.last) {
       splits.length - 2
     } else {
@@ -135,7 +134,4 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
       }
     }
   }
-
-  @Since("1.6.0")
-  override def load(path: String): Bucketizer = super.load(path)
 }

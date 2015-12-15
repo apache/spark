@@ -18,7 +18,6 @@
 package org.apache.spark.tags;
 
 import java.lang.annotation.*;
-
 import org.scalatest.TagAnnotation;
 
 @TagAnnotation

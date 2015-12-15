@@ -18,7 +18,6 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -26,7 +25,16 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[clustering] case class TestRow(features: Vector)
 
-class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+object KMeansSuite {
+  def generateKMeansData(sql: SQLContext, rows: Int, dim: Int, k: Int): DataFrame = {
+    val sc = sql.sparkContext
+    val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
+      .map(v => new TestRow(v))
+    sql.createDataFrame(rdd)
+  }
+}
+
+class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   final val k = 5
   @transient var dataset: DataFrame = _
@@ -98,33 +106,4 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(clusters === Set(0, 1, 2, 3, 4))
     assert(model.computeCost(dataset) < 0.1)
   }
-
-  test("read/write") {
-    def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
-      assert(model.clusterCenters === model2.clusterCenters)
-    }
-    val kmeans = new KMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
-  }
-}
-
-object KMeansSuite {
-  def generateKMeansData(sql: SQLContext, rows: Int, dim: Int, k: Int): DataFrame = {
-    val sc = sql.sparkContext
-    val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
-      .map(v => new TestRow(v))
-    sql.createDataFrame(rdd)
-  }
-
-  /**
-   * Mapping from all Params to valid settings which differ from the defaults.
-   * This is useful for tests which need to exercise all Params, such as save/load.
-   * This excludes input columns to simplify some tests.
-   */
-  val allParamSettings: Map[String, Any] = Map(
-    "predictionCol" -> "myPrediction",
-    "k" -> 3,
-    "maxIter" -> 2,
-    "tol" -> 0.01
-  )
 }

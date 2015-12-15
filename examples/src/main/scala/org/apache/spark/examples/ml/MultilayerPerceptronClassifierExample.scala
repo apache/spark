@@ -66,4 +66,4 @@ object MultilayerPerceptronClassifierExample {
     sc.stop()
   }
 }
-// scalastyle:on println
+// scalastyle:off println

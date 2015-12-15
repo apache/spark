@@ -56,19 +56,19 @@ class WriteAheadLogUtilsSuite extends SparkFunSuite {
   test("log selection and creation") {
 
     val emptyConf = new SparkConf()  // no log configuration
-    assertDriverLogClass[FileBasedWriteAheadLog](emptyConf, isBatched = true)
+    assertDriverLogClass[FileBasedWriteAheadLog](emptyConf)
     assertReceiverLogClass[FileBasedWriteAheadLog](emptyConf)
 
     // Verify setting driver WAL class
     val driverWALConf = new SparkConf().set("spark.streaming.driver.writeAheadLog.class",
       classOf[MockWriteAheadLog0].getName())
-    assertDriverLogClass[MockWriteAheadLog0](driverWALConf, isBatched = true)
+    assertDriverLogClass[MockWriteAheadLog0](driverWALConf)
     assertReceiverLogClass[FileBasedWriteAheadLog](driverWALConf)
 
     // Verify setting receiver WAL class
     val receiverWALConf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
       classOf[MockWriteAheadLog0].getName())
-    assertDriverLogClass[FileBasedWriteAheadLog](receiverWALConf, isBatched = true)
+    assertDriverLogClass[FileBasedWriteAheadLog](receiverWALConf)
     assertReceiverLogClass[MockWriteAheadLog0](receiverWALConf)
 
     // Verify setting receiver WAL class with 1-arg constructor
@@ -103,19 +103,6 @@ class WriteAheadLogUtilsSuite extends SparkFunSuite {
       classOf[MockWriteAheadLog0].getName())
     assertDriverLogClass[FileBasedWriteAheadLog](receiverWALConf, isBatched = true)
     assertReceiverLogClass[MockWriteAheadLog0](receiverWALConf)
-  }
-
-  test("batching is enabled by default in WriteAheadLog") {
-    val conf = new SparkConf()
-    assert(WriteAheadLogUtils.isBatchingEnabled(conf, isDriver = true))
-    // batching is not valid for receiver WALs
-    assert(!WriteAheadLogUtils.isBatchingEnabled(conf, isDriver = false))
-  }
-
-  test("closeFileAfterWrite is disabled by default in WriteAheadLog") {
-    val conf = new SparkConf()
-    assert(!WriteAheadLogUtils.shouldCloseFileAfterWrite(conf, isDriver = true))
-    assert(!WriteAheadLogUtils.shouldCloseFileAfterWrite(conf, isDriver = false))
   }
 }
 

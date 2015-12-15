@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.io.OutputStream;
+import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -30,26 +26,12 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.spark.sql.types.ArrayType;
-import org.apache.spark.sql.types.BinaryType;
-import org.apache.spark.sql.types.BooleanType;
-import org.apache.spark.sql.types.ByteType;
-import org.apache.spark.sql.types.CalendarIntervalType;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DateType;
-import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.sql.types.DecimalType;
-import org.apache.spark.sql.types.DoubleType;
-import org.apache.spark.sql.types.FloatType;
-import org.apache.spark.sql.types.IntegerType;
-import org.apache.spark.sql.types.LongType;
-import org.apache.spark.sql.types.MapType;
-import org.apache.spark.sql.types.NullType;
-import org.apache.spark.sql.types.ShortType;
-import org.apache.spark.sql.types.StringType;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.TimestampType;
-import org.apache.spark.sql.types.UserDefinedType;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
@@ -57,22 +39,8 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.sql.types.DataTypes.BooleanType;
-import static org.apache.spark.sql.types.DataTypes.ByteType;
-import static org.apache.spark.sql.types.DataTypes.DateType;
-import static org.apache.spark.sql.types.DataTypes.DoubleType;
-import static org.apache.spark.sql.types.DataTypes.FloatType;
-import static org.apache.spark.sql.types.DataTypes.IntegerType;
-import static org.apache.spark.sql.types.DataTypes.LongType;
-import static org.apache.spark.sql.types.DataTypes.NullType;
-import static org.apache.spark.sql.types.DataTypes.ShortType;
-import static org.apache.spark.sql.types.DataTypes.TimestampType;
+import static org.apache.spark.sql.types.DataTypes.*;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.KryoSerializable;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -148,6 +116,11 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   /** The size of this row's backing data, in bytes) */
   private int sizeInBytes;
 
+  private void setNotNullAt(int i) {
+    assertIndexIsValid(i);
+    BitSetMethods.unset(baseObject, baseOffset, i);
+  }
+
   /** The width of the null tracking bit set, in bytes */
   private int bitSetWidthInBytes;
 
@@ -203,21 +176,6 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void pointTo(byte[] buf, int numFields, int sizeInBytes) {
     pointTo(buf, Platform.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
-  }
-
-  /**
-   * Updates this UnsafeRow preserving the number of fields.
-   * @param buf byte array to point to
-   * @param sizeInBytes the number of bytes valid in the byte array
-   */
-  public void pointTo(byte[] buf, int sizeInBytes) {
-    pointTo(buf, numFields, sizeInBytes);
-  }
-
-
-  public void setNotNullAt(int i) {
-    assertIndexIsValid(i);
-    BitSetMethods.unset(baseObject, baseOffset, i);
   }
 
   @Override
