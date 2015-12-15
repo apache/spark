@@ -47,17 +47,18 @@ private[sql] trait Queryable {
   private[sql] def showString(_numRows: Int, truncate: Boolean = true): String
 
   /**
-    * Format the string representing rows for output
-    * @param rows The rows to show
-    * @param numRows Number of rows to show
-    * @param hasMoreData Whether some rows are not shown due to the limit
-    * @param truncate Whether truncate long strings and align cells right
-    *
-    */
-  private[sql] def formatString (rows: Seq[Seq[String]],
-                                 numRows: Int,
-                                 hasMoreData : Boolean,
-                                 truncate: Boolean = true): String = {
+   * Format the string representing rows for output
+   * @param rows The rows to show
+   * @param numRows Number of rows to show
+   * @param hasMoreData Whether some rows are not shown due to the limit
+   * @param truncate Whether truncate long strings and align cells right
+   *
+   */
+  private[sql] def formatString (
+      rows: Seq[Seq[String]],
+      numRows: Int,
+      hasMoreData : Boolean,
+      truncate: Boolean = true): String = {
     val sb = new StringBuilder
     val numCols = schema.fieldNames.length
 

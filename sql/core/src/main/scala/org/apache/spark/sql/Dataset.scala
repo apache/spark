@@ -230,10 +230,10 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
-    * Compose the string representing rows for output
-    * @param _numRows Number of rows to show
-    * @param truncate Whether truncate long strings and align cells right
-    */
+   * Compose the string representing rows for output
+   * @param _numRows Number of rows to show
+   * @param truncate Whether truncate long strings and align cells right
+   */
   override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
     val takeResult = take(numRows + 1)
@@ -262,20 +262,20 @@ class Dataset[T] private[sql](
   }
 
   /**
-    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
-    * @since 1.6.0
-    */
+   * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+   * @since 1.6.0
+   */
   def repartition(numPartitions: Int): Dataset[T] = withPlan {
     Repartition(numPartitions, shuffle = true, _)
   }
 
   /**
-    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
-    * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
-    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
-    * the 100 new partitions will claim 10 of the current partitions.
-    * @since 1.6.0
-    */
+   * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+   * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+   * the 100 new partitions will claim 10 of the current partitions.
+   * @since 1.6.0
+   */
   def coalesce(numPartitions: Int): Dataset[T] = withPlan {
     Repartition(numPartitions, shuffle = false, _)
   }
@@ -732,47 +732,47 @@ class Dataset[T] private[sql](
   def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
 
   /**
-    * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
-    * @since 1.6.0
-    */
+   * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
+   * @since 1.6.0
+   */
   def persist(): this.type = {
     sqlContext.cacheManager.cacheQuery(this)
     this
   }
 
   /**
-    * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
-    * @since 1.6.0
-    */
+   * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
+   * @since 1.6.0
+   */
   def cache(): this.type = persist()
 
   /**
-    * Persist this [[Dataset]] with the given storage level.
-    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
-    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
-    *                 `MEMORY_AND_DISK_2`, etc.
-    * @group basic
-    * @since 1.6.0
-    */
+   * Persist this [[Dataset]] with the given storage level.
+   * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+   *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+   *                 `MEMORY_AND_DISK_2`, etc.
+   * @group basic
+   * @since 1.6.0
+   */
   def persist(newLevel: StorageLevel): this.type = {
     sqlContext.cacheManager.cacheQuery(this, None, newLevel)
     this
   }
 
   /**
-    * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
-    * @param blocking Whether to block until all blocks are deleted.
-    * @since 1.6.0
-    */
+   * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
+   * @param blocking Whether to block until all blocks are deleted.
+   * @since 1.6.0
+   */
   def unpersist(blocking: Boolean): this.type = {
     sqlContext.cacheManager.tryUncacheQuery(this, blocking)
     this
   }
 
   /**
-    * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
-    * @since 1.6.0
-    */
+   * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
+   * @since 1.6.0
+   */
   def unpersist(): this.type = unpersist(blocking = false)
 
   /* ******************** *
