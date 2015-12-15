@@ -498,28 +498,28 @@ class DataFrame private[sql](
   def join(right: DataFrame, usingColumns: Seq[String], joinType: String): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
-    val joined = sqlContext.executePlan(
+    val innerJoined = sqlContext.executePlan(
       Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
 
     // Project only one of the join columns.
-    val joinedCols = usingColumns.map(col => withPlan(joined.right).resolve(col))
+    val joinedCols = AttributeSet(usingColumns.map(col => withPlan(innerJoined.right).resolve(col)))
+
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
-        withPlan(joined.left).resolve(col),
-        withPlan(joined.right).resolve(col))
+        withPlan(innerJoined.left).resolve(col),
+        withPlan(innerJoined.right).resolve(col))
     }.reduceLeftOption[catalyst.expressions.BinaryExpression] { (cond, eqTo) =>
       catalyst.expressions.And(cond, eqTo)
     }
 
     withPlan {
-      Project(
-        joined.output.filterNot(joinedCols.contains(_)),
-        Join(
-          joined.left,
-          joined.right,
-          joinType = JoinType(joinType),
-          condition)
-      )
+      val joined = Join(
+        innerJoined.left,
+        innerJoined.right,
+        joinType = JoinType(joinType),
+        condition)
+
+      Project(joined.output.filterNot(joinedCols.contains(_)), joined)
     }
   }
 
