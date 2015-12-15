@@ -228,6 +228,24 @@ class Dataset[T] private[sql](
   def show(numRows: Int, truncate: Boolean): Unit = toDF().show(numRows, truncate)
 
   /**
+   * Returns the top 20 rows of [[Dataset]] composed as a String in a tabular form. Strings more
+   * than 20 characters will be truncated, and all cells will be aligned right.
+   * @since 1.6.0
+   */
+  def showString(): String = toDF().showString()
+
+  /**
+   * Returns [[Dataset]] composed as a String in a tabular form.
+   *
+   * @param numRows Number of rows to process
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   * @since 1.6.0
+   */
+  def showString(numRows: Int, truncate: Boolean = true): String =
+    toDF().showString(numRows, truncate)
+
+  /**
     * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
     * @since 1.6.0
     */

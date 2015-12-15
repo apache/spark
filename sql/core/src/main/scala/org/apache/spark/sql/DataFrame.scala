@@ -161,16 +161,21 @@ class DataFrame private[sql](
   }
 
   /**
-    * Compose the string representing rows for output
-    */
+   * Returns the top 20 rows of [[DataFrame]] composed as a String in a tabular form. Strings more
+   * than 20 characters will be truncated, and all cells will be aligned right.
+   * @since 1.6.0
+   */
   def showString(): String = {
     showString(20)
   }
 
   /**
-   * Compose the string representing rows for output
-   * @param numRows Number of rows to show
-   * @param truncate Whether truncate long strings and align cells right
+   * Returns [[DataFrame]] composed as a String in a tabular form.
+   *
+   * @param numRows Number of rows to process
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   * @since 1.6.0
    */
   def showString(numRows: Int, truncate: Boolean = true): String = {
     val _numRows = numRows.max(0)
