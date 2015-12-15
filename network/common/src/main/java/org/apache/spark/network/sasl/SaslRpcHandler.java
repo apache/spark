@@ -135,6 +135,11 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
+  public void connectionEstablished(TransportClient client) {
+    delegate.connectionEstablished(client);
+  }
+
+  @Override
   public void connectionTerminated(TransportClient client) {
     try {
       delegate.connectionTerminated(client);
