@@ -327,6 +327,10 @@ def parse_args():
     parser.add_option(
         "--instance-profile-name", default=None,
         help="IAM profile name to launch instances under")
+    parser.add_option(
+        "--bootstrap-script", action="append", default=None,
+        help="s3 path to bootstrap shell script to be execute on each node. " +
+             "This flag can be present multiple times.")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -854,6 +858,17 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     setup_spark_cluster(master, opts)
     print("Done!")
 
+    if len(opts.bootstrap_script):
+        for s3_script in opts.bootstrap_script:
+            print("Running bootstrap script %s on all nodes..." % s3_script)
+            print("master...")
+            download_and_run_bootstrap_script(master, s3_script, opts)
+            for slave in slave_nodes:
+                slave_address = get_dns_name(slave, opts.private_ips)
+                print("slave %s..." % slave_address)
+                download_and_run_bootstrap_script(slave_address, s3_script, opts)
+        print("Done!")
+
 
 def setup_spark_cluster(master, opts):
     ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
@@ -1117,6 +1132,18 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     subprocess.check_call(command)
     # Remove the temp directory we created above
     shutil.rmtree(tmp_dir)
+
+
+def download_and_run_bootstrap_script(node, script, opts):
+    # install a newer version of the awscli
+    ssh(node, opts, "/usr/bin/easy_install-2.7 awscli")
+    # download the script
+    cmd = "source /root/spark-ec2/ec2-variables.sh && " + \
+          "/usr/local/bin/aws s3 cp %s /root/spark-ec2/" % script
+    ssh(node, opts, cmd)
+    # execute the script
+    cmd = "source /root/spark-ec2/%s" % os.path.basename(script)
+    ssh(node, opts, cmd)
 
 
 # Deploy a given local directory to a cluster, WITHOUT parameter substitution.
