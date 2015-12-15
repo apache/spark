@@ -327,8 +327,8 @@ private[parquet] class CatalystRowConverter(
       // are using `Binary.toByteBuffer.array()` to steal the underlying byte array without copying
       // it.
       val buffer = value.toByteBuffer
-      val offset = buffer.position()
-      val numBytes = buffer.limit() - buffer.position()
+      val offset = buffer.arrayOffset() + buffer.position()
+      val numBytes = buffer.remaining()
       updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
     }
   }
@@ -370,34 +370,12 @@ private[parquet] class CatalystRowConverter(
     protected def decimalFromBinary(value: Binary): Decimal = {
       if (precision <= CatalystSchemaConverter.MAX_PRECISION_FOR_INT64) {
         // Constructs a `Decimal` with an unscaled `Long` value if possible.
-        val unscaled = binaryToUnscaledLong(value)
+        val unscaled = CatalystRowConverter.binaryToUnscaledLong(value)
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
         Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
       }
-    }
-
-    private def binaryToUnscaledLong(binary: Binary): Long = {
-      // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
-      // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
-      // copying it.
-      val buffer = binary.toByteBuffer
-      val bytes = buffer.array()
-      val start = buffer.position()
-      val end = buffer.limit()
-
-      var unscaled = 0L
-      var i = start
-
-      while (i < end) {
-        unscaled = (unscaled << 8) | (bytes(i) & 0xff)
-        i += 1
-      }
-
-      val bits = 8 * (end - start)
-      unscaled = (unscaled << (64 - bits)) >> (64 - bits)
-      unscaled
     }
   }
 
@@ -656,5 +634,29 @@ private[parquet] class CatalystRowConverter(
     override def getConverter(field: Int): Converter = elementConverter.getConverter(field)
     override def end(): Unit = elementConverter.end()
     override def start(): Unit = elementConverter.start()
+  }
+}
+
+private[parquet] object CatalystRowConverter {
+  def binaryToUnscaledLong(binary: Binary): Long = {
+    // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
+    // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
+    // copying it.
+    val buffer = binary.toByteBuffer
+    val bytes = buffer.array()
+    val start = buffer.arrayOffset() + buffer.position()
+    val end = buffer.arrayOffset() + buffer.limit()
+
+    var unscaled = 0L
+    var i = start
+
+    while (i < end) {
+      unscaled = (unscaled << 8) | (bytes(i) & 0xff)
+      i += 1
+    }
+
+    val bits = 8 * (end - start)
+    unscaled = (unscaled << (64 - bits)) >> (64 - bits)
+    unscaled
   }
 }

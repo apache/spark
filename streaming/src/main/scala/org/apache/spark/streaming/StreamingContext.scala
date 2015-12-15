@@ -44,7 +44,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
+import org.apache.spark.util.{AsynchronousListenerBus, CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -574,11 +574,12 @@ class StreamingContext private[streaming] (
    * :: DeveloperApi ::
    *
    * Return the current state of the context. The context can be in three possible states -
-   * - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
-   *   Input DStreams, transformations and output operations can be created on the context.
-   * - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
-   *   Input DStreams, transformations and output operations cannot be created on the context.
-   * - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
+   *
+   *  - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *    Input DStreams, transformations and output operations can be created on the context.
+   *  - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
+   *    Input DStreams, transformations and output operations cannot be created on the context.
+   *  - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
    */
   @DeveloperApi
   def getState(): StreamingContextState = synchronized {
@@ -693,29 +694,38 @@ class StreamingContext private[streaming] (
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     var shutdownHookRefToRemove: AnyRef = null
+    if (AsynchronousListenerBus.withinListenerThread.value) {
+      throw new SparkException("Cannot stop StreamingContext within listener thread of" +
+        " AsynchronousListenerBus")
+    }
     synchronized {
-      try {
-        state match {
-          case INITIALIZED =>
-            logWarning("StreamingContext has not been started yet")
-          case STOPPED =>
-            logWarning("StreamingContext has already been stopped")
-          case ACTIVE =>
-            scheduler.stop(stopGracefully)
-            // Removing the streamingSource to de-register the metrics on stop()
-            env.metricsSystem.removeSource(streamingSource)
-            uiTab.foreach(_.detach())
-            StreamingContext.setActiveContext(null)
-            waiter.notifyStop()
-            if (shutdownHookRef != null) {
-              shutdownHookRefToRemove = shutdownHookRef
-              shutdownHookRef = null
-            }
-            logInfo("StreamingContext stopped successfully")
-        }
-      } finally {
-        // The state should always be Stopped after calling `stop()`, even if we haven't started yet
-        state = STOPPED
+      // The state should always be Stopped after calling `stop()`, even if we haven't started yet
+      state match {
+        case INITIALIZED =>
+          logWarning("StreamingContext has not been started yet")
+          state = STOPPED
+        case STOPPED =>
+          logWarning("StreamingContext has already been stopped")
+          state = STOPPED
+        case ACTIVE =>
+          // It's important that we don't set state = STOPPED until the very end of this case,
+          // since we need to ensure that we're still able to call `stop()` to recover from
+          // a partially-stopped StreamingContext which resulted from this `stop()` call being
+          // interrupted. See SPARK-12001 for more details. Because the body of this case can be
+          // executed twice in the case of a partial stop, all methods called here need to be
+          // idempotent.
+          scheduler.stop(stopGracefully)
+          // Removing the streamingSource to de-register the metrics on stop()
+          env.metricsSystem.removeSource(streamingSource)
+          uiTab.foreach(_.detach())
+          StreamingContext.setActiveContext(null)
+          waiter.notifyStop()
+          if (shutdownHookRef != null) {
+            shutdownHookRefToRemove = shutdownHookRef
+            shutdownHookRef = null
+          }
+          logInfo("StreamingContext stopped successfully")
+          state = STOPPED
       }
     }
     if (shutdownHookRefToRemove != null) {
@@ -882,12 +892,13 @@ object StreamingContext extends Logging {
   }
 
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
-    if (prefix == null) {
-      time.milliseconds.toString
-    } else if (suffix == null || suffix.length ==0) {
-      prefix + "-" + time.milliseconds
-    } else {
-      prefix + "-" + time.milliseconds + "." + suffix
+    var result = time.milliseconds.toString
+    if (prefix != null && prefix.length > 0) {
+      result = s"$prefix-$result"
     }
+    if (suffix != null && suffix.length > 0) {
+      result = s"$result.$suffix"
+    }
+    result
   }
 }

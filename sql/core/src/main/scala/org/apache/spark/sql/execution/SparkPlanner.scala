@@ -80,7 +80,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
       filterCondition.map(Filter(_, scan)).getOrElse(scan)
     } else {
       val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-      TungstenProject(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
+      Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
     }
   }
 }
