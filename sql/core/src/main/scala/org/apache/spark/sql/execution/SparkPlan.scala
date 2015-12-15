@@ -206,7 +206,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
       val left = n - buf.size
-      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+      val p = partsScanned until math.min(partsScanned.toLong + numPartsToTry, totalParts).toInt
       val sc = sqlContext.sparkContext
       val res =
         sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
