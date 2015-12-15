@@ -1,6 +1,7 @@
 [ {
   "id" : "<driver>",
   "hostPort" : "localhost:57971",
+  "isActive" : true,
   "rddBlocks" : 8,
   "memoryUsed" : 28000128,
   "diskUsed" : 0,
@@ -12,7 +13,6 @@
   "totalInputBytes" : 28000288,
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 13180,
-  "isActive" : true,
   "maxMemory" : 278302556,
   "executorLogs" : { }
 } ]
