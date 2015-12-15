@@ -116,6 +116,10 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   @Override
+  public void channelActive() {
+  }
+
+  @Override
   public void channelUnregistered() {
     if (numOutstandingRequests() > 0) {
       String remoteAddress = NettyUtils.getRemoteAddress(channel);

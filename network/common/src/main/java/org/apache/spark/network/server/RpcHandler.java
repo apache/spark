@@ -69,6 +69,11 @@ public abstract class RpcHandler {
   }
 
   /**
+   * Invoked when the connection associated with the given client has been established.
+   */
+  public void connectionEstablished(TransportClient client) { }
+
+  /**
    * Invoked when the connection associated with the given client has been invalidated.
    * No further requests will come from this client.
    */

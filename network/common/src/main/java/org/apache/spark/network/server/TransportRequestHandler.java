@@ -83,6 +83,11 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   }
 
   @Override
+  public void channelActive() {
+    rpcHandler.connectionEstablished(reverseClient);
+  }
+
+  @Override
   public void channelUnregistered() {
     if (streamManager != null) {
       try {
