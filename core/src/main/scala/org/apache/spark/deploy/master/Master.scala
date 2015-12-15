@@ -944,11 +944,11 @@ private[deploy] class Master(
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     val eventLogDir = app.desc.eventLogDir
-        .getOrElse {
-          // Event logging is disabled for this application
-          app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
-          return Future.successful(None)
-        }
+      .getOrElse {
+        // Event logging is disabled for this application
+        app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
+        return Future.successful(None)
+      }
     val futureUI = Future {
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
         eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
