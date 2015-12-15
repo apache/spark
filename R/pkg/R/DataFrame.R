@@ -1886,7 +1886,7 @@ setMethod("except",
 #' @param df A SparkSQL DataFrame
 #' @param path A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #'
 #' @family DataFrame functions
 #' @rdname write.df
@@ -1951,7 +1951,7 @@ setMethod("saveDF",
 #' @param df A SparkSQL DataFrame
 #' @param tableName A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #'
 #' @family DataFrame functions
 #' @rdname saveAsTable
