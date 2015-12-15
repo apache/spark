@@ -250,6 +250,7 @@ class Dataset[T] private[sql](
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
+          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case array: Array[_] => array.mkString("[", ", ", "]")
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
           case _ => cell.toString

@@ -426,6 +426,20 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.toString == "[_1: int, _2: int]")
   }
 
+  test("showString: Kryo encoder") {
+    implicit val kryoEncoder = Encoders.kryo[KryoData]
+    val ds = Seq(KryoData(1), KryoData(2)).toDS()
+
+    val expectedAnswer = """+-----------+
+                           ||      value|
+                           |+-----------+
+                           ||KryoData(1)|
+                           ||KryoData(2)|
+                           |+-----------+
+                           |""".stripMargin
+    assert(ds.showString(10) === expectedAnswer)
+  }
+
   test("Kryo encoder") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
