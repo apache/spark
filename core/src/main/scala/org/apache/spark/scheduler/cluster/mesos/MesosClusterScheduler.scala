@@ -395,7 +395,7 @@ private[spark] class MesosClusterScheduler(
         .getOrElse {
           throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
         }
-      val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getCanonicalPath
+      val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getPath
       // Sandbox points to the current directory by default with Mesos.
       (cmdExecutable, ".")
     }
