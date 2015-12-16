@@ -94,6 +94,7 @@ public class ShuffleIndexCacheSuite {
             cache.getIndexInformation(indexFile, shuffleId, mapId, reduceId);
             cache.removeMap(shuffleId, mapId);
           } catch (Exception e) {
+            // Ignore
           }
         }
       };
@@ -112,6 +113,7 @@ public class ShuffleIndexCacheSuite {
           Thread.sleep(15000);
           mainTestThread.interrupt();
         } catch (InterruptedException ie) {
+          // Ignore
         }
       }
     };
