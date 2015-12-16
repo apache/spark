@@ -27,3 +27,4 @@ public class ShuffleIndexRecord {
     this.nextOffset = nextOffset;
   }
 }
+
