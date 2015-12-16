@@ -201,7 +201,9 @@ private[spark] class IndexShuffleBlockResolver(
       indexInfo.nextOffset - indexInfo.offset)
   }
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = {
+    indexCache.clear()
+  }
 }
 
 private[spark] object IndexShuffleBlockResolver {

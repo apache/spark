@@ -42,8 +42,8 @@ import org.apache.spark.network.util.JavaUtils;
 public class ShuffleIndexCache {
   private static final Logger logger = LoggerFactory.getLogger(ShuffleIndexCache.class);
 
-  private final ConcurrentMap<ShuffleMapId, IndexInformation> indexCache;
-  private final LinkedBlockingQueue<ShuffleMapId> queue = new LinkedBlockingQueue<ShuffleMapId>();
+  private ConcurrentMap<ShuffleMapId, IndexInformation> indexCache;
+  private LinkedBlockingQueue<ShuffleMapId> queue = new LinkedBlockingQueue<ShuffleMapId>();
   private final int totalMemoryAllowed;
   private AtomicInteger totalMemoryUsed = new AtomicInteger();
   private final boolean isIndexCache;
@@ -95,6 +95,7 @@ public class ShuffleIndexCache {
     }
   }
 
+  /** Get the index information of the reduceId from index file */
   public ShuffleIndexRecord readIndexFile(File indexFile, int reduceId) throws IOException {
     DataInputStream in = null;
     try {
@@ -181,7 +182,7 @@ public class ShuffleIndexCache {
   }
 
   /**
-   * when index cache is not enough, remove first used index information.
+   * When index cache is not enough, remove first used index information.
    */
   private synchronized void freeIndexInformation() {
     while (totalMemoryUsed.get() > totalMemoryAllowed) {
@@ -210,6 +211,16 @@ public class ShuffleIndexCache {
       }
     } else {
       logger.info("ShuffleMapId " + shuffleMapId + " not found in cache");
+    }
+  }
+
+  /** Clear the index cache */
+  public void clear(){
+    if (queue != null) {
+      queue = null;
+    }
+    if (indexCache != null) {
+      indexCache = null;
     }
   }
 
