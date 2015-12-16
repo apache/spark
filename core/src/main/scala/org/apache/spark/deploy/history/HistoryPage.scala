@@ -90,7 +90,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                 <form action="" method="GET">
                   Search: <input type="text" name="query" value={requestedQuery} />
                   <input type="hidden" name="showIncomplete" value={requestedIncomplete.toString} />
-                  <input type="submit" value="Submit" />
+                  <input type="submit" value="Search" />
                 </form>
                 Showing {actualFirst + 1}-{last + 1} of {allAppsSize}
                 {if (requestedIncomplete) "(Incomplete applications)"}
