@@ -1363,6 +1363,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
         case "TOK_LEFTSEMIJOIN" => LeftSemi
+        case "TOK_ANTIJOIN" => throw new NotImplementedError("Anti join not supported")
       }
       Join(nodeToRelation(relation1, context),
         nodeToRelation(relation2, context),
