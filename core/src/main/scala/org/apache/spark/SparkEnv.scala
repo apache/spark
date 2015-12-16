@@ -262,7 +262,7 @@ object SparkEnv extends Logging {
           } else if (rpcEnv.address != null) {
             rpcEnv.address.port + 1
           } else {
-            port + 1
+            port
           }
         // Create a ActorSystem for legacy codes
         AkkaUtils.createActorSystem(
