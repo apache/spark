@@ -100,8 +100,7 @@ class Normalizer(VectorTransformer):
         :return: normalized vector. If the norm of the input is zero, it
                  will return the input vector.
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None, "SparkContext should be initialized first"
+        sc = SparkContext.getOrCreate()
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
         else:
