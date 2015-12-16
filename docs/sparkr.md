@@ -148,7 +148,7 @@ printSchema(people)
 </div>
 
 The data sources API can also be used to save out DataFrames into multiple file formats. For example we can save the DataFrame from the previous example
-to a Parquet file using `write.df` (Before spark 1.7, mode's default value is 'append', we change it to 'error' to be consistent with scala api)
+to a Parquet file using `write.df` (Until Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.7 to `error` to match the Scala API)
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -393,4 +393,4 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 
 ## Upgrading From SparkR 1.6 to 1.7
 
- - Before Spark 1.7, the default save mode is `append` in api saveDF/write.df/saveAsTable, it is changed to `error` to be consistent with scala api.
+ - Until Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.7 to `error` to match the Scala API.
