@@ -80,8 +80,8 @@ class Word2Vec extends Serializable with Logging {
   private var maxSentenceLength = 1000
 
   /**
-   * sets the maxSentenceLength, maxSentenceLength is used as the threshold for cutting sentence into chunks
-   * when it is too long. (default: 1000)
+   * sets the maxSentenceLength, maxSentenceLength is used as the threshold for cutting sentence
+   * into chunks when it is too long. (default: 1000)
    * @param maxSentenceLength the maxSentenceLength allowed.
    *                          recommend to set it large enough to respect reasonable long sentences
    *                          while not overflow memory
@@ -309,7 +309,7 @@ class Word2Vec extends Serializable with Logging {
           // do cutting only when the sentence is larger than maxSentenceLength
           if ((wordIter == null || !wordIter.hasNext) && sentenceIter.hasNext) {
             do {
-              //get the non-empty wordIter
+              // get the non-empty wordIter
               wordIter = sentenceIter.next().iterator
             } while (!wordIter.hasNext && sentenceIter.hasNext)
           }
