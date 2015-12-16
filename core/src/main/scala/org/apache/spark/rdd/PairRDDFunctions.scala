@@ -65,9 +65,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note that V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
    *
-   * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
-   * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
-   * - `mergeCombiners`, to combine two C's into a single one.
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
+   *  - `mergeCombiners`, to combine two C's into a single one.
    *
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
@@ -274,7 +274,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * ::Experimental::
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *
@@ -289,7 +288,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param seed seed for the random number generator
    * @return RDD containing the sampled subset
    */
-  @Experimental
   def sampleByKeyExact(
       withReplacement: Boolean,
       fractions: Map[K, Double],
@@ -384,19 +382,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * :: Experimental ::
    * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
-  @Experimental
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = self.withScope {
     self.map(_._1).countByValueApprox(timeout, confidence)
   }
 
   /**
-   * :: Experimental ::
-   *
    * Return approximate number of distinct values for each key in this RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
@@ -413,7 +407,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *           If `sp` equals 0, the sparse representation is skipped.
    * @param partitioner Partitioner to use for the resulting RDD.
    */
-  @Experimental
   def countApproxDistinctByKey(
       p: Int,
       sp: Int,

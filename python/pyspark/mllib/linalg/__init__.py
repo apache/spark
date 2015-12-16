@@ -764,10 +764,14 @@ class SparseVector(Vector):
         if not isinstance(index, int):
             raise TypeError(
                 "Indices must be of type integer, got type %s" % type(index))
+
+        if index >= self.size or index < -self.size:
+            raise ValueError("Index %d out of bounds." % index)
         if index < 0:
             index += self.size
-        if index >= self.size or index < 0:
-            raise ValueError("Index %d out of bounds." % index)
+
+        if (inds.size == 0) or (index > inds.item(-1)):
+            return 0.
 
         insert_index = np.searchsorted(inds, index)
         row_ind = inds[insert_index]

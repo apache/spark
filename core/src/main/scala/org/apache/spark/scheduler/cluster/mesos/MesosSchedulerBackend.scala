@@ -63,12 +63,21 @@ private[spark] class MesosSchedulerBackend(
   private[this] val slaveOfferConstraints =
     parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
+  // reject offers with mismatched constraints in seconds
+  private val rejectOfferDurationForUnmetConstraints =
+    getRejectOfferDurationForUnmetConstraints(sc)
+
   @volatile var appId: String = _
 
   override def start() {
     classLoader = Thread.currentThread.getContextClassLoader
     val driver = createSchedulerDriver(
-      master, MesosSchedulerBackend.this, sc.sparkUser, sc.appName, sc.conf)
+      master,
+      MesosSchedulerBackend.this,
+      sc.sparkUser,
+      sc.appName,
+      sc.conf,
+      sc.ui.map(_.appUIAddress))
     startScheduler(driver)
   }
 
@@ -207,29 +216,47 @@ private[spark] class MesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     inClassLoader() {
-      // Fail-fast on offers we know will be rejected
-      val (usableOffers, unUsableOffers) = offers.asScala.partition { o =>
+      // Fail first on offers with unmet constraints
+      val (offersMatchingConstraints, offersNotMatchingConstraints) =
+        offers.asScala.partition { o =>
+          val offerAttributes = toAttributeMap(o.getAttributesList)
+          val meetsConstraints =
+            matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+
+          // add some debug messaging
+          if (!meetsConstraints) {
+            val id = o.getId.getValue
+            logDebug(s"Declining offer: $id with attributes: $offerAttributes")
+          }
+
+          meetsConstraints
+        }
+
+      // These offers do not meet constraints. We don't need to see them again.
+      // Decline the offer for a long period of time.
+      offersNotMatchingConstraints.foreach { o =>
+        d.declineOffer(o.getId, Filters.newBuilder()
+          .setRefuseSeconds(rejectOfferDurationForUnmetConstraints).build())
+      }
+
+      // Of the matching constraints, see which ones give us enough memory and cores
+      val (usableOffers, unUsableOffers) = offersMatchingConstraints.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
         val offerAttributes = toAttributeMap(o.getAttributesList)
 
-        // check if all constraints are satisfield
-        //  1. Attribute constraints
-        //  2. Memory requirements
-        //  3. CPU requirements - need at least 1 for executor, 1 for task
-        val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+        // check offers for
+        //  1. Memory requirements
+        //  2. CPU requirements - need at least 1 for executor, 1 for task
         val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
-
         val meetsRequirements =
-          (meetsConstraints && meetsMemoryRequirements && meetsCPURequirements) ||
+          (meetsMemoryRequirements && meetsCPURequirements) ||
           (slaveIdToExecutorInfo.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
-
-        // add some debug messaging
         val debugstr = if (meetsRequirements) "Accepting" else "Declining"
-        val id = o.getId.getValue
-        logDebug(s"$debugstr offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+        logDebug(s"$debugstr offer: ${o.getId.getValue} with attributes: "
+          + s"$offerAttributes mem: $mem cpu: $cpus")
 
         meetsRequirements
       }
@@ -389,7 +416,7 @@ private[spark] class MesosSchedulerBackend(
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
                                                                  slaveId.getValue))
-    recordSlaveLost(d, slaveId, ExecutorExited(status, isNormalExit = false))
+    recordSlaveLost(d, slaveId, ExecutorExited(status, exitCausedByApp = true))
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {

@@ -17,7 +17,10 @@
 # limitations under the License.
 #
 
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
-source "$SPARK_HOME"/bin/load-spark-env.sh
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
+
+source "${SPARK_HOME}"/bin/load-spark-env.sh
 export _SPARK_CMD_USAGE="Usage: ./bin/sparkR [options]"
-exec "$SPARK_HOME"/bin/spark-submit sparkr-shell-main "$@"
+exec "${SPARK_HOME}"/bin/spark-submit sparkr-shell-main "$@"

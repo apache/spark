@@ -69,7 +69,7 @@ case class Rand(seed: Long) extends RDG {
       s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
-      final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextDouble();
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();
     """
   }
 }
@@ -92,7 +92,7 @@ case class Randn(seed: Long) extends RDG {
       s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
-      final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextGaussian();
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();
     """
   }
 }

@@ -23,6 +23,10 @@ import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
+/**
+ * Fetches and reads the partitions in range [startPartition, endPartition) from a shuffle by
+ * requesting them from other nodes' block stores.
+ */
 private[spark] class BlockStoreShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
@@ -32,9 +36,6 @@ private[spark] class BlockStoreShuffleReader[K, C](
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C] with Logging {
 
-  require(endPartition == startPartition + 1,
-    "Hash shuffle currently only supports fetching one partition")
-
   private val dep = handle.dependency
 
   /** Read the combined key-values for this reduce task */
@@ -43,7 +44,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       context,
       blockManager.shuffleClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition),
+      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
 
@@ -97,13 +98,14 @@ private[spark] class BlockStoreShuffleReader[K, C](
       case Some(keyOrd: Ordering[K]) =>
         // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
         // the ExternalSorter won't spill to disk.
-        val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
+        val sorter =
+          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = Some(ser))
         sorter.insertAll(aggregatedIter)
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.internalMetricsToAccumulators(
           InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
-        sorter.iterator
+        CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
       case None =>
         aggregatedIter
     }

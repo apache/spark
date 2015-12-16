@@ -26,8 +26,7 @@ import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BS
 import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
@@ -35,7 +34,6 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: Experimental ::
  * Represents a row-oriented distributed Matrix with no meaningful row indices.
  *
  * @param rows rows stored as an RDD[Vector]
@@ -45,7 +43,6 @@ import org.apache.spark.storage.StorageLevel
  *              columns will be determined by the size of the first row.
  */
 @Since("1.0.0")
-@Experimental
 class RowMatrix @Since("1.0.0") (
     @Since("1.0.0") val rows: RDD[Vector],
     private var nRows: Long,
@@ -357,9 +354,11 @@ class RowMatrix @Since("1.0.0") (
     var alpha = 0.0
     while (i < n) {
       alpha = m / m1 * mean(i)
-      j = 0
+      j = i
       while (j < n) {
-        G(i, j) = G(i, j) / m1 - alpha * mean(j)
+        val Gij = G(i, j) / m1 - alpha * mean(j)
+        G(i, j) = Gij
+        G(j, i) = Gij
         j += 1
       }
       i += 1
@@ -369,7 +368,8 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the top k principal components.
+   * Computes the top k principal components and a vector of proportions of
+   * variance explained by each principal component.
    * Rows correspond to observations and columns correspond to variables.
    * The principal components are stored a local matrix of size n-by-k.
    * Each column corresponds for one principal component,
@@ -380,22 +380,40 @@ class RowMatrix @Since("1.0.0") (
    * Note that this cannot be computed on matrices with more than 65535 columns.
    *
    * @param k number of top principal components.
-   * @return a matrix of size n-by-k, whose columns are principal components
+   * @return a matrix of size n-by-k, whose columns are principal components, and
+   * a vector of values which indicate how much variance each principal component
+   * explains
    */
-  @Since("1.0.0")
-  def computePrincipalComponents(k: Int): Matrix = {
+  @Since("1.6.0")
+  def computePrincipalComponentsAndExplainedVariance(k: Int): (Matrix, Vector) = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
 
     val Cov = computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
 
-    val brzSvd.SVD(u: BDM[Double], _, _) = brzSvd(Cov)
+    val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
+
+    val eigenSum = s.data.sum
+    val explainedVariance = s.data.map(_ / eigenSum)
 
     if (k == n) {
-      Matrices.dense(n, k, u.data)
+      (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
     } else {
-      Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k))
+      (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
+        Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
     }
+  }
+
+  /**
+   * Computes the top k principal components only.
+   *
+   * @param k number of top principal components.
+   * @return a matrix of size n-by-k, whose columns are principal components
+   * @see computePrincipalComponentsAndExplainedVariance
+   */
+  @Since("1.0.0")
+  def computePrincipalComponents(k: Int): Matrix = {
+    computePrincipalComponentsAndExplainedVariance(k)._1
   }
 
   /**
@@ -674,7 +692,6 @@ class RowMatrix @Since("1.0.0") (
 }
 
 @Since("1.0.0")
-@Experimental
 object RowMatrix {
 
   /**

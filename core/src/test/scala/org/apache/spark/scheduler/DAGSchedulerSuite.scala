@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Properties
+
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -49,19 +51,39 @@ class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
  * An RDD for passing to DAGScheduler. These RDDs will use the dependencies and
  * preferredLocations (if any) that are passed to them. They are deliberately not executable
  * so we can test that DAGScheduler does not try to execute RDDs locally.
+ *
+ * Optionally, one can pass in a list of locations to use as preferred locations for each task,
+ * and a MapOutputTrackerMaster to enable reduce task locality. We pass the tracker separately
+ * because, in this test suite, it won't be the same as sc.env.mapOutputTracker.
  */
 class MyRDD(
     sc: SparkContext,
     numPartitions: Int,
     dependencies: List[Dependency[_]],
-    locations: Seq[Seq[String]] = Nil) extends RDD[(Int, Int)](sc, dependencies) with Serializable {
+    locations: Seq[Seq[String]] = Nil,
+    @transient tracker: MapOutputTrackerMaster = null)
+  extends RDD[(Int, Int)](sc, dependencies) with Serializable {
+
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
     throw new RuntimeException("should not be reached")
+
   override def getPartitions: Array[Partition] = (0 until numPartitions).map(i => new Partition {
     override def index: Int = i
   }).toArray
-  override def getPreferredLocations(split: Partition): Seq[String] =
-    if (locations.isDefinedAt(split.index)) locations(split.index) else Nil
+
+  override def getPreferredLocations(partition: Partition): Seq[String] = {
+    if (locations.isDefinedAt(partition.index)) {
+      locations(partition.index)
+    } else if (tracker != null && dependencies.size == 1 &&
+        dependencies(0).isInstanceOf[ShuffleDependency[_, _, _]]) {
+      // If we have only one shuffle dependency, use the same code path as ShuffledRDD for locality
+      val dep = dependencies(0).asInstanceOf[ShuffleDependency[_, _, _]]
+      tracker.getPreferredLocationsForShuffle(dep, partition.index)
+    } else {
+      Nil
+    }
+  }
+
   override def toString: String = "DAGSchedulerSuiteRDD " + id
 }
 
@@ -242,9 +264,10 @@ class DAGSchedulerSuite
       rdd: RDD[_],
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
-      listener: JobListener = jobListener): Int = {
+      listener: JobListener = jobListener,
+      properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener))
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
     jobId
   }
 
@@ -351,7 +374,8 @@ class DAGSchedulerSuite
    */
   test("getMissingParentStages should consider all ancestor RDDs' cache statuses") {
     val rddA = new MyRDD(sc, 1, Nil)
-    val rddB = new MyRDD(sc, 1, List(new ShuffleDependency(rddA, null)))
+    val rddB = new MyRDD(sc, 1, List(new ShuffleDependency(rddA, new HashPartitioner(1))),
+      tracker = mapOutputTracker)
     val rddC = new MyRDD(sc, 1, List(new OneToOneDependency(rddB))).cache()
     val rddD = new MyRDD(sc, 1, List(new OneToOneDependency(rddC)))
     cacheLocations(rddC.id -> 0) =
@@ -458,9 +482,9 @@ class DAGSchedulerSuite
 
   test("run trivial shuffle") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1)),
@@ -474,9 +498,9 @@ class DAGSchedulerSuite
 
   test("run trivial shuffle with fetch failure") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
@@ -573,11 +597,17 @@ class DAGSchedulerSuite
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
    */
-  private def completeNextResultStageWithSuccess(stageId: Int, attemptIdx: Int): Unit = {
+  private def completeNextResultStageWithSuccess(
+      stageId: Int,
+      attemptIdx: Int,
+      partitionToResult: Int => Int = _ => 42): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
     assert(scheduler.stageIdToStage(stageId).isInstanceOf[ResultStage])
-    complete(stageAttempt, stageAttempt.tasks.zipWithIndex.map(_ => (Success, 42)).toSeq)
+    val taskResults = stageAttempt.tasks.zipWithIndex.map { case (task, idx) =>
+      (Success, partitionToResult(idx))
+    }
+    complete(stageAttempt, taskResults.toSeq)
   }
 
   /**
@@ -590,9 +620,8 @@ class DAGSchedulerSuite
 
     val parts = 8
     val shuffleMapRdd = new MyRDD(sc, parts, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, (0 until parts).toArray)
 
     completeShuffleMapStageSuccessfully(0, 0, numShufflePartitions = parts)
@@ -625,9 +654,8 @@ class DAGSchedulerSuite
     setupStageAbortTest(sc)
 
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
 
     for (attempt <- 0 until Stage.MAX_CONSECUTIVE_FETCH_FAILURES) {
@@ -668,10 +696,10 @@ class DAGSchedulerSuite
     setupStageAbortTest(sc)
 
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
-    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
-    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
-    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
 
     // In the first two iterations, Stage 0 succeeds and stage 1 fails. In the next two iterations,
@@ -717,10 +745,10 @@ class DAGSchedulerSuite
     setupStageAbortTest(sc)
 
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
-    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
-    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
-    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
 
     // First, execute stages 0 and 1, failing stage 1 up to MAX-1 times.
@@ -777,9 +805,9 @@ class DAGSchedulerSuite
 
   test("trivial shuffle with multiple fetch failures") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
@@ -818,9 +846,9 @@ class DAGSchedulerSuite
    */
   test("late fetch failures don't cause multiple concurrent attempts for the same map stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
 
     val mapStageId = 0
@@ -886,9 +914,9 @@ class DAGSchedulerSuite
   test("extremely late fetch failures don't cause multiple concurrent attempts for " +
       "the same stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
 
     def countSubmittedReduceStageAttempts(): Int = {
@@ -949,9 +977,9 @@ class DAGSchedulerSuite
 
   test("ignore late map task completions") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
 
     // pretend we were told hostA went away
@@ -1018,8 +1046,8 @@ class DAGSchedulerSuite
 
   test("run shuffle with map stage failure") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
 
     // Fail the map stage.  This should cause the entire job to fail.
@@ -1036,6 +1064,47 @@ class DAGSchedulerSuite
   }
 
   /**
+   * Run two jobs, with a shared dependency.  We simulate a fetch failure in the second job, which
+   * requires regenerating some outputs of the shared dependency.  One key aspect of this test is
+   * that the second job actually uses a different stage for the shared dependency (a "skipped"
+   * stage).
+   */
+  test("shuffle fetch failure in a reused shuffle dependency") {
+    // Run the first job successfully, which creates one shuffle dependency
+
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+    assertDataStructuresEmpty()
+
+    // submit another job w/ the shared dependency, and have a fetch failure
+    val reduce2 = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduce2, Array(0, 1))
+    // Note that the stage numbering here is only b/c the shared dependency produces a new, skipped
+    // stage.  If instead it reused the existing stage, then this would be stage 2
+    completeNextStageWithFetchFailure(3, 0, shuffleDep)
+    scheduler.resubmitFailedStages()
+
+    // the scheduler now creates a new task set to regenerate the missing map output, but this time
+    // using a different stage, the "skipped" one
+
+    // SPARK-9809 -- this stage is submitted without a task for each partition (because some of
+    // the shuffle map output is still available from stage 0); make sure we've still got internal
+    // accumulators setup
+    assert(scheduler.stageIdToStage(2).internalAccumulators.nonEmpty)
+    completeShuffleMapStageSuccessfully(2, 0, 2)
+    completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
+    assert(results === Map(0 -> 1234, 1 -> 1235))
+
+    assertDataStructuresEmpty()
+  }
+
+  /**
    * This test runs a three stage job, with a fetch failure in stage 1.  but during the retry, we
    * have completions from both the first & second attempt of stage 1.  So all the map output is
    * available before we finish any task set for stage 1.  We want to make sure that we don't
@@ -1043,10 +1112,10 @@ class DAGSchedulerSuite
    */
   test("don't submit stage until its dependencies map outputs are registered (SPARK-5259)") {
     val firstRDD = new MyRDD(sc, 3, Nil)
-    val firstShuffleDep = new ShuffleDependency(firstRDD, null)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
     val firstShuffleId = firstShuffleDep.shuffleId
     val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
 
@@ -1156,7 +1225,7 @@ class DAGSchedulerSuite
    */
   test("register map outputs correctly after ExecutorLost and task Resubmitted") {
     val firstRDD = new MyRDD(sc, 3, Nil)
-    val firstShuffleDep = new ShuffleDependency(firstRDD, null)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
     val reduceRdd = new MyRDD(sc, 5, List(firstShuffleDep))
     submit(reduceRdd, Array(0))
 
@@ -1221,12 +1290,12 @@ class DAGSchedulerSuite
    */
   test("failure of stage used by two jobs") {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
-    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, null)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
     val shuffleMapRdd2 = new MyRDD(sc, 2, Nil)
-    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, null)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
 
-    val reduceRdd1 = new MyRDD(sc, 2, List(shuffleDep1))
-    val reduceRdd2 = new MyRDD(sc, 2, List(shuffleDep1, shuffleDep2))
+    val reduceRdd1 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    val reduceRdd2 = new MyRDD(sc, 2, List(shuffleDep1, shuffleDep2), tracker = mapOutputTracker)
 
     // We need to make our own listeners for this test, since by default submit uses the same
     // listener for all jobs, and here we want to capture the failure for each job separately.
@@ -1256,11 +1325,111 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+  def checkJobPropertiesAndPriority(taskSet: TaskSet, expected: String, priority: Int): Unit = {
+    assert(taskSet.properties != null)
+    assert(taskSet.properties.getProperty("testProperty") === expected)
+    assert(taskSet.priority === priority)
+  }
+
+  def launchJobsThatShareStageAndCancelFirst(): ShuffleDependency[Int, Int, Nothing] = {
+    val baseRdd = new MyRDD(sc, 1, Nil)
+    val shuffleDep1 = new ShuffleDependency(baseRdd, new HashPartitioner(1))
+    val intermediateRdd = new MyRDD(sc, 1, List(shuffleDep1))
+    val shuffleDep2 = new ShuffleDependency(intermediateRdd, new HashPartitioner(1))
+    val finalRdd1 = new MyRDD(sc, 1, List(shuffleDep2))
+    val finalRdd2 = new MyRDD(sc, 1, List(shuffleDep2))
+    val job1Properties = new Properties()
+    val job2Properties = new Properties()
+    job1Properties.setProperty("testProperty", "job1")
+    job2Properties.setProperty("testProperty", "job2")
+
+    // Run jobs 1 & 2, both referencing the same stage, then cancel job1.
+    // Note that we have to submit job2 before we cancel job1 to have them actually share
+    // *Stages*, and not just shuffle dependencies, due to skipped stages (at least until
+    // we address SPARK-10193.)
+    val jobId1 = submit(finalRdd1, Array(0), properties = job1Properties)
+    val jobId2 = submit(finalRdd2, Array(0), properties = job2Properties)
+    assert(scheduler.activeJobs.nonEmpty)
+    val testProperty1 = scheduler.jobIdToActiveJob(jobId1).properties.getProperty("testProperty")
+
+    // remove job1 as an ActiveJob
+    cancel(jobId1)
+
+    // job2 should still be running
+    assert(scheduler.activeJobs.nonEmpty)
+    val testProperty2 = scheduler.jobIdToActiveJob(jobId2).properties.getProperty("testProperty")
+    assert(testProperty1 != testProperty2)
+    // NB: This next assert isn't necessarily the "desired" behavior; it's just to document
+    // the current behavior.  We've already submitted the TaskSet for stage 0 based on job1, but
+    // even though we have cancelled that job and are now running it because of job2, we haven't
+    // updated the TaskSet's properties.  Changing the properties to "job2" is likely the more
+    // correct behavior.
+    val job1Id = 0  // TaskSet priority for Stages run with "job1" as the ActiveJob
+    checkJobPropertiesAndPriority(taskSets(0), "job1", job1Id)
+    complete(taskSets(0), Seq((Success, makeMapStatus("hostA", 1))))
+
+    shuffleDep1
+  }
+
+  /**
+   * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
+   * later, active job if they were previously run under a job that is no longer active
+   */
+  test("stage used by two jobs, the first no longer active (SPARK-6880)") {
+    launchJobsThatShareStageAndCancelFirst()
+
+    // The next check is the key for SPARK-6880.  For the stage which was shared by both job1 and
+    // job2 but never had any tasks submitted for job1, the properties of job2 are now used to run
+    // the stage.
+    checkJobPropertiesAndPriority(taskSets(1), "job2", 1)
+
+    complete(taskSets(1), Seq((Success, makeMapStatus("hostA", 1))))
+    assert(taskSets(2).properties != null)
+    complete(taskSets(2), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assert(scheduler.activeJobs.isEmpty)
+
+    assertDataStructuresEmpty()
+  }
+
+  /**
+   * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
+   * later, active job if they were previously run under a job that is no longer active, even when
+   * there are fetch failures
+   */
+  test("stage used by two jobs, some fetch failures, and the first job no longer active " +
+    "(SPARK-6880)") {
+    val shuffleDep1 = launchJobsThatShareStageAndCancelFirst()
+    val job2Id = 1  // TaskSet priority for Stages run with "job2" as the ActiveJob
+
+    // lets say there is a fetch failure in this task set, which makes us go back and
+    // run stage 0, attempt 1
+    complete(taskSets(1), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleDep1.shuffleId, 0, 0, "ignored"), null)))
+    scheduler.resubmitFailedStages()
+
+    // stage 0, attempt 1 should have the properties of job2
+    assert(taskSets(2).stageId === 0)
+    assert(taskSets(2).stageAttemptId === 1)
+    checkJobPropertiesAndPriority(taskSets(2), "job2", job2Id)
+
+    // run the rest of the stages normally, checking that they have the correct properties
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
+    checkJobPropertiesAndPriority(taskSets(3), "job2", job2Id)
+    complete(taskSets(3), Seq((Success, makeMapStatus("hostA", 1))))
+    checkJobPropertiesAndPriority(taskSets(4), "job2", job2Id)
+    complete(taskSets(4), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assert(scheduler.activeJobs.isEmpty)
+
+    assertDataStructuresEmpty()
+  }
+
   test("run trivial shuffle with out-of-band failure and retry") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
     // blockManagerMaster.removeExecutor("exec-hostA")
     // pretend we were told hostA went away
@@ -1281,10 +1450,10 @@ class DAGSchedulerSuite
 
   test("recursive shuffle failures") {
     val shuffleOneRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne))
-    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
-    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker)
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
     // have the first stage complete normally
     complete(taskSets(0), Seq(
@@ -1310,10 +1479,10 @@ class DAGSchedulerSuite
 
   test("cached post-shuffle") {
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
-    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
-    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
-    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
     cacheLocations(shuffleTwoRdd.id -> 0) = Seq(makeBlockManagerId("hostD"))
     cacheLocations(shuffleTwoRdd.id -> 1) = Seq(makeBlockManagerId("hostC"))
@@ -1356,18 +1525,27 @@ class DAGSchedulerSuite
     assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
+  /**
+   * The job will be failed on first task throwing a DAGSchedulerSuiteDummyException.
+   *  Any subsequent task WILL throw a legitimate java.lang.UnsupportedOperationException.
+   *  If multiple tasks, there exists a race condition between the SparkDriverExecutionExceptions
+   *  and their differing causes as to which will represent result for job...
+   */
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
     val e = intercept[SparkDriverExecutionException] {
+      // Number of parallelized partitions implies number of tasks of job
       val rdd = sc.parallelize(1 to 10, 2)
       sc.runJob[Int, Int](
         rdd,
         (context: TaskContext, iter: Iterator[Int]) => iter.size,
-        Seq(0, 1),
+        // For a robust test assertion, limit number of job tasks to 1; that is,
+        // if multiple RDD partitions, use id of any one partition, say, first partition id=0
+        Seq(0),
         (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
     }
     assert(e.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
 
-    // Make sure we can still run commands
+    // Make sure we can still run commands on our SparkContext
     assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
@@ -1419,9 +1597,9 @@ class DAGSchedulerSuite
   test("reduce tasks should be placed locally with map output") {
     // Create an shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1))))
@@ -1440,9 +1618,9 @@ class DAGSchedulerSuite
     val numMapTasks = 4
     // Create an shuffleMapRdd with more partitions
     val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
 
     val statuses = (1 to numMapTasks).map { i =>
@@ -1464,10 +1642,10 @@ class DAGSchedulerSuite
     // Create an RDD that has both a shuffle dependency and a narrow dependency (e.g. for a join)
     val rdd1 = new MyRDD(sc, 1, Nil)
     val rdd2 = new MyRDD(sc, 1, Nil, locations = Seq(Seq("hostB")))
-    val shuffleDep = new ShuffleDependency(rdd1, null)
+    val shuffleDep = new ShuffleDependency(rdd1, new HashPartitioner(1))
     val narrowDep = new OneToOneDependency(rdd2)
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep, narrowDep))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep, narrowDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1))))
@@ -1500,7 +1678,8 @@ class DAGSchedulerSuite
   test("simple map stage submission") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
 
     // Submit a map stage by itself
     submitMapStage(shuffleDep)
@@ -1526,7 +1705,8 @@ class DAGSchedulerSuite
   test("map stage submission with reduce stage also depending on the data") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
 
     // Submit the map stage by itself
     submitMapStage(shuffleDep)
@@ -1555,7 +1735,7 @@ class DAGSchedulerSuite
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
 
     // Submit a map stage by itself
     submitMapStage(shuffleDep)
@@ -1604,9 +1784,9 @@ class DAGSchedulerSuite
   test("map stage submission with multiple shared stages and failures") {
     val rdd1 = new MyRDD(sc, 2, Nil)
     val dep1 = new ShuffleDependency(rdd1, new HashPartitioner(2))
-    val rdd2 = new MyRDD(sc, 2, List(dep1))
+    val rdd2 = new MyRDD(sc, 2, List(dep1), tracker = mapOutputTracker)
     val dep2 = new ShuffleDependency(rdd2, new HashPartitioner(2))
-    val rdd3 = new MyRDD(sc, 2, List(dep2))
+    val rdd3 = new MyRDD(sc, 2, List(dep2), tracker = mapOutputTracker)
 
     val listener1 = new SimpleListener
     val listener2 = new SimpleListener
@@ -1712,7 +1892,7 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
 
     // Also test that a reduce stage using this shuffled data can immediately run
-    val reduceRDD = new MyRDD(sc, 2, List(shuffleDep))
+    val reduceRDD = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     results.clear()
     submit(reduceRDD, Array(0, 1))
     complete(taskSets(2), Seq((Success, 42), (Success, 43)))

@@ -1,28 +1,28 @@
 ---
 layout: global
-title: Clustering - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Clustering
+title: Clustering - spark.mllib
+displayTitle: Clustering - spark.mllib
 ---
 
-Clustering is an unsupervised learning problem whereby we aim to group subsets
+[Clustering](https://en.wikipedia.org/wiki/Cluster_analysis) is an unsupervised learning problem whereby we aim to group subsets
 of entities with one another based on some notion of similarity.  Clustering is
 often used for exploratory analysis and/or as a component of a hierarchical
-supervised learning pipeline (in which distinct classifiers or regression
+[supervised learning](https://en.wikipedia.org/wiki/Supervised_learning) pipeline (in which distinct classifiers or regression
 models are trained for each cluster).
 
-MLlib supports the following models:
+The `spark.mllib` package supports the following models:
 
 * Table of contents
 {:toc}
 
 ## K-means
 
-[k-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
+[K-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
 most commonly used clustering algorithms that clusters the data points into a
-predefined number of clusters. The MLlib implementation includes a parallelized
+predefined number of clusters. The `spark.mllib` implementation includes a parallelized
 variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
-The implementation in MLlib has the following parameters:
+The implementation in `spark.mllib` has the following parameters:
 
 * *k* is the number of desired clusters.
 * *maxIterations* is the maximum number of iterations to run.
@@ -46,6 +46,8 @@ In the following example after loading and parsing data, we use the
 into two clusters. The number of desired clusters is passed to the algorithm. We then compute Within
 Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact the
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
+
+Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`KMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeansModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
@@ -76,6 +78,8 @@ way you do in Scala. The only caveat is that the methods take Scala RDD objects,
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
+
+Refer to the [`KMeans` Java docs](api/java/org/apache/spark/mllib/clustering/KMeans.html) and [`KMeansModel` Java docs](api/java/org/apache/spark/mllib/clustering/KMeansModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
@@ -132,6 +136,8 @@ data into two clusters. The number of desired clusters is passed to the algorith
 Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
+Refer to the [`KMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeans) and [`KMeansModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeansModel) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.clustering import KMeans, KMeansModel
 from numpy import array
@@ -165,7 +171,7 @@ sameModel = KMeansModel.load(sc, "myModelPath")
 
 A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
 represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
-each with its own probability.  The MLlib implementation uses the
+each with its own probability.  The `spark.mllib` implementation uses the
 [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
  algorithm to induce the maximum-likelihood model given a set of samples.  The implementation
 has the following parameters:
@@ -183,6 +189,8 @@ In the following example after loading and parsing data, we use a
 [GaussianMixture](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture)
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
+
+Refer to the [`GaussianMixture` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixtureModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.GaussianMixture
@@ -215,6 +223,8 @@ way you do in Scala. The only caveat is that the methods take Scala RDD objects,
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
+
+Refer to the [`GaussianMixture` Java docs](api/java/org/apache/spark/mllib/clustering/GaussianMixture.html) and [`GaussianMixtureModel` Java docs](api/java/org/apache/spark/mllib/clustering/GaussianMixtureModel.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
@@ -268,6 +278,8 @@ In the following example after loading and parsing data, we use a
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
 
+Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixtureModel) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.clustering import GaussianMixture
 from numpy import array
@@ -296,13 +308,13 @@ graph given pairwise similarties as edge properties,
 described in [Lin and Cohen, Power Iteration Clustering](http://www.icml2010.org/papers/387.pdf).
 It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
 [power iteration](http://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.
-MLlib includes an implementation of PIC using GraphX as its backend.
+`spark.mllib` includes an implementation of PIC using GraphX as its backend.
 It takes an `RDD` of `(srcId, dstId, similarity)` tuples and outputs a model with the clustering assignments.
 The similarities must be nonnegative.
 PIC assumes that the similarity measure is symmetric.
 A pair `(srcId, dstId)` regardless of the ordering should appear at most once in the input data.
 If a pair is missing from input, their similarity is treated as zero.
-MLlib's PIC implementation takes the following (hyper-)parameters:
+`spark.mllib`'s PIC implementation takes the following (hyper-)parameters:
 
 * `k`: number of clusters
 * `maxIterations`: maximum number of power iterations
@@ -311,7 +323,7 @@ MLlib's PIC implementation takes the following (hyper-)parameters:
 
 **Examples**
 
-In the following, we show code snippets to demonstrate how to use PIC in MLlib.
+In the following, we show code snippets to demonstrate how to use PIC in `spark.mllib`.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -323,6 +335,8 @@ affinity matrix.
 Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel),
 which contains the computed clustering assignments.
+
+Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
@@ -364,6 +378,8 @@ affinity matrix.
 Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html)
 which contains the computed clustering assignments.
+
+Refer to the [`PowerIterationClustering` Java docs](api/java/org/apache/spark/mllib/clustering/PowerIterationClustering.html) and [`PowerIterationClusteringModel` Java docs](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -410,6 +426,8 @@ affinity matrix.
 Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
 which contains the computed clustering assignments.
+
+Refer to the [`PowerIterationClustering` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClusteringModel) for more details on the API.
 
 {% highlight python %}
 from __future__ import print_function
@@ -475,7 +493,7 @@ checkpointing can help reduce shuffle file sizes on disk and help with
 failure recovery.
 
 
-All of MLlib's LDA models support:
+All of `spark.mllib`'s LDA models support:
 
 * `describeTopics`: Returns topics as arrays of most important terms and
 term weights
@@ -571,6 +589,7 @@ to the algorithm. We then output the topics, represented as probability distribu
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+Refer to the [`LDA` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) and [`DistributedLDAModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.DistributedLDAModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.{LDA, DistributedLDAModel}
@@ -602,6 +621,8 @@ val sameModel = DistributedLDAModel.load(sc, "myLDAModel")
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`LDA` Java docs](api/java/org/apache/spark/mllib/clustering/LDA.html) and [`DistributedLDAModel` Java docs](api/java/org/apache/spark/mllib/clustering/DistributedLDAModel.html) for details on the API.
+
 {% highlight java %}
 import scala.Tuple2;
 
@@ -666,6 +687,8 @@ public class JavaLDAExample {
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`LDA` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDA) and [`LDAModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDAModel) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.clustering import LDA, LDAModel
 from pyspark.mllib.linalg import Vectors
@@ -698,7 +721,7 @@ sameModel = LDAModel.load(sc, "myModelPath")
 ## Streaming k-means
 
 When data arrive in a stream, we may want to estimate clusters dynamically,
-updating them as new data arrive. MLlib provides support for streaming k-means clustering,
+updating them as new data arrive. `spark.mllib` provides support for streaming k-means clustering,
 with parameters to control the decay (or "forgetfulness") of the estimates. The algorithm
 uses a generalization of the mini-batch k-means update rule. For each batch of data, we assign
 all points to their nearest cluster, compute new cluster centers, then update each cluster using:
@@ -730,6 +753,7 @@ This example shows how to estimate clusters on streaming data.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`StreamingKMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.StreamingKMeans) for details on the API.
 
 First we import the neccessary classes.
 
@@ -780,6 +804,8 @@ ssc.awaitTermination()
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`StreamingKMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.StreamingKMeans) for more details on the API.
+
 First we import the neccessary classes.
 
 {% highlight python %}
