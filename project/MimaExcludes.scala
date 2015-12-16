@@ -164,11 +164,12 @@ object MimaExcludes {
         // SPARK-3580 Add getNumPartitions method to JavaRDD
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
-      ) ++ Seq(
+      ) ++
         // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
         // private class.
-        MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
-      ) ++ Seq (
+        MimaBuild.excludeSparkClass(
+          "scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint") ++
+      Seq (
         // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.ExecutorSummary.this")
