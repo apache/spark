@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.json4s.JsonAST.{JNothing, JValue}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
   def output: Seq[Attribute]
@@ -170,4 +174,27 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
   override def simpleString: String = statePrefix + super.simpleString
+
+  protected def childrenJson: JValue = {
+    if (children.isEmpty) {
+      JNothing
+    } else if (children.length == 1) {
+      "child" -> children.head.jsonValue
+    } else if (children.length == 2) {
+      ("left" -> children(0).jsonValue) ~ ("right" -> children(1).jsonValue)
+    } else {
+      "children" -> children.map(_.jsonValue)
+    }
+  }
+
+  protected def otherJsonValues: JValue = JNothing
+
+  final private[sql] def jsonValue: JValue = {
+    val baseJsonValue = ("name" -> nodeName) ~ ("output" -> output.map(_.simpleString))
+    baseJsonValue.merge(otherJsonValues).merge(childrenJson)
+  }
+
+  final def toJson: String = {
+    pretty(render(jsonValue))
+  }
 }
