@@ -212,7 +212,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
 
       res.foreach(buf ++= _.take(n - buf.size))
-      partsScanned += numPartsToTry
+      partsScanned += p.size
     }
 
     buf.toArray
