@@ -365,14 +365,16 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     new MesosSchedulerBackend(taskScheduler, sc, "master")
   }
 
-  test("isOfferSatisfiesRequirements return true when there offer meet cpu and memory requirement") {
+  test("isOfferSatisfiesRequirements return true when there offer meet cpu and" +
+    " memory requirement") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
     assert(schedulerBackend.isOfferSatisfiesRequirements( 5, 10000, "Slave1", sc))
   }
 
-  test("isOfferSatisfiesRequirements return false when memory in offer is less than required memory") {
+  test("isOfferSatisfiesRequirements return false when memory in offer is less " +
+    "than required memory") {
     val sc = mock[SparkContext]
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
