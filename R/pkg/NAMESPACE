@@ -92,7 +92,9 @@ exportMethods("arrange",
               "with",
               "withColumn",
               "withColumnRenamed",
-              "write.df")
+              "write.df",
+              "write.json",
+              "write.parquet")
 
 exportClasses("Column")
 

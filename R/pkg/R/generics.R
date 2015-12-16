@@ -519,10 +519,6 @@ setGeneric("sample_frac",
 #' @export
 setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("sampleBy") })
 
-#' @rdname saveAsParquetFile
-#' @export
-setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
-
 #' @rdname saveAsTable
 #' @export
 setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
@@ -540,6 +536,18 @@ setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
 #' @rdname write.df
 #' @export
 setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
+
+#' @rdname write.json
+#' @export
+setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
+
+#' @rdname write.parquet
+#' @export
+setGeneric("write.parquet", function(x, path) { standardGeneric("write.parquet") })
+
+#' @rdname write.parquet
+#' @export
+setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
 
 #' @rdname schema
 #' @export
