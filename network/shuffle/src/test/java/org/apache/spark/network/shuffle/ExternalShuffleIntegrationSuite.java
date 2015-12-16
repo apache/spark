@@ -49,8 +49,8 @@ import org.apache.spark.network.util.TransportConf;
 public class ExternalShuffleIntegrationSuite {
 
   static String APP_ID = "app-id";
-  static String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
-  static String HASH_MANAGER = "org.apache.spark.shuffle.hash.HashShuffleManager";
+  static String SORT_MANAGER = "sort";
+  static String HASH_MANAGER = "hash";
 
   // Executor 0 is sort-based
   static TestShuffleDataContext dataContext0;
