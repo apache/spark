@@ -265,6 +265,14 @@ object MLUtils {
    */
   @Since("1.0.0")
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
+    kFold(rdd, numFolds, seed.toLong)
+  }
+
+  /**
+   * Version of [[kFold()]] taking a Long seed.
+   */
+  @Since("2.0.0")
+  def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Long): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
       val sampler = new BernoulliCellSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
