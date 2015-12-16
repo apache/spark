@@ -481,10 +481,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(2 -> 2.toByte, 3 -> 3.toByte).toDF("a", "b").as[ClassData]
     assert(ds.collect().toSeq == Seq(ClassData("2", 2), ClassData("3", 3)))
   }
+
+  test("verify mismatching field names fail with a good error") {
+    val ds = Seq(ClassData("a", 1)).toDS()
+    val e = intercept[AnalysisException] {
+      ds.as[ClassData2].collect()
+    }
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns a, b"), e.getMessage)
+  }
 }
 
-
 case class ClassData(a: String, b: Int)
+case class ClassData2(c: String, d: Int)
 case class ClassNullableData(a: String, b: Integer)
 
 /**
