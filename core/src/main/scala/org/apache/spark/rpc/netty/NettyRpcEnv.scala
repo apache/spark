@@ -397,7 +397,7 @@ private[netty] class NettyRpcEnv(
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
-      logError(s"Error downloading stream $streamId.", cause)
+      logDebug(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
     }
