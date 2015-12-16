@@ -57,11 +57,14 @@ object TreeNodeJsonFormatter {
       fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
 
     fieldNames.zip(fieldValues).map {
-      case (name, value: TreeNode[_]) if node.containsChild(value) => name -> JNothing
+      case (name, value: TreeNode[_]) if node.containsChild(value) =>
+        name -> JInt(node.children.indexOf(value))
       case (name, value: Seq[_]) if value.nonEmpty && value.forall {
         case n: TreeNode[_] => node.containsChild(n)
         case _ => false
-      } => name -> JNothing
+      } => name -> JArray(
+        value.map(v => JInt(node.children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
+      )
       case (name, value) => name -> parseToJson(value)
     }.toList
   }
@@ -103,26 +106,11 @@ object TreeNodeJsonFormatter {
       val cls = Utils.classForName((nextNode \ "class").asInstanceOf[JString].s)
       val numChildren = (nextNode \ "num-children").asInstanceOf[JInt].num.toInt
 
-      var children: Seq[TreeNode[_]] = (1 to numChildren).map(_ => parseNextNode())
+      val children: Seq[TreeNode[_]] = (1 to numChildren).map(_ => parseNextNode())
       val fields = getConstructorParas(cls)
 
       val parameters: Array[AnyRef] = fields.map {
-        case (fieldName, fieldType) =>
-          val fieldJsonValue = nextNode \ fieldName
-          if (fieldJsonValue == JNothing) {
-            fieldType match {
-              case t if t <:< localTypeOf[Seq[_]] =>
-                val result = children
-                children = Seq.empty
-                result
-              case _ =>
-                val result = children.head
-                children = children.drop(1)
-                result
-            }
-          } else {
-            parseFromJson(fieldJsonValue, fieldType)
-          }
+        case (fieldName, fieldType) => parseFromJson(nextNode \ fieldName, fieldType, children)
       }.toArray
 
       if (cls == classOf[org.apache.spark.sql.catalyst.expressions.Literal]) {
@@ -150,7 +138,8 @@ object TreeNodeJsonFormatter {
 
   private def parseFromJson(
       value: JValue,
-      expectedType: Type): AnyRef = ScalaReflectionLock.synchronized {
+      expectedType: Type,
+      children: Seq[TreeNode[_]]): AnyRef = ScalaReflectionLock.synchronized {
     expectedType match {
       case t if t <:< definitions.BooleanTpe =>
         value.asInstanceOf[JBool].value: java.lang.Boolean
@@ -183,18 +172,22 @@ object TreeNodeJsonFormatter {
         } else {
           throw new RuntimeException(s"$direction is not a valid SortDirection string.")
         }
-      case t if t <:< localTypeOf[TreeNode[_]] => reconstruct(value.asInstanceOf[JArray])
+      case t if t <:< localTypeOf[TreeNode[_]] => value match {
+        case JInt(i) => children(i.toInt)
+        case arr: JArray => reconstruct(arr)
+        case _ => throw new RuntimeException(s"$value is not a valid json value for tree node.")
+      }
       case t if t <:< localTypeOf[Option[_]] =>
         if (value == JNull) {
           None
         } else {
           val TypeRef(_, _, Seq(optType)) = t
-          Option(parseFromJson(value, optType))
+          Option(parseFromJson(value, optType, children))
         }
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val JArray(elements) = value
-        elements.map(parseFromJson(_, elementType)).toSeq
+        elements.map(parseFromJson(_, elementType, children)).toSeq
       case _ => value match {
         case JBool(b) => b: java.lang.Boolean
         case JInt(i) => i

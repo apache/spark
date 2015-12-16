@@ -641,9 +641,9 @@ trait ScalaReflection {
       case t if t <:< localTypeOf[Product] =>
         val params = getConstructorParas(t)
         Schema(StructType(
-          params.map { p =>
-            val Schema(dataType, nullable) = schemaFor(p._2)
-            StructField(p._1, dataType, nullable)
+          params.map { case (fieldName, fieldType) =>
+            val Schema(dataType, nullable) = schemaFor(fieldType)
+            StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
