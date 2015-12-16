@@ -27,6 +27,7 @@ import scala.language.postfixOps
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.{BeforeAndAfterAll, Matchers}
@@ -59,10 +60,13 @@ abstract class BaseYarnClusterSuite
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
 
+  var oldProperties: Properties = null
+
   def newYarnConfig(): YarnConfiguration
 
   override def beforeAll() {
     super.beforeAll()
+    oldProperties = SerializationUtils.clone(System.getProperties)
 
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
@@ -116,7 +120,7 @@ abstract class BaseYarnClusterSuite
 
   override def afterAll() {
     yarnCluster.stop()
-    System.clearProperty("SPARK_YARN_MODE")
+    System.setProperties(oldProperties)
     super.afterAll()
   }
 

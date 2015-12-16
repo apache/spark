@@ -72,9 +72,6 @@ class SizeEstimatorSuite
   with PrivateMethodTester
   with ResetSystemProperties {
 
-  // Get the current value of os.arch property
-  val arch = System.getProperty("os.arch")
-
   override def beforeEach() {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     super.beforeEach()
@@ -83,8 +80,7 @@ class SizeEstimatorSuite
   }
 
   override def afterEach() = {
-    // Restore the original value of os.arch property
-    System.setProperty("os.arch", arch)
+    super.afterEach()
   }
 
   test("simple classes") {

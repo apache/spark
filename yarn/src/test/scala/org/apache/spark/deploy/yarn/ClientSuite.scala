@@ -19,12 +19,14 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.URI
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
 import scala.reflect.ClassTag
 import scala.util.Try
 
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
@@ -43,12 +45,21 @@ import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
+  var oldProperties: Properties = null
+
   override def beforeAll(): Unit = {
+    super.beforeAll()
+    oldProperties = SerializationUtils.clone(System.getProperties)
     System.setProperty("SPARK_YARN_MODE", "true")
   }
 
   override def afterAll(): Unit = {
-    System.clearProperty("SPARK_YARN_MODE")
+    try {
+      System.setProperties(oldProperties)
+      oldProperties = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("default Yarn application classpath") {

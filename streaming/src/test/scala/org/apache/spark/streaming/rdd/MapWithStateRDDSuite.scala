@@ -36,6 +36,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
   private var checkpointDir: File = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     sc = new SparkContext(
       new SparkConf().setMaster("local").setAppName("MapWithStateRDDSuite"))
     checkpointDir = Utils.createTempDir()
@@ -43,10 +44,14 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
   }
 
   override def afterAll(): Unit = {
-    if (sc != null) {
-      sc.stop()
+    try {
+      if (sc != null) {
+        sc.stop()
+      }
+      Utils.deleteRecursively(checkpointDir)
+    } finally {
+      super.afterAll()
     }
-    Utils.deleteRecursively(checkpointDir)
   }
 
   override def sparkContext: SparkContext = sc

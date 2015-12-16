@@ -28,7 +28,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 
 class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
   import TestUtils.{assertNotSpilled, assertSpilled}
-
+/*
   testWithMultipleSer("empty data stream")(emptyDataStream)
 
   testWithMultipleSer("few elements per partition")(fewElementsPerPartition)
@@ -235,7 +235,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       it.next()
     }
   }
-
+*/
   /* ============================= *
    |  Helper test utility methods  |
    * ============================= */

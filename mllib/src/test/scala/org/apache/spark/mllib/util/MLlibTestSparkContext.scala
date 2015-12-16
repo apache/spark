@@ -38,12 +38,15 @@ trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
   }
 
   override def afterAll() {
-    sqlContext = null
-    SQLContext.clearActive()
-    if (sc != null) {
-      sc.stop()
-    }
+    try {
+      sqlContext = null
+      SQLContext.clearActive()
+      if (sc != null) {
+        sc.stop()
+      }
     sc = null
-    super.afterAll()
+    } finally {
+      super.afterAll()
+    }
   }
 }
