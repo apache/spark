@@ -25,6 +25,7 @@ import scala.Tuple2;
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.collect.Ordering;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -440,8 +441,13 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
   public static <T extends Comparable<T>> void assertOrderInvariantEquals(
     List<List<T>> expected, List<List<T>> actual) {
     expected.forEach((List<T> list) -> Collections.sort(list));
-    actual.forEach((List<T> list) -> Collections.sort(list));
-    Assert.assertEquals(expected, actual);
+    ArrayList<ArrayList<T>> sortedActual = new ArrayList<ArrayList<T>>();
+    actual.forEach((List<T> list) -> {
+        ArrayList<T> sortedList = new ArrayList<T>(list);
+        Collections.sort(sortedList);
+        sortedActual.add(sortedList);
+    });
+    Assert.assertEquals(expected, sortedActual);
   }
 
   @Test
