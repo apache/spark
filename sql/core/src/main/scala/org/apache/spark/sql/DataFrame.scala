@@ -234,7 +234,7 @@ class DataFrame private[sql](
     // For Data that has more than "_numRows" records
     if (hasMoreData) {
       val rowsString = if (_numRows == 1) "row" else "rows"
-      sb.append(s"only showing top ${_numRows} $rowsString\n")
+      sb.append(s"only showing top $_numRows $rowsString\n")
     }
 
     sb.toString()
