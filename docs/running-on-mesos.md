@@ -150,14 +150,30 @@ it does not need to be redundantly passed in as a system property.
 Spark on Mesos also supports cluster mode, where the driver is launched in the cluster and the client
 can find the results of the driver from the Mesos Web UI.
 
-To use cluster mode, you must start the MesosClusterDispatcher in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
-passing in the Mesos master url (e.g: mesos://host:5050).
+To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
+passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
 
-From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master url
-to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
+If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`).
+
+From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
+to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
 Spark cluster Web UI.
 
-Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves.
+For example:
+{% highlight bash %}
+./bin/spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --master mesos://207.184.161.138:7077 \
+  --deploy-mode cluster
+  --supervise
+  --executor-memory 20G \
+  --total-executor-cores 100 \
+  http://path/to/examples.jar \
+  1000
+{% endhighlight %}
+
+
+Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves, as the Spark driver doesn't automatically upload local jars.
 
 # Mesos Run Modes
 

@@ -115,6 +115,18 @@ export HADOOP_CONF_DIR=XXX
   --master spark://207.184.161.138:7077 \
   examples/src/main/python/pi.py \
   1000
+
+# Run on a Mesos cluster in cluster deploy mode with supervise
+./bin/spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --master mesos://207.184.161.138:7077 \
+  --deploy-mode cluster
+  --supervise
+  --executor-memory 20G \
+  --total-executor-cores 100 \
+  http://path/to/examples.jar \
+  1000
+
 {% endhighlight %}
 
 # Master URLs
@@ -132,9 +144,10 @@ The master URL passed to Spark can be in one of the following formats:
 <tr><td> <code>mesos://HOST:PORT</code> </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
         The port must be whichever one your is configured to use, which is 5050 by default.
         Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
+        To submit with <code>--deploy-mode cluster</code>, the HOST:PORT should be configured to connect to the <a href="running-on-mesos.html#cluster-mode">MesosClusterDispatcher</a>.
 </td></tr>
 <tr><td> <code>yarn</code> </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-        <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>. 
+        <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.
         The cluster location will be found based on the <code>HADOOP_CONF_DIR</code> or <code>YARN_CONF_DIR</code> variable.
 </td></tr>
 <tr><td> <code>yarn-client</code> </td><td> Equivalent to <code>yarn</code> with <code>--deploy-mode client</code>,
