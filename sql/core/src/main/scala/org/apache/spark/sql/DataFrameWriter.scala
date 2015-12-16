@@ -253,7 +253,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * (scala-specific)
    * Saves the content of the [[DataFrame]] to a external database table via JDBC. In the case the
    * table already exists in the external database, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
@@ -267,21 +266,21 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
    * @param columnMapping Maps DataFrame column names to target table column names.
-   *                           This parameter can be omitted if the target table has/will be
-   *                           created in this method and therefore the target table structure
-   *                           matches the DF structure.
-   *                           This parameter is stongly recommended, if target table already
-   *                           exists and has been created outside of this method.
-   *                           If omitted, the SQL insert statement will not include column names,
-   *                           which means that the field ordering of the DataFrame must match
-   *                           the target table column ordering.
+   *                      This parameter can be omitted if the target table has/will be
+   *                      created in this method and therefore the target table structure
+   *                      matches the DF structure.
+   *                      This parameter is stongly recommended, if target table already
+   *                      exists and has been created outside of this method.
+   *                      If omitted, the SQL insert statement will not include column names,
+   *                      which means that the field ordering of the DataFrame must match
+   *                      the target table column ordering.
    *
    * @since 1.4.0
    */
   def jdbc(url: String,
            table: String,
            connectionProperties: Properties,
-           columnMapping: scala.collection.immutable.Map[String, String]): Unit = {
+           columnMapping: scala.collection.Map[String, String]): Unit = {
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
       props.put(key, value)
@@ -320,28 +319,30 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * (java-specific) version of jdbc method
+   * (java-friendly) version of
+   * [[DataFrameWriter.jdbc(String,String,Properties,scala.collection.Map[String,String]):]]
    */
-   def jdbc(url: String,
+  def jdbc(url: String,
            table: String,
            connectionProperties: Properties,
            columnMapping: java.util.Map[String, String]): Unit = {
-    // Convert java Map into immutable scala Map
-    var sColumnMapping: scala.collection.immutable.Map[String, String] = null
+    // Convert java Map into scala Map
+    var sColumnMapping: scala.collection.Map[String, String] = null
     if (columnMapping!=null) {
-        sColumnMapping = collection.immutable.Map(columnMapping.asScala.toList: _*)
+        sColumnMapping = columnMapping.asScala
     }
-    jdbc( url, table, connectionProperties, sColumnMapping )
+    jdbc(url, table, connectionProperties, sColumnMapping)
   }
 
   /**
-   * legacy three parameter version of jdbc method
+   * Three parameter version of
+   * [[DataFrameWriter.jdbc(String,String,Properties,scala.collection.Map[String,String]):]]
    */
   def jdbc(url: String,
            table: String,
            connectionProperties: Properties): Unit = {
-    val columnMapping: scala.collection.immutable.Map[String, String] = null
-    jdbc( url, table, connectionProperties, columnMapping )
+    val columnMapping: scala.collection.Map[String, String] = null
+    jdbc(url, table, connectionProperties, columnMapping)
   }
 
   /**

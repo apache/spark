@@ -520,7 +520,7 @@ class DataFrameWriter(object):
         for k in properties:
             jprop.setProperty(k, properties[k])
         if columnMapping is None:
-        	  columnMapping = dict()
+            columnMapping = dict()
         jcolumnMapping = JavaClass("java.util.HashMap", self._sqlContext._sc._gateway._gateway_client)()
         for k in columnMapping:
             jcolumnMapping.put(k, columnMapping[k])

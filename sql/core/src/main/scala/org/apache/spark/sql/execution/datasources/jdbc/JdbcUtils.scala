@@ -61,14 +61,14 @@ object JdbcUtils extends Logging {
 
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
-   * If a columnMapping is provided, it will be used to translate rdd
+   * If a columnMapping is provided, it will be used to translate RDD
    * column names into table column names.
    */
   def insertStatement(conn: Connection,
                       dialect: JdbcDialect,
                       table: String,
                       rddSchema: StructType,
-                      columnMapping: Map[String, String]): PreparedStatement = {
+                      columnMapping: scala.collection.Map[String, String]): PreparedStatement = {
     val sql = dialect.getInsertStatement(table, rddSchema, columnMapping)
     conn.prepareStatement(sql)
   }
@@ -122,7 +122,7 @@ object JdbcUtils extends Logging {
       iterator: Iterator[Row],
       rddSchema: StructType,
       nullTypes: Array[Int],
-      columnMapping: Map[String, String] = null,
+      columnMapping: scala.collection.Map[String, String] = null,
       batchSize: Int,
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
@@ -236,7 +236,7 @@ object JdbcUtils extends Logging {
       url: String,
       table: String,
       properties: Properties = new Properties(),
-      columnMapping: Map[String, String] = null) {
+      columnMapping: scala.collection.Map[String, String] = null) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType

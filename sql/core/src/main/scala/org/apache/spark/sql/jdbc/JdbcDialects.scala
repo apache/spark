@@ -120,19 +120,18 @@ abstract class JdbcDialect extends Serializable {
    */
   def getInsertStatement(table: String,
                          rddSchema: StructType,
-                         columnMapping: Map[String, String] = null): String = {
+                         columnMapping: scala.collection.Map[String, String] = null): String = {
     if (columnMapping == null) {
-      return rddSchema.fields.map(field => "?")
-             .mkString( s"INSERT INTO $table VALUES (", ", ", " ) ")
+      rddSchema.fields.map(field => "?")
+      .mkString( s"INSERT INTO $table VALUES (", ", ", " ) ")
     } else {
-      return rddSchema.fields.map(
-               field => columnMapping.get(field.name) match {
-                 case Some(name) => name
-                 case None => s"<JdbcDialect.getInsertStatement: No entry " +
-                              s"found in columnMapping for field '${field.name}'>"
-               }
-             ).mkString( s"INSERT INTO $table ( ", ", ", " ) " ) +
-             rddSchema.fields.map(field => "?").mkString( "VALUES ( ", ", ", " )" )
+      rddSchema.fields.map(
+        field => columnMapping.get(field.name) match {
+          case Some(name) => name
+          case None => field.name
+        }
+      ).mkString( s"INSERT INTO $table ( ", ", ", " ) " ) +
+      rddSchema.fields.map(field => "?").mkString( "VALUES ( ", ", ", " )" )
     }
   }
 

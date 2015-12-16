@@ -93,7 +93,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties)
     assert(2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
     assert(
-      2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
+      2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).collect()(0).length)
   }
 
   test("Basic CREATE with columnMapping") {
@@ -101,7 +101,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     val columnMapping = Map("name" -> "name", "id" -> "id")
     df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties, columnMapping)
-    assert(2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+    assert(2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).count)
     assert(
       2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
   }
