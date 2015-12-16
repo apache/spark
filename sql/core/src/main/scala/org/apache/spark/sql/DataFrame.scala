@@ -499,10 +499,16 @@ class DataFrame private[sql](
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None)
+    ).analyzed.asInstanceOf[Join]
 
     // Project only one of the join columns.
-    val joinedCols = usingColumns.map(col => withPlan(joined.right).resolve(col))
+    //
+    // SPARK-12336: For outer joins, attributes of at least one child plan output will be forced to
+    // be nullable. An `AttributeSet` is necessary so that we are not affected by different
+    // nullability values.
+    val joinedCols = AttributeSet(usingColumns.map(col => withPlan(joined.right).resolve(col)))
+
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
         withPlan(joined.left).resolve(col),
@@ -514,12 +520,7 @@ class DataFrame private[sql](
     withPlan {
       Project(
         joined.output.filterNot(joinedCols.contains(_)),
-        Join(
-          joined.left,
-          joined.right,
-          joinType = JoinType(joinType),
-          condition)
-      )
+        joined.copy(condition = condition))
     }
   }
 

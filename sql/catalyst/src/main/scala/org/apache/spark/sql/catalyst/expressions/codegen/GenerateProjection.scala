@@ -42,7 +42,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  // Make Mutablility optional...
+  // Make Mutability optional...
   protected def create(expressions: Seq[Expression]): Projection = {
     val ctx = newCodeGenContext()
     val columns = expressions.zipWithIndex.map {
@@ -65,7 +65,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         """
     }.mkString("\n")
 
-    val getCases = (0 until expressions.size).map { i =>
+    val getCases = expressions.indices.map { i =>
       s"case $i: return c$i;"
     }.mkString("\n")
 

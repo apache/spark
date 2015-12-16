@@ -358,10 +358,10 @@ object StructType extends AbstractDataType {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-              leftField.copy(
-                dataType = merge(leftType, rightType),
-                nullable = leftNullable || rightNullable)
-            }
+                leftField.copy(
+                  dataType = merge(leftType, rightType),
+                  nullable = leftNullable || rightNullable)
+              }
               .orElse(Some(leftField))
               .foreach(newFields += _)
         }
