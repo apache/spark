@@ -107,7 +107,7 @@ class CrossValidator(Estimator, HasSeed):
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
-    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, seed=42)
+    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
     >>> cvModel = cv.fit(dataset)
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
