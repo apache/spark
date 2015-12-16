@@ -133,7 +133,7 @@ class CrossValidator(Estimator, HasSeed):
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
                  seed=None):
         """
-        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
                  seed=None)
         """
         super(CrossValidator, self).__init__()
@@ -157,7 +157,7 @@ class CrossValidator(Estimator, HasSeed):
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
                   seed=None):
         """
-        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
                   seed=None):
         Sets params for cross validator.
         """
