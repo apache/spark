@@ -186,8 +186,58 @@ class DataFrame private[sql](
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
-          case array: Array[_] => array.mkString("[", ", ", "]")
-          case seq: Seq[_] => seq.mkString("[", ", ", "]")
+          case (arr : Double) :: tail => (arr :: tail).map(x => {
+            val temp = x.asInstanceOf[Double]
+            val tempStr = temp.toString
+            if (StringUtils.containsIgnoreCase(tempStr, "E") && tempStr.length > 20 && truncate) {
+              f"$temp%G"
+            } else {
+              temp
+            }
+          }).mkString("[", ", ", "]")
+          case (arr : BigDecimal) :: tail => (arr :: tail).map(x => {
+            val temp = x.asInstanceOf[BigDecimal]
+            val tempStr = temp.toString()
+            if (StringUtils.containsIgnoreCase(tempStr, "E") && tempStr.length > 20 &&
+              truncate) {
+              f"$temp%G"
+            } else {
+              temp
+            }
+          }).mkString("[", ", ", "]")
+          case (arr : Float) :: tail => (arr :: tail).map(x => {
+            val temp = x.asInstanceOf[Float]
+            val tempStr = temp.toString
+            if (StringUtils.containsIgnoreCase(tempStr, "E") && tempStr.length > 20 &&
+              truncate) {
+              f"$temp%G"
+            } else {
+              temp
+            }
+          }).mkString("[", ", ", "]")
+          case seq: Seq[_] =>
+            seq.mkString("[", ", ", "]")
+          case d: Float =>
+            val temp = d.toString
+            if (StringUtils.containsIgnoreCase(temp, "E") && temp.length > 20 && truncate) {
+              f"$d%G"
+            } else {
+              temp
+            }
+          case d: Double =>
+            val temp = d.toString
+            if (StringUtils.containsIgnoreCase(temp, "E") && temp.length > 20 && truncate) {
+              f"$d%G"
+            } else {
+              temp
+            }
+          case d: BigDecimal =>
+            val temp = d.toString()
+            if (StringUtils.containsIgnoreCase(temp, "E") && temp.length > 20 && truncate) {
+              f"$d%G"
+            } else {
+              temp
+            }
           case _ => cell.toString
         }
         if (truncate && str.length > 20) str.substring(0, 17) + "..." else str

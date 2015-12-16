@@ -620,6 +620,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.select($"*").filter($"key" < 0).showString(1) === expectedAnswer)
   }
 
+  test("SPARK-11408 show with scientific notation") {
+    val df = Seq(
+      (1.0, 1.0/3e5)
+    ).toDF()
+
+    val expectedAnswer = """+---+-----------+
+                           || _1|         _2|
+                           |+---+-----------+
+                           ||1.0|3.33333E-06|
+                           |+---+-----------+
+                           |""".stripMargin
+
+    assert(df.showString(10) === expectedAnswer)
+  }
+
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
     val rowRDD = sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
