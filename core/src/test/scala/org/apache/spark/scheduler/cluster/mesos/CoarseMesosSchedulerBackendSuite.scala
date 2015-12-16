@@ -201,7 +201,8 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
   }
 
 
-  test("isOfferSatisfiesRequirements return false when memory in offer is less than required memory") {
+  test("isOfferSatisfiesRequirements return false when memory in offer is less" +
+    " than required memory") {
     val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
 
     assert(schedulerBackend.isOfferSatisfiesRequirements("Slave1", 1, 5, sc) === false)
