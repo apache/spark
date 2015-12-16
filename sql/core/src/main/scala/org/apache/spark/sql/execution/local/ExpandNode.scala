@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Projection}
+import org.apache.spark.sql.catalyst.expressions._
 
 case class ExpandNode(
     conf: SQLConf,
@@ -36,7 +36,7 @@ case class ExpandNode(
 
   override def open(): Unit = {
     child.open()
-    groups = projections.map(ee => newProjection(ee, child.output)).toArray
+    groups = projections.map(ee => newMutableProjection(ee, child.output)()).toArray
     idx = groups.length
   }
 
