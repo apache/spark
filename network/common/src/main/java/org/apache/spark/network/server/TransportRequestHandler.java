@@ -84,11 +84,11 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   @Override
   public void channelActive() {
-    rpcHandler.connectionEstablished(reverseClient);
+    rpcHandler.channelActive(reverseClient);
   }
 
   @Override
-  public void channelUnregistered() {
+  public void channelInactive() {
     if (streamManager != null) {
       try {
         streamManager.connectionTerminated(channel);
@@ -96,7 +96,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         logger.error("StreamManager connectionTerminated() callback failed.", e);
       }
     }
-    rpcHandler.connectionTerminated(reverseClient);
+    rpcHandler.channelInactive(reverseClient);
   }
 
   @Override

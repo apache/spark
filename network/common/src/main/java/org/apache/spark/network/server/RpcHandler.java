@@ -69,15 +69,15 @@ public abstract class RpcHandler {
   }
 
   /**
-   * Invoked when the connection associated with the given client has been established.
+   * Invoked when the channel associated with the given client is active.
    */
-  public void connectionEstablished(TransportClient client) { }
+  public void channelActive(TransportClient client) { }
 
   /**
-   * Invoked when the connection associated with the given client has been invalidated.
+   * Invoked when the channel associated with the given client is inactive.
    * No further requests will come from this client.
    */
-  public void connectionTerminated(TransportClient client) { }
+  public void channelInactive(TransportClient client) { }
 
   public void exceptionCaught(Throwable cause, TransportClient client) { }
 

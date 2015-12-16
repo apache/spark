@@ -607,14 +607,14 @@ private[netty] class NettyRpcHandler(
     }
   }
 
-  override def connectionEstablished(client: TransportClient): Unit = {
+  override def channelActive(client: TransportClient): Unit = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
     dispatcher.postToAll(RemoteProcessConnected(clientAddr))
   }
 
-  override def connectionTerminated(client: TransportClient): Unit = {
+  override def channelInactive(client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
       val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
