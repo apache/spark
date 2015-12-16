@@ -115,13 +115,19 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval.isNullAt($ordinal)) {
-          ${ev.isNull} = true;
-        } else {
+      if (nullable) {
+        s"""
+          if ($eval.isNullAt($ordinal)) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+          }
+        """
+      } else {
+        s"""
           ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
-        }
-      """
+        """
+      }
     })
   }
 }
