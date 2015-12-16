@@ -70,12 +70,12 @@ class VectorAssembler(override val uid: String)
           val group = AttributeGroup.fromStructField(field)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
-            group.attributes.get.map { attr =>
+            group.attributes.get.zipWithIndex.map { case (attr, i) =>
               if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)
               } else {
-                attr
+                attr.withName(c + "_" + i)
               }
             }
           } else {
