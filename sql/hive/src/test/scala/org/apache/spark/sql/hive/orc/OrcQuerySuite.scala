@@ -57,21 +57,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     tempFile
   }
 
-  /**
-   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
-   */
-  protected def stripSparkFilter(df: DataFrame): DataFrame = {
-    val schema = df.schema
-    val childRDD = df
-      .queryExecution
-      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-      .child
-      .execute()
-      .map(row => Row.fromSeq(row.toSeq(schema)))
-
-    sqlContext.createDataFrame(childRDD, schema)
-  }
-
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
