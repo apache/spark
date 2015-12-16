@@ -2413,7 +2413,7 @@ setMethod("str",
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlCtx, path)
+#' df <- read.json(sqlCtx, path)
 #' drop(df, "col1")
 #' drop(df, c("col1", "col2"))
 #' drop(df, df$col1)
