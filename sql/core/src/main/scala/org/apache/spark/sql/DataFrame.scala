@@ -161,23 +161,16 @@ class DataFrame private[sql](
   }
 
   /**
-    * Compose the string representing rows for output
-    */
-  def showString(): String = {
-    showString(20)
-  }
-
-  /**
    * Compose the string representing rows for output
-   * @param numRows Number of rows to show
+   * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
    */
-  def showString(numRows: Int, truncate: Boolean = true): String = {
-    val _numRows = numRows.max(0)
+  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+    val numRows = _numRows.max(0)
     val sb = new StringBuilder
-    val takeResult = take(_numRows + 1)
-    val hasMoreData = takeResult.length > _numRows
-    val data = takeResult.take(_numRows)
+    val takeResult = take(numRows + 1)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
     val numCols = schema.fieldNames.length
 
     // For array values, replace Seq and Array with square brackets
@@ -231,10 +224,10 @@ class DataFrame private[sql](
 
     sb.append(sep)
 
-    // For Data that has more than "_numRows" records
+    // For Data that has more than "numRows" records
     if (hasMoreData) {
-      val rowsString = if (_numRows == 1) "row" else "rows"
-      sb.append(s"only showing top $_numRows $rowsString\n")
+      val rowsString = if (numRows == 1) "row" else "rows"
+      sb.append(s"only showing top $numRows $rowsString\n")
     }
 
     sb.toString()
