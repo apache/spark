@@ -49,7 +49,7 @@ private[spark] class IndexShuffleBlockResolver(
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
   private val indexCache = new ShuffleIndexCache(
-    conf.getSizeAsBytes("spark.shuffle.index.cacheSize","1m").toInt)
+    conf.getSizeAsBytes("spark.shuffle.index.cacheSize", "1m").toInt)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
