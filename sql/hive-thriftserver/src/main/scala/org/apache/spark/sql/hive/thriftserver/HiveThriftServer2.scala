@@ -57,7 +57,7 @@ object HiveThriftServer2 extends Logging {
     val server = new HiveThriftServer2(sqlContext)
     server.init(sqlContext.hiveconf)
     server.start()
-    if(SparkSQLEnv.hiveContext.hiveconf.getBoolVar(
+    if (SparkSQLEnv.hiveContext.hiveconf.getBoolVar(
       ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)) {
       invoke(classOf[HiveServer2], server, "addServerInstanceToZooKeeper",
         classOf[HiveConf] -> SparkSQLEnv.hiveContext.hiveconf)
@@ -89,7 +89,7 @@ object HiveThriftServer2 extends Logging {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
       server.init(SparkSQLEnv.hiveContext.hiveconf)
       server.start()
-      if(SparkSQLEnv.hiveContext.hiveconf.getBoolVar(
+      if (SparkSQLEnv.hiveContext.hiveconf.getBoolVar(
         ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)) {
         invoke(classOf[HiveServer2], server, "addServerInstanceToZooKeeper",
           classOf[HiveConf] -> SparkSQLEnv.hiveContext.hiveconf)
