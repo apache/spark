@@ -494,15 +494,6 @@ class Word2VecModel private[spark] (
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
 
-  /**
-   * get the built vocabulary from the input
-   * this is useful for getting the whole vocabulary to join with other data or filtering other data
-   * @return a map of word to its index
-   */
-  def getVocabulary: Map[String, Int] = {
-    wordIndex
-  }
-
   override protected def formatVersion = "1.0"
 
   @Since("1.4.0")
@@ -583,16 +574,6 @@ class Word2VecModel private[spark] (
     }
   }
 
-  /**
-   * get word vector array. length is vocabularySize*vectorSize
-   * this is useful for batch outputting of vectors,
-   * way much faster than use getVectors() one by one
-   * @return the array of word vectors,
-   *         need to split it by vectorSize to get each individual vector
-   */
-  def getWordVectors: Array[Float] = {
-    wordVectors
-  }
 }
 
 @Since("1.4.0")
