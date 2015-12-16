@@ -254,7 +254,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         val id = offer.getId.getValue
         if (meetsConstraints) {
-          if (isOfferSatisfiesRequirements(meetsConstraints, slaveId, mem, cpus, sc)) {
+          if (isOfferSatisfiesRequirements(slaveId, mem, cpus, sc)) {
             // Launch an executor on the slave
             val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
             totalCoresAcquired += cpusToUse
@@ -304,9 +304,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
     // ToDo: Abstract out each condition and log them.
-  def isOfferSatisfiesRequirements(meetsConstraints: Boolean,
-                                slaveId: String, mem: Double,
-                                cpusOffered: Int, sc: SparkContext): Boolean = {
+  def isOfferSatisfiesRequirements(slaveId: String, mem: Double, cpusOffered: Int,
+                                   sc: SparkContext): Boolean = {
       val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
       val meetsCPURequirements = cpusOffered >= 1
       val needMoreCores = totalCoresAcquired < maxCores
@@ -317,7 +316,6 @@ private[spark] class CoarseMesosSchedulerBackend(
       executorNotRunningOnSlave &&
       taskOnEachSlaveLessThanExecutorLimit &&
       needMoreCores &&
-      meetsConstraints &&
       meetsMemoryRequirements &&
       meetsCPURequirements &&
       healthySlave
