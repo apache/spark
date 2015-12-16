@@ -20,17 +20,18 @@ package org.apache.spark.sql.catalyst.encoders
 import java.util.concurrent.ConcurrentMap
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.{AnalysisException, Encoder}
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
-import org.apache.spark.sql.catalyst.{JavaTypeInference, InternalRow, ScalaReflection}
-import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.sql.{AnalysisException, Encoder}
+import org.apache.spark.util.Utils
 
 /**
  * A factory for constructing encoders that convert objects and primitives to and from the
@@ -284,6 +285,7 @@ case class ExpressionEncoder[T](
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     SimpleAnalyzer.checkAnalysis(analyzedPlan)
+    checkNullability(schema)
     val optimizedPlan = SimplifyCasts(analyzedPlan)
 
     // In order to construct instances of inner classes (for example those declared in a REPL cell),
@@ -302,6 +304,18 @@ case class ExpressionEncoder[T](
 
         n.copy(outerPointer = Some(Literal.fromObject(outer)))
     })
+  }
+
+  private def checkNullability(output: Seq[Attribute]): Unit = {
+    val logicalPlanSchema = StructType.fromAttributes(output)
+
+    // Checks for schema nullability
+    if (this.schema != logicalPlanSchema && this.schema.sameType(logicalPlanSchema)) {
+      throw new AnalysisException(
+        s"""Dataset nullability doesn't conform to the underlying logical plan:
+            >${sideBySide(logicalPlanSchema.treeString, this.schema.treeString).mkString("\n")}
+         """.stripMargin('>'))
+    }
   }
 
   /**
