@@ -606,9 +606,8 @@ class SQLContext private[sql](
     val className = beanClass.getName
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    val projection = UnsafeProjection.create(attrSeq)
     DataFrame(self,
-      LocalRelation(attrSeq, rows.toSeq.map(projection(_).copy().asInstanceOf[UnsafeRow])))
+      LocalRelation.fromInternalRows(attrSeq, rows.toSeq))
   }
 
 

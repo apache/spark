@@ -37,8 +37,9 @@ object LocalRelation {
 
   def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
     val schema = StructType.fromAttributes(output)
-    val encoder = RowEncoder(schema)
-    LocalRelation(output, data.map(encoder.toRow(_).copy().asInstanceOf[UnsafeRow]))
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val internalRows = data.map(converter(_).asInstanceOf[InternalRow])
+    fromInternalRows(output, internalRows)
   }
 
   def fromProduct[T <: Product : ExpressionEncoder](

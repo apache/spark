@@ -446,68 +446,40 @@ object ScalaReflection extends ScalaReflection {
           optType match {
             // For primitive types we must manually unbox the value of the object.
             case t if t <:< definitions.IntTpe =>
-              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Integer]), inputObject)
-              expressions.If(
-                IsNull(unwrapped),
-                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                Invoke(
-                  unwrapped,
-                  "intValue",
-                  IntegerType))
+              Invoke(
+                UnwrapOption(ObjectType(classOf[java.lang.Integer]), inputObject),
+                "intValue",
+                IntegerType)
             case t if t <:< definitions.LongTpe =>
-              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Long]), inputObject)
-              expressions.If(
-                IsNull(unwrapped),
-                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                Invoke(
-                  unwrapped,
-                  "longValue",
-                  LongType))
+              Invoke(
+                UnwrapOption(ObjectType(classOf[java.lang.Long]), inputObject),
+                "longValue",
+                LongType)
             case t if t <:< definitions.DoubleTpe =>
-              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Double]), inputObject)
-              expressions.If(
-                IsNull(unwrapped),
-                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                Invoke(
-                  unwrapped,
-                  "doubleValue",
-                  DoubleType))
+              Invoke(
+                UnwrapOption(ObjectType(classOf[java.lang.Double]), inputObject),
+                "doubleValue",
+                DoubleType)
             case t if t <:< definitions.FloatTpe =>
-              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Float]), inputObject)
-              expressions.If(
-                IsNull(unwrapped),
-                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                Invoke(
-                  unwrapped,
-                  "floatValue",
-                  FloatType))
+              Invoke(
+                UnwrapOption(ObjectType(classOf[java.lang.Float]), inputObject),
+                "floatValue",
+                FloatType)
             case t if t <:< definitions.ShortTpe =>
-              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Short]), inputObject)
-              expressions.If(
-                IsNull(unwrapped),
-                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                Invoke(
-                  unwrapped,
-                  "shortValue",
-                  ShortType))
+              Invoke(
+                UnwrapOption(ObjectType(classOf[java.lang.Short]), inputObject),
+                "shortValue",
+                ShortType)
             case t if t <:< definitions.ByteTpe =>
-              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Byte]), inputObject)
-              expressions.If(
-                IsNull(unwrapped),
-                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                Invoke(
-                 unwrapped,
-                  "byteValue",
-                  ByteType))
+              Invoke(
+                UnwrapOption(ObjectType(classOf[java.lang.Byte]), inputObject),
+                "byteValue",
+                ByteType)
             case t if t <:< definitions.BooleanTpe =>
-              val unwrapped = UnwrapOption(ObjectType(classOf[java.lang.Boolean]), inputObject)
-              expressions.If(
-                IsNull(unwrapped),
-                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                Invoke(
-                  unwrapped,
-                  "booleanValue",
-                  BooleanType))
+              Invoke(
+                UnwrapOption(ObjectType(classOf[java.lang.Boolean]), inputObject),
+                "booleanValue",
+                BooleanType)
 
             // For non-primitives, we can just extract the object from the Option and then recurse.
             case other =>
