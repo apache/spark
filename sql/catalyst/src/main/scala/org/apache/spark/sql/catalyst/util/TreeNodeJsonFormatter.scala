@@ -24,11 +24,14 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.util.Utils
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans._
 
 object TreeNodeJsonFormatter {
 
@@ -78,14 +81,24 @@ object TreeNodeJsonFormatter {
     case f: Float => JDouble(f)
     case d: Double => JDouble(d)
     case s: String => JString(s)
+    case s: UTF8String => JString(s.toString)
     case dt: DataType => dt.jsonValue
     case m: Metadata => m.jsonValue
     case e: ExprId => ("id" -> e.id) ~ ("jvmId" -> e.jvmId.toString)
     case s: SortDirection => s.toString
+    case j: JoinType => j.toString
+    case a: AggregateMode => a.toString
     case n: TreeNode[_] => jsonValue(n)
     case o: Option[_] => o.map(parseToJson).getOrElse(JNull)
     case t: Seq[_] => JArray(t.map(parseToJson).toList)
-    case _ => throw new RuntimeException(s"Do not support type ${obj.getClass}.")
+    case _ =>
+      val clsName = obj.getClass.getName
+      if (clsName.contains("RDD") || clsName.contains("SQLContext") ||
+        clsName.contains("Relation")) {
+        JNull
+      } else {
+        throw new RuntimeException(s"Do not support type ${obj.getClass}.")
+      }
   }
 
   def fromJSON(json: String): TreeNode[_] = {
@@ -157,21 +170,34 @@ object TreeNodeJsonFormatter {
         value.asInstanceOf[JDouble].num: java.lang.Double
 
       case t if t <:< localTypeOf[java.lang.String] => value.asInstanceOf[JString].s
+      case t if t <:< localTypeOf[UTF8String] =>
+        UTF8String.fromString(value.asInstanceOf[JString].s)
       case t if t <:< localTypeOf[DataType] => DataType.parseDataType(value)
       case t if t <:< localTypeOf[Metadata] => Metadata.fromJObject(value.asInstanceOf[JObject])
       case t if t <:< localTypeOf[ExprId] =>
         val JInt(id) = value \ "id"
         val JString(jvmId) = value \ "jvmId"
         ExprId(id.toInt, UUID.fromString(jvmId))
-      case t if t <:< localTypeOf[SortDirection] =>
-        val JString(direction) = value
-        if (direction == Ascending.toString) {
-          Ascending
-        } else if (direction == Descending.toString) {
-          Descending
-        } else {
-          throw new RuntimeException(s"$direction is not a valid SortDirection string.")
+      case t if t <:< localTypeOf[SortDirection] => value.asInstanceOf[JString].s match {
+          case "Ascending" => Ascending
+          case "Descending" => Descending
+          case other => throw new RuntimeException(s"$other is not a valid SortDirection string.")
         }
+      case t if t <:< localTypeOf[JoinType] => value.asInstanceOf[JString].s match {
+          case "Inner" => Inner
+          case "LeftOuter" => LeftOuter
+          case "RightOuter" => RightOuter
+          case "FullOuter" => FullOuter
+          case "LeftSemi" => LeftSemi
+          case other => throw new RuntimeException(s"$other is not a valid JoinType string.")
+      }
+      case t if t <:< localTypeOf[AggregateMode] => value.asInstanceOf[JString].s match {
+        case "Partial" => Partial
+        case "PartialMerge" => PartialMerge
+        case "Final" => Final
+        case "Complete" => Complete
+        case other => throw new RuntimeException(s"$other is not a valid AggregateMode string.")
+      }
       case t if t <:< localTypeOf[TreeNode[_]] => value match {
         case JInt(i) => children(i.toInt)
         case arr: JArray => reconstruct(arr)
@@ -193,6 +219,7 @@ object TreeNodeJsonFormatter {
         case JInt(i) => i
         case JDouble(d) => d: java.lang.Double
         case JString(s) => s
+        case JNull => null
         case _ => throw new RuntimeException(s"Do not support type $expectedType.")
       }
     }

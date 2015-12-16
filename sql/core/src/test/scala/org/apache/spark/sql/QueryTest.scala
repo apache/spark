@@ -23,8 +23,10 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.Queryable
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
 
 abstract class QueryTest extends PlanTest {
 
@@ -121,6 +123,31 @@ abstract class QueryTest extends PlanTest {
              |
              |${stackTraceToString(ae)}
              |""".stripMargin)
+    }
+
+    import TreeNodeJsonFormatter._
+    val logicalPlan = analyzedDF.queryExecution.analyzed
+    var logicalRDDs = logicalPlan.collect { case l: LogicalRDD => l }
+    var logicalRelations = logicalPlan.collect { case l: LogicalRelation => l }
+    try {
+      val jsonBackPlan = fromJSON(toJSON(logicalPlan)).asInstanceOf[LogicalPlan]
+      val normalized = jsonBackPlan transformDown {
+        case l: LogicalRDD =>
+          val replace = logicalRDDs.head
+          logicalRDDs = logicalRDDs.drop(1)
+          replace
+        case l: LogicalRelation =>
+          val replace = logicalRelations.head
+          logicalRelations = logicalRelations.drop(1)
+          replace
+      }
+      assert(logicalRDDs.isEmpty)
+      assert(logicalRelations.isEmpty)
+      comparePlans(logicalPlan, normalized)
+    } catch {
+      case e =>
+        println(logicalPlan.treeString)
+        throw e
     }
 
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
