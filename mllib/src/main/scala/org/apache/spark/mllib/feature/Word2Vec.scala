@@ -533,35 +533,18 @@ class Word2VecModel private[spark] (
    */
   @Since("1.1.0")
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
-    findSynonyms(word, num, false)
-  }
-
-  /**
-   * Find synonyms of a word
-   * @param word a word
-   * @param num number of synonyms to find
-   * @param norm a flag to tell whether to output normalized cosineSimilarity or not.
-   *             it will not change order, just for convenience of caller
-   *      e.g. set up threshold for filtering purpose.
-   * @return array of (word, cosineSimilarity)
-   */
-  def findSynonyms(word: String, num: Int, norm: Boolean ): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector, num, norm)
+    findSynonyms(vector, num)
   }
 
   /**
    * Find synonyms of the vector representation of a word
    * @param vector vector representation of a word
    * @param num number of synonyms to find
-   * @param norm an optional flag to tell whether to output normalized cosineSimilarity or not.
-   *             it will not change order, just for convinience of caller
-   *      e.g. set up threshold for filtering purpose.
-   *      default value is false for backward compatibility
    * @return array of (word, cosineSimilarity)
    */
   @Since("1.1.0")
-  def findSynonyms(vector: Vector, num: Int, norm: Boolean = false): Array[(String, Double)] = {
+  def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
     // TODO: optimize top-k
     val fVector = vector.toArray.map(_.toFloat)
@@ -575,15 +558,9 @@ class Word2VecModel private[spark] (
     // Need not divide with the norm of the given vector since it is constant.
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
-    var vecNorm = 1f
-    if (norm) {
-      vecNorm = blas.snrm2(vectorSize, fVector, 1)
-    }
+    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
     while (ind < numWords) {
       cosVec(ind) /= wordVecNorms(ind)
-      if (norm) {
-        cosVec(ind) /= vecNorm
-      }
       ind += 1
     }
     wordList.zip(cosVec)
@@ -591,6 +568,7 @@ class Word2VecModel private[spark] (
       .sortBy(- _._2)
       .take(num + 1)
       .tail
+      .map(v => (v._1, v._2 / vecNorm))
       .toArray
   }
 
