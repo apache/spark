@@ -271,8 +271,10 @@ public class ExternalShuffleBlockResolver {
   private ManagedBuffer getSortBasedShuffleBlockData(
     ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
     try {
+      File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+          "shuffle_" + shuffleId + "_" + mapId + "_0.index");
       ShuffleIndexRecord info =
-        indexCache.getIndexInformation(executor, shuffleId, mapId, reduceId);
+        indexCache.getIndexInformation(indexFile, shuffleId, mapId, reduceId);
       return new FileSegmentManagedBuffer(
         conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,

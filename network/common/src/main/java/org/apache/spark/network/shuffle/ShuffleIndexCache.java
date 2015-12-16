@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.network.shuffle;
 
 import java.io.DataInputStream;
@@ -16,7 +33,6 @@ import com.google.common.base.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
 
 /**
@@ -30,10 +46,16 @@ public class ShuffleIndexCache {
   private final LinkedBlockingQueue<ShuffleMapId> queue = new LinkedBlockingQueue<ShuffleMapId>();
   private final int totalMemoryAllowed;
   private AtomicInteger totalMemoryUsed = new AtomicInteger();
+  private final boolean isIndexCache;
 
   public ShuffleIndexCache(int totalMemoryAllowed) {
     this.indexCache = new ConcurrentHashMap<ShuffleMapId, IndexInformation>();
     this.totalMemoryAllowed = totalMemoryAllowed;
+    if (totalMemoryAllowed > 0) {
+      this.isIndexCache = true;
+    } else {
+      this.isIndexCache = false;
+    }
     logger.info("IndexCache created with max memory = {}", totalMemoryAllowed);
   }
 
@@ -42,13 +64,13 @@ public class ShuffleIndexCache {
    * It reads the index file into cache if it is not already present.
    */
   public ShuffleIndexRecord getIndexInformation(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) throws IOException {
-    if (totalMemoryAllowed > 0) {
+    File indexFile, int shuffleId, int mapId, int reduceId) throws IOException {
+    if (isIndexCache) {
       ShuffleMapId shuffleMapId = new ShuffleMapId(shuffleId, mapId);
       IndexInformation info = indexCache.get(shuffleMapId);
 
       if (info == null) {
-        info = readIndexFileToCache(executor, shuffleMapId);
+        info = readIndexFileToCache(indexFile, shuffleMapId);
       } else {
         synchronized(info) {
           while (isUnderConstruction(info)) {
@@ -64,19 +86,16 @@ public class ShuffleIndexCache {
       if(info.getLength() == 0 || info.getLength() <= reduceId + 1) {
         throw new IOException("Invalid request " + " shuffleMapId = " + shuffleMapId +
           " reduceId = " + reduceId + " Index Info Length = " + info.getLength() +
-            " index file = " + getIndexFile(executor, mapId, reduceId));
+            " index file = " + indexFile);
       }
 
       return info.getIndex(reduceId);
     } else {
-      return this.readIndexFile(executor, shuffleId, mapId, reduceId);
+      return this.readIndexFile(indexFile, reduceId);
     }
   }
 
-  public ShuffleIndexRecord readIndexFile(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) throws IOException {
-    File indexFile = this.getIndexFile(executor, shuffleId, mapId);
-
+  public ShuffleIndexRecord readIndexFile(File indexFile, int reduceId) throws IOException {
     DataInputStream in = null;
     try {
       in = new DataInputStream(new FileInputStream(indexFile));
@@ -95,7 +114,7 @@ public class ShuffleIndexCache {
    * Get the index information from index file and then put index information into cache.
    */
   private IndexInformation readIndexFileToCache(
-    ExecutorShuffleInfo executor, ShuffleMapId shuffleMapId) throws IOException {
+    File indexFile, ShuffleMapId shuffleMapId) throws IOException {
     IndexInformation info;
     IndexInformation newInd = new IndexInformation();
     if ((info = indexCache.putIfAbsent(shuffleMapId, newInd)) != null) {
@@ -113,7 +132,6 @@ public class ShuffleIndexCache {
     }
 
     logger.debug("IndexCache: ShuffleMapId " + shuffleMapId + " not found") ;
-    File indexFile = this.getIndexFile(executor, shuffleMapId.shuffleId, shuffleMapId.mapId);
 
     LongBuffer tmp = null;
     DataInputStream in = null;
@@ -160,11 +178,6 @@ public class ShuffleIndexCache {
     synchronized(info) {
       return (null == info.offsets);
     }
-  }
-
-  private File getIndexFile(ExecutorShuffleInfo executor, int shuffleId, int mapId) {
-    return ExternalShuffleBlockResolver.getFile(executor.localDirs, executor.subDirsPerLocalDir,
-      "shuffle_" + shuffleId + "_" + mapId + "_0.index");
   }
 
   /**
@@ -247,5 +260,3 @@ public class ShuffleIndexCache {
     }
   }
 }
-
-
