@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 
 /**
@@ -177,15 +177,6 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     }
   }
 
-  private def addShutdownHook() {
-    Runtime.getRuntime.addShutdownHook(new Thread("ExternalBlockStore shutdown hook") {
-      override def run(): Unit = Utils.logUncaughtExceptions {
-        logDebug("Shutdown hook called")
-        externalBlockManager.map(_.shutdown())
-      }
-    })
-  }
-
   // Create concrete block manager and fall back to Tachyon by default for backward compatibility.
   private def createBlkManager(): Option[ExternalBlockManager] = {
     val clsName = blockManager.conf.getOption(ExternalBlockStore.BLOCK_MANAGER_NAME)
@@ -196,7 +187,10 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
         .newInstance()
         .asInstanceOf[ExternalBlockManager]
       instance.init(blockManager, executorId)
-      addShutdownHook();
+      ShutdownHookManager.addShutdownHook { () =>
+        logDebug("Shutdown hook called")
+        externalBlockManager.map(_.shutdown())
+      }
       Some(instance)
     } catch {
       case NonFatal(t) =>
