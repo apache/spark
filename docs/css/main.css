@@ -40,17 +40,14 @@
 }
 
 body .container-wrapper {
-  position: absolute;
-  width: 100%;
-  display: flex;
-}
-
-body #content {
+  background-color: #FFF;
+  color: #1D1F22;
+  max-width: 1024px;
+  margin-top: 10px;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 15px;
   position: relative;
-
-  line-height: 1.6; /* Inspired by Github's wiki style */
-  background-color: white;
-  padding-left: 15px;
 }
 
 .title {
@@ -99,6 +96,24 @@ a:hover code {
 
 .container {
   max-width: 914px;
+}
+
+.content {
+  z-index: 1;
+  position: relative;
+  background-color: #FFF;
+  max-width: 914px;
+  line-height: 1.6; /* Inspired by Github's wiki style */
+  padding-left: 15px;
+}
+
+.content-with-sidebar {
+  z-index: 1;
+  position: relative;
+  background-color: #FFF;
+  max-width: 914px;
+  line-height: 1.6; /* Inspired by Github's wiki style */
+  padding-left: 30px;
 }
 
 .dropdown-menu {
@@ -171,24 +186,104 @@ a.anchorjs-link:hover { text-decoration: none; }
  * The left navigation bar.
  */
 .left-menu-wrapper {
-  position: absolute;
-  height: 100%;
-
-  width: 256px;
-  margin-top: -20px;
-  padding-top: 20px;
+  margin-left: 0px;
+  margin-right: 0px;
   background-color: #F0F8FC;
+  border-top-width: 0px;
+  border-left-width: 0px;
+  border-bottom-width: 0px;
+  margin-top: 0px;
+  width: 210px;
+  float: left;
+  position: absolute;
 }
 
 .left-menu {
-  position: fixed;
-  max-width: 350px;
-
-  padding-right: 10px;
-  width: 256px;
+  padding: 0px;
+  width: 199px;
 }
 
 .left-menu h3 {
   margin-left: 10px;
   line-height: 30px;
+}
+
+/**
+ * The collapsing button for the navigation bar.
+ */
+.nav-trigger {
+  position: fixed;
+  clip: rect(0, 0, 0, 0);
+}
+
+.nav-trigger + label:after {
+  content: '»';
+}
+
+label {
+  z-index: 10;
+}
+
+label[for="nav-trigger"] {
+  position: fixed;
+  margin-left: 0px;
+  padding-top: 100px;
+  padding-left: 5px;
+  width: 10px;
+  height: 80%;
+  cursor: pointer;
+  background-size: contain;
+  background-color: #D4F0FF;
+}
+
+label[for="nav-trigger"]:hover {
+  background-color: #BEE9FF;
+}
+
+.nav-trigger:checked + label {
+  margin-left: 200px;
+}
+
+.nav-trigger:checked + label:after {
+  content: '«';
+}
+
+.nav-trigger:checked ~ div.content-with-sidebar {
+  margin-left: 200px;
+}
+
+.nav-trigger + label, div.content-with-sidebar {
+  transition: left 0.4s;
+}
+
+/**
+ * Rules to collapse the menu automatically when the screen becomes too thin.
+ */
+
+@media all and (max-width: 780px) {
+
+  div.content-with-sidebar {
+    margin-left: 200px;
+  }
+  .nav-trigger + label:after {
+    content: '«';
+  }
+  label[for="nav-trigger"] {
+    margin-left: 200px;
+  }
+
+  .nav-trigger:checked + label {
+    margin-left: 0px;
+  }
+  .nav-trigger:checked + label:after {
+    content: '»';
+  }
+  .nav-trigger:checked ~ div.content-with-sidebar {
+    margin-left: 0px;
+  }
+
+  div.container-index {
+    margin-left: -215px;
+  }
+
 }
