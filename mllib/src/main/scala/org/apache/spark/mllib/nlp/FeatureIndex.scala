@@ -16,22 +16,17 @@
  */
 package org.apache.spark.mllib.nlp
 
-import java.io.{ByteArrayOutputStream, FileInputStream, FileOutputStream, File}
-
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-
-import scala.StringBuilder
-import scala.collection.mutable
-import scala.io.Source._
 import scala.collection.mutable.ArrayBuffer
+
 
 private[mllib] class FeatureIndex extends Serializable {
   var maxid: Int = 0
   var alpha: ArrayBuffer[Double] = ArrayBuffer[Double]()
   var alpha_float: ArrayBuffer[Float] = ArrayBuffer[Float]()
   var cost_factor: Double = 0.0
-  var xsize: Integer = 0
+  var xsize: Int = 0
   var check_max_xsize: Boolean = false
   var max_xsize: Int = 0
   var unigram_templs: ArrayBuffer[String] = new ArrayBuffer[String]()
@@ -70,10 +65,9 @@ private[mllib] class FeatureIndex extends Serializable {
 
   /**
    * Read one template file
-   * @param template the unit template file
+   * @param lines the unit template file
    */
-  def openTemplate(template: String): Unit = {
-    val lines = template.split("\n")
+  def openTemplate(lines: Array[String]): Unit = {
     var i: Int = 0
     while (i < lines.length) {
       if (lines(i).charAt(0) == 'U') {
@@ -90,11 +84,10 @@ private[mllib] class FeatureIndex extends Serializable {
    * Parse the feature file. If Sentences or paragraphs are defined as a unit
    * for processing, they should be saved in a string. Multiple units are saved
    * in the RDD.
-   * @param train the unit source file
+   * @param lines the unit source file
    * @return
    */
-  def openTagSet(train: String): FeatureIndex = {
-    val lines = train.split("\n")
+  def openTagSet(lines: Array[String]): FeatureIndex = {
     var lineHead = lines(0).charAt(0)
     var tag: Array[String] = null
     var i: Int = 0
@@ -117,7 +110,7 @@ private[mllib] class FeatureIndex extends Serializable {
         if (y(i) == y(j)) {
           y.remove(j)
         }
-        while (y(i) == y(j)) {
+        while (j < y.size && y(i) == y(j)) {
           y.remove(j)
         }
         j += 1
@@ -141,7 +134,7 @@ private[mllib] class FeatureIndex extends Serializable {
     }
   }
 
-  def shrink(freq: Integer): Unit = {
+  def shrink(freq: Int): Unit = {
     var newMaxId: Int = 0
     val key: String = null
     val count: Int = 0
@@ -215,7 +208,7 @@ private[mllib] class FeatureIndex extends Serializable {
    */
   def buildFeatures(tagger: Tagger): Unit = {
     var os: String = null
-    var id: Integer = 0
+    var id: Int = 0
     var cur: Int = 0
     var it: Int = 0
     featureCacheH.append(0)
@@ -247,10 +240,13 @@ private[mllib] class FeatureIndex extends Serializable {
     }
   }
 
-  def getId(src: String): Integer = {
+  def getId(src: String): Int = {
     var n: Int = maxid
     var idx: Int = 0
     var fid: Int = 0
+    if(src == null) {
+      return 0
+    }
     if (dic.get(src).isEmpty) {
       dic.update(src, (maxid, 1))
       n = maxid
@@ -273,7 +269,7 @@ private[mllib] class FeatureIndex extends Serializable {
     }
   }
 
-  def applyRule(src: String, idx: Integer, tagger: Tagger): String = {
+  def applyRule(src: String, idx: Int, tagger: Tagger): String = {
     var dest: String = ""
     var r: String = ""
     var i: Int = 0
@@ -294,11 +290,11 @@ private[mllib] class FeatureIndex extends Serializable {
     dest
   }
 
-  def getIndex(src: String, pos: Integer, tagger: Tagger): String = {
-    var neg: Integer = 1
-    var col: Integer = 0
-    var row: Integer = 0
-    var idx: Integer = 0
+  def getIndex(src: String, pos: Int, tagger: Tagger): String = {
+    var neg: Int = 1
+    var col: Int = 0
+    var row: Int = 0
+    var idx: Int = 0
     var rtn: String = null
     var encol: Boolean = false
     var i: Int = 0
@@ -346,7 +342,7 @@ private[mllib] class FeatureIndex extends Serializable {
     alpha = _alpha
   }
 
-  def initAlpha(size: Integer): Unit = {
+  def initAlpha(size: Int): Unit = {
     var i: Int = 0
     while (i <= size + 20) {
       alpha.append(0.0)
@@ -399,13 +395,13 @@ private[mllib] class FeatureIndex extends Serializable {
     p
   }
 
-  def saveModelTxt(sc: SparkContext): ArrayBuffer[String] = {
+  def saveModelTxt: Array[String] = {
     var y_str: String = ""
     var i: Int = 0
-    var templ_str: String = ""
+    var template: String = ""
     val keys: ArrayBuffer[String] = new ArrayBuffer[String]()
     val values: ArrayBuffer[Int] = new ArrayBuffer[Int]()
-    val contents: ArrayBuffer[String] = new ArrayBuffer[String]()
+    val contents: ArrayBuffer[String] = new ArrayBuffer[String]
     while (i < y.size) {
       y_str += y(i)
       y_str += '\0'
@@ -413,106 +409,91 @@ private[mllib] class FeatureIndex extends Serializable {
     }
     i = 0
     while (i < unigram_templs.size) {
-      templ_str += unigram_templs(i)
-      templ_str += "\0"
+      template += unigram_templs(i)
+      template += "\0"
       i += 1
     }
     i = 0
     while (i < bigram_templs.size) {
-      templ_str += bigram_templs(i)
-      templ_str += "\0"
+      template += bigram_templs(i)
+      template += "\0"
       i += 1
     }
-    while ((y_str.length + templ_str.length) % 4 != 0) {
-      templ_str += "\0"
+    while ((y_str.length + template.length) % 4 != 0) {
+      template += "\0"
     }
 
     dic.foreach { (pair) => keys.append(pair._1) }
     dic.foreach { (pair) => values.append(pair._2._1) }
 
-    contents.append("maxid=" + maxid + "\n")
-    contents.append("xsize=" + xsize + "\n")
-    contents.append(y_str + "\n")
-    contents.append(templ_str + "\n")
+    contents.append("maxid=" + maxid)
+    contents.append("xsize=" + xsize)
+    contents.append(y_str)
+    contents.append(template)
     i = 0
     while (i < keys.size) {
-      contents.append(keys(i) + " " + values(i) + "\n")
+      contents.append(keys(i) + " " + values(i))
       i += 1
     }
     i = 0
     while (i < maxid) {
-      contents.append(alpha(i) + "\n")
+      contents.append(alpha(i).toString)
       i += 1
     }
-    contents
+    contents.toArray
   }
 
-  def saveModel(): String = {
-    var contents: String = ""
+  def saveModel: Array[String] = {
+    val contents: ArrayBuffer[String] = new ArrayBuffer[String]
     var i: Int = 0
-    while (i < maxid) {
-      contents += alpha(i) + "\n"
-      i += 1
-    }
-    contents += "a\n"
-    i = 0
+
     while (i < featureCache.size) {
-      contents += featureCache(i) + "\n"
+      contents.append(featureCache(i).toString)
       i += 1
     }
-    contents += "b\n"
+    contents.append("FeatureCacheHeader")
     i = 0
     while (i < featureCacheH.size) {
-      contents += featureCacheH(i) + "\n"
+      contents.append(featureCacheH(i).toString)
       i += 1
     }
-    contents += "c"
-    contents
+    i = 0
+    contents.append("Alpha")
+    while (i < maxid) {
+      contents.append(alpha(i).toString)
+      i += 1
+    }
+    contents.append("Trace")
+    contents.appendAll(saveModelTxt)
+    contents.toArray
   }
 
-  def openFromArray(contents: String): Unit = {
+  def openFromArray(contents: Array[String]): Unit = {
     var i: Int = 0
-    var j: Int = 0
-    var d: String = ""
-    var readAlpha: Boolean = true
-    var readFCache: Boolean = false
+    var readFCache: Boolean = true
     var readFCacheH: Boolean = false
+    var readAlpha: Boolean = false
     while (i < contents.length) {
-      if (contents(i) == 'a') {
-        readAlpha = false
-        readFCache = true
-        i += 2
-      } else if (contents(i) == 'b') {
+      if (contents(i) == "FeatureCacheHeader") {
         readFCache = false
         readFCacheH = true
-        i += 2
+        i += 1
+      } else if (contents(i) == "Alpha") {
+        readAlpha = true
+        readFCacheH = false
+        i += 1
+      } else if (contents(i) == "Trace") {
+        i = contents.length + 1 // break
+        readFCache = false
+        readFCacheH = false
+        readAlpha = false
       }
-      if (readAlpha) {
-        if (contents(i) != '\n') {
-          d += contents(i)
-        } else {
-          alpha.append(d.toDouble)
-          d = ""
-          j += 1
-        }
-      } else if (readFCache) {
-        j = 0
-        if (contents(i) != '\n') {
-          d += contents(i)
-        } else {
-          featureCache.append(d.toInt)
-          d = ""
-          j += 1
-        }
+      if (readFCache) {
+        featureCache.append(contents(i).toInt)
       } else if (readFCacheH) {
-        j = 0
-        if (contents(i) != '\n') {
-          d += contents(i)
-        } else {
-          featureCacheH.append(d.toInt)
-          d = ""
-          j += 1
-        }
+        featureCacheH.append(contents(i).toInt)
+      } else if (readAlpha) {
+        alpha.append(contents(i).toDouble)
       }
       i += 1
     }

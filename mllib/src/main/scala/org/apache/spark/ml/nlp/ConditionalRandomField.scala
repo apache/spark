@@ -18,25 +18,23 @@
 package org.apache.spark.ml.nlp
 
 import org.apache.spark.mllib.nlp.{CRF, CRFModel}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, DataFrame}
 
 class ConditionalRandomField {
   def train(template: DataFrame,
             sentences: DataFrame): CRFModel = {
     val t = template.select().
-      map { case Row(template: String) => template }
-    val src = sentences.select().map { case Row(s: String) => s }
-    val resultRDD: RDD[String] = CRF.runCRF(t, src)
-    val model = new CRFModel(resultRDD)
+      map { case Row(template: Array[String]) => template }
+    val src = sentences.select().map { case Row(s: Array[String]) => s }
+    val model = CRF.runCRF(t, src)
     model
   }
 
   def verify(sentences: DataFrame,
              modelExp: DataFrame): CRFModel = {
-    val md = modelExp.select().map { case Row(exp: String) => exp }
-    val src = sentences.select().map { case Row(s: String) => s }
-    val result = new CRFModel(CRF.verifyCRF(src, md))
+    val md = modelExp.select().map { case Row(exp: Array[String]) => exp }
+    val src = sentences.select().map { case Row(s: Array[String]) => s }
+    val result = CRF.verifyCRF(src, md)
     result
   }
 

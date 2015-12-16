@@ -16,29 +16,24 @@
  */
 package org.apache.spark.mllib.nlp
 
-import java.io.{FileOutputStream, File}
-
-import org.apache.spark.rdd.RDD
-
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source._
 
 private[mllib] class Tagger extends Serializable {
-  var mode: Integer = 2
+  var mode: Int = 2
   // LEARN
   var vlevel: Int = 0
   var nbest: Int = 0
   var ysize: Int = 0
   var cost: Double = 0.0
   var Z: Double = 0.0
-  var feature_id: Integer = 0
-  var thread_id: Integer = 0
+  var feature_id: Int = 0
+  var thread_id: Int = 0
   var feature_idx: FeatureIndex = new FeatureIndex()
   var x: ArrayBuffer[Array[String]] = new ArrayBuffer[Array[String]]()
   var node: ArrayBuffer[ArrayBuffer[Node]] = new ArrayBuffer[ArrayBuffer[Node]]
   var penalty: ArrayBuffer[ArrayBuffer[Double]] = new ArrayBuffer[ArrayBuffer[Double]]()
-  var answer: ArrayBuffer[Integer] = new ArrayBuffer[Integer]()
-  var result: ArrayBuffer[Integer] = new ArrayBuffer[Integer]()
+  var answer: ArrayBuffer[Int] = new ArrayBuffer[Int]()
+  var result: ArrayBuffer[Int] = new ArrayBuffer[Int]()
   val MINUS_LOG_EPSILON = 50
 
   /**
@@ -54,9 +49,8 @@ private[mllib] class Tagger extends Serializable {
    * Each feature is a string in the RDD. The feature should be correspondent
    * with template file. User needs prepare the relationship beforehand.
    */
-  def read(feature: String): Tagger = {
+  def read(lines: Array[String]): Tagger = {
     var i: Int = 0
-    val lines = feature.split("\n")
     var columns: Array[String] = null
     var j: Int = 0
     while (i < lines.length) {
@@ -80,7 +74,7 @@ private[mllib] class Tagger extends Serializable {
     this
   }
 
-  def setFeatureId(id: Integer): Unit = {
+  def setFeatureId(id: Int): Unit = {
     feature_id = id
   }
 
@@ -320,21 +314,20 @@ private[mllib] class Tagger extends Serializable {
     viterbi()
   }
 
-  def createOutput(): String = {
+  def createOutput(): Array[String] = {
     var i: Int = 0
     var j: Int = 0
-    var content: String = null
+    var content: ArrayBuffer[String] = new ArrayBuffer[String]
     while (i < x.size) {
       while (j < x(i).length) {
-        content += x(i)(j) + "|"
+        content.append(x(i)(j) + "|")
         j += 1
       }
       content += feature_idx.y(result(i))
       i += 1
       j = 0
-      content += "\n"
     }
-    content
+    content.toArray
   }
 
 }

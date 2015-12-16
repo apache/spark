@@ -23,7 +23,7 @@ private[mllib] class Path extends Serializable {
   var lnode: Node = new Node
   var cost: Double = 0.0
   var fvector: Int = 0
-  var fIdx: Integer = 0
+  var fIdx: Int = 0
   var path: Path = null
 
   def getInstance(): Path = {
@@ -36,7 +36,7 @@ private[mllib] class Path extends Serializable {
   }
 
   def calExpectation(expected: ArrayBuffer[Double], Z: Double,
-                     size: Integer, fCache: ArrayBuffer[Int],
+                     size: Int, fCache: ArrayBuffer[Int],
                      featureIdx: FeatureIndex): Unit = {
     val c: Double = math.exp(lnode.alpha + cost + rnode.beta - Z)
     var idx: Int = 0
