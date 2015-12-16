@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -610,11 +611,12 @@ class DAGScheduler(
       properties: Properties): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    waiter.awaitResult() match {
-      case JobSucceeded =>
+    Await.ready(waiter.completionFuture, atMost = Duration.Inf)
+    waiter.completionFuture.value.get match {
+      case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format
           (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
-      case JobFailed(exception: Exception) =>
+      case scala.util.Failure(exception) =>
         logInfo("Job %d failed: %s, took %f s".format
           (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
         // SPARK-8644: Include user stack trace in exceptions coming from DAGScheduler.
