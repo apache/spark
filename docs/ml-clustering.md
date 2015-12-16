@@ -51,7 +51,6 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
       <th align="left">Type(s)</th>
       <th align="left">Default</th>
       <th align="left">Description</th>
-      <th align="left">Notes</th>
     </tr>
   </thead>
   <tbody>
@@ -60,7 +59,6 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
       <td>Int</td>
       <td>"prediction"</td>
       <td>Predicted cluster center</td>
-      <td></td>
     </tr>
   </tbody>
 </table>
