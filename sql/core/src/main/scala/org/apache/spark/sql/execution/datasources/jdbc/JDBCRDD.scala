@@ -287,6 +287,7 @@ private[sql] class JDBCRDD(
     case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
     case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
     case IsNull(attr) => s"$attr IS NULL"
+    case IsNotNull(attr) => s"$attr IS NOT NULL"
     case _ => null
   }
 
