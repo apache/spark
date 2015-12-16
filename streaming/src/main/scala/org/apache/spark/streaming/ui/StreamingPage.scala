@@ -392,9 +392,15 @@ private[ui] class StreamingPage(parent: StreamingTab)
       maxX: Long,
       minY: Double,
       maxY: Double): Seq[Node] = {
+    val maxYCalculated = listener.receivedEventRateWithBatchTime.values
+      .flatMap { case streamAndRates => streamAndRates.map { case (_, eventRate) => eventRate } }
+      .reduceOption[Double](math.max)
+      .map(_.ceil.toLong)
+      .getOrElse(0L)
+
     val content = listener.receivedEventRateWithBatchTime.toList.sortBy(_._1).map {
       case (streamId, eventRates) =>
-        generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxY)
+        generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxYCalculated)
     }.foldLeft[Seq[Node]](Nil)(_ ++ _)
 
     // scalastyle:off
