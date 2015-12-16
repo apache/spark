@@ -275,13 +275,14 @@ package object dsl {
 
       def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
-      // TODO specify the output column names
       def generate(
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
-        alias: Option[String] = None): LogicalPlan =
-        Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
+        alias: Option[String] = None,
+        outputNames: Seq[String] = Nil): LogicalPlan =
+        Generate(generator, join = join, outer = outer, alias,
+          outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(
