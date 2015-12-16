@@ -84,6 +84,8 @@ defaults = {
     },
     'smtp': {
         'smtp_starttls': True,
+        'smtp_user': '',
+        'smtp_password': '',
     },
     'kerberos': {
         'ccache': '/tmp/airflow_krb5_ccache',
