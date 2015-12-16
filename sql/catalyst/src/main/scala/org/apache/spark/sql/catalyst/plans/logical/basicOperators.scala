@@ -210,6 +210,37 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
 }
 
+case class Range(
+    start: Long,
+    end: Long,
+    step: Long,
+    numSlices: Int) extends LeafNode {
+  require(step != 0, "step cannot be 0")
+  val numElements: BigInt = {
+    val safeStart = BigInt(start)
+    val safeEnd = BigInt(end)
+    if ((safeEnd - safeStart) % step == 0 || safeEnd > safeStart ^ step > 0) {
+      (safeEnd - safeStart) / step
+    } else {
+      // the remainder has the same sign with range, could add 1 more
+      (safeEnd - safeStart) / step + 1
+    }
+  }
+
+  val output: Seq[Attribute] =
+    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+  /**
+    * Computes [[Statistics]] for this plan. The default implementation assumes the output
+    * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+    * of cartesian joins.
+    *
+    * [[LeafNode]]s must override this.
+    */
+  val sizeInBytes = LongType.defaultSize * numElements
+  override def statistics: Statistics = Statistics( sizeInBytes = sizeInBytes )
+}
+
+
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
