@@ -18,24 +18,29 @@
 package org.apache.spark.repl
 
 import java.io.File
-import java.net.{URL, URLClassLoader}
+import java.net.{URI, URL, URLClassLoader}
+import java.nio.channels.{FileChannel, ReadableByteChannel}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Paths, StandardOpenOption}
 import java.util
-
-import com.google.common.io.Files
 
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
+import com.google.common.io.Files
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Interruptor
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.mock.MockitoSugar
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
+import org.mockito.Matchers.anyString
 import org.mockito.Mockito._
 
 import org.apache.spark._
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
 class ExecutorClassLoaderSuite
@@ -78,7 +83,7 @@ class ExecutorClassLoaderSuite
 
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
     val fakeClass = classLoader.loadClass("ReplFakeClass2").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "1")
@@ -86,7 +91,7 @@ class ExecutorClassLoaderSuite
 
   test("parent first") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, false)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, false)
     val fakeClass = classLoader.loadClass("ReplFakeClass1").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
@@ -94,7 +99,7 @@ class ExecutorClassLoaderSuite
 
   test("child first can fall back") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
     val fakeClass = classLoader.loadClass("ReplFakeClass3").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
@@ -102,7 +107,7 @@ class ExecutorClassLoaderSuite
 
   test("child first can fail") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
     intercept[java.lang.ClassNotFoundException] {
       classLoader.loadClass("ReplFakeClassDoesNotExist").newInstance()
     }
@@ -110,7 +115,7 @@ class ExecutorClassLoaderSuite
 
   test("resource from parent") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
     val resourceName: String = parentResourceNames.head
     val is = classLoader.getResourceAsStream(resourceName)
     assert(is != null, s"Resource $resourceName not found")
@@ -120,7 +125,7 @@ class ExecutorClassLoaderSuite
 
   test("resources from parent") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
     val resourceName: String = parentResourceNames.head
     val resources: util.Enumeration[URL] = classLoader.getResources(resourceName)
     assert(resources.hasMoreElements, s"Resource $resourceName not found")
@@ -142,7 +147,7 @@ class ExecutorClassLoaderSuite
     SparkEnv.set(mockEnv)
     // Create an ExecutorClassLoader that's configured to load classes from the HTTP server
     val parentLoader = new URLClassLoader(Array.empty, null)
-    val classLoader = new ExecutorClassLoader(conf, classServer.uri, parentLoader, false)
+    val classLoader = new ExecutorClassLoader(conf, null, classServer.uri, parentLoader, false)
     classLoader.httpUrlConnectionTimeoutMillis = 500
     // Check that this class loader can actually load classes that exist
     val fakeClass = classLoader.loadClass("ReplFakeClass2").newInstance()
@@ -175,6 +180,29 @@ class ExecutorClassLoaderSuite
       }
     }
     failAfter(10 seconds)(tryAndFailToLoadABunchOfClasses())(interruptor)
+  }
+
+  test("fetch classes using Spark's RpcEnv") {
+    val env = mock[SparkEnv]
+    val rpcEnv = mock[RpcEnv]
+    when(env.rpcEnv).thenReturn(rpcEnv)
+    when(rpcEnv.openChannel(anyString())).thenAnswer(new Answer[ReadableByteChannel]() {
+      override def answer(invocation: InvocationOnMock): ReadableByteChannel = {
+        val uri = new URI(invocation.getArguments()(0).asInstanceOf[String])
+        val path = Paths.get(tempDir1.getAbsolutePath(), uri.getPath().stripPrefix("/"))
+        FileChannel.open(path, StandardOpenOption.READ)
+      }
+    })
+
+    val classLoader = new ExecutorClassLoader(new SparkConf(), env, "spark://localhost:1234",
+      getClass().getClassLoader(), false)
+
+    val fakeClass = classLoader.loadClass("ReplFakeClass2").newInstance()
+    val fakeClassVersion = fakeClass.toString
+    assert(fakeClassVersion === "1")
+    intercept[java.lang.ClassNotFoundException] {
+      classLoader.loadClass("ReplFakeClassDoesNotExist").newInstance()
+    }
   }
 
 }

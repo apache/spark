@@ -609,7 +609,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sortWithinPartitions(sortCol: String, sortCols: String*): DataFrame = {
-    sortWithinPartitions(sortCol, sortCols : _*)
+    sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
   /**
@@ -1420,6 +1420,19 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def first(): Row = head()
+
+  /**
+   * Concise syntax for chaining custom transformations.
+   * {{{
+   *   def featurize(ds: DataFrame) = ...
+   *
+   *   df
+   *     .transform(featurize)
+   *     .transform(...)
+   * }}}
+   * @since 1.6.0
+   */
+  def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
 
   /**
    * Returns a new RDD by applying a function to all rows of this DataFrame.

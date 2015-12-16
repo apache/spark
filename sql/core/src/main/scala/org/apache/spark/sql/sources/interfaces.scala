@@ -422,7 +422,7 @@ abstract class HadoopFsRelation private[sql](
     parameters: Map[String, String])
   extends BaseRelation with FileRelation with Logging {
 
-  override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
+  override def toString: String = getClass.getSimpleName
 
   def this() = this(None, Map.empty[String, String])
 
