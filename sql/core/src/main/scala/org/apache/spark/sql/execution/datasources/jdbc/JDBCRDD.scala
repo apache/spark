@@ -281,6 +281,7 @@ private[sql] class JDBCRDD(
    */
   private def compileFilter(f: Filter): String = f match {
     case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
     case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
     case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
     case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
