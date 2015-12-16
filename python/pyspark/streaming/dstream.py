@@ -561,13 +561,12 @@ class DStream(object):
             if slideDuration is None:
                 slideDuration = self._slideDuration
             dstream = self._sc._jvm.PythonReducedWindowedDStream(reduced._jdstream.dstream(),
-                                                             jreduceFunc, jinvReduceFunc,
-                                                             self._ssc._jduration(windowDuration),
-                                                             self._ssc._jduration(slideDuration))
+                                                                 jreduceFunc, jinvReduceFunc,
+                                                                 self._ssc._jduration(windowDuration),
+                                                                 self._ssc._jduration(slideDuration))
             return DStream(dstream.asJavaDStream(), self._ssc, self._sc.serializer)
         else:
             return reduced.window(windowDuration, slideDuration).reduceByKey(func, numPartitions)
-
 
     def updateStateByKey(self, updateFunc, numPartitions=None):
         """
