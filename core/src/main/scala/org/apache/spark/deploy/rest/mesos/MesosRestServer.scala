@@ -94,7 +94,12 @@ private[mesos] class MesosSubmitRequestServlet(
     val driverMemory = sparkProperties.get("spark.driver.memory")
     val driverCores = sparkProperties.get("spark.driver.cores")
     val appArgs = request.appArgs
-    val environmentVariables = request.environmentVariables
+    // We don't want to pass down SPARK_HOME when launching Spark apps with Mesos cluster mode
+    // since it's populated by default on the client and it will cause spark-submit script to
+    // look for files in SPARK_HOME instead. We only need the ability to specify where to find
+    // spark-submit script which user can user spark.executor.home or spark.home configurations
+    // (SPARK-12345).
+    val environmentVariables = request.environmentVariables.filter(!_.equals("SPARK_HOME"))
     val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
 
     // Construct driver description
