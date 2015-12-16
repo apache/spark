@@ -294,10 +294,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private boolean isClientMode(Map<String, String> userProps) {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
-    // Default master is "local[*]", so assume client mode in that case.
+    String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
+    // Default master is "local[*]", so assume client mode in that case
     return userMaster == null ||
-      "client".equals(deployMode) ||
-      (!userMaster.equals("yarn-cluster") && deployMode == null);
+      "client".equals(userDeployMode) ||
+      (!userMaster.equals("yarn-cluster") && userDeployMode == null);
   }
 
   /**
