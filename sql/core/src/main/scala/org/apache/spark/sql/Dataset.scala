@@ -79,7 +79,7 @@ class Dataset[T] private[sql](
 
   /**
    * The encoder where the expressions used to construct an object from an input row have been
-   * bound to the ordinals of the given schema.
+   * bound to the ordinals of this [[Dataset]]'s output schema.
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
