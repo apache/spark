@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Linear Methods - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
+title: Linear Methods - spark.mllib
+displayTitle: Linear Methods - spark.mllib
 ---
 
 * Table of contents
@@ -41,7 +41,7 @@ the objective function is of the form
 Here the vectors `$\x_i\in\R^d$` are the training data examples, for `$1\le i\le n$`, and
 `$y_i\in\R$` are their corresponding labels, which we want to predict.
 We call the method *linear* if $L(\wv; \x, y)$ can be expressed as a function of $\wv^T x$ and $y$.
-Several of MLlib's classification and regression algorithms fall into this category,
+Several of `spark.mllib`'s classification and regression algorithms fall into this category,
 and are discussed here.
 
 The objective function `$f$` has two parts:
@@ -55,7 +55,7 @@ training error) and minimizing model complexity (i.e., to avoid overfitting).
 ### Loss functions
 
 The following table summarizes the loss functions and their gradients or sub-gradients for the
-methods MLlib supports:
+methods `spark.mllib` supports:
 
 <table class="table">
   <thead>
@@ -83,7 +83,7 @@ methods MLlib supports:
 The purpose of the
 [regularizer](http://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
 encourage simple models and avoid overfitting.  We support the following
-regularizers in MLlib:
+regularizers in `spark.mllib`:
 
 <table class="table">
   <thead>
@@ -115,7 +115,10 @@ especially when the number of training examples is small.
 
 ### Optimization
 
-Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
+Under the hood, linear methods use convex optimization methods to optimize the objective functions.
+`spark.mllib` uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).
+Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS.
+Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
 
 ## Classification
 
@@ -126,16 +129,16 @@ The most common classification type is
 categories, usually named positive and negative.
 If there are more than two categories, it is called
 [multiclass classification](http://en.wikipedia.org/wiki/Multiclass_classification).
-MLlib supports two linear methods for classification: linear Support Vector Machines (SVMs)
+`spark.mllib` supports two linear methods for classification: linear Support Vector Machines (SVMs)
 and logistic regression.
 Linear SVMs supports only binary classification, while logistic regression supports both binary and
 multiclass classification problems.
-For both methods, MLlib supports L1 and L2 regularized variants.
+For both methods, `spark.mllib` supports L1 and L2 regularized variants.
 The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib,
 where labels are class indices starting from zero: $0, 1, 2, \ldots$.
 Note that, in the mathematical formulation in this guide, a binary label $y$ is denoted as either
 $+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
-*However*, the negative label is represented by $0$ in MLlib instead of $-1$, to be consistent with
+*However*, the negative label is represented by $0$ in `spark.mllib` instead of $-1$, to be consistent with
 multiclass labeling.
 
 ### Linear Support Vector Machines (SVMs)
@@ -207,7 +210,7 @@ val sameModel = SVMModel.load(sc, "myModelPath")
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
 regularization parameter set to 1.0. If we want to configure this algorithm, we
 can customize `SVMWithSGD` further by creating a new object directly and
-calling setter methods. All other MLlib algorithms support customization in
+calling setter methods. All other `spark.mllib` algorithms support customization in
 this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
@@ -293,7 +296,7 @@ public class SVMClassifier {
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
 regularization parameter set to 1.0. If we want to configure this algorithm, we
 can customize `SVMWithSGD` further by creating a new object directly and
-calling setter methods. All other MLlib algorithms support customization in
+calling setter methods. All other `spark.mllib` algorithms support customization in
 this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
@@ -375,7 +378,7 @@ Binary logistic regression can be generalized into
 train and predict multiclass classification problems.
 For example, for $K$ possible outcomes, one of the outcomes can be chosen as a "pivot", and the
 other $K - 1$ outcomes can be separately regressed against the pivot outcome.
-In MLlib, the first class $0$ is chosen as the "pivot" class.
+In `spark.mllib`, the first class $0$ is chosen as the "pivot" class.
 See Section 4.4 of
 [The Elements of Statistical Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
 references.
@@ -726,7 +729,7 @@ a dependency.
 ###Streaming linear regression
 
 When data arrive in a streaming fashion, it is useful to fit regression models online,
-updating the parameters of the model as new data arrives. MLlib currently supports
+updating the parameters of the model as new data arrives. `spark.mllib` currently supports
 streaming linear regression using ordinary least squares. The fitting is similar
 to that performed offline, except fitting occurs on each batch of data, so that
 the model continually updates to reflect the data from the stream.
@@ -852,7 +855,7 @@ will get better!
 
 # Implementation (developer)
 
-Behind the scene, MLlib implements a simple distributed version of stochastic gradient descent
+Behind the scene, `spark.mllib` implements a simple distributed version of stochastic gradient descent
 (SGD), building on the underlying gradient descent primitive (as described in the <a
 href="mllib-optimization.html">optimization</a> section).  All provided algorithms take as input a
 regularization parameter (`regParam`) along with various parameters associated with stochastic
