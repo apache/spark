@@ -24,6 +24,7 @@ import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.scheduler.cluster.mesos._
 import org.apache.spark.util.SignalLogger
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.util.ShutdownHookManager
 
 /*
  * A dispatcher that is responsible for managing and launching drivers, and is intended to be
@@ -103,14 +104,11 @@ private[mesos] object MesosClusterDispatcher extends Logging {
     }
     val dispatcher = new MesosClusterDispatcher(dispatcherArgs, conf)
     dispatcher.start()
-    val shutdownHook = new Thread() {
-      override def run() {
-        logInfo("Shutdown hook is shutting down dispatcher")
-        dispatcher.stop()
-        dispatcher.awaitShutdown()
-      }
+    ShutdownHookManager.addShutdownHook { () =>
+      logInfo("Shutdown hook is shutting down dispatcher")
+      dispatcher.stop()
+      dispatcher.awaitShutdown()
     }
-    Runtime.getRuntime.addShutdownHook(shutdownHook)
     dispatcher.awaitShutdown()
   }
 }
