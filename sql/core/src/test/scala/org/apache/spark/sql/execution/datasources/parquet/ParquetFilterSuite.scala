@@ -110,21 +110,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
-  /**
-   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
-   */
-  protected def stripSparkFilter(df: DataFrame): DataFrame = {
-    val schema = df.schema
-    val childRDD = df
-      .queryExecution
-      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-      .child
-      .execute()
-      .map(row => Row.fromSeq(row.toSeq(schema)))
-
-    sqlContext.createDataFrame(childRDD, schema)
-  }
-
   test("filter pushdown - boolean") {
     withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
