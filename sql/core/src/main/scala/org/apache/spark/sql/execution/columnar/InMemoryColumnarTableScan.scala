@@ -200,7 +200,7 @@ private[sql] case class InMemoryRelation(
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
-  override protected def otherCopyArgs: Seq[AnyRef] =
+  override protected[sql] def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
 
   private[sql] def uncache(blocking: Boolean): Unit = {

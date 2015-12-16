@@ -125,11 +125,11 @@ object TreeNodeJsonFormatter {
         parameters(0) = value
       }
 
-      val ctors = cls.getConstructors.filter(_.getParameterCount != 0)
+      val ctors = cls.getConstructors.filter(_.getParameterTypes.size != 0)
       if (ctors.isEmpty) {
         sys.error(s"No valid constructor for ${cls.getName}")
       }
-      val defaultCtor = ctors.maxBy(_.getParameterCount)
+      val defaultCtor = ctors.maxBy(_.getParameterTypes.size)
       defaultCtor.newInstance(parameters: _*).asInstanceOf[TreeNode[_]]
     }
 

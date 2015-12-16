@@ -74,7 +74,7 @@ private[sql] case class LogicalRDD(
 
   override def children: Seq[LogicalPlan] = Nil
 
-  override protected final def otherCopyArgs: Seq[AnyRef] = {
+  override protected[sql] final def otherCopyArgs: Seq[AnyRef] = {
     sqlContext :: Nil
   }
 
