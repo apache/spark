@@ -821,7 +821,8 @@ class TaskInstance(Base):
                     self.start_date = datetime.now()
                     self.end_date = datetime.now()
                     session.merge(self)
-                elif failed + upstream_failed >= len(task._upstream_list):
+                elif (failed + upstream_failed >= len(task._upstream_list) or
+                      (task.trigger_rule == TR.ALL_SUCCESS and upstream_failed > 0)):
                     self.state = State.UPSTREAM_FAILED
                     self.start_date = datetime.now()
                     self.end_date = datetime.now()
