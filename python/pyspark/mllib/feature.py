@@ -30,7 +30,7 @@ if sys.version >= '3':
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import SparkContext, since
+from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import (
@@ -100,8 +100,6 @@ class Normalizer(VectorTransformer):
         :return: normalized vector. If the norm of the input is zero, it
                  will return the input vector.
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None, "SparkContext should be initialized first"
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
         else:
