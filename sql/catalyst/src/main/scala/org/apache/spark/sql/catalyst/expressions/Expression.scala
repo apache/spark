@@ -340,20 +340,19 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(eval.value)
     if (nullable) {
       eval.code + s"""
         boolean ${ev.isNull} = ${eval.isNull};
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         if (!${eval.isNull}) {
-          $resultCode
+          ${f(eval.value)}
         }
       """
     } else {
       ev.isNull = "false"
       eval.code + s"""
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode
+        ${f(eval.value)}
       """
     }
   }
@@ -584,6 +583,7 @@ abstract class TernaryExpression extends Expression {
         }
       """
     } else {
+      ev.isNull = "false"
       s"""
         ${evals(0).code}
         ${evals(1).code}
