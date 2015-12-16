@@ -103,6 +103,7 @@ def trigger_dag(args):
 def run(args):
 
     utils.pessimistic_connection_handling()
+
     # Setting up logging
     log = os.path.expanduser(configuration.get('core', 'BASE_LOG_FOLDER'))
     directory = log + "/{args.dag_id}/{args.task_id}".format(args=args)
@@ -120,6 +121,7 @@ def run(args):
         old_log = None
 
     subdir = process_subdir(args.subdir)
+    logging.root.handlers = []
     logging.basicConfig(
         filename=filename,
         level=settings.LOGGING_LEVEL,

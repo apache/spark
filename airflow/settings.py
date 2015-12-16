@@ -70,7 +70,8 @@ def policy(task_instance):
 
 def configure_logging():
     logging.root.handlers = []
-    logging.basicConfig(format=LOG_FORMAT, stream=sys.stdout, level=LOGGING_LEVEL)
+    logging.basicConfig(
+        format=LOG_FORMAT, stream=sys.stdout, level=LOGGING_LEVEL)
 
 try:
     from airflow_local_settings import *
