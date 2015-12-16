@@ -142,6 +142,15 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
   }
 
+  test("UDF in view") {
+    val errMsg = intercept[AnalysisException] {
+      sql("CREATE VIEW test_view AS SELECT spark_partition_id() AS partition_id FROM src")
+    }
+    assert(errMsg.getMessage contains "Cannot use Spark UDFs when using Hive" +
+      " native commands to handle CREATE VIEW")
+    sql("CREATE VIEW test_view2 AS SELECT max(key) FROM src LIMIT 1")
+  }
+
   test("Generic UDAF aggregates") {
     checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999)) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)

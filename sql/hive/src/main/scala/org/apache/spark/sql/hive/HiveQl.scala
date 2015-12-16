@@ -82,7 +82,8 @@ private[hive] case class CreateViewAsSelect(
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    sql: String) extends UnaryNode with Command {
+    sql: String,
+    withUDFs: Boolean = false) extends UnaryNode with Command {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean = false
 }
@@ -534,7 +535,18 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // We can remove this when parser is configurable(can access SQLConf) in the future.
     val sql = context.getTokenRewriteStream
       .toString(view.getTokenStartIndex, view.getTokenStopIndex)
-    CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExist, replace, sql)
+
+    val childPlan = nodeToPlan(query, context)
+    val withUDFs = childPlan.flatMap {
+      case p =>
+        p.expressions.flatMap { _.find {
+          case UnresolvedFunction(name, _, _) =>
+            !Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).isDefined
+          case _ => false
+        }}
+    }.nonEmpty
+
+    CreateViewAsSelect(tableDesc, childPlan, allowExist, replace, sql, withUDFs)
   }
 
   protected def nodeToPlan(node: ASTNode, context: Context): LogicalPlan = node match {
