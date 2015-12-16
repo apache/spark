@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import org.apache.spark.sql.catalyst.JavaTypeInference
-
 import scala.collection.Map
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.types.{StructType, DataType}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types.{Metadata, StructType, DataType}
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -470,7 +469,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   private[sql] def jsonValue: JValue = {
-    val fieldNames = JavaTypeInference.getConstructorParaNames(getClass)
+    val fieldNames = ScalaReflection.getConstructorParaNames(getClass)
     val fieldValues = productIterator.toSeq ++ otherCopyArgs
     assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
       fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
@@ -482,7 +481,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case (name, value) => Some(name -> parseToJson(value))
     }
 
-    JObject(("node-name" -> JString(nodeName)) :: jsonFields.toList)
+    JObject(("class" -> JString(getClass.getName)) :: jsonFields.toList)
   }
 
   private def parseToJson(obj: Any): JValue = obj match {
@@ -494,7 +493,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case l: Long => JInt(l)
     case f: Float => JDouble(f)
     case d: Double => JDouble(d)
+    case m: Metadata => JObject(("class" -> JString(classOf[Metadata].getName))).merge(m.jsonValue)
     case o: Option[_] => o.map(parseToJson).getOrElse(JNothing)
+    case map: Map[_, _] =>
+      val fields = map.toList.map { case (k: String, v) => (k, parseToJson(v)) }
+      JObject(fields)
     case t: Traversable[_] => JArray(t.map(parseToJson).toList)
     case _ => JString(obj.toString)
   }
