@@ -540,7 +540,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
     def formatted = CodeFormatter.format(code)
 
-    logError({
+    logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
       formatted

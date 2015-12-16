@@ -107,7 +107,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   private lazy val field = child.dataType.asInstanceOf[StructType](ordinal)
 
   override def dataType: DataType = field.dataType
-  override def nullable: Boolean = child.nullable || field.nullable
+  override def nullable: Boolean = true
   override def toString: String = s"$child.${name.getOrElse(field.name)}"
 
   protected override def nullSafeEval(input: Any): Any =
@@ -139,7 +139,7 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def nullable: Boolean = child.nullable || containsNull || field.nullable
+  override def nullable: Boolean = child.nullable || field.nullable
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {

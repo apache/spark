@@ -499,10 +499,16 @@ class DataFrame private[sql](
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
+      .analyzed.asInstanceOf[Join]
 
-    // Project only one of the join columns.
-    val joinedCols = usingColumns.map(col => withPlan(joined.right).resolve(col))
+    // Project only one of the join columns for Inner join, outer join should have all the columns
+    // from both sides.
+    val joinedCols = if (JoinType(joinType) == Inner) {
+      usingColumns.map(col => withPlan(joined.right).resolve(col))
+    } else {
+      Nil
+    }
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
         withPlan(joined.left).resolve(col),
