@@ -596,17 +596,17 @@ setMethod("toJSON",
             RDD(jrdd, serializedMode = "string")
           })
 
-#' saveAsParquetFile
+#' write.json
 #'
-#' Save the contents of a DataFrame as a Parquet file, preserving the schema. Files written out
-#' with this method can be read back in as a DataFrame using parquetFile().
+#' Save the contents of a DataFrame as a JSON file (one object per line). Files written out
+#' with this method can be read back in as a DataFrame using read.json().
 #'
 #' @param x A SparkSQL DataFrame
 #' @param path The directory where the file is saved
 #'
 #' @family DataFrame functions
-#' @rdname saveAsParquetFile
-#' @name saveAsParquetFile
+#' @rdname write.json
+#' @name write.json
 #' @export
 #' @examples
 #'\dontrun{
@@ -614,12 +614,51 @@ setMethod("toJSON",
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
-#' saveAsParquetFile(df, "/tmp/sparkr-tmp/")
+#' write.json(df, "/tmp/sparkr-tmp/")
 #'}
+setMethod("write.json",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "json", path))
+          })
+
+#' write.parquet
+#'
+#' Save the contents of a DataFrame as a Parquet file, preserving the schema. Files written out
+#' with this method can be read back in as a DataFrame using read.parquet().
+#'
+#' @param x A SparkSQL DataFrame
+#' @param path The directory where the file is saved
+#'
+#' @family DataFrame functions
+#' @rdname write.parquet
+#' @name write.parquet
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlContext, path)
+#' write.parquet(df, "/tmp/sparkr-tmp1/")
+#' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
+#'}
+setMethod("write.parquet",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "parquet", path))
+          })
+
+#' @rdname write.parquet
+#' @name saveAsParquetFile
+#' @export
 setMethod("saveAsParquetFile",
           signature(x = "DataFrame", path = "character"),
           function(x, path) {
-            invisible(callJMethod(x@sdf, "saveAsParquetFile", path))
+            .Deprecated("write.parquet")
+            write.parquet(x, path)
           })
 
 #' Distinct
@@ -1886,7 +1925,7 @@ setMethod("except",
 #' @param df A SparkSQL DataFrame
 #' @param path A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #'
 #' @family DataFrame functions
 #' @rdname write.df
@@ -1903,7 +1942,7 @@ setMethod("except",
 #' }
 setMethod("write.df",
           signature(df = "DataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "append", ...){
+          function(df, path, source = NULL, mode = "error", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
@@ -1928,7 +1967,7 @@ setMethod("write.df",
 #' @export
 setMethod("saveDF",
           signature(df = "DataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "append", ...){
+          function(df, path, source = NULL, mode = "error", ...){
             write.df(df, path, source, mode, ...)
           })
 
@@ -1951,7 +1990,7 @@ setMethod("saveDF",
 #' @param df A SparkSQL DataFrame
 #' @param tableName A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #'
 #' @family DataFrame functions
 #' @rdname saveAsTable
@@ -1968,7 +2007,7 @@ setMethod("saveDF",
 setMethod("saveAsTable",
           signature(df = "DataFrame", tableName = "character", source = "character",
                     mode = "character"),
-          function(df, tableName, source = NULL, mode="append", ...){
+          function(df, tableName, source = NULL, mode="error", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
