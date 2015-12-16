@@ -23,11 +23,14 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class TreeNodeJsonFormatSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+  import TreeNodeJsonFormatter._
 
   test("logical plan json format") {
     val plan = testRelation.select(('a + 1).as("i"), ('a * 2).as("j")).sortBy('i.asc).analyze
     // scalastyle:off println
-    println(plan.toJSON)
+    val json = toJSON(plan)
+    println(json)
+    println(fromJSON(json).treeString)
     println(plan.treeString)
   }
 }

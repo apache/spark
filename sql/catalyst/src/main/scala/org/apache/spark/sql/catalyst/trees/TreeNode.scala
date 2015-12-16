@@ -18,13 +18,9 @@
 package org.apache.spark.sql.catalyst.trees
 
 import scala.collection.Map
-import org.json4s.JsonAST._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{Metadata, StructType, DataType}
+import org.apache.spark.sql.types.{StructType, DataType}
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -334,7 +330,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * These are appended to the transformed args automatically by makeCopy
    * @return
    */
-  protected def otherCopyArgs: Seq[AnyRef] = Nil
+  protected[sql] def otherCopyArgs: Seq[AnyRef] = Nil
 
   /**
    * Creates a copy of this type of tree node after a transformation.
@@ -467,50 +463,4 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
     s"$nodeName(${args.mkString(",")})"
   }
-
-  private[sql] def jsonValue: JValue = {
-    val fieldNames = ScalaReflection.getConstructorParaNames(getClass)
-    val fieldValues = productIterator.toSeq ++ otherCopyArgs
-    assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
-      fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
-
-    val jsonFields: Seq[JField] = fieldNames.zip(fieldValues).flatMap {
-      case (name, value: TreeNode[_]) if containsChild(value) => None
-      case (name, value: TreeNode[_]) => Some(name -> value.allJsonValues)
-      case (name, value: Seq[BaseType]) if value.toSet.subsetOf(children.toSet) => None
-      case (name, value) => Some(name -> parseToJson(value))
-    }
-
-    JObject(("class" -> JString(getClass.getName)) :: jsonFields.toList)
-  }
-
-  private def parseToJson(obj: Any): JValue = obj match {
-    case n: TreeNode[_] => n.allJsonValues
-    case b: Boolean => JBool(b)
-    case b: Byte => JInt(b.toInt)
-    case s: Short => JInt(s.toInt)
-    case i: Int => JInt(i)
-    case l: Long => JInt(l)
-    case f: Float => JDouble(f)
-    case d: Double => JDouble(d)
-    case m: Metadata => JObject(("class" -> JString(classOf[Metadata].getName))).merge(m.jsonValue)
-    case o: Option[_] => o.map(parseToJson).getOrElse(JNothing)
-    case map: Map[_, _] =>
-      val fields = map.toList.map { case (k: String, v) => (k, parseToJson(v)) }
-      JObject(fields)
-    case t: Traversable[_] => JArray(t.map(parseToJson).toList)
-    case _ => JString(obj.toString)
-  }
-
-  private def allJsonValues: JValue = {
-    val jsonValues = scala.collection.mutable.ArrayBuffer.empty[JValue]
-    def collectJsonValue(node: BaseType): Unit = {
-      jsonValues += node.jsonValue.merge(JObject("num-children" -> JInt(node.children.length)))
-      node.children.foreach(collectJsonValue)
-    }
-    collectJsonValue(this)
-    jsonValues
-  }
-
-  def toJSON: String = pretty(render(allJsonValues))
 }
