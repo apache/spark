@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
@@ -40,16 +42,57 @@ private[sql] object Column {
 
 /**
  * A [[Column]] where an [[Encoder]] has been given for the expected input and return type.
- * @since 1.6.0
+ * To create a [[TypedColumn]], use the `as` function on a [[Column]].
+ *
  * @tparam T The input type expected for this expression.  Can be `Any` if the expression is type
  *           checked by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
  * @tparam U The output type of this column.
+ *
+ * @since 1.6.0
  */
-class TypedColumn[-T, U](expr: Expression, val encoder: Encoder[U]) extends Column(expr)
+class TypedColumn[-T, U](
+    expr: Expression,
+    private[sql] val encoder: ExpressionEncoder[U])
+  extends Column(expr) {
+
+  /**
+   * Inserts the specific input type and schema into any expressions that are expected to operate
+   * on a decoded object.
+   */
+  private[sql] def withInputType(
+      inputEncoder: ExpressionEncoder[_],
+      schema: Seq[Attribute]): TypedColumn[T, U] = {
+    val boundEncoder = inputEncoder.bind(schema).asInstanceOf[ExpressionEncoder[Any]]
+    new TypedColumn[T, U](
+      expr transform { case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
+        ta.copy(aEncoder = Some(boundEncoder), children = schema)
+      },
+      encoder)
+  }
+}
 
 /**
  * :: Experimental ::
- * A column in a [[DataFrame]].
+ * A column that will be computed based on the data in a [[DataFrame]].
+ *
+ * A new column is constructed based on the input columns present in a dataframe:
+ *
+ * {{{
+ *   df("columnName")            // On a specific DataFrame.
+ *   col("columnName")           // A generic column no yet associcated with a DataFrame.
+ *   col("columnName.field")     // Extracting a struct field
+ *   col("`a.column.with.dots`") // Escape `.` in column names.
+ *   $"columnName"               // Scala short hand for a named column.
+ *   expr("a + 1")               // A column that is constructed from a parsed SQL Expression.
+ *   lit("abc")                  // A column that produces a literal (constant) value.
+ * }}}
+ *
+ * [[Column]] objects can be composed to form complex expressions:
+ *
+ * {{{
+ *   $"a" + 1
+ *   $"a" === $"b"
+ * }}}
  *
  * @groupname java_expr_ops Java-specific expression operators
  * @groupname expr_ops Expression operators
@@ -73,6 +116,25 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
 
+  /**
+   * Returns the expression for this column either with an existing or auto assigned name.
+   */
+  private[sql] def named: NamedExpression = expr match {
+    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+    // make it a NamedExpression.
+    case u: UnresolvedAttribute => UnresolvedAlias(u)
+
+    case expr: NamedExpression => expr
+
+    // Leave an unaliased generator with an empty list of names since the analyzer will generate
+    // the correct defaults after the nested expression's type has been resolved.
+    case explode: Explode => MultiAlias(explode, Nil)
+    case jt: JsonTuple => MultiAlias(jt, Nil)
+
+    case expr: Expression => Alias(expr, expr.prettyString)()
+  }
+
   override def toString: String = expr.prettyString
 
   override def equals(that: Any): Boolean = that match {
@@ -93,11 +155,12 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /**
    * Extracts a value or values from a complex type.
    * The following types of extraction are supported:
-   * - Given an Array, an integer ordinal can be used to retrieve a single value.
-   * - Given a Map, a key of the correct type can be used to retrieve an individual value.
-   * - Given a Struct, a string fieldName can be used to extract that field.
-   * - Given an Array of Structs, a string fieldName can be used to extract filed
-   *   of every struct in that array, and return an Array of fields
+   *
+   *  - Given an Array, an integer ordinal can be used to retrieve a single value.
+   *  - Given a Map, a key of the correct type can be used to retrieve an individual value.
+   *  - Given a Struct, a string fieldName can be used to extract that field.
+   *  - Given an Array of Structs, a string fieldName can be used to extract filed
+   *    of every struct in that array, and return an Array of fields
    *
    * @group expr_ops
    * @since 1.4.0
@@ -649,8 +712,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
+   * @deprecated As of 1.5.0. Use isin. This will be removed in Spark 2.0.
    */
-  @deprecated("use isin", "1.5.0")
+  @deprecated("use isin. This will be removed in Spark 2.0.", "1.5.0")
   @scala.annotation.varargs
   def in(list: Any*): Column = isin(list : _*)
 

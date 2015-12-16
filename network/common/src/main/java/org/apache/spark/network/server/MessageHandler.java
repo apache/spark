@@ -26,7 +26,7 @@ import org.apache.spark.network.protocol.Message;
  */
 public abstract class MessageHandler<T extends Message> {
   /** Handles the receipt of a single message. */
-  public abstract void handle(T message);
+  public abstract void handle(T message) throws Exception;
 
   /** Invoked when an exception was caught on the Channel. */
   public abstract void exceptionCaught(Throwable cause);

@@ -19,13 +19,14 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
-class IDFSuite extends SparkFunSuite with MLlibTestSparkContext {
+class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   def scaleDataWithIDF(dataSet: Array[Vector], model: Vector): Array[Vector] = {
     dataSet.map {
@@ -97,5 +98,21 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }
+  }
+
+  test("IDF read/write") {
+    val t = new IDF()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMinDocFreq(5)
+    testDefaultReadWrite(t)
+  }
+
+  test("IDFModel read/write") {
+    val instance = new IDFModel("myIDFModel", new OldIDFModel(Vectors.dense(1.0, 2.0)))
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.idf === instance.idf)
   }
 }

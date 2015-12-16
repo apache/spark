@@ -71,6 +71,11 @@ private[deploy] class ExecutorRunner(
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
     shutdownHook = ShutdownHookManager.addShutdownHook { () =>
+      // It's possible that we arrive here before calling `fetchAndRunExecutor`, then `state` will
+      // be `ExecutorState.RUNNING`. In this case, we should set `state` to `FAILED`.
+      if (state == ExecutorState.RUNNING) {
+        state = ExecutorState.FAILED
+      }
       killProcess(Some("Worker shutting down")) }
   }
 
@@ -92,7 +97,11 @@ private[deploy] class ExecutorRunner(
       process.destroy()
       exitCode = Some(process.waitFor())
     }
-    worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+    try {
+      worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+    } catch {
+      case e: IllegalStateException => logWarning(e.getMessage(), e)
+    }
   }
 
   /** Stop this executor runner, including killing the process it launched */

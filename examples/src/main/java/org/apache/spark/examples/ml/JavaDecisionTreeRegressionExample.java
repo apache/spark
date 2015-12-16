@@ -27,9 +27,6 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel;
 import org.apache.spark.ml.regression.DecisionTreeRegressor;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 // $example off$
@@ -40,9 +37,9 @@ public class JavaDecisionTreeRegressionExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
     // $example on$
-    // Load and parse the data file, converting it to a DataFrame.
-    RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-    DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+    // Load the data stored in LIBSVM format as a DataFrame.
+    DataFrame data = sqlContext.read().format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
 
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
