@@ -180,7 +180,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       info: ApplicationHistoryInfo,
       attempt: ApplicationAttemptInfo,
       isFirst: Boolean): Seq[Node] = {
-    val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
+    val uiAddress = UIUtils.prependBaseUri(HistoryServer.getAttemptURI(info.id, attempt.attemptId))
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
     val duration =
@@ -209,8 +209,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       {
         if (renderAttemptIdColumn) {
           if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
-            <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
-              {attempt.attemptId.get}</a></td>
+            <td><a href={uiAddress}>{attempt.attemptId.get}</a></td>
           } else {
             <td>&nbsp;</td>
           }
