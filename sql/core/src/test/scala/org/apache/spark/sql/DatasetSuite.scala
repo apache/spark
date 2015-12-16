@@ -23,7 +23,6 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types._
 
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
@@ -490,116 +489,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.getMessage.contains("cannot resolve 'c' given input columns a, b"), e.getMessage)
   }
-
-  def testNonNullable[T: Encoder](name: String, schema: StructType, rows: Row*): Unit = {
-    test(s"non-nullable field - $name") {
-      val rowRDD = sqlContext.sparkContext.parallelize(rows)
-      val ds = sqlContext.createDataFrame(rowRDD, schema).as[T]
-      val message = intercept[RuntimeException](ds.collect()).getMessage
-      assert(message.contains("Null value appeared in non-nullable field"))
-    }
-  }
-
-  testNonNullable[ClassData](
-    "scala.Int",
-    StructType(Seq(
-      StructField("a", StringType, nullable = true),
-      StructField("b", IntegerType, nullable = false)
-    )),
-    Row("hello", 1: Integer),
-    Row("world", null)
-  )
-
-  testNonNullable[NestedClassData](
-    "struct",
-    StructType(Seq(
-      StructField("a", StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", IntegerType, nullable = false)
-      )), nullable = false)
-    )),
-    Row(Row("hello", 1: Integer)),
-    Row(null)
-  )
-
-  ignore("non-nullable field in nested struct") {
-    testNonNullable[NestedClassData](
-      "non-nullable field in nested struct",
-      StructType(Seq(
-        StructField("a", StructType(Seq(
-          StructField("a", StringType, nullable = true),
-          StructField("b", IntegerType, nullable = false)
-        )), nullable = false)
-      )),
-      Row(Row("hello", 1: Integer)),
-      Row(Row("hello", null))
-    )
-  }
-
-  testNonNullable[NestedNonNullableArray](
-    "array",
-    StructType(Seq(
-      StructField("a", ArrayType(StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", IntegerType, nullable = false)
-      ))), nullable = false)
-    )),
-    Row(Seq(Row("hello", 1))),
-    Row(null)
-  )
-
-  ignore("non-nullable element in nested array") {
-    testNonNullable[NestedNonNullableArray](
-      "non-nullable element in nested array",
-      StructType(Seq(
-        StructField("a", ArrayType(StructType(Seq(
-          StructField("a", StringType, nullable = true),
-          StructField("b", IntegerType, nullable = false)
-        )), containsNull = false), nullable = false)
-      )),
-      Row(Seq(Row("hello", 1), null))
-    )
-  }
-
-  testNonNullable[NestedNonNullableMap](
-    "map",
-    StructType(Seq(
-      StructField("a", MapType(
-        IntegerType,
-        StructType(Seq(
-          StructField("a", StringType, nullable = true),
-          StructField("b", IntegerType, nullable = false)
-        ))
-      ), nullable = false)
-    )),
-    Row(Map(1 -> Row("hello", 1))),
-    Row(null)
-  )
-
-  ignore("non-nullable value in nested map") {
-    testNonNullable[NestedNonNullableMap](
-      "non-nullable value in nested map",
-      StructType(Seq(
-        StructField("a", MapType(
-          IntegerType,
-          StructType(Seq(
-            StructField("a", StringType, nullable = true),
-            StructField("b", IntegerType, nullable = false)
-          ))
-        ), nullable = false)
-      )),
-      Row(Map(1 -> Row("hello", 1), 2 -> null))
-    )
-  }
 }
 
 case class ClassData(a: String, b: Int)
 case class ClassData2(c: String, d: Int)
 case class ClassNullableData(a: String, b: Integer)
-
-case class NestedClassData(a: ClassData)
-case class NestedNonNullableArray(a: Array[ClassData])
-case class NestedNonNullableMap(a: scala.collection.Map[Int, ClassData])
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
