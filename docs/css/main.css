@@ -39,14 +39,6 @@
   margin-left: 10px;
 }
 
-/*
-body .container-wrapper {
-  position: absolute;
-  width: 100%;
-  display: flex;
-}
-*/
-
 body .container-wrapper {
   background-color: #FFF;
   color: #1D1F22;
@@ -56,14 +48,6 @@ body .container-wrapper {
   margin-right: auto;
   border-radius: 15px;
   position: relative;
-}
-
-body #contentREMOVE {
-  position: relative;
-
-  line-height: 1.6; /* Inspired by Github's wiki style */
-  background-color: white;
-  padding-left: 15px;
 }
 
 .title {
@@ -228,12 +212,12 @@ a.anchorjs-link:hover { text-decoration: none; }
  * The collapsing button for the navigation bar.
  */
 .nav-trigger {
-    position: fixed;
-    clip: rect(0, 0, 0, 0);
+  position: fixed;
+  clip: rect(0, 0, 0, 0);
 }
 
 .nav-trigger + label:after {
-    content: '»';
+  content: '»';
 }
 
 label {
@@ -241,35 +225,35 @@ label {
 }
 
 label[for="nav-trigger"] {
-    position: fixed;
-    margin-left: 0px;
-    padding-top: 100px;
-    padding-left: 5px;
-    width: 10px;
-    height: 80%;
-    cursor: pointer;
-    background-size: contain;
-    background-color: #D4F0FF;
-    border-radius: 10px 0px 0px 10px;
+  position: fixed;
+  margin-left: 0px;
+  padding-top: 100px;
+  padding-left: 5px;
+  width: 10px;
+  height: 80%;
+  cursor: pointer;
+  background-size: contain;
+  background-color: #D4F0FF;
 }
 
 label[for="nav-trigger"]:hover {
-    background-color: #BEE9FF;
+  background-color: #BEE9FF;
 }
 
 .nav-trigger:checked + label {
-    margin-left: 200px;
+  margin-left: 200px;
 }
 
 .nav-trigger:checked + label:after {
-    content: '«';
+  content: '«';
 }
 
 .nav-trigger:checked ~ div.content-with-sidebar {
-    margin-left: 200px;
+  margin-left: 200px;
 }
+
 .nav-trigger + label, div.content-with-sidebar {
-    transition: left 0.4s;
+  transition: left 0.4s;
 }
 
 /**

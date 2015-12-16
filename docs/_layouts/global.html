@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
 <!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
@@ -127,32 +128,32 @@
         <div class="container-wrapper">
 
             {% if page.url contains "/ml" %}
-              {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
-              <input id="nav-trigger" class="nav-trigger" checked="" type="checkbox">
-              <label for="nav-trigger"></label>
+                {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
+                <input id="nav-trigger" class="nav-trigger" checked type="checkbox">
+                <label for="nav-trigger"></label>
                 <div class="content-with-sidebar" id="content">
-                  {% if page.displayTitle %}
-                    <h1 class="title">{{ page.displayTitle }}</h1>
-                  {% else %}
-                    <h1 class="title">{{ page.title }}</h1>
-                  {% endif %}
+                    {% if page.displayTitle %}
+                        <h1 class="title">{{ page.displayTitle }}</h1>
+                    {% else %}
+                        <h1 class="title">{{ page.title }}</h1>
+                    {% endif %}
 
-                  {{ content }}
+                    {{ content }}
 
-                </div> <!-- /container -->
+                </div>
             {% else %}
                 <div class="content" id="content">
-                      {% if page.displayTitle %}
+                    {% if page.displayTitle %}
                         <h1 class="title">{{ page.displayTitle }}</h1>
-                      {% else %}
+                    {% else %}
                         <h1 class="title">{{ page.title }}</h1>
-                      {% endif %}
+                    {% endif %}
 
-                      {{ content }}
+                    {{ content }}
 
-                </div> <!-- /container -->
+                </div>
             {% endif %}
-
+             <!-- /container -->
         </div>
 
         <script src="js/vendor/jquery-1.8.0.min.js"></script>
