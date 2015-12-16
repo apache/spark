@@ -102,18 +102,20 @@ a:hover code {
   z-index: 1;
   position: relative;
   background-color: #FFF;
-  padding-left: 15px;
   max-width: 914px;
   line-height: 1.6; /* Inspired by Github's wiki style */
   background-color: white;
+  padding-left: 15px;
 }
 
 .content-with-sidebar {
   z-index: 1;
   position: relative;
   background-color: #FFF;
+  max-width: 914px;
+  line-height: 1.6; /* Inspired by Github's wiki style */
+  background-color: white;
   padding-left: 30px;
-  max-width: 914px;  
 }
 
 .dropdown-menu {
