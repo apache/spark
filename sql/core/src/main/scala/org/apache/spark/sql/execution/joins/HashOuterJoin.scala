@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.{HashMap => JavaHashMap}
-
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -27,7 +24,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.util.collection.CompactBuffer
 
-@DeveloperApi
+
 trait HashOuterJoin {
   self: SparkPlan =>
 
@@ -67,38 +64,18 @@ trait HashOuterJoin {
         s"HashOuterJoin should not take $x as the JoinType")
   }
 
-  protected[this] def isUnsafeMode: Boolean = {
-    (self.codegenEnabled && self.unsafeEnabled && joinType != FullOuter
-      && UnsafeProjection.canSupport(buildKeys)
-      && UnsafeProjection.canSupport(self.schema))
-  }
-
-  override def outputsUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessSafeRows: Boolean = !isUnsafeMode
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
 
   protected def buildKeyGenerator: Projection =
-    if (isUnsafeMode) {
-      UnsafeProjection.create(buildKeys, buildPlan.output)
-    } else {
-      newMutableProjection(buildKeys, buildPlan.output)()
-    }
+    UnsafeProjection.create(buildKeys, buildPlan.output)
 
-  protected[this] def streamedKeyGenerator: Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(streamedKeys, streamedPlan.output)
-    } else {
-      newProjection(streamedKeys, streamedPlan.output)
-    }
-  }
+  protected[this] def streamedKeyGenerator: Projection =
+    UnsafeProjection.create(streamedKeys, streamedPlan.output)
 
-  protected[this] def resultProjection: InternalRow => InternalRow = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(self.schema)
-    } else {
-      identity[InternalRow]
-    }
-  }
+  protected[this] def resultProjection: InternalRow => InternalRow =
+    UnsafeProjection.create(self.schema)
 
   @transient private[this] lazy val DUMMY_LIST = CompactBuffer[InternalRow](null)
   @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
@@ -176,8 +153,12 @@ trait HashOuterJoin {
   }
 
   protected[this] def fullOuterIterator(
-      key: InternalRow, leftIter: Iterable[InternalRow], rightIter: Iterable[InternalRow],
-      joinedRow: JoinedRow, numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+      key: InternalRow,
+      leftIter: Iterable[InternalRow],
+      rightIter: Iterable[InternalRow],
+      joinedRow: JoinedRow,
+      resultProjection: InternalRow => InternalRow,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     if (!key.anyNull) {
       // Store the positions of records in right, if one of its associated row satisfy
       // the join condition.
@@ -194,7 +175,7 @@ trait HashOuterJoin {
             matched = true
             // if the row satisfy the join condition, add its index into the matched set
             rightMatchedSet.add(idx)
-            joinedRow.copy()
+            resultProjection(joinedRow)
 
         } ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
           // 2. For those unmatched records in left, append additional records with empty right.
@@ -204,7 +185,7 @@ trait HashOuterJoin {
           // of the records in right side.
           // If we didn't get any proper row, then append a single row with empty right.
           numOutputRows += 1
-          joinedRow.withRight(rightNullRow).copy()
+          resultProjection(joinedRow.withRight(rightNullRow))
         })
       } ++ rightIter.zipWithIndex.collect {
         // 3. For those unmatched records in right, append additional records with empty left.
@@ -213,15 +194,15 @@ trait HashOuterJoin {
         // in the matched set.
         case (r, idx) if !rightMatchedSet.contains(idx) =>
           numOutputRows += 1
-          joinedRow(leftNullRow, r).copy()
+          resultProjection(joinedRow(leftNullRow, r))
       }
     } else {
       leftIter.iterator.map[InternalRow] { l =>
         numOutputRows += 1
-        joinedRow(l, rightNullRow).copy()
+        resultProjection(joinedRow(l, rightNullRow))
       } ++ rightIter.iterator.map[InternalRow] { r =>
         numOutputRows += 1
-        joinedRow(leftNullRow, r).copy()
+        resultProjection(joinedRow(leftNullRow, r))
       }
     }
   }
@@ -230,8 +211,8 @@ trait HashOuterJoin {
   protected[this] def buildHashTable(
       iter: Iterator[InternalRow],
       numIterRows: LongSQLMetric,
-      keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
-    val hashTable = new JavaHashMap[InternalRow, CompactBuffer[InternalRow]]()
+      keyGenerator: Projection): java.util.HashMap[InternalRow, CompactBuffer[InternalRow]] = {
+    val hashTable = new java.util.HashMap[InternalRow, CompactBuffer[InternalRow]]()
     while (iter.hasNext) {
       val currentRow = iter.next()
       numIterRows += 1

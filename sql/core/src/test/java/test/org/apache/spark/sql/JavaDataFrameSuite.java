@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
@@ -65,6 +66,13 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(1, df.select("key").collect()[0].get(0));
   }
 
+  @Test
+  public void testCollectAndTake() {
+    DataFrame df = context.table("testData").filter("key = 1 or key = 2 or key = 3");
+    Assert.assertEquals(3, df.select("key").collectAsList().size());
+    Assert.assertEquals(2, df.select("key").takeAsList(2).size());
+  }
+
   /**
    * See SPARK-5904. Abstract vararg methods defined in Scala do not work in Java.
    */
@@ -91,7 +99,6 @@ public class JavaDataFrameSuite {
     df.groupBy().mean("key");
     df.groupBy().max("key");
     df.groupBy().min("key");
-    df.groupBy().stddev("key");
     df.groupBy().sum("key");
 
     // Varargs in column expressions
@@ -142,11 +149,7 @@ public class JavaDataFrameSuite {
     }
   }
 
-  @Test
-  public void testCreateDataFrameFromJavaBeans() {
-    Bean bean = new Bean();
-    JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
-    DataFrame df = context.createDataFrame(rdd, Bean.class);
+  void validateDataFrameWithBeans(Bean bean, DataFrame df) {
     StructType schema = df.schema();
     Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
       schema.apply("a"));
@@ -183,12 +186,40 @@ public class JavaDataFrameSuite {
   }
 
   @Test
+  public void testCreateDataFrameFromLocalJavaBeans() {
+    Bean bean = new Bean();
+    List<Bean> data = Arrays.asList(bean);
+    DataFrame df = context.createDataFrame(data, Bean.class);
+    validateDataFrameWithBeans(bean, df);
+  }
+
+  @Test
+  public void testCreateDataFrameFromJavaBeans() {
+    Bean bean = new Bean();
+    JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
+    DataFrame df = context.createDataFrame(rdd, Bean.class);
+    validateDataFrameWithBeans(bean, df);
+  }
+
+  @Test
   public void testCreateDataFromFromList() {
     StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
     List<Row> rows = Arrays.asList(RowFactory.create(0));
     DataFrame df = context.createDataFrame(rows, schema);
     Row[] result = df.collect();
     Assert.assertEquals(1, result.length);
+  }
+
+  @Test
+  public void testCreateStructTypeFromList(){
+    List<StructField> fields1 = new ArrayList<>();
+    fields1.add(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema1 = StructType$.MODULE$.apply(fields1);
+    Assert.assertEquals(0, schema1.fieldIndex("id"));
+
+    List<StructField> fields2 = Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema2 = StructType$.MODULE$.apply(fields2);
+    Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
 
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
@@ -246,7 +277,48 @@ public class JavaDataFrameSuite {
     DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
-    Row[] expected = {RowFactory.create(0, 5), RowFactory.create(1, 8)};
-    Assert.assertArrayEquals(expected, actual);
+    Assert.assertEquals(0, actual[0].getLong(0));
+    Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
+    Assert.assertEquals(1, actual[1].getLong(0));
+    Assert.assertTrue(2 <= actual[1].getLong(1) && actual[1].getLong(1) <= 13);
+  }
+
+  @Test
+  public void pivot() {
+    DataFrame df = context.table("courseSales");
+    Row[] actual = df.groupBy("year")
+      .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
+      .agg(sum("earnings")).orderBy("year").collect();
+
+    Assert.assertEquals(2012, actual[0].getInt(0));
+    Assert.assertEquals(15000.0, actual[0].getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual[0].getDouble(2), 0.01);
+
+    Assert.assertEquals(2013, actual[1].getInt(0));
+    Assert.assertEquals(48000.0, actual[1].getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual[1].getDouble(2), 0.01);
+  }
+
+  public void testGenericLoad() {
+    DataFrame df1 = context.read().format("text").load(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Assert.assertEquals(4L, df1.count());
+
+    DataFrame df2 = context.read().format("text").load(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
+      Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
+    Assert.assertEquals(5L, df2.count());
+  }
+
+  @Test
+  public void testTextLoad() {
+    DataFrame df1 = context.read().text(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Assert.assertEquals(4L, df1.count());
+
+    DataFrame df2 = context.read().text(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
+      Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
+    Assert.assertEquals(5L, df2.count());
   }
 }

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction and Transformation - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction and Transformation
+title: Feature Extraction and Transformation - spark.mllib
+displayTitle: Feature Extraction and Transformation - spark.mllib
 ---
 
 * Table of contents
@@ -31,7 +31,7 @@ The TF-IDF measure is simply the product of TF and IDF:
 TFIDF(t, d, D) = TF(t, d) \cdot IDF(t, D).
 \]`
 There are several variants on the definition of term frequency and document frequency.
-In MLlib, we separate TF and IDF to make them flexible.
+In `spark.mllib`, we separate TF and IDF to make them flexible.
 
 Our implementation of term frequency utilizes the
 [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
@@ -44,7 +44,7 @@ To reduce the chance of collision, we can increase the target feature dimension,
 the number of buckets of the hash table.
 The default feature dimension is `$2^{20} = 1,048,576$`.
 
-**Note:** MLlib doesn't provide tools for text segmentation.
+**Note:** `spark.mllib` doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
 [scalanlp/chalk](https://github.com/scalanlp/chalk).
 
@@ -55,6 +55,9 @@ TF and IDF are implemented in [HashingTF](api/scala/index.html#org.apache.spark.
 and [IDF](api/scala/index.html#org.apache.spark.mllib.feature.IDF).
 `HashingTF` takes an `RDD[Iterable[_]]` as the input.
 Each record could be an iterable of strings or other types.
+
+Refer to the [`HashingTF` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.HashingTF) for details on the API.
+
 
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
@@ -83,7 +86,7 @@ val idf = new IDF().fit(tf)
 val tfidf: RDD[Vector] = idf.transform(tf)
 {% endhighlight %}
 
-MLlib's IDF implementation provides an option for ignoring terms which occur in less than a
+`spark.mllib`'s IDF implementation provides an option for ignoring terms which occur in less than a
 minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
 can be used by passing the `minDocFreq` value to the IDF constructor.
 
@@ -102,6 +105,9 @@ TF and IDF are implemented in [HashingTF](api/python/pyspark.mllib.html#pyspark.
 and [IDF](api/python/pyspark.mllib.html#pyspark.mllib.feature.IDF).
 `HashingTF` takes an RDD of list as the input.
 Each record could be an iterable of strings or other types.
+
+
+Refer to the [`HashingTF` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF) for details on the API.
 
 {% highlight python %}
 from pyspark import SparkContext
@@ -128,7 +134,7 @@ idf = IDF().fit(tf)
 tfidf = idf.transform(tf)
 {% endhighlight %}
 
-MLLib's IDF implementation provides an option for ignoring terms which occur in less than a
+`spark.mllib`'s IDF implementation provides an option for ignoring terms which occur in less than a
 minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
 can be used by passing the `minDocFreq` value to the IDF constructor.
 
@@ -183,7 +189,9 @@ the [text8](http://mattmahoney.net/dc/text8.zip) data and extract it to your pre
 Here we assume the extracted file is `text8` and in same directory as you run the spark shell.  
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+Refer to the [`Word2Vec` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Word2Vec) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark._
 import org.apache.spark.rdd._
@@ -207,7 +215,9 @@ model.save(sc, "myModelPath")
 val sameModel = Word2VecModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+Refer to the [`Word2Vec` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Word2Vec) for more details on the API.
+
 {% highlight python %}
 from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
@@ -264,7 +274,9 @@ The example below demonstrates how to load a dataset in libsvm format, and stand
 so that the new features have unit standard deviation and/or zero mean.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+Refer to the [`StandardScaler` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.StandardScaler
@@ -288,7 +300,9 @@ val data2 = data.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.t
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+Refer to the [`StandardScaler` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.StandardScaler) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.linalg import Vectors
@@ -338,7 +352,9 @@ The example below demonstrates how to load a dataset in libsvm format, and norma
 with $L^2$ norm, and $L^\infty$ norm.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+Refer to the [`Normalizer` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.Normalizer
@@ -358,7 +374,9 @@ val data2 = data.map(x => (x.label, normalizer2.transform(x.features)))
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+Refer to the [`Normalizer` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Normalizer) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.linalg import Vectors
@@ -532,7 +550,10 @@ v_N
 This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+
+Refer to the [`ElementwiseProduct` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.feature.ElementwiseProduct
@@ -551,7 +572,9 @@ val transformedData2 = data.map(x => transformer.transform(x))
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
+Refer to the [`ElementwiseProduct` Java docs](api/java/org/apache/spark/mllib/feature/ElementwiseProduct.html) for details on the API.
+
 {% highlight java %}
 import java.util.Arrays;
 import org.apache.spark.api.java.JavaRDD;
@@ -580,7 +603,9 @@ JavaRDD<Vector> transformedData2 = data.map(
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+Refer to the [`ElementwiseProduct` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.ElementwiseProduct) for more details on the API.
+
 {% highlight python %}
 from pyspark import SparkContext
 from pyspark.mllib.linalg import Vectors
@@ -617,7 +642,9 @@ and use them to project the vectors into a low-dimensional space while keeping a
 for calculation a [Linear Regression]((mllib-linear-methods.html))
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint

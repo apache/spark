@@ -34,6 +34,7 @@ We list major functionality from both below, with links to detailed guides.
   * [correlations](mllib-statistics.html#correlations)
   * [stratified sampling](mllib-statistics.html#stratified-sampling)
   * [hypothesis testing](mllib-statistics.html#hypothesis-testing)
+  * [streaming significance testing](mllib-statistics.html#streaming-significance-testing)
   * [random data generation](mllib-statistics.html#random-data-generation)
 * [Classification and regression](mllib-classification-regression.html)
   * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
@@ -65,14 +66,14 @@ We list major functionality from both below, with links to detailed guides.
 
 # spark.ml: high-level APIs for ML pipelines
 
-**[spark.ml programming guide](ml-guide.html)** provides an overview of the Pipelines API and major
-concepts. It also contains sections on using algorithms within the Pipelines API, for example:
+* [Overview: estimators, transformers and pipelines](ml-guide.html)
+* [Extracting, transforming and selecting features](ml-features.html)
+* [Classification and regression](ml-classification-regression.html)
+* [Clustering](ml-clustering.html)
+* [Advanced topics](ml-advanced.html)
 
-* [Feature extraction, transformation, and selection](ml-features.html)
-* [Decision trees for classification and regression](ml-decision-tree.html)
-* [Ensembles](ml-ensembles.html)
-* [Linear methods with elastic net regularization](ml-linear-methods.html)
-* [Multilayer perceptron classifier](ml-ann.html)
+Some techniques are not available yet in spark.ml, most notably dimensionality reduction 
+Users can seemlessly combine the implementation of these techniques found in `spark.mllib` with the rest of the algorithms found in `spark.ml`.
 
 # Dependencies
 

@@ -55,6 +55,10 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-unsafe_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>

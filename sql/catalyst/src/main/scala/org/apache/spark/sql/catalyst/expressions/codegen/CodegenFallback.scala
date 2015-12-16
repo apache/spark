@@ -33,12 +33,12 @@ trait CodegenFallback extends Expression {
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
     s"""
-      /* expression: ${this} */
-      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
+      /* expression: ${this.toCommentSafeString} */
+      java.lang.Object $objectTerm = expressions[${ctx.references.size - 1}].eval(${ctx.INPUT_ROW});
       boolean ${ev.isNull} = $objectTerm == null;
-      ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
+      ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
       if (!${ev.isNull}) {
-        ${ev.primitive} = (${ctx.boxedType(this.dataType)}) $objectTerm;
+        ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
       }
     """
   }

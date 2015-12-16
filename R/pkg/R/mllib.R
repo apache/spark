@@ -27,11 +27,17 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '+', '-', and '.'.
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data DataFrame for training
 #' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
 #' @param lambda Regularization parameter
 #' @param alpha Elastic-net mixing parameter (see glmnet's documentation for details)
+#' @param standardize Whether to standardize features before training
+#' @param solver The solver algorithm used for optimization, this can be "l-bfgs", "normal" and
+#'               "auto". "l-bfgs" denotes Limited-memory BFGS which is a limited-memory
+#'               quasi-Newton optimization method. "normal" denotes using Normal Equation as an
+#'               analytical solution to the linear regression problem. The default value is "auto"
+#'               which means that the solver algorithm is selected automatically.
 #' @return a fitted MLlib model
 #' @rdname glm
 #' @export
@@ -41,14 +47,17 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
 #' df <- createDataFrame(sqlContext, iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df)
+#' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
+#' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
+          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
+            standardize = TRUE, solver = "auto") {
             family <- match.arg(family)
+            formula <- paste(deparse(formula), collapse="")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
-                                 alpha)
+                                 "fitRModelFormula", formula, data@sdf, family, lambda,
+                                 alpha, standardize, solver)
             return(new("PipelineModel", model = model))
           })
 
@@ -76,9 +85,15 @@ setMethod("predict", signature(object = "PipelineModel"),
 #'
 #' Returns the summary of a model produced by glm(), similarly to R's summary().
 #'
-#' @param x A fitted MLlib model
-#' @return a list with a 'coefficient' component, which is the matrix of coefficients. See
-#'         summary.glm for more information.
+#' @param object A fitted MLlib model
+#' @return a list with 'devianceResiduals' and 'coefficients' components for gaussian family
+#'         or a list with 'coefficients' component for binomial family. \cr
+#'         For gaussian family: the 'devianceResiduals' gives the min/max deviance residuals
+#'         of the estimation, the 'coefficients' gives the estimated coefficients and their
+#'         estimated standard errors, t values and p-values. (It only available when model
+#'         fitted by normal solver.) \cr
+#'         For binomial family: the 'coefficients' gives the estimated coefficients.
+#'         See summary.glm for more information. \cr
 #' @rdname summary
 #' @export
 #' @examples
@@ -86,14 +101,28 @@ setMethod("predict", signature(object = "PipelineModel"),
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
 #'}
-setMethod("summary", signature(x = "PipelineModel"),
-          function(x, ...) {
+setMethod("summary", signature(object = "PipelineModel"),
+          function(object, ...) {
+            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelName", object@model)
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelFeatures", x@model)
-            weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelWeights", x@model)
-            coefficients <- as.matrix(unlist(weights))
-            colnames(coefficients) <- c("Estimate")
-            rownames(coefficients) <- unlist(features)
-            return(list(coefficients = coefficients))
+                                   "getModelFeatures", object@model)
+            coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelCoefficients", object@model)
+            if (modelName == "LinearRegressionModel") {
+              devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                               "getModelDevianceResiduals", object@model)
+              devianceResiduals <- matrix(devianceResiduals, nrow = 1)
+              colnames(devianceResiduals) <- c("Min", "Max")
+              rownames(devianceResiduals) <- rep("", times = 1)
+              coefficients <- matrix(coefficients, ncol = 4)
+              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+              rownames(coefficients) <- unlist(features)
+              return(list(devianceResiduals = devianceResiduals, coefficients = coefficients))
+            } else {
+              coefficients <- as.matrix(unlist(coefficients))
+              colnames(coefficients) <- c("Estimate")
+              rownames(coefficients) <- unlist(features)
+              return(list(coefficients = coefficients))
+            }
           })

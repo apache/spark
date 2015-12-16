@@ -63,6 +63,11 @@ private[spark] class MesosExecutorBackend
 
     logInfo(s"Registered with Mesos as executor ID $executorId with $cpusPerTask cpus")
     this.driver = driver
+    // Set a context class loader to be picked up by the serializer. Without this call
+    // the serializer would default to the null class loader, and fail to find Spark classes
+    // See SPARK-10986.
+    Thread.currentThread().setContextClassLoader(this.getClass.getClassLoader)
+
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
       Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     val conf = new SparkConf(loadDefaults = true).setAll(properties)

@@ -41,5 +41,5 @@ public @interface SQLUserDefinedType {
    * Returns an instance of the UserDefinedType which can serialize and deserialize the user
    * class to and from Catalyst built-in types.
    */
-  Class<? extends UserDefinedType<?> > udt();
+  Class<? extends UserDefinedType<?>> udt();
 }

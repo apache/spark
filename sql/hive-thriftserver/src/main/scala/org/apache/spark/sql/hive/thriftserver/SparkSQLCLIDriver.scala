@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io._
 import java.util.{ArrayList => JArrayList, Locale}
 
+import org.apache.spark.sql.AnalysisException
+
 import scala.collection.JavaConverters._
 
 import jline.console.ConsoleReader
@@ -81,7 +83,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    HiveContext.newTemporaryConfiguration().foreach {
+    HiveContext.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
       case (key, value) => cliConf.set(key, value)
     }
     val sessionState = new CliSessionState(cliConf)
@@ -192,6 +194,22 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         logWarning(e.getMessage)
     }
 
+    // add shutdown hook to flush the history to history file
+    Runtime.getRuntime.addShutdownHook(new Thread(new Runnable() {
+      override def run() = {
+        reader.getHistory match {
+          case h: FileHistory =>
+            try {
+              h.flush()
+            } catch {
+              case e: IOException =>
+                logWarning("WARNING: Failed to write command history file: " + e.getMessage)
+            }
+          case _ =>
+        }
+      }
+    }))
+
     // TODO: missing
 /*
     val clientTransportTSocketField = classOf[CliSessionState].getDeclaredField("transport")
@@ -288,7 +306,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = CommandProcessorFactory.get(Array(tokens(0)), hconf)
+      val proc: CommandProcessor = CommandProcessorFactory.get(tokens, hconf)
 
       if (proc != null) {
         // scalastyle:off println
@@ -298,6 +316,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           driver.init()
           val out = sessionState.out
+          val err = sessionState.err
           val start: Long = System.currentTimeMillis()
           if (sessionState.getIsVerbose) {
             out.println(cmd)
@@ -308,7 +327,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           ret = rc.getResponseCode
           if (ret != 0) {
-            console.printError(rc.getErrorMessage())
+            // For analysis exception, only the error is printed out to the console.
+            rc.getException() match {
+              case e : AnalysisException =>
+                err.println(s"""Error in query: ${e.getMessage}""")
+              case _ => err.println(rc.getErrorMessage())
+            }
             driver.close()
             return ret
           }

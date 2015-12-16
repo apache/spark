@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import UTF8Deserializer

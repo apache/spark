@@ -22,17 +22,19 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.StringUtils
 
+import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.SqlParser
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JSONRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.{Logging, Partition}
 
 /**
  * :: Experimental ::
@@ -102,6 +104,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * @since 1.4.0
    */
+  // TODO: Remove this one in Spark 2.0.
   def load(path: String): DataFrame = {
     option("path", path).load()
   }
@@ -120,6 +123,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data sources that support multiple paths.
+   * Only works if the source is a HadoopFsRelationProvider.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def load(paths: String*): DataFrame = {
+    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
   }
 
   /**
@@ -215,10 +229,38 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
-   * @param path input path
+   * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+   * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
+   * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
+   * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
+   * </li>
+   * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
+   * (e.g. 00012)</li>
+   *
    * @since 1.4.0
    */
+  // TODO: Remove this one in Spark 2.0.
   def json(path: String): DataFrame = format("json").load(path)
+
+  /**
+   * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
+   *
+   * This function goes through the input once to determine the input schema. If you know the
+   * schema in advance, use the version that specifies the schema to avoid the extra scan.
+   *
+   * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+   * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
+   * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
+   * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
+   * </li>
+   * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
+   * (e.g. 00012)</li>
+   *
+   * @since 1.6.0
+   */
+  def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
    * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
@@ -243,9 +285,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
+      new JSONRelation(
+        Some(jsonRDD),
+        maybeDataSchema = userSpecifiedSchema,
+        maybePartitionSpec = None,
+        userDefinedPartitionColumns = None,
+        parameters = extraOptions.toMap)(sqlContext)
+    )
   }
 
   /**
@@ -287,8 +334,26 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext, sqlContext.catalog.lookupRelation(Seq(tableName)))
+    DataFrame(sqlContext,
+      sqlContext.catalog.lookupRelation(SqlParser.parseTableIdentifier(tableName)))
   }
+
+  /**
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * {{{
+   *   // Scala:
+   *   sqlContext.read.text("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   sqlContext.read().text("/path/to/spark/README.md")
+   * }}}
+   *
+   * @param paths input path
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

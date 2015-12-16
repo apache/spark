@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -32,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartit
  * @param output      The output Schema
  * @param child       Child operator
  */
-@DeveloperApi
 case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
@@ -43,14 +41,24 @@ case class Expand(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
+  override def references: AttributeSet =
+    AttributeSet(projections.flatten.flatMap(_.references))
+
+  private[this] val projection = {
+    if (outputsUnsafeRows) {
+      (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
+    } else {
+      (exprs: Seq[Expression]) => newMutableProjection(exprs, child.output)()
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
-      // TODO Move out projection objects creation and transfer to
-      // workers via closure. However we can't assume the Projection
-      // is serializable because of the code gen, so we have to
-      // create the projections within each of the partition processing.
-      val groups = projections.map(ee => newProjection(ee, child.output)).toArray
-
+      val groups = projections.map(projection).toArray
       new Iterator[InternalRow] {
         private[this] var result: InternalRow = _
         private[this] var idx = -1  // -1 means the initial state

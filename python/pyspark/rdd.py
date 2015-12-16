@@ -1760,7 +1760,6 @@ class RDD(object):
         In addition, users can control the partitioning of the output RDD.
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
-        >>> def f(x): return x
         >>> def add(a, b): return a + str(b)
         >>> sorted(x.combineByKey(str, add, add).collect())
         [('a', '11'), ('b', '1')]
@@ -2016,7 +2015,7 @@ class RDD(object):
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
         [[1, 2, 3, 4, 5]]
         """
-        jrdd = self._jrdd.coalesce(numPartitions)
+        jrdd = self._jrdd.coalesce(numPartitions, shuffle)
         return RDD(jrdd, self.ctx, self._jrdd_deserializer)
 
     def zip(self, other):
