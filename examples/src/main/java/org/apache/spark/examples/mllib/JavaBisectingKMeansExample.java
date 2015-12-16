@@ -41,15 +41,15 @@ public class JavaBisectingKMeansExample {
 
     // $example on$
     ArrayList<Vector> localData = Lists.newArrayList(
-        Vectors.dense(0.1, 0.1),   Vectors.dense(0.3, 0.3),
-        Vectors.dense(10.1, 10.1), Vectors.dense(10.3, 10.3),
-        Vectors.dense(20.1, 20.1), Vectors.dense(20.3, 20.3),
-        Vectors.dense(30.1, 30.1), Vectors.dense(30.3, 30.3)
+      Vectors.dense(0.1, 0.1),   Vectors.dense(0.3, 0.3),
+      Vectors.dense(10.1, 10.1), Vectors.dense(10.3, 10.3),
+      Vectors.dense(20.1, 20.1), Vectors.dense(20.3, 20.3),
+      Vectors.dense(30.1, 30.1), Vectors.dense(30.3, 30.3)
     );
     JavaRDD<Vector> data = sc.parallelize(localData, 2);
 
     BisectingKMeans bkm = new BisectingKMeans()
-        .setK(4);
+      .setK(4);
     BisectingKMeansModel model = bkm.run(data);
 
     System.out.println("Compute Cost: " + model.computeCost(data));
