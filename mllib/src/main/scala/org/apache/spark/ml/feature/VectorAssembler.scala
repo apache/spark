@@ -82,7 +82,7 @@ class VectorAssembler(override val uid: String)
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
             val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
-            Array.fill(numAttrs)(NumericAttribute.defaultAttr)
+            Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
         case otherType =>
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
