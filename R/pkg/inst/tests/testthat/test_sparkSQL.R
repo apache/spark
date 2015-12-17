@@ -1725,14 +1725,13 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
                "Only atomic type is supported for column types")
 })
 
-# Structure of Iris
-
 test_that("Method str()", {
+  # Structure of Iris
   iris2 <- iris
   colnames(iris2) <- c("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width", "Species")
   iris2$col <- TRUE
   irisDF2 <- createDataFrame(sqlContext, iris2)
-  
+
   out <- capture.output(str(irisDF2))
   expect_equal(length(out), 7)
   expect_equal(out[1], "'DataFrame': 6 variables:")
