@@ -737,14 +737,12 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
   }
 
   test("DStreamCheckpointData.restore invoking times") {
-    var clock: ManualClock = null
-    val outputBuffer = new ArrayBuffer[Seq[Seq[Int]]] with SynchronizedBuffer[Seq[Seq[Int]]]
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
       ssc.checkpoint(checkpointDir)
       val inputDStream = new CheckpointInputDStream(ssc)
       val checkpointData = inputDStream.checkpointData
       val mappedDStream = inputDStream.map(_ + 100)
-      val outputStream = new TestOutputStreamWithPartitions(mappedDStream, outputBuffer)
+      val outputStream = new TestOutputStreamWithPartitions(mappedDStream)
       outputStream.register()
       // do two more times output
       mappedDStream.foreachRDD(rdd => rdd.count())
