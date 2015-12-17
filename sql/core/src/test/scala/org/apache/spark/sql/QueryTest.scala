@@ -21,9 +21,11 @@ import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
@@ -125,30 +127,7 @@ abstract class QueryTest extends PlanTest {
              |""".stripMargin)
     }
 
-    import TreeNodeJsonFormatter._
-    val logicalPlan = analyzedDF.queryExecution.analyzed
-    var logicalRDDs = logicalPlan.collect { case l: LogicalRDD => l }
-    var logicalRelations = logicalPlan.collect { case l: LogicalRelation => l }
-    try {
-      val jsonBackPlan = fromJSON(toJSON(logicalPlan)).asInstanceOf[LogicalPlan]
-      val normalized = jsonBackPlan transformDown {
-        case l: LogicalRDD =>
-          val replace = logicalRDDs.head
-          logicalRDDs = logicalRDDs.drop(1)
-          replace
-        case l: LogicalRelation =>
-          val replace = logicalRelations.head
-          logicalRelations = logicalRelations.drop(1)
-          replace
-      }
-      assert(logicalRDDs.isEmpty)
-      assert(logicalRelations.isEmpty)
-      comparePlans(logicalPlan, normalized)
-    } catch {
-      case e =>
-        println(logicalPlan.treeString)
-        throw e
-    }
+    checkJsonFormat(analyzedDF)
 
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
@@ -203,6 +182,89 @@ abstract class QueryTest extends PlanTest {
       cachedData.size == numCachedTables,
       s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
         planWithCaching)
+  }
+
+  private def checkJsonFormat(df: DataFrame): Unit = {
+    import TreeNodeJsonFormatter._
+    val logicalPlan = df.queryExecution.analyzed
+    logicalPlan.transform {
+      case _: MapPartitions[_, _] => return
+      case _: MapGroups[_, _, _] => return
+      case _: AppendColumns[_, _] => return
+      case _: CoGroup[_, _, _, _] => return
+      case _: LogicalRelation => return
+    }.transformAllExpressions {
+      case a: ImperativeAggregate => return
+    }
+
+    var logicalRDDs = logicalPlan.collect { case l: LogicalRDD => l }
+    var localRelations = logicalPlan.collect { case l: LocalRelation => l }
+    var inMemoryRelations = logicalPlan.collect { case i: InMemoryRelation => i }
+
+    val normalized1 = logicalPlan.transformAllExpressions {
+      case udf: ScalaUDF => udf.copy(function = null)
+      case gen: UserDefinedGenerator => gen.copy(function = null)
+    }
+
+    val jsonString = try {
+      toJSON(logicalPlan)
+    } catch {
+      case e =>
+        fail(
+          s"""
+             |Failed to parse logical plan to JSON:
+             |${logicalPlan.treeString}
+           """.stripMargin, e)
+    }
+
+    val jsonBackPlan = try {
+      fromJSON(jsonString, sqlContext.sparkContext).asInstanceOf[LogicalPlan]
+    } catch {
+      case e =>
+        fail(
+          s"""
+             |Failed to rebuild the logical plan from JSON:
+             |${logicalPlan.treeString}
+             |
+             |$jsonString
+           """.stripMargin, e)
+    }
+
+    val normalized2 = jsonBackPlan transformDown {
+      case l: LogicalRDD =>
+        val origin = logicalRDDs.head
+        logicalRDDs = logicalRDDs.drop(1)
+        LogicalRDD(l.output, origin.rdd)(sqlContext)
+      case l: LocalRelation =>
+        val origin = localRelations.head
+        localRelations = localRelations.drop(1)
+        l.copy(data = origin.data)
+      case l: InMemoryRelation =>
+        val origin = inMemoryRelations.head
+        inMemoryRelations = inMemoryRelations.drop(1)
+        InMemoryRelation(
+          l.output,
+          l.useCompression,
+          l.batchSize,
+          l.storageLevel,
+          l.child,
+          l.tableName)(
+          origin.cachedColumnBuffers,
+          l._statistics,
+          origin._batchStats)
+    }
+
+    assert(logicalRDDs.isEmpty)
+    assert(localRelations.isEmpty)
+    assert(inMemoryRelations.isEmpty)
+
+    if (normalized1 != normalized2) {
+      fail(
+        s"""
+           |== FAIL: the logical plan parsed from json does not match the original one ===
+           |${sideBySide(logicalPlan.treeString, normalized2.treeString).mkString("\n")}
+          """.stripMargin)
+    }
   }
 }
 

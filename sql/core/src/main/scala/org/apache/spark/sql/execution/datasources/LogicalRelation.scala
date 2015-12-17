@@ -33,7 +33,7 @@ case class LogicalRelation(
     expectedOutputAttributes: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {
 
-  override lazy val output: Seq[AttributeReference] = {
+  override val output: Seq[AttributeReference] = {
     val attrs = relation.schema.toAttributes
     expectedOutputAttributes.map { expectedAttrs =>
       assert(expectedAttrs.length == attrs.length)
@@ -72,7 +72,7 @@ case class LogicalRelation(
   )
 
   /** Used to lookup original attribute capitalization */
-  lazy val attributeMap: AttributeMap[AttributeReference] = AttributeMap(output.map(o => (o, o)))
+  val attributeMap: AttributeMap[AttributeReference] = AttributeMap(output.map(o => (o, o)))
 
   def newInstance(): this.type = LogicalRelation(relation).asInstanceOf[this.type]
 

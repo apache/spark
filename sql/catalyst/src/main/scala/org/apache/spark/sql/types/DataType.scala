@@ -104,8 +104,8 @@ object DataType {
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
   private val nonDecimalNameToType = {
-    Seq(NullType, DateType, TimestampType, BinaryType,
-      IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 

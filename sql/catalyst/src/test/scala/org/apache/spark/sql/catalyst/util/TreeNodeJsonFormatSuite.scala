@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class TreeNodeJsonFormatSuite extends SparkFunSuite {
+class TreeNodeJsonFormatSuite extends SparkFunSuite with SharedSparkContext {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
   import TreeNodeJsonFormatter._
 
@@ -30,7 +30,7 @@ class TreeNodeJsonFormatSuite extends SparkFunSuite {
     // scalastyle:off println
     val json = toJSON(plan)
     println(json)
-    println(fromJSON(json).treeString)
+    println(fromJSON(json, sc).treeString)
     println(plan.treeString)
   }
 }

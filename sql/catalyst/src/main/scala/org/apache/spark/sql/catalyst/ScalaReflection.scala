@@ -321,7 +321,7 @@ object ScalaReflection extends ScalaReflection {
           keyData :: valueData :: Nil)
 
       case t if t <:< localTypeOf[Product] =>
-        val params = getConstructorParas(t)
+        val params = getConstructorParameters(t)
 
         val cls = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 
@@ -459,7 +459,7 @@ object ScalaReflection extends ScalaReflection {
           }
 
         case t if t <:< localTypeOf[Product] =>
-          val params = getConstructorParas(t)
+          val params = getConstructorParameters(t)
 
           CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
@@ -560,11 +560,11 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
-  def getConstructorParas(cls: Class[_]): Seq[(String, Type)] = {
+  def getConstructorParameters(cls: Class[_]): Seq[(String, Type)] = {
     val m = runtimeMirror(cls.getClassLoader)
     val classSymbol = m.staticClass(cls.getName)
     val t = classSymbol.selfType
-    getConstructorParas(t)
+    getConstructorParameters(t)
   }
 }
 
@@ -639,7 +639,7 @@ trait ScalaReflection {
         Schema(MapType(schemaFor(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< localTypeOf[Product] =>
-        val params = getConstructorParas(t)
+        val params = getConstructorParameters(t)
         Schema(StructType(
           params.map { case (fieldName, fieldType) =>
             val Schema(dataType, nullable) = schemaFor(fieldType)
@@ -697,7 +697,7 @@ trait ScalaReflection {
     methods.head.getParameterTypes
   }
 
-  protected def getConstructorParas(tpe: Type): Seq[(String, Type)] = {
+  def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = tpe
     val constructorSymbol = tpe.member(nme.CONSTRUCTOR)
