@@ -87,7 +87,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
               <h4>
                 <form action="" method="GET">
-                  Application Names: <input type="text" name="query" value={requestedQuery} />
+                  Application Name: <input type="text" name="query" value={requestedQuery} />
                   <input type="hidden" name="showIncomplete" value={requestedIncomplete.toString} />
                   <input type="submit" value="Search" />
                 </form>
