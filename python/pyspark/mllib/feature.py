@@ -194,7 +194,7 @@ class StandardScalerModel(JavaVectorTransformer):
     @since('2.0.0')
     def std(self):
         """
-        Return the column standard deviation values. Only set if model was trained withStd.
+        Return the column standard deviation values.
         """
         return self.call("std")
 
@@ -202,7 +202,7 @@ class StandardScalerModel(JavaVectorTransformer):
     @since('2.0.0')
     def mean(self):
         """
-        Return the column mean values. Only set if model was trained withMean.
+        Return the column mean values.
         """
         return self.call("mean")
 
