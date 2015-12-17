@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
 /**
  * A non-concrete data type, reserved for internal uses.
  */
-private[spark] abstract class AbstractDataType {
+private[sql] abstract class AbstractDataType {
   /**
    * The default concrete type to use if we want to cast a null literal into this type.
    */
