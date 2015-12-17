@@ -455,7 +455,7 @@ class DataFrame private[sql](
     val joined = sqlContext.executePlan(
       Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
       .analyzed.asInstanceOf[Join]
-    
+
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
         withPlan(joined.left).resolve(col),
