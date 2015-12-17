@@ -36,6 +36,10 @@ import net.jpountz.xxhash.XXHashFactory;
  * @see LZ4BlockOutputStream
  *
  * This is based on net.jpountz.lz4.LZ4BlockInputStream
+ *
+ * changes: https://github.com/davies/lz4-java/commit/cc1fa940ac57cc66a0b937300f805d37e2bf8411
+ *
+ * TODO: merge this into upstream
  */
 public final class LZ4BlockInputStream extends FilterInputStream {
 
