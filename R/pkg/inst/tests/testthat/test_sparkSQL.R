@@ -1732,14 +1732,14 @@ test_that("Method str()", {
   irisDF2 <- createDataFrame(sqlContext, iris2)
   out <- capture.output(str(irisDF2))
   expect_equal(length(out), 7)
-  expect_equal(out[1], "'DataFrame': 150 obs. of 6 variables:")
-  expect_equal(out[2], " $ Sepal_Length: num 5.1 4.9 4.7 4.6 5 5.4 ...")
-  expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9 ...")
-  expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7 ...")
-  expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4 ...")
+  expect_equal(out[1], "'DataFrame': 6 variables:")
+  expect_equal(out[2], " $ Sepal_Length: num 5.1 4.9 4.7 4.6 5 5.4")
+  expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9")
+  expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7")
+  expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4")
   expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
-                              "setosa\" \"setosa\" \"setosa\" \"setosa\" ..."))
-  expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE ...")
+                              "setosa\" \"setosa\" \"setosa\" \"setosa\""))
+  expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
 
   # A random dataset with many columns. This test is to check str limits
   # the number of columns. Therefore, it will suffice to check for the

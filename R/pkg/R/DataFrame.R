@@ -2250,10 +2250,6 @@ setMethod("str",
             names <- names(object)
             types <- coltypes(object)
 
-            # Get the number of rows.
-            # TODO: Ideally, this should be cached
-            cachedCount <- nrow(object)
-
             # Get the first elements of the dataset. Limit number of columns accordingly
             localDF <- if (ncol(object) > MAX_COLS) {
               head(object[, c(1:MAX_COLS)])
@@ -2261,22 +2257,9 @@ setMethod("str",
               head(object)
             }
 
-            # The number of observations will be displayed only if the number
-            # of rows of the dataset has already been cached.
-            if (!is.null(cachedCount)) {
-              cat(paste0("'", class(object), "': ", cachedCount, " obs. of ",
-                         length(names), " variables:\n"))
-            } else {
-              cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
-            }
-
-            # Whether the ... should be printed at the end of each row
-            ellipsis <- FALSE
-
-            # Add ellipsis (i.e., "...") if there are more rows than shown
-            if (!is.null(cachedCount) && (cachedCount > 6)) {
-              ellipsis <- TRUE
-            }
+            # The number of observations will not be displayed as computing the
+            # number of rows is a very expensive operation
+            cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
 
             if (nrow(localDF) > 0) {
               for (i in 1 : ncol(localDF)) {
@@ -2306,9 +2289,6 @@ setMethod("str",
 
                 # Chop off extra characters if this is too long
                 cat(substr(line, 1, MAX_CHAR_PER_ROW))
-                if (ellipsis) {
-                  cat(" ...")
-                }
                 cat("\n")
               }
 
