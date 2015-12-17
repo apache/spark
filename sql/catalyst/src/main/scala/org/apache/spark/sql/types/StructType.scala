@@ -278,6 +278,23 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     s"struct<${fieldTypes.mkString(",")}>"
   }
 
+  override def simpleString(maxNumberFields: Int): String = {
+    val builder = new StringBuilder
+    val fieldTypes = fields.take(maxNumberFields).map {
+      case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
+    }
+    builder.append("struct<")
+    builder.append(fieldTypes.mkString(","))
+    if (fields.length > 2) {
+      if (fields.length - fieldTypes.size == 1) {
+        builder.append(" ... 1 more field")
+      } else {
+        builder.append(" ... " + (fields.length - 2) + " more fields")
+      }
+    }
+    builder.append(">").toString()
+  }
+
   /**
    * Merges with another schema (`StructType`).  For a struct field A from `this` and a struct field
    * B from `that`,
