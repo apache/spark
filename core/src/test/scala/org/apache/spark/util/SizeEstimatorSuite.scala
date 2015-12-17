@@ -79,7 +79,7 @@ class SizeEstimatorSuite
     System.setProperty("spark.test.useCompressedOops", "true")
   }
 
-  override def afterEach() = {
+  override def afterEach(): Unit = {
     super.afterEach()
   }
 

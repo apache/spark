@@ -96,7 +96,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   override def afterEach(): Unit = {
-    try {    
+    try {
       if (store != null) {
         store.stop()
         store = null
