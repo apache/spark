@@ -1629,6 +1629,71 @@ class DataFrame private[sql](
   }
 
   /**
+   * :: Experimental ::
+   *
+   * Returns the content of the [[DataFrame]] as an [[RDD]] of the given type `T`, where `T` is a
+   * subtype of [[scala.Product]] (typically a case class).
+   *
+   * For example, given a case class `Food`
+   *
+   * {{{
+   *   case class Food(name: String, count: Int)
+   * }}}
+   *
+   * the following example shows how a [[DataFrame]] derived from an `RDD[Food]` can be
+   * reconstituted into another `RDD[Food]` with the same elements:
+   *
+   * {{{
+   *   val rdd0 = sc.parallelize(Seq(Food("apple", 1), Food("banana", 2), Food("cherry", 3)))
+   *   val df0 = rdd0.toDF()
+   *   df0.save("foods.parquet")
+   *
+   *   val df1 = sqlContext.load("foods.parquet")
+   *   val rdd1 = df1.toTypedRDD[Food]()
+   *   // rdd0 and rdd1 should have the same elements
+   * }}}
+   *
+   * This method makes a best effort to validate, up front, i.e. before the RDD is materialized,
+   * that `T` is compatible with this DataFrame's [[schema]] and will throw an
+   * `IllegalArgumentException` if it isn't. Any other problems with the schema or conversion should
+   * manifest as exceptions when materializing the RDD.
+   *
+   * `toTypedRDD` can reconstruct most but not all `T`. For example, if `T` has a field of type
+   * `Array` whose corresponding Catalyst type is `ArrayType`, `toTypedRDD` cannot rebuild the array
+   * because of limitations with reflection. (`toTypedRDD` can only build `Seq` fields from Catalyst
+   * values of `ArrayType`.)
+   *
+   * This method cannot reconstruct classes defined in the Spark shell. Before using the shell, you
+   * should compile any classes you want to use with `toTypedRDD`.
+   *
+   * @group rdd
+   */
+  @Experimental
+  def toTypedRDD[T <: Product : TypeTag]()(implicit classTag: ClassTag[T]): RDD[T] = {
+    // NOTE: Similar to implementation of rdd.
+
+    // Use a local variable to make sure the map closure doesn't capture the whole DataFrame.
+    val schema = this.schema.asInstanceOf[StructType]
+
+    // Validate the schema.
+    // NOTE: Nullability appears to be lost for primitives when an RDD is converted to a DataFrame.
+    // To give the DataFrame a chance to be converted back to an RDD, we ignore nullability.
+    val schemaForT = ScalaReflection.schemaFor[T].dataType.asInstanceOf[StructType]
+    if (schema.asNullable != schemaForT.asNullable) {
+      throw new IllegalArgumentException(
+        s"""|Even after ignoring nullable, schemas are incompatible:
+            |DataFrame ${schema.asNullable} vs.
+            |${classTag.runtimeClass.getName} ${schemaForT.asNullable}")"""
+          .stripMargin.replaceAll("\n", " "))
+    } else {
+      queryExecution.executedPlan.execute().mapPartitions { rows =>
+        val converter = CatalystTypeConverters.createToProductConverter[T](schema)
+        rows.map(converter)
+      }
+    }
+  }
+
+  /**
    * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.
    * @group rdd
    * @since 1.3.0
