@@ -162,7 +162,9 @@ private[spark] object ShutdownHookManager extends Logging {
       val hook = new Thread {
         override def run() {}
       }
+      // scalastyle:off runtimeaddshutdownhook
       Runtime.getRuntime.addShutdownHook(hook)
+      // scalastyle:on runtimeaddshutdownhook
       Runtime.getRuntime.removeShutdownHook(hook)
     } catch {
       case ise: IllegalStateException => return true
@@ -228,7 +230,9 @@ private [util] class SparkShutdownHookManager {
           .invoke(shm, hookTask, Integer.valueOf(fsPriority + 30))
 
       case Failure(_) =>
+        // scalastyle:off runtimeaddshutdownhook
         Runtime.getRuntime.addShutdownHook(new Thread(hookTask, "Spark Shutdown Hook"));
+        // scalastyle:on runtimeaddshutdownhook
     }
   }
 

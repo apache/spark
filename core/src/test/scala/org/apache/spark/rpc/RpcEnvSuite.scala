@@ -771,6 +771,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir, "file")
     Files.write(UUID.randomUUID().toString(), file, UTF_8)
+    val fileWithSpecialChars = new File(tempDir, "file name")
+    Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
     val empty = new File(tempDir, "empty")
     Files.write("", empty, UTF_8);
     val jar = new File(tempDir, "jar")
@@ -787,6 +789,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
 
     val fileUri = env.fileServer.addFile(file)
+    val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
     val emptyUri = env.fileServer.addFile(empty)
     val jarUri = env.fileServer.addJar(jar)
     val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
@@ -805,6 +808,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val files = Seq(
       (file, fileUri),
+      (fileWithSpecialChars, fileWithSpecialCharsUri),
       (empty, emptyUri),
       (jar, jarUri),
       (subFile1, dir1Uri + "/file1"),
