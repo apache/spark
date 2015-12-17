@@ -57,24 +57,38 @@ object ResolvedDataSource extends Logging {
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
     serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
-      /** the provider format did not match any given registered aliases */
-      case Nil => Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
-        case Success(dataSource) => dataSource
-        case Failure(error) =>
-          if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-            throw new ClassNotFoundException(
-              "The ORC data source must be used with Hive support enabled.", error)
-          } else {
-            throw new ClassNotFoundException(
-              s"Failed to load class for data source: $provider.", error)
-          }
-      }
-      /** there is exactly one registered alias */
-      case head :: Nil => head.getClass
-      /** There are multiple registered aliases for the input */
-      case sources => sys.error(s"Multiple sources found for $provider, " +
-        s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
-        "please specify the fully qualified class name.")
+      // the provider format did not match any given registered aliases
+      case Nil =>
+        Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+          case Success(dataSource) =>
+            // Found the data source using fully qualified path
+            dataSource
+          case Failure(error) =>
+            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+              throw new ClassNotFoundException(
+                "The ORC data source must be used with Hive support enabled.", error)
+            } else {
+              if (provider == "avro" || provider == "com.databricks.spark.avro") {
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please use Spark package " +
+                  "http://spark-packages.org/package/databricks/spark-avro",
+                  error)
+              } else {
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please find packages at " +
+                  "http://spark-packages.org",
+                  error)
+              }
+            }
+        }
+      case head :: Nil =>
+        // there is exactly one registered alias
+        head.getClass
+      case sources =>
+        // There are multiple registered aliases for the input
+        sys.error(s"Multiple sources found for $provider " +
+          s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
+          "please specify the fully qualified class name.")
     }
   }
 
