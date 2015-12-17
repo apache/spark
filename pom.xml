@@ -108,6 +108,7 @@
     <module>external/mqtt</module>
     <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
+    <module>external/jms</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
