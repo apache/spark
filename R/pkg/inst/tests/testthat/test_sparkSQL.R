@@ -1481,6 +1481,25 @@ test_that("read/write Parquet files", {
   unlink(parquetPath4)
 })
 
+test_that("read/write text files", {
+  # Test write.df and read.df
+  df <- read.df(sqlContext, jsonPath, "text")
+  expect_is(df, "DataFrame")
+  expect_equal(colnames(df), c("value"))
+  expect_equal(count(df), 3)
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.df(df, textPath, "text", mode="overwrite")
+
+  # Test write.text and read.text
+  textPath2 <- tempfile(pattern = "textPath2", fileext = ".txt")
+  write.text(df, textPath2)
+  df2 <- read.text(sqlContext, c(textPath, textPath2))
+  expect_is(df2, "DataFrame")
+  expect_equal(colnames(df2), c("value"))
+  expect_equal(count(df2), count(df) * 2)
+
+})
+
 test_that("describe() and summarize() on a DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   stats <- describe(df, "age")
