@@ -51,8 +51,9 @@ private[ml] trait PredictorParams extends Params
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
       val actualDataType = schema($(labelCol)).dataType
+      val labelColName = $(labelCol)
       require(actualDataType.isInstanceOf[NumericType],
-        s"Column $labelCol must be of type NumericType but was actually $actualDataType")
+        s"Column $labelColName must be of type NumericType but was actually of type $actualDataType")
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
