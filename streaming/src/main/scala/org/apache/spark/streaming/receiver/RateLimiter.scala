@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.receiver
 
 import com.google.common.util.concurrent.{RateLimiter => GuavaRateLimiter}
-import org.apache.spark.streaming.scheduler.RateController
 
 import org.apache.spark.{Logging, SparkConf}
 
@@ -65,18 +64,8 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
 
   /**
    * Get the initial rateLimit to initial rateLimiter
-   * @return
    */
-  def getInitialRateLimit() : Long = {
-    if (RateController.isBackPressureEnabled(conf)) {
-      val initialRate = conf.getLong("spark.streaming.backpressure.initialRate", 1000)
-      if (initialRate < maxRateLimit) {
-        initialRate
-      } else {
-        maxRateLimit
-      }
-    } else {
-      maxRateLimit
-    }
+  private def getInitialRateLimit(): Long = {
+    math.min(conf.getLong("spark.streaming.backpressure.initialRate", maxRateLimit), maxRateLimit)
   }
 }
