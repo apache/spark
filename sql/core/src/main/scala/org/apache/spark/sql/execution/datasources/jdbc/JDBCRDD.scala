@@ -288,6 +288,8 @@ private[sql] class JDBCRDD(
     case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
     case IsNull(attr) => s"$attr IS NULL"
     case IsNotNull(attr) => s"$attr IS NOT NULL"
+    case And(filter1, filter2) =>
+      "(" + compileFilter (filter1) + ") AND ("  + compileFilter (filter2)  + ")"
     case _ => null
   }
 
