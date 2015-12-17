@@ -17,12 +17,14 @@
 
 package org.apache.spark.graphx
 
-import java.io.{File, OutputStreamWriter, FileOutputStream}
+import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils
-import org.scalatest.FunSuite
 
-class GraphLoaderSuite extends FunSuite with LocalSparkContext {
+class GraphLoaderSuite extends SparkFunSuite with LocalSparkContext {
 
   test("GraphLoader.edgeListFile") {
     withSpark { sc =>
