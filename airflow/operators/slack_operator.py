@@ -1,6 +1,7 @@
 from slackclient import SlackClient
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
+import json
 
 
 class SlackAPIOperator(BaseOperator):
@@ -62,6 +63,8 @@ class SlackAPIPostOperator(SlackAPIOperator):
     :type text: string
     :param icon_url: url to icon used for this message
     :type icon_url: string
+    :param attachments: extra formatting details - see https://api.slack.com/docs/attachments
+    :type attachments: array of hashes
     """
 
     template_fields = ('username', 'text')
@@ -75,12 +78,14 @@ class SlackAPIPostOperator(SlackAPIOperator):
                       'Here is a cat video instead\n'
                       'https://www.youtube.com/watch?v=J---aiyznGQ',
                  icon_url='https://raw.githubusercontent.com/airbnb/airflow/master/airflow/www/static/pin_100.png',
+                 attachments=None,
                  *args, **kwargs):
         self.method = 'chat.postMessage'
         self.channel = channel
         self.username = username
         self.text = text
         self.icon_url = icon_url
+        self.attachments = attachments
         super(SlackAPIPostOperator, self).__init__(method=self.method,
                                                    *args, **kwargs)
 
@@ -90,4 +95,5 @@ class SlackAPIPostOperator(SlackAPIOperator):
             'username': self.username,
             'text': self.text,
             'icon_url': self.icon_url,
+            'attachments': json.dumps(self.attachments),
         }
