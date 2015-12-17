@@ -335,8 +335,6 @@ class DecisionTreeClassifierSuite
   }
 
   test("DecisionTree should support other NumericType labels") {
-    val sqlContext = new SQLContext(sc)
-
     val dfWithIntLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3)),
       (1, Vectors.dense(0, 3, 1)),
