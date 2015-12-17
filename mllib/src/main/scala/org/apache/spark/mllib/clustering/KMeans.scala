@@ -245,13 +245,14 @@ class KMeans private (
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
       " seconds.")
 
+    var done = false
     var costs = 0.0
     var iteration = 0
     val iterationStartTime = System.nanoTime()
     val isSparse = data.take(1)(0).vector.isInstanceOf[SparseVector]
 
     // Execute Lloyd's algorithm until converged or reached the max number of iterations
-    while (iteration < maxIterations) {
+    while (iteration < maxIterations && !done) {
       type WeightedPoint = (Vector, Long)
       def mergeContribs(x: WeightedPoint, y: WeightedPoint): WeightedPoint = {
         axpy(1.0, x._1, y._1)
@@ -316,10 +317,7 @@ class KMeans private (
 
         val vectorOfPointsArray = vectorOfPoints.toArray
         distanceMatrix.transpose.toArray.grouped(k).toArray.map(_.zipWithIndex.min).zipWithIndex
-          .foreach { p =>
-            val cost = p._1._1
-            val bc = p._1._2
-            val index = p._2
+          .foreach { case ((cost, bc), index) =>
             costAccums += cost
             val sum = sums(bc)
             axpy(1.0, vectorOfPointsArray(index), sum)
@@ -346,10 +344,12 @@ class KMeans private (
         }
         j += 1
       }
+
+      costs = costAccums.value
       if (!changed) {
         logInfo("Run finished in " + (iteration + 1) + " iterations")
+        done = true
       }
-      costs = costAccums.value
       iteration += 1
     }
 
