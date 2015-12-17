@@ -1243,7 +1243,7 @@ class Row(tuple):
     # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
-        return _create_row(self, args)
+        return create_row(self.fields_, args)
 
     def __getitem__(self, item):
         if isinstance(item, (int, slice)):
