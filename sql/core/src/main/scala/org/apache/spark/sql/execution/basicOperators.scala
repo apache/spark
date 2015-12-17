@@ -204,6 +204,10 @@ case class TakeOrderedAndProject(
     projectOutput.getOrElse(child.output)
   }
 
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   override def outputPartitioning: Partitioning = SinglePartition
 
   // We need to use an interpreted ordering here because generated orderings cannot be serialized
@@ -215,7 +219,11 @@ case class TakeOrderedAndProject(
 
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    projection.map(data.map(_)).getOrElse(data)
+    if (projection.isDefined) {
+      projection.map(data.map(_)).get
+    } else {
+      data
+    }
   }
 
   override def executeCollect(): Array[InternalRow] = {
