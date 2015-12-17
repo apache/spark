@@ -23,6 +23,7 @@ import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -100,6 +101,40 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
+  }
+
+  test("GradientBoostedTrees should support all NumericType labels") {
+    val dfWithIntLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (0, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2)
+
+    val dfWithFloatLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      (0f, Vectors.dense(0, 2, 3)),
+      (1f, Vectors.dense(0, 3, 1)),
+      (0f, Vectors.dense(0, 2, 2)),
+      (1f, Vectors.dense(0, 3, 9)),
+      (0f, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2)
+
+    val dfWithLongLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      (0L, Vectors.dense(0, 2, 3)),
+      (1L, Vectors.dense(0, 3, 1)),
+      (0L, Vectors.dense(0, 2, 2)),
+      (1L, Vectors.dense(0, 3, 9)),
+      (0L, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2)
+
+    val gbt = new GBTClassifier()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    gbt.fit(dfWithIntLabels)
+    gbt.fit(dfWithFloatLabels)
+    gbt.fit(dfWithLongLabels)
   }
 
   // TODO: Reinstate test once runWithValidation is implemented   SPARK-7132
