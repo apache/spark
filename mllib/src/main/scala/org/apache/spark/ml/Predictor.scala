@@ -123,11 +123,8 @@ abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
-    dataset.select($(labelCol), $(featuresCol)).rdd.map {
+    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) => LabeledPoint(label, features)
-      case Row(label: Float, features: Vector) => LabeledPoint(label, features)
-      case Row(label: Long, features: Vector) => LabeledPoint(label, features)
-      case Row(label: Int, features: Vector) => LabeledPoint(label, features)
     }
   }
 }
