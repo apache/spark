@@ -36,6 +36,8 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
 
+import scala.util.{Success, Try}
+
 /**
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
@@ -306,18 +308,22 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     if (paths.isEmpty) {
       sqlContext.emptyDataFrame
     } else {
-      val globbedPaths = paths.flatMap { path =>
+      val globbedPaths = paths.map { path =>
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(qualified)
-      }.toArray
+        Try(SparkHadoopUtil.get.globPathIfNecessary(qualified))
+      }.collect { case Success(s) =>s }.flatten.toArray
 
-      sqlContext.baseRelationToDataFrame(
-        new ParquetRelation(
-          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
+      if (globbedPaths.isEmpty) {
+        sqlContext.emptyDataFrame
+      } else
+        sqlContext.baseRelationToDataFrame(
+          new ParquetRelation(
+            globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
     }
   }
+
 
   /**
    * Loads an ORC file and returns the result as a [[DataFrame]].

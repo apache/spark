@@ -523,6 +523,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test(" Missing parquet files(SPARK-12369"){
+    withTempPath { path =>
+      Seq((2012,"a","b")).toDF("year", "vala","valb").write.partitionBy("year","vala").parquet(path.getAbsolutePath)
+      val df = sqlContext.read.parquet(s"${path.getAbsolutePath}/year=2015/*/*.parquet")
+      assert(df.inputFiles.isEmpty)
+      val df1 = sqlContext.read.parquet(s"${path.getAbsolutePath}/year=2012/*/*.parquet")
+      assert(df1.inputFiles.nonEmpty)
+    }
+  }
+
   ignore("show") {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
