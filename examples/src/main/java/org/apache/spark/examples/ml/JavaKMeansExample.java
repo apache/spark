@@ -23,6 +23,9 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
+// $example on$
 import org.apache.spark.ml.clustering.KMeansModel;
 import org.apache.spark.ml.clustering.KMeans;
 import org.apache.spark.mllib.linalg.Vector;
@@ -30,11 +33,10 @@ import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+// $example off$
 
 
 /**
@@ -74,6 +76,7 @@ public class JavaKMeansExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
 
+    // $example on$
     // Loads data
     JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParsePoint());
     StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
@@ -91,6 +94,7 @@ public class JavaKMeansExample {
     for (Vector center: centers) {
       System.out.println(center);
     }
+    // $example off$
 
     jsc.stop();
   }
