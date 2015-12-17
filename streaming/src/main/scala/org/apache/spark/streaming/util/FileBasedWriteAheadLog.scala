@@ -231,7 +231,7 @@ private[streaming] object FileBasedWriteAheadLog {
 
   def getCallerName(): Option[String] = {
     val stackTraceClasses = Thread.currentThread.getStackTrace().map(_.getClassName)
-    stackTraceClasses.find(!_.contains("WriteAheadLog")).flatMap(_.split(".").lastOption)
+    stackTraceClasses.find(!_.contains("WriteAheadLog")).flatMap(_.split("\\.").lastOption)
   }
 
   /** Convert a sequence of files to a sequence of sorted LogInfo objects */
