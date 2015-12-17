@@ -39,8 +39,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       .filter(_.attempts.head.completed != requestedIncomplete)
     if (!requestedQuery.equals("")) {
       val query = requestedQuery.toLowerCase
-      allApps = allApps.filter(app =>
-        app.id.contains(query) || app.name.toLowerCase.contains(query))
+      allApps = allApps.filter(app => app.name.toLowerCase.contains(query))
     }
     val allAppsSize = allApps.size
 
@@ -88,7 +87,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
               <h4>
                 <form action="" method="GET">
-                  Search: <input type="text" name="query" value={requestedQuery} />
+                  Application Names: <input type="text" name="query" value={requestedQuery} />
                   <input type="hidden" name="showIncomplete" value={requestedIncomplete.toString} />
                   <input type="submit" value="Search" />
                 </form>
