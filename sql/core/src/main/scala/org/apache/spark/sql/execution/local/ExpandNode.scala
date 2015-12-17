@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Projection, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
 
 case class ExpandNode(
     conf: SQLConf,
