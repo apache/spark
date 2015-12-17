@@ -585,6 +585,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10) === expectedAnswer)
   }
 
+  test("showString: binary") {
+    val df = Seq(
+      ("12".getBytes, "ABC.".getBytes),
+      ("34".getBytes, "12346".getBytes)
+    ).toDF()
+    val expectedAnswer = """+-------+----------------+
+                           ||     _1|              _2|
+                           |+-------+----------------+
+                           ||[31 32]|   [41 42 43 2E]|
+                           ||[33 34]|[31 32 33 34 36]|
+                           |+-------+----------------+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
   test("showString: minimum column width") {
     val df = Seq(
       (1, 1),
@@ -1090,8 +1105,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     // Distribute into one partition and order by. This partition should contain all the values.
-    val df6 = data.repartition(1, $"a").sortWithinPartitions($"b".asc)
-    // Walk each partition and verify that it is sorted descending and not globally sorted.
+    val df6 = data.repartition(1, $"a").sortWithinPartitions("b")
+    // Walk each partition and verify that it is sorted ascending and not globally sorted.
     df6.rdd.foreachPartition { p =>
       var previousValue: Int = -1
       var allSequential: Boolean = true
@@ -1144,9 +1159,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     // passing null into the UDF that could handle it
     val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
-      (i: java.lang.Integer) => if (i == null) -10 else i * 2
+      (i: java.lang.Integer) => if (i == null) -10 else null
     }
-    checkAnswer(df.select(boxedUDF($"age")), Row(44) :: Row(-10) :: Nil)
+    checkAnswer(df.select(boxedUDF($"age")), Row(null) :: Row(-10) :: Nil)
+
+    sqlContext.udf.register("boxedUDF",
+      (i: java.lang.Integer) => (if (i == null) -10 else null): java.lang.Integer)
+    checkAnswer(sql("select boxedUDF(null), boxedUDF(-1)"), Row(-10, null) :: Nil)
 
     val primitiveUDF = udf((i: Int) => i * 2)
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
