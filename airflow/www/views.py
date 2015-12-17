@@ -46,7 +46,7 @@ from airflow.www import utils as wwwutils
 from airflow import settings
 from airflow.models import State
 
-from airflow.www.forms import DateTimeForm, TreeForm
+from airflow.www.forms import DateTimeForm, DateTimeWithNumRunsForm
 
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
@@ -1179,7 +1179,8 @@ class Airflow(BaseView):
         session.commit()
         session.close()
 
-        form = TreeForm(data={'base_date': max_date, 'num_runs': num_runs})
+        form = DateTimeWithNumRunsForm(data={'base_date': max_date,
+                                             'num_runs': num_runs})
         return self.render(
             'airflow/tree.html',
             operators=sorted(
@@ -1304,10 +1305,18 @@ class Airflow(BaseView):
     def duration(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
-        days = int(request.args.get('days', 30))
         dag = dagbag.get_dag(dag_id)
-        from_date = (datetime.today()-timedelta(days)).date()
-        from_date = datetime.combine(from_date, datetime.min.time())
+        base_date = request.args.get('base_date')
+        num_runs = request.args.get('num_runs')
+        num_runs = int(num_runs) if num_runs else 25
+
+        if base_date:
+            base_date = dateutil.parser.parse(base_date)
+        else:
+            base_date = dag.latest_execution_date or datetime.now()
+
+        dates = dag.date_range(base_date, num=-abs(num_runs))
+        min_date = dates[0] if dates else datetime(2000, 1, 1)
 
         root = request.args.get('root')
         if root:
@@ -1319,7 +1328,8 @@ class Airflow(BaseView):
         all_data = []
         for task in dag.tasks:
             data = []
-            for ti in task.get_task_instances(session, from_date):
+            for ti in task.get_task_instances(session, start_date=min_date,
+                                              end_date=base_date):
                 if ti.duration:
                     data.append([
                         ti.execution_date.isoformat(),
@@ -1328,9 +1338,16 @@ class Airflow(BaseView):
             if data:
                 all_data.append({'data': data, 'name': task.task_id})
 
+        tis = dag.get_task_instances(
+                session, start_date=min_date, end_date=base_date)
+        dates = sorted(list({ti.execution_date for ti in tis}))
+        max_date = max([ti.execution_date for ti in tis]) if dates else None
+
         session.commit()
         session.close()
 
+        form = DateTimeWithNumRunsForm(data={'base_date': max_date,
+                                             'num_runs': num_runs})
         return self.render(
             'airflow/chart.html',
             dag=dag,
@@ -1339,6 +1356,7 @@ class Airflow(BaseView):
             height="700px",
             demo_mode=configuration.getboolean('webserver', 'demo_mode'),
             root=root,
+            form=form,
         )
 
     @expose('/landing_times')
@@ -1347,10 +1365,18 @@ class Airflow(BaseView):
     def landing_times(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
-        days = int(request.args.get('days', 30))
         dag = dagbag.get_dag(dag_id)
-        from_date = (datetime.today()-timedelta(days)).date()
-        from_date = datetime.combine(from_date, datetime.min.time())
+        base_date = request.args.get('base_date')
+        num_runs = request.args.get('num_runs')
+        num_runs = int(num_runs) if num_runs else 25
+
+        if base_date:
+            base_date = dateutil.parser.parse(base_date)
+        else:
+            base_date = dag.latest_execution_date or datetime.now()
+
+        dates = dag.date_range(base_date, num=-abs(num_runs))
+        min_date = dates[0] if dates else datetime(2000, 1, 1)
 
         root = request.args.get('root')
         if root:
@@ -1362,7 +1388,8 @@ class Airflow(BaseView):
         all_data = []
         for task in dag.tasks:
             data = []
-            for ti in task.get_task_instances(session, from_date):
+            for ti in task.get_task_instances(session, start_date=min_date,
+                                              end_date=base_date):
                 if ti.end_date:
                     ts = ti.execution_date
                     if dag.schedule_interval:
@@ -1371,9 +1398,16 @@ class Airflow(BaseView):
                     data.append([ti.execution_date.isoformat(), secs])
             all_data.append({'data': data, 'name': task.task_id})
 
+        tis = dag.get_task_instances(
+                session, start_date=min_date, end_date=base_date)
+        dates = sorted(list({ti.execution_date for ti in tis}))
+        max_date = max([ti.execution_date for ti in tis]) if dates else None
+
         session.commit()
         session.close()
 
+        form = DateTimeWithNumRunsForm(data={'base_date': max_date,
+                                             'num_runs': num_runs})
         return self.render(
             'airflow/chart.html',
             dag=dag,
@@ -1382,6 +1416,7 @@ class Airflow(BaseView):
             chart_options={'yAxis': {'title': {'text': 'hours after 00:00'}}},
             demo_mode=configuration.getboolean('webserver', 'demo_mode'),
             root=root,
+            form=form,
         )
 
     @expose('/paused')
