@@ -101,8 +101,9 @@ private[mesos] class MesosSubmitRequestServlet(
     // which user can user spark.executor.home or spark.home configurations.
     //
     // Due to https://issues.scala-lang.org/browse/SI-6654, `filterKeys` returns an
-    // unserializable object,so we must call `.map(identity)` on the result.
-    val environmentVariables = request.environmentVariables.filterKeys(!_.equals("SPARK_HOME")).map(identity)
+    // unserializable object, so we must call `.map(identity)` on the result.
+    val environmentVariables = request.environmentVariables.filterKeys(!_.equals("SPARK_HOME"))
+      .map(identity)
     val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
 
     // Construct driver description
