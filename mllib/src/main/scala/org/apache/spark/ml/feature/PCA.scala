@@ -167,6 +167,15 @@ object PCAModel extends MLReadable[PCAModel] {
 
     private val className = classOf[PCAModel].getName
 
+    /**
+     * Loads a [[PCAModel]] from data the input path. Note that the model includes an
+     * `explainedVariance` member that is not recorded by Spark 1.6 and earlier. A model
+     * can be loaded from such older data but will have an empty vector for
+     * `explainedVariance`.
+     *
+     * @param path path to serialized model data
+     * @return a [[PCAModel]]
+     */
     override def load(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
@@ -187,7 +196,7 @@ object PCAModel extends MLReadable[PCAModel] {
         new PCAModel(metadata.uid, pc, explainedVariance)
       } else {
         val Row(pc: DenseMatrix) = sqlContext.read.parquet(dataPath).select("pc").head()
-        new PCAModel(metadata.uid, pc, null)
+        new PCAModel(metadata.uid, pc, Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
       }
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
