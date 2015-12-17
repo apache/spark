@@ -77,8 +77,8 @@ class CRFTests extends SparkFunSuite with Logging with Serializable {
     ".|.|O"
   ))
 
-  val modelPath = "~/CRFConfig/CRFModel"
-  val resultPath = "~/CRFConfig/CRFResult"
+  val modelPath = "~/git/CRFConfig/CRFModel"
+  val resultPath = "~/git/CRFConfig/CRFResult"
   val src = sc.parallelize(file).cache()
   val CRFModel = CRF.runCRF(template, src)
   CRFModel.save(sc,modelPath)
@@ -97,4 +97,37 @@ class CRFTests extends SparkFunSuite with Logging with Serializable {
     }
     idx += 1
   }
+
+  val newFile = Array(Array(
+    "Confidence|NN",
+    "in|IN",
+    "the|DT",
+    "pound|NN",
+    "is|VBZ",
+    "widely|RB",
+    "expected|VBN",
+    "to|TO",
+    "take|VB",
+    "another|DT",
+    "sharp|JJ",
+    "dive|NN",
+    "if|IN",
+    "trade|NN",
+    "figures|NNS",
+    "for|IN",
+    "September|NNP"
+  ))
+  val newSrc = sc.parallelize(newFile).cache()
+  val newResult = CRF.verifyCRF(newSrc, modelRDD)
+  idx = 0
+  temp = ""
+  while(idx < newResult.CRFSeries(0).length) {
+    temp += newResult.CRFSeries(0)(idx)
+    if((idx + 1) % 3 == 0) {
+      println(temp)
+      temp = ""
+    }
+    idx += 1
+  }
+
 }

@@ -458,6 +458,12 @@ private[mllib] class FeatureIndex extends Serializable {
       i += 1
     }
     i = 0
+    contents.append("Labels")
+    while (i < y.size){
+      contents.append(y(i))
+      i += 1
+    }
+    i = 0
     contents.append("Alpha")
     while (i < maxid) {
       contents.append(alpha(i).toString)
@@ -468,34 +474,44 @@ private[mllib] class FeatureIndex extends Serializable {
     contents.toArray
   }
 
-  def openFromArray(contents: Array[String]): Unit = {
+  def openFromArray(contents: Array[String]): FeatureIndex = {
     var i: Int = 0
     var readFCache: Boolean = true
     var readFCacheH: Boolean = false
     var readAlpha: Boolean = false
+    var readLabel: Boolean = false
     while (i < contents.length) {
       if (contents(i) == "FeatureCacheHeader") {
         readFCache = false
         readFCacheH = true
         i += 1
+      } else if (contents(i) == "Labels") {
+        readLabel = true
+        readFCacheH = false
+        i += 1
       } else if (contents(i) == "Alpha") {
         readAlpha = true
         readFCacheH = false
+        readLabel = false
         i += 1
       } else if (contents(i) == "Trace") {
         i = contents.length + 1 // break
         readFCache = false
         readFCacheH = false
         readAlpha = false
+        readLabel = false
       }
       if (readFCache) {
         featureCache.append(contents(i).toInt)
       } else if (readFCacheH) {
         featureCacheH.append(contents(i).toInt)
+      } else if (readLabel) {
+        y.append(contents(i))
       } else if (readAlpha) {
         alpha.append(contents(i).toDouble)
       }
       i += 1
     }
+    this
   }
 }

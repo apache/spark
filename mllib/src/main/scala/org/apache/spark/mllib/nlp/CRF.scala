@@ -42,10 +42,10 @@ private[mllib] class CRF extends Serializable{
   def verify(test: Array[String],
              model: Array[String]): Array[String] = {
     var tagger: Tagger = new Tagger()
-    featureIdx = featureIdx.openTagSet(test)
-    tagger.open(featureIdx)
+    // featureIdx = featureIdx.openTagSet(test)
     tagger = tagger.read(test)
-    featureIdx.openFromArray(model)
+    featureIdx = featureIdx.openFromArray(model)
+    tagger.open(featureIdx)
     tagger.parse()
     tagger.createOutput()
   }
@@ -193,13 +193,6 @@ object CRF {
 
   /**
    * Train CRF Model
-   * A word's context is its sentence or its nearby
-   * paragraph and the sentence or nearby paragraph will
-   * not be very long. So A sentence or paragraph will be
-   * processed in a node to reduce partition and networking
-   * costs. Multiple sentences or paragraphs are
-   * collected from multiple nodes to create the overall result.
-   *
    * Feature file format
    * word|word characteristic|designated label
    *
@@ -226,11 +219,7 @@ object CRF {
   }
 
   /**
-   * Verify CRF model.
-   * The model is the result from CRF train. If the predicted
-   * labels match the designated labels in the test file, the
-   * model is valid.
-   *
+   * Verify CRF model
    * Test result format:
    * word|word characteristic|designated label|predicted label
    *
