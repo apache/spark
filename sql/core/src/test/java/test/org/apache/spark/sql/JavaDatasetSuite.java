@@ -613,7 +613,6 @@ public class JavaDatasetSuite implements Serializable {
     private Timestamp a;
     private Date b;
     private java.math.BigDecimal c;
-    private scala.math.BigDecimal d;
 
     public Timestamp getA() { return a; }
 
@@ -627,10 +626,6 @@ public class JavaDatasetSuite implements Serializable {
 
     public void setC(java.math.BigDecimal c) { this.c = c; }
 
-    public scala.math.BigDecimal getD() { return d; }
-
-    public void setD(scala.math.BigDecimal d) { this.d = d; }
-
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -640,8 +635,7 @@ public class JavaDatasetSuite implements Serializable {
 
       if (!a.equals(that.a)) return false;
       if (!b.equals(that.b)) return false;
-      if (!c.equals(that.c)) return false;
-      return d.equals(that.d);
+      return c.equals(that.c);
     }
 
     @Override
@@ -649,7 +643,6 @@ public class JavaDatasetSuite implements Serializable {
       int result = a.hashCode();
       result = 31 * result + b.hashCode();
       result = 31 * result + c.hashCode();
-      result = 31 * result + d.hashCode();
       return result;
     }
   }
@@ -737,13 +730,13 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
-  public void testJavaBeanEncoderWithNonPrimitiveTypes() {
+  public void testJavaBeanEncoder2() {
     // This is a regression test of SPARK-12404
+    OuterScopes.addOuterScope(this);
     SimpleJavaBean2 obj = new SimpleJavaBean2();
     obj.setA(new Timestamp(0));
     obj.setB(new Date(0));
     obj.setC(java.math.BigDecimal.valueOf(1));
-    obj.setD(scala.math.BigDecimal$.MODULE$.apply(1));
     Dataset<SimpleJavaBean2> ds =
       context.createDataset(Arrays.asList(obj), Encoders.bean(SimpleJavaBean2.class));
     ds.collect();
