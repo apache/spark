@@ -210,11 +210,20 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
 }
 
+/** Factory for constructing new `Range` nodes. */
+object Range {
+  def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
+    val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+    new Range(start, end, step, numSlices, output)
+  }
+}
+
 case class Range(
     start: Long,
     end: Long,
     step: Long,
-    numSlices: Int) extends LeafNode {
+    numSlices: Int,
+    output: Seq[Attribute]) extends LeafNode {
   require(step != 0, "step cannot be 0")
   val numElements: BigInt = {
     val safeStart = BigInt(start)
@@ -227,19 +236,11 @@ case class Range(
     }
   }
 
-  val output: Seq[Attribute] =
-    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
-  /**
-    * Computes [[Statistics]] for this plan. The default implementation assumes the output
-    * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
-    * of cartesian joins.
-    *
-    * [[LeafNode]]s must override this.
-    */
-  val sizeInBytes = LongType.defaultSize * numElements
-  override def statistics: Statistics = Statistics( sizeInBytes = sizeInBytes )
+  override def statistics: Statistics = {
+    val sizeInBytes = LongType.defaultSize * numElements
+    Statistics( sizeInBytes = sizeInBytes )
+  }
 }
-
 
 case class Aggregate(
     groupingExpressions: Seq[Expression],

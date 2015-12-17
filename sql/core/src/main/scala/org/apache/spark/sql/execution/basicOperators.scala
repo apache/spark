@@ -133,8 +133,8 @@ case class Range(
     numSlices: Int,
     numElements: BigInt,
     output: Seq[Attribute])
-  extends LeafNode
-{
+  extends LeafNode {
+
   override def outputsUnsafeRows: Boolean = true
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -156,6 +156,7 @@ case class Range(
         val safePartitionEnd = getSafeMargin(partitionEnd)
         val bufferHolder = new BufferHolder(LongType.defaultSize)
         val unsafeRow = new UnsafeRow
+        unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
 
         new Iterator[InternalRow] {
           private[this] var number: Long = safePartitionStart
@@ -181,7 +182,6 @@ case class Range(
             }
 
             bufferHolder.reset()
-            unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
             unsafeRow.setLong(0, ret)
             unsafeRow
           }
