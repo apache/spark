@@ -957,6 +957,7 @@ class TaskInstance(Base):
             if not test_mode:
                 session.merge(self)
             session.commit()
+            session.close()
             if verbose:
                 if mark_success:
                     msg = "Marking success for "
@@ -1011,6 +1012,7 @@ class TaskInstance(Base):
             if not test_mode:
                 session.add(Log(State.SUCCESS, self))
                 session.merge(self)
+            session.commit()
 
             # Success callback
             try:
@@ -1021,6 +1023,7 @@ class TaskInstance(Base):
                 logging.exception(e3)
 
         session.commit()
+        session.close()
 
     def dry_run(self):
         task = self.task
