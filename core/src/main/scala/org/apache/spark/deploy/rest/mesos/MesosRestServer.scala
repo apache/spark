@@ -99,7 +99,7 @@ private[mesos] class MesosSubmitRequestServlet(
     // look for files in SPARK_HOME instead. We only need the ability to specify where to find
     // spark-submit script which user can user spark.executor.home or spark.home configurations
     // (SPARK-12345).
-    val environmentVariables = request.environmentVariables.filter(!_.equals("SPARK_HOME"))
+    val environmentVariables = request.environmentVariables.filterKeys(!_.equals("SPARK_HOME"))
     val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
 
     // Construct driver description
