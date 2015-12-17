@@ -196,6 +196,8 @@ abstract class QueryTest extends PlanTest with Timeouts {
   /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
 
+
+
   /** A trait to mark actions that require the stream to be actively running. */
   trait StreamMustBeRunning
 
@@ -208,8 +210,18 @@ abstract class QueryTest extends PlanTest with Timeouts {
       AddDataMemory(source, data)
   }
 
-  case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends StreamAction {
+  /** A trait that can be extended when testing other sources. */
+  trait AddData extends StreamAction {
+    def source: Source
+    def addData(): Offset
+  }
+
+  case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
+
+    override def addData(): Offset = {
+      source.addData(data)
+    }
   }
 
   case class AwaitEventTime(time: Long) extends StreamAction with StreamMustBeRunning
@@ -258,7 +270,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
   def testStream(stream: DataFrame)(actions: StreamAction*): Unit = {
     var pos = 0
     var currentStream: StreamExecution = null
-    val awaiting = new mutable.HashMap[Source, Watermark]()
+    val awaiting = new mutable.HashMap[Source, Offset]()
     val sink = new MemorySink(stream.schema)
 
     @volatile
@@ -278,8 +290,8 @@ abstract class QueryTest extends PlanTest with Timeouts {
         }
     }.mkString("\n")
 
-    def currentWatermarks =
-      if (currentStream != null) currentStream.currentWatermarks.toString else "not started"
+    def currentOffsets =
+      if (currentStream != null) currentStream.currentOffsets.toString else "not started"
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
@@ -289,7 +301,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
          |$testActions
          |
          |== Stream ==
-         |Stream state: $currentWatermarks
+         |Stream state: $currentOffsets
          |Thread state: $threadState
          |Event time trigger: ${if (currentStream != null) currentStream.maxEventTime else ""}
          |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
@@ -350,13 +362,13 @@ abstract class QueryTest extends PlanTest with Timeouts {
             currentStream = null
             streamDeathCause = null
 
-          case AddDataMemory(source, data) =>
-            awaiting.put(source, source.addData(data))
+          case a: AddData =>
+            awaiting.put(a.source, a.addData())
 
           case AwaitEventTime(time) =>
             checkState(currentStream != null, "stream not running")
             try failAfter(streamingTimout) {
-              currentStream.awaitWatermark(currentStream.eventTimeSource, LongWatermark(time))
+              currentStream.awaitOffset(currentStream.eventTimeSource, LongOffset(time))
             } catch {
               case _: InterruptedException =>
                 fail(
@@ -368,7 +380,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
                 fail(
                   s"""
                      |Timed out while waiting for eventTime to catch up to $time
-                     |Currently at: ${sink.currentWatermark(currentStream.eventTimeSource)}
+                     |Currently at: ${sink.currentOffset(currentStream.eventTimeSource)}
                      |$testState
                          """.stripMargin)
             }
@@ -376,9 +388,9 @@ abstract class QueryTest extends PlanTest with Timeouts {
             checkState(currentStream != null, "stream not running")
 
             // Block until all data added has been processed
-            awaiting.foreach { case (source, watermark) =>
+            awaiting.foreach { case (source, offset) =>
               try failAfter(streamingTimout) {
-                currentStream.awaitWatermark(source, watermark)
+                currentStream.awaitOffset(source, offset)
               } catch {
                 case _: InterruptedException =>
                   fail(
@@ -389,8 +401,8 @@ abstract class QueryTest extends PlanTest with Timeouts {
                 case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
                   fail(
                     s"""
-                       |Timed out while waiting for $source to catch up to $watermark
-                       |Currently at: ${sink.currentWatermark(source)}
+                       |Timed out while waiting for $source to catch up to $offset
+                       |Currently at: ${sink.currentOffset(source)}
                        |$testState
                    """.stripMargin)
               }

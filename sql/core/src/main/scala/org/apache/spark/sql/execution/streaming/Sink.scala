@@ -22,6 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
 trait Sink {
-  def currentWatermark(source: Source): Option[Watermark]
+  def currentOffset(source: Source): Option[Offset]
   def addBatch(currentState: StreamProgress, rdd: RDD[InternalRow]): Unit
 }

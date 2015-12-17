@@ -36,14 +36,14 @@ import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.Logging
 
-import org.apache.spark.sql.execution.streaming.{Watermark, Source}
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
 
-case class StreamWatermark(sequenceNumbers: Map[String, String]) extends Watermark {
+case class StreamOffset(sequenceNumbers: Map[String, String]) extends Offset {
   override def isEmpty: Boolean = false
 
-  override def >(other: Watermark): Boolean = ???
+  override def >(other: Offset): Boolean = ???
 
-  override def <(other: Watermark): Boolean = ???
+  override def <(other: Offset): Boolean = ???
 }
 
 case class KinesisSource(
@@ -54,19 +54,19 @@ case class KinesisSource(
   private val client = new AmazonKinesisClient(credentials)
   client.setEndpoint(endpoint, "kinesis", regionId)
 
-  override def watermark: Watermark = {
+  override def offset: Offset = {
     val desc = client.describeStream(streamName)
     val endSequenceNumbers = desc.getStreamDescription.getShards.asScala.map { s =>
       val range = s.getSequenceNumberRange
       (s.getShardId, range.getEndingSequenceNumber)
     }.toMap
-    StreamWatermark(endSequenceNumbers)
+    StreamOffset(endSequenceNumbers)
   }
 
   override def getSlice(
       sqlContext: SQLContext,
-      start: Watermark,
-      end: Watermark): RDD[InternalRow] = {
+      start: Offset,
+      end: Offset): RDD[InternalRow] = {
 
 
 

@@ -65,8 +65,8 @@ package object state {
       data.put(key, value)
     }
 
-    def triggerWindowsBefore(watermark: Long): Seq[(InternalRow, Long)] = {
-      val triggeredWindows = data.filter(_._1.getLong(0) <= watermark).toArray
+    def triggerWindowsBefore(Offset: Long): Seq[(InternalRow, Long)] = {
+      val triggeredWindows = data.filter(_._1.getLong(0) <= Offset).toArray
       triggeredWindows.map(_._1).foreach(data.remove)
       triggeredWindows.toSeq
     }
@@ -82,7 +82,7 @@ package object state {
     override def missingInput: AttributeSet = super.missingInput - windowAttribute
   }
 
-  implicit object MaxWatermark extends AccumulatorParam[LongWatermark] {
+  implicit object MaxOffset extends AccumulatorParam[LongOffset] {
     /**
      * Add additional data to the accumulator value. Is allowed to modify and return `r`
      * for efficiency (to avoid allocating objects).
@@ -91,7 +91,7 @@ package object state {
      * @param t the data to be added to the accumulator
      * @return the new value of the accumulator
      */
-    override def addAccumulator(r: LongWatermark, t: LongWatermark): LongWatermark =
+    override def addAccumulator(r: LongOffset, t: LongOffset): LongOffset =
       if (r > t) r else t
 
     /**
@@ -102,15 +102,15 @@ package object state {
      * @param r2 another set of accumulated data
      * @return both data sets merged together
      */
-    override def addInPlace(r1: LongWatermark, r2: LongWatermark): LongWatermark =
+    override def addInPlace(r1: LongOffset, r2: LongOffset): LongOffset =
       if (r1 > r2) r1 else r2
 
     /**
      * Return the "zero" (identity) value for an accumulator type, given its initial value. For
      * example, if R was a vector of N dimensions, this would return a vector of N zeroes.
      */
-    override def zero(initialValue: LongWatermark): LongWatermark =
-      LongWatermark(-1)
+    override def zero(initialValue: LongOffset): LongOffset =
+      LongOffset(-1)
   }
 
   /**
@@ -119,8 +119,8 @@ package object state {
    */
   case class WindowAggregate(
       eventtime: Expression,
-      eventtimeMax: Accumulator[LongWatermark],
-      eventtimeWatermark: LongWatermark,
+      eventtimeMax: Accumulator[LongOffset],
+      eventtimeOffset: LongOffset,
       lastCheckpoint: StreamProgress,
       nextCheckpoint: StreamProgress,
       windowAttribute: AttributeReference,
@@ -149,8 +149,8 @@ package object state {
 
         iter.foreach { row =>
           val windowAndGroup = windowAndGroupProjection(row)
-          if (windowAndGroup.getLong(0) > eventtimeWatermark.offset) {
-            eventtimeMax += LongWatermark(windowAndGroup.getLong(0))
+          if (windowAndGroup.getLong(0) > eventtimeOffset.offset) {
+            eventtimeMax += LongOffset(windowAndGroup.getLong(0))
             val newCount = stateStore.get(windowAndGroup).getOrElse(0L) + 1
             stateStore.put(windowAndGroup.copy(), newCount)
           }
@@ -165,8 +165,8 @@ package object state {
         val joinedRow = new JoinedRow
         val countRow = new SpecificMutableRow(LongType :: Nil)
 
-        logDebug(s"Triggering windows < $eventtimeWatermark")
-        stateStore.triggerWindowsBefore(eventtimeWatermark.offset).toIterator.map {
+        logDebug(s"Triggering windows < $eventtimeOffset")
+        stateStore.triggerWindowsBefore(eventtimeOffset.offset).toIterator.map {
           case (key, count) =>
             countRow.setLong(0, count)
             buildRow(joinedRow(key, countRow))
@@ -211,7 +211,7 @@ package object state {
 
   class StatefulPlanner(
       sqlContext: SQLContext,
-      maxWatermark: Accumulator[LongWatermark],
+      maxOffset: Accumulator[LongOffset],
       lastCheckpoint: StreamProgress,
       nextCheckpoint: StreamProgress)
     extends SparkPlanner(sqlContext) {
@@ -224,8 +224,8 @@ package object state {
                Window(et, windowAttribute, step, triggerDelay, child)) =>
           WindowAggregate(
             et,
-            maxWatermark,
-            maxWatermark.value - triggerDelay,
+            maxOffset,
+            maxOffset.value - triggerDelay,
             lastCheckpoint,
             nextCheckpoint,
             windowAttribute,

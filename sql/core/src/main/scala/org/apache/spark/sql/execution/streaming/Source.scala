@@ -22,6 +22,12 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 
 trait Source {
-  def watermark: Watermark
-  def getSlice(sqlContext: SQLContext, start: Watermark, end: Watermark): RDD[InternalRow]
+  /** Returns the maximum offset that can be retrieved from the source. */
+  def offset: Offset
+
+  /**
+   * Returns the data between the `start` and `end` offsets.  This function must always return
+   * the same set of data for any given pair of offsets.
+   */
+  def getSlice(sqlContext: SQLContext, start: Offset, end: Offset): RDD[InternalRow]
 }

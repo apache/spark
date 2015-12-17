@@ -27,11 +27,11 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
 
-class EventTimeSource(val max: Accumulator[LongWatermark]) extends Source with Serializable {
-  override def watermark: Watermark = max.value
+class EventTimeSource(val max: Accumulator[LongOffset]) extends Source with Serializable {
+  override def offset: Offset = max.value
 
   override def getSlice(
-      sqlContext: SQLContext, start: Watermark, end: Watermark): RDD[InternalRow] = ???
+      sqlContext: SQLContext, start: Offset, end: Offset): RDD[InternalRow] = ???
 
   // HACK
   override def equals(other: Any): Boolean = other.isInstanceOf[EventTimeSource]
@@ -52,11 +52,11 @@ class StreamExecution(
     val sink: Sink) extends Logging {
 
   /** Tracks how much data we have processed from each input source. */
-  private[sql] val currentWatermarks = new StreamProgress
+  private[sql] val currentOffsets = new StreamProgress
 
-  import org.apache.spark.sql.execution.streaming.state.MaxWatermark
+  import org.apache.spark.sql.execution.streaming.state.MaxOffset
   private[sql] val maxEventTime =
-    sqlContext.sparkContext.accumulator(LongWatermark(-1))
+    sqlContext.sparkContext.accumulator(LongOffset(-1))
 
   private[sql] val eventTimeSource = new EventTimeSource(maxEventTime)
 
@@ -64,19 +64,19 @@ class StreamExecution(
   private val sources =
     logicalPlan.collect { case s: Source => s: Source } :+ eventTimeSource
 
-  // Start the execution at the current watermark for the sink. (i.e. avoid reprocessing data
+  // Start the execution at the current Offset for the sink. (i.e. avoid reprocessing data
   // that we have already processed).
   sources.foreach { s =>
-    val sourceWatermark = sink.currentWatermark(s).getOrElse(LongWatermark(-1))
-    currentWatermarks.update(s, sourceWatermark)
+    val sourceOffset = sink.currentOffset(s).getOrElse(LongOffset(-1))
+    currentOffsets.update(s, sourceOffset)
   }
 
-  // Restore the position of the eventtime watermark accumulator
-  currentWatermarks.get(eventTimeSource).foreach {
-    case w: LongWatermark => eventTimeSource.max.setValue(w)
+  // Restore the position of the eventtime Offset accumulator
+  currentOffsets.get(eventTimeSource).foreach {
+    case w: LongOffset => eventTimeSource.max.setValue(w)
   }
 
-  logWarning(s"Stream running at $currentWatermarks")
+  logInfo(s"Stream running at $currentOffsets")
 
   /** When false, signals to the microBatchThread that it should stop running. */
   @volatile private var shouldRun = true
@@ -95,12 +95,12 @@ class StreamExecution(
 
   /**
    * Checks to see if any new data is present in any of the sources.  When new data is available,
-   * a batch is executed and passed to the sink, updating the currentWatermarks.
+   * a batch is executed and passed to the sink, updating the currentOffsets.
    */
   private def attemptBatch(): Unit = {
     // Check to see if any of the input sources have data that has not been processed.
     val newData = sources.flatMap {
-      case s if s.watermark > currentWatermarks(s) => s -> s.watermark :: Nil
+      case s if s.offset > currentOffsets(s) => s -> s.offset :: Nil
       case _ => Nil
     }.toMap
 
@@ -111,7 +111,7 @@ class StreamExecution(
       // Replace sources in the logical plan with data that has arrived since the last batch.
       val newPlan = logicalPlan transform {
         case s: Source if newData.contains(s) =>
-          val batchInput = s.getSlice(sqlContext, currentWatermarks(s), newData(s))
+          val batchInput = s.getSlice(sqlContext, currentOffsets(s), newData(s))
           LogicalRDD(s.output, batchInput)(sqlContext)
         case s: Source => LocalRelation(s.output)
       }
@@ -126,10 +126,10 @@ class StreamExecution(
           val batchPlanner = new StatefulPlanner(
             sqlContext,
             maxEventTime,
-            currentWatermarks.copy(),
-            currentWatermarks ++ newData)
+            currentOffsets.copy(),
+            currentOffsets ++ newData)
 
-          logInfo(s"BatchPlanner initialized: $currentWatermarks, $maxEventTime")
+          logInfo(s"BatchPlanner initialized: $currentOffsets, $maxEventTime")
 
           batchPlanner.plan(optimizedPlan).next()
         }
@@ -139,10 +139,10 @@ class StreamExecution(
       logDebug(s"Optimized batch in ${optimizerTime}ms")
 
       val results = executedPlan.execute().map(_.copy())
-      newData.foreach(currentWatermarks.update)
-      sink.addBatch(currentWatermarks.copy(), results)
+      newData.foreach(currentOffsets.update)
+      sink.addBatch(currentOffsets.copy(), results)
 
-      logInfo(s"EventTime Watermark: ${maxEventTime.value}")
+      logInfo(s"EventTime Offset: ${maxEventTime.value}")
       StreamExecution.this.synchronized {
         StreamExecution.this.notifyAll()
       }
@@ -151,7 +151,7 @@ class StreamExecution(
       logInfo(s"Compete up to $newData in ${batchTime}ms")
     }
 
-    logDebug(s"Waiting for data, current: $currentWatermarks")
+    logDebug(s"Waiting for data, current: $currentOffsets")
     Thread.sleep(10)
   }
 
@@ -166,15 +166,15 @@ class StreamExecution(
 
   /**
    * Blocks the current thread until processing for data from the given `source` has reached at
-   * least the given `watermark`. This method is indented for use primarily when writing tests.
+   * least the given `Offset`. This method is indented for use primarily when writing tests.
    */
-  def awaitWatermark(source: Source, newWatermark: Watermark): Unit = {
+  def awaitOffset(source: Source, newOffset: Offset): Unit = {
     assert(microBatchThread.isAlive)
 
-    while (currentWatermarks(source) < newWatermark) {
-      logInfo(s"Waiting until $newWatermark at $source")
+    while (currentOffsets(source) < newOffset) {
+      logInfo(s"Waiting until $newOffset at $source")
       synchronized { wait() }
     }
-    logDebug(s"Unblocked at $newWatermark for $source")
+    logDebug(s"Unblocked at $newOffset for $source")
   }
 }

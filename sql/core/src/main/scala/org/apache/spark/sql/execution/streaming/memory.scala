@@ -44,12 +44,12 @@ object MemoryStream {
 
 case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode with Source {
   protected var blocks = new ArrayBuffer[BlockId]
-  protected var currentWatermark: LongWatermark = new LongWatermark(-1)
+  protected var currentOffset: LongOffset = new LongOffset(-1)
   protected val encoder = encoderFor[A]
 
   protected def blockManager = SparkEnv.get.blockManager
 
-  def watermark: Watermark = currentWatermark
+  def offset: Offset = currentOffset
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
     new Dataset(sqlContext, this)
@@ -59,7 +59,7 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
     new DataFrame(sqlContext, this)
   }
 
-  def addData(data: TraversableOnce[A]): Watermark = {
+  def addData(data: TraversableOnce[A]): Offset = {
     val blockId = StreamBlockId(0, MemoryStream.currentBlockId.incrementAndGet())
     blockManager.putIterator(
       blockId,
@@ -67,17 +67,17 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
       StorageLevels.MEMORY_ONLY_SER)
 
     synchronized {
-      currentWatermark = currentWatermark + 1
+      currentOffset = currentOffset + 1
       blocks.append(blockId)
-      currentWatermark
+      currentOffset
     }
   }
 
-  def getSlice(sqlContext: SQLContext, start: Watermark, end: Watermark): RDD[InternalRow] = {
+  def getSlice(sqlContext: SQLContext, start: Offset, end: Offset): RDD[InternalRow] = {
     val newBlocks =
       blocks.slice(
-        start.asInstanceOf[LongWatermark].offset.toInt + 1,
-        end.asInstanceOf[LongWatermark].offset.toInt + 1).toArray
+        start.asInstanceOf[LongOffset].offset.toInt + 1,
+        end.asInstanceOf[LongOffset].offset.toInt + 1).toArray
     logDebug(s"Running [$start, $end] on blocks ${newBlocks.mkString(", ")}")
     new BlockRDD[InternalRow](sqlContext.sparkContext, newBlocks)
   }
@@ -89,8 +89,8 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   private var batches = new ArrayBuffer[(StreamProgress, Seq[Row])]()
   private val output = schema.toAttributes
 
-  def currentWatermarks: StreamProgress = batches.lastOption.map(_._1).getOrElse(new StreamProgress)
-  def currentWatermark(source: Source): Option[Watermark] = currentWatermarks.get(source)
+  def currentOffsets: StreamProgress = batches.lastOption.map(_._1).getOrElse(new StreamProgress)
+  def currentOffset(source: Source): Option[Offset] = currentOffsets.get(source)
 
   def allData: Seq[Row] = batches.flatMap(_._2)
 

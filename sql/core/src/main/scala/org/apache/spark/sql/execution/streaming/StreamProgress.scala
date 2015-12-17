@@ -20,44 +20,44 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable
 
 class StreamProgress extends Serializable {
-  private val currentWatermarks = new mutable.HashMap[Source, Watermark]
+  private val currentOffsets = new mutable.HashMap[Source, Offset]
 
-  def isEmpty: Boolean = currentWatermarks.filterNot(_._2.isEmpty).isEmpty
+  def isEmpty: Boolean = currentOffsets.filterNot(_._2.isEmpty).isEmpty
 
-  def update(source: Source, newWatermark: Watermark): Unit = {
-    currentWatermarks.get(source).foreach(old => assert(newWatermark > old))
-    currentWatermarks.put(source, newWatermark)
+  def update(source: Source, newOffset: Offset): Unit = {
+    currentOffsets.get(source).foreach(old => assert(newOffset > old))
+    currentOffsets.put(source, newOffset)
   }
 
-  def update(newWatermark: (Source, Watermark)): Unit =
-    update(newWatermark._1, newWatermark._2)
+  def update(newOffset: (Source, Offset)): Unit =
+    update(newOffset._1, newOffset._2)
 
-  def apply(source: Source): Watermark = currentWatermarks(source)
-  def get(source: Source): Option[Watermark] = currentWatermarks.get(source)
+  def apply(source: Source): Offset = currentOffsets(source)
+  def get(source: Source): Option[Offset] = currentOffsets.get(source)
 
-  def ++(updates: Map[Source, Watermark]): StreamProgress = {
+  def ++(updates: Map[Source, Offset]): StreamProgress = {
     val updated = new StreamProgress
-    currentWatermarks.foreach(updated.update)
+    currentOffsets.foreach(updated.update)
     updates.foreach(updated.update)
     updated
   }
 
   def copy(): StreamProgress = {
     val copied = new StreamProgress
-    currentWatermarks.foreach(copied.update)
+    currentOffsets.foreach(copied.update)
     copied
   }
 
   override def toString: String =
-    currentWatermarks.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
+    currentOffsets.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 
   override def equals(other: Any): Boolean = other match {
     case s: StreamProgress =>
-      s.currentWatermarks.keys.toSet == currentWatermarks.keys.toSet &&
-      s.currentWatermarks.forall(w => currentWatermarks(w._1) == w._2)
+      s.currentOffsets.keys.toSet == currentOffsets.keys.toSet &&
+      s.currentOffsets.forall(w => currentOffsets(w._1) == w._2)
   }
 
   override def hashCode: Int = {
-    currentWatermarks.toSeq.sortBy(_._1.toString).hashCode()
+    currentOffsets.toSeq.sortBy(_._1.toString).hashCode()
   }
 }

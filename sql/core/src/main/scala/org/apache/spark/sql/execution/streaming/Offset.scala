@@ -20,36 +20,36 @@ package org.apache.spark.sql.execution.streaming
 
 
 /**
- * A watermark is a monotonically increasing metric used to track progress in the computation of a
- * stream.  In addition to being comparable, a [[Watermark]] must have a notion of being empty
- * which is used to denote a stream where no processing has yet occured.
+ * A offset is a monotonically increasing metric used to track progress in the computation of a
+ * stream.  In addition to being comparable, a [[Offset]] must have a notion of being empty
+ * which is used to denote a stream where no processing has yet occurred.
  */
-trait Watermark {
+trait Offset {
   def isEmpty: Boolean
 
-  def >(other: Watermark): Boolean
+  def >(other: Offset): Boolean
 
-  def <(other: Watermark): Boolean
+  def <(other: Offset): Boolean
 }
 
-object LongWatermark {
-  val empty = LongWatermark(-1)
+object LongOffset {
+  val empty = LongOffset(-1)
 }
 
-case class LongWatermark(offset: Long) extends Watermark {
+case class LongOffset(offset: Long) extends Offset {
   def isEmpty: Boolean = offset == -1
 
-  def >(other: Watermark): Boolean = other match {
-    case l: LongWatermark => offset > l.offset
+  def >(other: Offset): Boolean = other match {
+    case l: LongOffset => offset > l.offset
     case _ =>
       throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")
   }
-  def <(other: Watermark): Boolean = other match {
-    case l: LongWatermark => offset < l.offset
+  def <(other: Offset): Boolean = other match {
+    case l: LongOffset => offset < l.offset
     case _ =>
       throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")
   }
 
-  def +(increment: Long): LongWatermark = new LongWatermark(offset + increment)
-  def -(decrement: Long): LongWatermark = new LongWatermark(offset - decrement)
+  def +(increment: Long): LongOffset = new LongOffset(offset + increment)
+  def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
 }
