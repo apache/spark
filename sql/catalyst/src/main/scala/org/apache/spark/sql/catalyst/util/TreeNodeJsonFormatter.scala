@@ -59,6 +59,8 @@ object TreeNodeJsonFormatter {
   }
 
   private def getJsonFields(node: TreeNode[_]): List[JField] = node match {
+    // Turns all kinds of literal values to string in json field, as the type info is hard to
+    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
     case lit: Literal =>
       val value = (lit.value, lit.dataType) match {
         case (null, _) => JNull
@@ -74,6 +76,8 @@ object TreeNodeJsonFormatter {
         fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
 
       fieldNames.zip(fieldValues).map {
+        // If the field value is a child, then use an int to encode it, represents the index of
+        // this child in all children.
         case (name, value: TreeNode[_]) if node.containsChild(value) =>
           name -> JInt(node.children.indexOf(value))
         case (name, value: Seq[_]) if value.nonEmpty && value.forall {
@@ -153,7 +157,8 @@ object TreeNodeJsonFormatter {
         val fields = getConstructorParameters(cls)
 
         val parameters: Array[AnyRef] = fields.map {
-          case (fieldName, fieldType) => parseFromJson(nextNode \ fieldName, fieldType, children, sc)
+          case (fieldName, fieldType) =>
+            parseFromJson(nextNode \ fieldName, fieldType, children, sc)
         }.toArray
 
         val ctors = cls.getConstructors

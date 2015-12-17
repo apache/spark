@@ -66,7 +66,7 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
   private[spark] override def asNullable: MyDenseVectorUDT = this
 
-  override def equals(other: Any) = other match {
+  override def equals(other: Any): Boolean = other match {
     case _: MyDenseVectorUDT => true
     case _ => false
   }
