@@ -734,4 +734,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       conf.set("spark.executor.instances", "0")) === true)
   }
 
+  test("encodeFileNameToURIRawPath") {
+    assert(Utils.encodeFileNameToURIRawPath("abc") === "abc")
+    assert(Utils.encodeFileNameToURIRawPath("abc xyz") === "abc%20xyz")
+    assert(Utils.encodeFileNameToURIRawPath("abc:xyz") === "abc:xyz")
+  }
+
+  test("decodeFileNameInURI") {
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc/xyz")) === "xyz")
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc")) === "abc")
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc%20xyz")) === "abc xyz")
+  }
 }
