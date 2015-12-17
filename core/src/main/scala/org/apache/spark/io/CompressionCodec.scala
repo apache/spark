@@ -17,10 +17,10 @@
 
 package org.apache.spark.io
 
-import java.io.{IOException, InputStream, OutputStream}
+import java.io._
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
+import net.jpountz.lz4.LZ4BlockOutputStream
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
@@ -49,7 +49,8 @@ private[spark] object CompressionCodec {
   private val configKey = "spark.io.compression.codec"
 
   private[spark] def supportsConcatenationOfSerializedStreams(codec: CompressionCodec): Boolean = {
-    codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
+    (codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
+      || codec.isInstanceOf[LZ4CompressionCodec])
   }
 
   private val shortCompressionCodecNames = Map(
@@ -96,7 +97,6 @@ private[spark] object CompressionCodec {
   val DEFAULT_COMPRESSION_CODEC = "lz4"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
-
 
 /**
  * :: DeveloperApi ::
