@@ -51,7 +51,7 @@ object ExtractValue {
       case (StructType(fields), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, fields(ordinal).copy(name = fieldName), ordinal)
+        GetStructField(child, ordinal, Some(fieldName))
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
@@ -97,21 +97,21 @@ object ExtractValue {
  * Returns the value of fields in the Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
- * TODO: Unify with [[GetInternalRowField]], remove the need to specify a [[StructField]].
+ *
+ * Note that we can pass in the field name directly to keep case preserving in `toString`.
+ * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
-case class GetStructField(child: Expression, field: StructField, ordinal: Int)
+case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
   extends UnaryExpression {
 
-  override def dataType: DataType = child.dataType match {
-    case s: StructType => s(ordinal).dataType
-    // This is a hack to avoid breaking existing code until we remove the need for the struct field
-    case _ => field.dataType
-  }
-  override def nullable: Boolean = child.nullable || field.nullable
-  override def toString: String = s"$child.${field.name}"
+  private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+
+  override def dataType: DataType = childSchema(ordinal).dataType
+  override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
+  override def toString: String = s"$child.${name.getOrElse(childSchema(ordinal).name)}"
 
   protected override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[InternalRow].get(ordinal, field.dataType)
+    input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {

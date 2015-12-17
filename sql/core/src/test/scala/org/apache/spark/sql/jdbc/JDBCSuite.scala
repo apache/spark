@@ -176,12 +176,14 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size === 0)
-    assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
   }
 
   test("SELECT * WHERE (quoted strings)") {
@@ -483,5 +485,16 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
+  }
+
+  test("Test DataFrame.where for Date and Timestamp") {
+    // Regression test for bug SPARK-11788
+    val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
+    val date = java.sql.Date.valueOf("1995-01-01")
+    val jdbcDf = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
+    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(rows(0).getAs[java.sql.Timestamp](2)
+      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 }

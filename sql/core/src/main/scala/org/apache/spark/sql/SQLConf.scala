@@ -323,6 +323,11 @@ private[spark] object SQLConf {
       "option must be set in Hadoop Configuration.  2. This option overrides " +
       "\"spark.sql.sources.outputCommitterClass\".")
 
+  val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = booleanConf(
+    key = "spark.sql.parquet.enableUnsafeRowRecordReader",
+    defaultValue = Some(true),
+    doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
+
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
     doc = "When true, enable filter pushdown for ORC files.")
@@ -444,18 +449,6 @@ private[spark] object SQLConf {
     doc = "When true, we could use `datasource`.`path` as table in SQL query"
   )
 
-  val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
-    booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
-      defaultValue = Some(true),
-      isPublic = false,
-      doc = "When true, if a query only has a single distinct column and it has " +
-        "grouping expressions, we will use our planner rule to handle this distinct " +
-        "column (other cases are handled by DistinctAggregationRewriter). " +
-        "When false, we will always use DistinctAggregationRewriter to plan " +
-        "aggregation queries with DISTINCT keyword. This is an internal flag that is " +
-        "used to benchmark the performance impact of using DistinctAggregationRewriter to " +
-        "plan aggregation queries with a single distinct column.")
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -573,9 +566,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
-
-  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean =
-    getConf(SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING)
 
   /** ********************** SQLConf functionality methods ************ */
 

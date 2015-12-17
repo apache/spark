@@ -22,7 +22,6 @@ from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.classification import MultilayerPerceptronClassifier
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
@@ -32,8 +31,8 @@ if __name__ == "__main__":
 
     # $example on$
     # Load training data
-    data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt")\
-        .toDF()
+    data = sqlContext.read.format("libsvm")\
+        .load("data/mllib/sample_multiclass_classification_data.txt")
     # Split the data into train and test
     splits = data.randomSplit([0.6, 0.4], 1234)
     train = splits[0]

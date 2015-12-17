@@ -680,39 +680,6 @@ private[python] class PythonMLLibAPI extends Serializable {
     }
   }
 
-  private[python] class Word2VecModelWrapper(model: Word2VecModel) {
-    def transform(word: String): Vector = {
-      model.transform(word)
-    }
-
-    /**
-     * Transforms an RDD of words to its vector representation
-     * @param rdd an RDD of words
-     * @return an RDD of vector representations of words
-     */
-    def transform(rdd: JavaRDD[String]): JavaRDD[Vector] = {
-      rdd.rdd.map(model.transform)
-    }
-
-    def findSynonyms(word: String, num: Int): JList[Object] = {
-      val vec = transform(word)
-      findSynonyms(vec, num)
-    }
-
-    def findSynonyms(vector: Vector, num: Int): JList[Object] = {
-      val result = model.findSynonyms(vector, num)
-      val similarity = Vectors.dense(result.map(_._2))
-      val words = result.map(_._1)
-      List(words, similarity).map(_.asInstanceOf[Object]).asJava
-    }
-
-    def getVectors: JMap[String, JList[Float]] = {
-      model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
-    }
-
-    def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
-  }
-
   /**
    * Java stub for Python mllib DecisionTree.train().
    * This stub returns a handle to the Java object instead of the content of the Java object.
@@ -1143,7 +1110,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    new RowMatrix(rows.rdd, numRows, numCols)
+    new RowMatrix(rows.rdd.retag(classOf[Vector]), numRows, numCols)
   }
 
   /**
@@ -1191,7 +1158,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
     // We use DataFrames for serialization of IndexedRows to Python,
     // so return a DataFrame.
-    val sqlContext = new SQLContext(indexedRowMatrix.rows.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(indexedRowMatrix.rows.sparkContext)
     sqlContext.createDataFrame(indexedRowMatrix.rows)
   }
 
@@ -1201,7 +1168,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
     // We use DataFrames for serialization of MatrixEntry entries to
     // Python, so return a DataFrame.
-    val sqlContext = new SQLContext(coordinateMatrix.entries.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(coordinateMatrix.entries.sparkContext)
     sqlContext.createDataFrame(coordinateMatrix.entries)
   }
 
@@ -1211,7 +1178,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixBlocks(blockMatrix: BlockMatrix): DataFrame = {
     // We use DataFrames for serialization of sub-matrix blocks to
     // Python, so return a DataFrame.
-    val sqlContext = new SQLContext(blockMatrix.blocks.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(blockMatrix.blocks.sparkContext)
     sqlContext.createDataFrame(blockMatrix.blocks)
   }
 }

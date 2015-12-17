@@ -222,6 +222,7 @@ class SparkContext(object):
         # create a signal handler which would be invoked on receiving SIGINT
         def signal_handler(signal, frame):
             self.cancelAllJobs()
+            raise KeyboardInterrupt()
 
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(threading.current_thread(), threading._MainThread):

@@ -194,7 +194,9 @@ case class AttributeReference(
   def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 
   override def equals(other: Any): Boolean = other match {
-    case ar: AttributeReference => name == ar.name && exprId == ar.exprId && dataType == ar.dataType
+    case ar: AttributeReference =>
+      name == ar.name && dataType == ar.dataType && nullable == ar.nullable &&
+        metadata == ar.metadata && exprId == ar.exprId && qualifiers == ar.qualifiers
     case _ => false
   }
 
@@ -210,9 +212,12 @@ case class AttributeReference(
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17
-    h = h * 37 + exprId.hashCode()
+    h = h * 37 + name.hashCode()
     h = h * 37 + dataType.hashCode()
+    h = h * 37 + nullable.hashCode()
     h = h * 37 + metadata.hashCode()
+    h = h * 37 + exprId.hashCode()
+    h = h * 37 + qualifiers.hashCode()
     h
   }
 
@@ -268,7 +273,8 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
+case class PrettyAttribute(name: String, dataType: DataType = NullType)
+  extends Attribute with Unevaluable {
 
   override def toString: String = name
 
@@ -281,7 +287,6 @@ case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
-  override def dataType: DataType = NullType
 }
 
 object VirtualColumn {

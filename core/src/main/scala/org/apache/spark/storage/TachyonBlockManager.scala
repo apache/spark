@@ -103,7 +103,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     val file = getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
     try {
-      os.write(bytes.array())
+      Utils.writeByteBuffer(bytes, os)
     } catch {
       case NonFatal(e) =>
         logWarning(s"Failed to put bytes of block $blockId into Tachyon", e)

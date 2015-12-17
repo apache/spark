@@ -21,12 +21,9 @@ package org.apache.spark.examples.ml;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 // $example off$
 
@@ -43,8 +40,7 @@ public class JavaMultilayerPerceptronClassifierExample {
     // $example on$
     // Load training data
     String path = "data/mllib/sample_multiclass_classification_data.txt";
-    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), path).toJavaRDD();
-    DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+    DataFrame dataFrame = jsql.read().format("libsvm").load(path);
     // Split the data into train and test
     DataFrame[] splits = dataFrame.randomSplit(new double[]{0.6, 0.4}, 1234L);
     DataFrame train = splits[0];
