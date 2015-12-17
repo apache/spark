@@ -115,7 +115,17 @@ class HistoryServer(
   }
 
   def getSparkUI(appKey: String): Option[SparkUI] = {
-    Option(appCache.get(appKey))
+    try {
+      val ui = appCache.get(appKey)
+      Some(ui)
+    } catch {
+      case e: Exception => e.getCause() match {
+        case nsee: NoSuchElementException =>
+          None
+
+        case cause: Exception => throw cause
+      }
+    }
   }
 
   initialize()
