@@ -100,10 +100,10 @@ private[mesos] class MesosSubmitRequestServlet(
     // We only need the ability to specify where to find spark-submit script
     // which user can user spark.executor.home or spark.home configurations.
     //
-    // Due to https://issues.scala-lang.org/browse/SI-6654, `filterKeys` returns an
-    // unserializable object, so we must call `.map(identity)` on the result.
-    val environmentVariables = request.environmentVariables.filterKeys(!_.equals("SPARK_HOME"))
-      .map(identity)
+    // Do not use `filterKeys` here to avoid SI-6654, which breaks ZK persistence
+    val environmentVariables = request.environmentVariables.filter { case (k, _) =>
+      k != "SPARK_HOME"
+    }
     val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
 
     // Construct driver description
