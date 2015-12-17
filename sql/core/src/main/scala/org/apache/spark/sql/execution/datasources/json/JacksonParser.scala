@@ -31,6 +31,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+private[json] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
+
 object JacksonParser {
 
   def parse(
@@ -110,7 +112,7 @@ object JacksonParser {
           lowerCaseValue.equals("-inf")) {
           value.toFloat
         } else {
-          sys.error(s"Cannot parse $value as FloatType.")
+          throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
         }
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DoubleType) =>
@@ -127,7 +129,7 @@ object JacksonParser {
           lowerCaseValue.equals("-inf")) {
           value.toDouble
         } else {
-          sys.error(s"Cannot parse $value as DoubleType.")
+          throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
         }
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, dt: DecimalType) =>
@@ -174,7 +176,11 @@ object JacksonParser {
         convertField(factory, parser, udt.sqlType)
 
       case (token, dataType) =>
-        sys.error(s"Failed to parse a value for data type $dataType (current token: $token).")
+        // We cannot parse this token based on the given data type. So, we throw a
+        // SparkSQLJsonProcessingException and this exception will be caught by
+        // parseJson method.
+        throw new SparkSQLJsonProcessingException(
+          s"Failed to parse a value for data type $dataType (current token: $token).")
     }
   }
 
@@ -267,14 +273,13 @@ object JacksonParser {
                   array.toArray[InternalRow](schema)
                 }
               case _ =>
-                sys.error(
-                  s"Failed to parse record $record. Please make sure that each line of " +
-                    "the file (or each string in the RDD) is a valid JSON object or " +
-                    "an array of JSON objects.")
+                failedRecord(record)
             }
           }
         } catch {
           case _: JsonProcessingException =>
+            failedRecord(record)
+          case _: SparkSQLJsonProcessingException =>
             failedRecord(record)
         }
       }
