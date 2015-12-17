@@ -103,7 +103,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     Utils.deleteRecursively(tempDir)
   }
 
-  test("GradientBoostedTrees should support all NumericType labels") {
+  test("should support all NumericType labels") {
     val dfWithIntLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3)),
       (1, Vectors.dense(0, 3, 1)),
@@ -135,6 +135,26 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     gbt.fit(dfWithIntLabels)
     gbt.fit(dfWithFloatLabels)
     gbt.fit(dfWithLongLabels)
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3)),
+      ("1", Vectors.dense(0, 3, 1)),
+      ("0", Vectors.dense(0, 2, 2)),
+      ("1", Vectors.dense(0, 3, 9)),
+      ("0", Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2)
+
+    val gbt = new GBTClassifier()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      gbt.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 
   // TODO: Reinstate test once runWithValidation is implemented   SPARK-7132
