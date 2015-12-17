@@ -78,16 +78,17 @@ private[ml] object TreeTests extends SparkFunSuite {
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
    * @param numClasses  Number of classes label can take. If 0, mark as continuous.
+   * @param labelColName  Name of the label column on which to set the metadata.
    * @return DataFrame with metadata
    */
-  def setMetadata(data: DataFrame, numClasses: Int): DataFrame = {
+  def setMetadata(data: DataFrame, numClasses: Int, labelColName: String): DataFrame = {
     val labelAttribute = if (numClasses == 0) {
-      NumericAttribute.defaultAttr.withName("label")
+      NumericAttribute.defaultAttr.withName(labelColName)
     } else {
-      NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
+      NominalAttribute.defaultAttr.withName(labelColName).withNumValues(numClasses)
     }
     val labelMetadata = labelAttribute.toMetadata()
-    data.select(data("features"), data("label").as("label", labelMetadata))
+    data.select(data("features"), data(labelColName).as(labelColName, labelMetadata))
   }
 
   /**
