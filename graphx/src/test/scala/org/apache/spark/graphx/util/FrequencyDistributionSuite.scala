@@ -17,11 +17,10 @@
 
 package org.apache.spark.graphx.util
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.LocalSparkContext
 
-class FrequencyDistributionSuite extends FunSuite with LocalSparkContext {
+class FrequencyDistributionSuite extends SparkFunSuite with LocalSparkContext {
 
   test("FrequencyDistribution.split") {
     withSpark { sc =>

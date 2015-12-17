@@ -83,7 +83,7 @@ private[graphx] object FrequencyDistribution {
   def split(bucketNum: Int): FrequencyDistribution = {
     assert(bucketNum > 0)
     new FrequencyDistribution {
-      override def divideRanges(max: Int, min: Int): Array[(Int, Int)] =  {
+      override def divideRanges(max: Int, min: Int): Array[(Int, Int)] = {
         val span = max - min + 1
         val initSize = span / bucketNum
         val sizes = Array.fill(bucketNum)(initSize)
