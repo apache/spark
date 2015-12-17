@@ -176,15 +176,14 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size === 0)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size === 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size === 1)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size === 1)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size === 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size === 2)
-    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size === 1)
-    assert(stripSparkFilter(
-      sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size === 0)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
   }
 
   test("SELECT * WHERE (quoted strings)") {
