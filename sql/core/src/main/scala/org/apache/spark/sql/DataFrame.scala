@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
@@ -455,10 +455,8 @@ class DataFrame private[sql](
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
+      Join(logicalPlan, right.logicalPlan, JoinType(joinType), None)).analyzed.asInstanceOf[Join]
 
-    // Project only one of the join columns.
-    val joinedCols = usingColumns.map(col => withPlan(joined.right).resolve(col))
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
         withPlan(joined.left).resolve(col),
@@ -467,9 +465,26 @@ class DataFrame private[sql](
       catalyst.expressions.And(cond, eqTo)
     }
 
+    // Project only one of the join columns.
+    val joinedCols = JoinType(joinType) match {
+      case Inner | LeftOuter | LeftSemi =>
+        usingColumns.map(col => withPlan(joined.left).resolve(col))
+      case RightOuter =>
+        usingColumns.map(col => withPlan(joined.right).resolve(col))
+      case FullOuter =>
+        usingColumns.map { col =>
+          val leftCol = withPlan(joined.left).resolve(col)
+          val rightCol = withPlan(joined.right).resolve(col)
+          Alias(Coalesce(Seq(leftCol, rightCol)), col)()
+        }
+    }
+    // The nullability of output of joined could be different than original column,
+    // so we can only compare them by exprId
+    val joinRefs = condition.map(_.references.toSeq.map(_.exprId)).getOrElse(Nil)
+    val resultCols = joinedCols ++ joined.output.filterNot(e => joinRefs.contains(e.exprId))
     withPlan {
       Project(
-        joined.output.filterNot(joinedCols.contains(_)),
+        resultCols,
         Join(
           joined.left,
           joined.right,
