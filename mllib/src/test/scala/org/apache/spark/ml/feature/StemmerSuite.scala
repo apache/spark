@@ -145,10 +145,7 @@ private object StemmerSuite extends SparkFunSuite {
       .setInputCol("tokens")
       .setOutputCol("stemmed")
 
-    stemmer.transform(dataset).select("expected", "stemmed")
-      .collect()
-      .foreach { case Row(tokens, wantedTokens) =>
-      assert(tokens === wantedTokens)
-    }
+    stemmer.transform(dataset).select("expected", "stemmed").collect()
+      .foreach { case Row(tokens, wantedTokens) => assert(tokens === wantedTokens) }
   }
 }

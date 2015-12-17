@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
  * :: Experimental ::
- * Stemmer removes the commoner morphological and inflexional endings from words in English
+ * Stemmer removes the commoner morphological and inflexional endings from words in English.
  */
 @Experimental
 @Since("1.7.0")
@@ -57,7 +57,7 @@ object Stemmer extends DefaultParamsReadable[Stemmer] {
  * :: Experimental ::
  * Classical Porter stemmer, which is implemented referring to scalanlp/chalk
  * [[https://github.com/scalanlp/chalk/blob/master/src/main/scala/chalk/text/analyze]].
- * The details of PorterStemmer can be found at
+ * The details of PorterStemmer algorithm can be found at
  * [[http://snowball.tartarus.org/algorithms/porter/stemmer.html]].
  */
 private[feature] object PorterStemmer {
@@ -72,6 +72,7 @@ private[feature] object PorterStemmer {
 
   private def step1(w: String): String = step1c(step1b(step1a(w)))
 
+  /** deals with plurals */
   private def step1a(w: String): String = {
     if (w.endsWith("sses") || w.endsWith("ies")) {
       w.substring(0, w.length - 2)
@@ -82,6 +83,7 @@ private[feature] object PorterStemmer {
     else w
   }
 
+  /** deals with  -ed or -ing suffixes */
   private def step1b(w: String): String = {
     def extra(w: String) = {
       if (w.endsWith("at") || w.endsWith("bl") || w.endsWith("iz")) w + 'e'
@@ -101,12 +103,14 @@ private[feature] object PorterStemmer {
     } else w
   }
 
+  /** Turns terminal y to i when there is another vowel in the stem */
   private def step1c(w: String): String = {
     if ((w.last == 'y' || w.last == 'Y') && w.indexWhere(isVowel) < w.length - 1) {
       w.substring(0, w.length - 1) + 'i'
     } else w
   }
 
+  /** Maps double suffixes to single ones */
   private def step2(w: String): String = {
     if (w.length < 3) w
     else {
@@ -118,19 +122,19 @@ private[feature] object PorterStemmer {
         case 'g' => replaceSuffix(w, "logi", "log")
         case 'l' => replaceSuffix(w, "bli", "ble")
           .orElse(replaceSuffix(w, "alli", "al"))
-          .orElse ( replaceSuffix(w, "entli", "ent"))
-          .orElse ( replaceSuffix(w, "eli", "e"))
-          .orElse ( replaceSuffix(w, "ousli", "ous"))
+          .orElse(replaceSuffix(w, "entli", "ent"))
+          .orElse(replaceSuffix(w, "eli", "e"))
+          .orElse(replaceSuffix(w, "ousli", "ous"))
         case 'o' => replaceSuffix(w, "ization", "ize")
-          .orElse( replaceSuffix(w, "ator", "ate"))
-          .orElse( replaceSuffix(w, "ation", "ate"))
+          .orElse(replaceSuffix(w, "ator", "ate"))
+          .orElse(replaceSuffix(w, "ation", "ate"))
         case 's' => replaceSuffix(w, "alism", "al")
-          .orElse( replaceSuffix(w, "iveness", "ive"))
-          .orElse( replaceSuffix(w, "fulness", "ful"))
-          .orElse( replaceSuffix(w, "ousness", "ous"))
+          .orElse(replaceSuffix(w, "iveness", "ive"))
+          .orElse(replaceSuffix(w, "fulness", "ful"))
+          .orElse(replaceSuffix(w, "ousness", "ous"))
         case 't' => replaceSuffix(w, "aliti", "al")
-          .orElse (replaceSuffix(w, "iviti", "ive"))
-          .orElse (replaceSuffix(w, "biliti", "ble"))
+          .orElse(replaceSuffix(w, "iviti", "ive"))
+          .orElse(replaceSuffix(w, "biliti", "ble"))
         case _ => None
       }
       opt.filter(w => m(w._1) > 0).map {
@@ -139,6 +143,7 @@ private[feature] object PorterStemmer {
     }
   }
 
+  /** Deals with suffixes, -full, -ness etc */
   private def step3(w: String): String = {
     if (w.length < 3) w
     else {
@@ -157,6 +162,7 @@ private[feature] object PorterStemmer {
     }
   }
 
+  /** Takes off -ant, -ence, etc. */
   private def step4(w: String): String = {
     if (w.length < 3){
       w
@@ -169,13 +175,13 @@ private[feature] object PorterStemmer {
         case 'i' => replaceSuffix(w, "ic", "")
         case 'l' => replaceSuffix(w, "able", "").orElse(replaceSuffix(w, "ible", ""))
         case 'n' => replaceSuffix(w, "ant", "")
-          .orElse( replaceSuffix(w, "ement", ""))
-          .orElse( replaceSuffix(w, "ment", ""))
-          .orElse( replaceSuffix(w, "ent", ""))
+          .orElse(replaceSuffix(w, "ement", ""))
+          .orElse(replaceSuffix(w, "ment", ""))
+          .orElse(replaceSuffix(w, "ent", ""))
 
         case 'o' => replaceSuffix(w, "ion", "")
           .filter(a => a._1.endsWith("t") || a._1.endsWith("s"))
-          .orElse( replaceSuffix(w, "ou", ""))
+          .orElse(replaceSuffix(w, "ou", ""))
         case 's' => replaceSuffix(w, "ism", "")
         case 't' => replaceSuffix(w, "ate", "").orElse(replaceSuffix(w, "iti", ""))
         case 'u' => replaceSuffix(w, "ous", "")
@@ -189,6 +195,7 @@ private[feature] object PorterStemmer {
     }
   }
 
+  /** Removes a final -e */
   private def step5(w: String): String = {
     if (w.length < 3) w else step5b(step5a(w))
   }
@@ -212,6 +219,7 @@ private[feature] object PorterStemmer {
     else w
   }
 
+  /** number of "consonant sequences" in the current term */
   private def m(w: String): Int = {
     val firstV = w.indexWhere(isVowel)
     if (firstV == -1) 0
@@ -224,7 +232,7 @@ private[feature] object PorterStemmer {
           x = x.dropWhile(isVowel)
           if (x.isEmpty) return m
           m += 1
-          if (m > 1) return m// don't need anything bigger than this.
+          if (m > 1) return m // don't need anything bigger than this.
           x = x.dropWhile(isConsonant)
         }
         m
@@ -232,7 +240,7 @@ private[feature] object PorterStemmer {
     }
   }
 
-  /** ends with CVC */
+  /** if the term ends with CVC */
   private def cvc(w: String): Boolean = (
     w.length > 2
       && isConsonant(w.last)
@@ -241,7 +249,7 @@ private[feature] object PorterStemmer {
       && isConsonant(w.charAt(w.length - 3))
     )
 
-  /** ends with double consonent */
+  /** if the term ends with double consonent */
   private def doublec(w: String): Boolean = {
     w.length > 2 && w.last == w.charAt(w.length - 2) && isConsonant(w.last)
   }
