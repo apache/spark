@@ -27,6 +27,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 
 class DecisionTreeClassifierSuite
@@ -335,37 +336,29 @@ class DecisionTreeClassifierSuite
   }
 
   test("should support all NumericType labels") {
-    val dfWithIntLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+    val df = sqlContext.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3)),
       (1, Vectors.dense(0, 3, 1)),
       (0, Vectors.dense(0, 2, 2)),
       (1, Vectors.dense(0, 3, 9)),
       (0, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features"), 2)
+    )).toDF("label", "features")
 
-    val dfWithFloatLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
-      (0f, Vectors.dense(0, 2, 3)),
-      (1f, Vectors.dense(0, 3, 1)),
-      (0f, Vectors.dense(0, 2, 2)),
-      (1f, Vectors.dense(0, 3, 9)),
-      (0f, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features"), 2)
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
 
-    val dfWithLongLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
-      (0L, Vectors.dense(0, 2, 3)),
-      (1L, Vectors.dense(0, 3, 1)),
-      (0L, Vectors.dense(0, 2, 2)),
-      (1L, Vectors.dense(0, 3, 9)),
-      (0L, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features"), 2)
+    var dfWithTypes = df
+    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
 
     val dt = new DecisionTreeClassifier()
-      .setLabelCol("label")
       .setFeaturesCol("features")
 
-    dt.fit(dfWithIntLabels)
-    dt.fit(dfWithFloatLabels)
-    dt.fit(dfWithLongLabels)
+    val refModel = dt.setLabelCol(DoubleType.toString)
+      .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))
+    types.filter(_ != DoubleType).foreach { t =>
+      TreeTests.checkEqual(refModel, dt.setLabelCol(t.toString)
+        .fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
+    }
   }
 
   test("shouldn't support non NumericType labels") {
@@ -375,7 +368,7 @@ class DecisionTreeClassifierSuite
       ("0", Vectors.dense(0, 2, 2)),
       ("1", Vectors.dense(0, 3, 9)),
       ("0", Vectors.dense(0, 2, 6))
-    )).toDF("label", "features"), 2)
+    )).toDF("label", "features"), 2, "label")
 
     val dt = new DecisionTreeClassifier()
       .setLabelCol("label")
