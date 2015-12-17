@@ -39,6 +39,7 @@ import org.apache.spark.sql.expressions.Aggregator;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.StructType;
 
 import static org.apache.spark.sql.functions.*;
@@ -608,6 +609,51 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
+  public class SimpleJavaBean2 implements Serializable {
+    private Timestamp a;
+    private Date b;
+    private java.math.BigDecimal c;
+    private scala.math.BigDecimal d;
+
+    public Timestamp getA() { return a; }
+
+    public void setA(Timestamp a) { this.a = a; }
+
+    public Date getB() { return b; }
+
+    public void setB(Date b) { this.b = b; }
+
+    public java.math.BigDecimal getC() { return c; }
+
+    public void setC(java.math.BigDecimal c) { this.c = c; }
+
+    public scala.math.BigDecimal getD() { return d; }
+
+    public void setD(scala.math.BigDecimal d) { this.d = d; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      SimpleJavaBean that = (SimpleJavaBean) o;
+
+      if (!a.equals(that.a)) return false;
+      if (!b.equals(that.b)) return false;
+      if (!c.equals(that.c)) return false;
+      return d.equals(that.d);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = a.hashCode();
+      result = 31 * result + b.hashCode();
+      result = 31 * result + c.hashCode();
+      result = 31 * result + d.hashCode();
+      return result;
+    }
+  }
+
   public class NestedJavaBean implements Serializable {
     private SimpleJavaBean a;
 
@@ -688,5 +734,18 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<SimpleJavaBean> ds3 = context.createDataFrame(Arrays.asList(row1, row2), schema)
       .as(Encoders.bean(SimpleJavaBean.class));
     Assert.assertEquals(data, ds3.collectAsList());
+  }
+
+  @Test
+  public void testJavaBeanEncoderWithNonPrimitiveTypes() {
+    // This is a regression test of SPARK-12404
+    SimpleJavaBean2 obj = new SimpleJavaBean2();
+    obj.setA(new Timestamp(0));
+    obj.setB(new Date(0));
+    obj.setC(java.math.BigDecimal.valueOf(1));
+    obj.setD(scala.math.BigDecimal$.MODULE$.apply(1));
+    Dataset<SimpleJavaBean2> ds =
+      context.createDataset(Arrays.asList(obj), Encoders.bean(SimpleJavaBean2.class));
+    ds.collect();
   }
 }
