@@ -1190,20 +1190,16 @@ private[spark] class BlockManager(
   def dataSerializeStream(
       blockId: BlockId,
       outputStream: OutputStream,
-      values: Iterator[Any],
-      serializer: Serializer = defaultSerializer): Unit = {
+      values: Iterator[Any]): Unit = {
     val byteStream = new BufferedOutputStream(outputStream)
-    val ser = serializer.newInstance()
+    val ser = defaultSerializer.newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
 
   /** Serializes into a byte buffer. */
-  def dataSerialize(
-      blockId: BlockId,
-      values: Iterator[Any],
-      serializer: Serializer = defaultSerializer): ByteBuffer = {
+  def dataSerialize(blockId: BlockId, values: Iterator[Any]): ByteBuffer = {
     val byteStream = new ByteArrayOutputStream(4096)
-    dataSerializeStream(blockId, byteStream, values, serializer)
+    dataSerializeStream(blockId, byteStream, values)
     ByteBuffer.wrap(byteStream.toByteArray)
   }
 
@@ -1211,24 +1207,21 @@ private[spark] class BlockManager(
    * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    */
-  def dataDeserialize(
-      blockId: BlockId,
-      bytes: ByteBuffer,
-      serializer: Serializer = defaultSerializer): Iterator[Any] = {
+  def dataDeserialize(blockId: BlockId, bytes: ByteBuffer): Iterator[Any] = {
     bytes.rewind()
-    dataDeserializeStream(blockId, new ByteBufferInputStream(bytes, true), serializer)
+    dataDeserializeStream(blockId, new ByteBufferInputStream(bytes, true))
   }
 
   /**
    * Deserializes a InputStream into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    */
-  def dataDeserializeStream(
-      blockId: BlockId,
-      inputStream: InputStream,
-      serializer: Serializer = defaultSerializer): Iterator[Any] = {
+  def dataDeserializeStream(blockId: BlockId, inputStream: InputStream): Iterator[Any] = {
     val stream = new BufferedInputStream(inputStream)
-    serializer.newInstance().deserializeStream(wrapForCompression(blockId, stream)).asIterator
+    defaultSerializer
+      .newInstance()
+      .deserializeStream(wrapForCompression(blockId, stream))
+      .asIterator
   }
 
   def stop(): Unit = {
