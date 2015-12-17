@@ -130,7 +130,6 @@ private[spark] class AppClient(
             if (registered.get) {
               registerMasterFutures.get.foreach(_.cancel(true))
               registerMasterThreadPool.shutdownNow()
-              registrationRetryTimer.cancel(true)
             } else if (nthRetry >= REGISTRATION_RETRIES) {
               markDead("All masters are unresponsive! Giving up.")
             } else {
