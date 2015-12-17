@@ -267,6 +267,37 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("summation") {
+    withSpark { sc =>
+      val n = 8
+      val verticesG = sc.parallelize((1 to n).map(x => (x: VertexId, x)))
+      val edgesG = sc.parallelize(Seq(
+        Edge(1, 2, 1), Edge(1, 3, 1), Edge(1, 4, 1), Edge(2, 3, 2), Edge(2, 4, 2), Edge(3, 4, 3),
+        Edge(4, 5, 4), Edge(4, 6, 4), Edge(5, 6, 5)))
+      val graphG: Graph[Int, Int] = Graph(verticesG, edgesG).cache()
+
+      val verticesH = sc.parallelize((5 to 8).map(x => (x: VertexId, x)))
+      val edgesH = sc.parallelize(Seq(
+        Edge(5, 6, 5), Edge(5, 7, 5), Edge(5, 8, 5), Edge(6, 7, 6), Edge(6, 8, 6), Edge(7, 8, 7)))
+      val graphH: Graph[Int, Int] = Graph(verticesH, edgesH).cache()
+
+      val projectedGraph = graphG.union[Int, Int, Int, Int](graphH,
+        (src, dst, a, b) => a - b,
+        (src, dst, a, b) => a + b)
+
+      val v = projectedGraph.vertices.collect().toSet
+      assert(v === (1 to 8).map(e => (if (e < 5) (e, e) else (e, 2*e))).toSet)
+
+      // the map is necessary because of object-reuse in the edge iterator
+      val e = projectedGraph.edges.map(e => Edge(e.srcId, e.dstId, e.attr)).collect()
+      assert(e.toSet === Set(Edge(1, 3, 1), Edge(6, 8, 6), Edge(3, 4, 3),
+        Edge(4, 6, 4), Edge(2, 3, 2), Edge(2, 4, 2),
+        Edge(7, 8, 7), Edge(5, 7, 5), Edge(1, 2, 1),
+        Edge(6, 7, 6), Edge(5, 8, 5), Edge(4, 5, 4),
+        Edge(1, 4, 1), Edge(5, 6, 0)))
+    }
+  }
+
   test("groupEdges") {
     withSpark { sc =>
       val n = 5

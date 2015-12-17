@@ -19,7 +19,7 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.HashPartitioner
+import org.apache.spark.{graphx, HashPartitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.storage.StorageLevel
@@ -184,6 +184,19 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
   }
 
+  override def union[VD2: ClassTag, VD3: ClassTag, ED2: ClassTag, ED3: ClassTag]
+  (other: Graph[VD2, ED2],
+   mergeEdges: (VertexId, VertexId, ED, ED2) => ED3,
+   mergeVertices: (VertexId, VertexId, VD, VD2) => VD3): Graph[VD3, ED3] = {
+    val newVertices : VertexRDD[VD3] = vertices.unionJoin(other.vertices)(mergeVertices)
+    val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD3, ED]]
+      .updateVertices(newVertices)
+    val newEdges : EdgeRDDImpl[ED3, VD3] =
+      newReplicatedVertexView.edges.union(other.edges)(mergeEdges)(
+        (edge: ED) => edge.asInstanceOf[ED3], (edge: ED2) => edge.asInstanceOf[ED3])
+
+    new GraphImpl[VD3, ED3](newVertices, newReplicatedVertexView.withEdges(newEdges))
+  }
   // ///////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
   // ///////////////////////////////////////////////////////////////////////////////////////////////

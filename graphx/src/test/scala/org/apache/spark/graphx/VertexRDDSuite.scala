@@ -163,6 +163,38 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("union") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n).cache()
+      val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
+      val odds : VertexRDD[Int] = verts.filter(q => ((q._2 % 2) == 1)).cache()
+      // union with another VertexRDD
+      assert(odds.unionJoin(evens) { (id1, id2, a, b) => a + b }.collect().toSet ===
+        (0 to n by 1).map(x => (x.toLong, x)).toSet)
+      // union with an RDD
+      val evensRDD = evens.map(identity)
+      assert(odds.unionJoin[Int, Int](evensRDD) { (id1, id2, a, b) => a + b }.collect().toSet ===
+        (0 to n by 1).map(x => (x.toLong, x)).toSet) }
+  }
+
+  test("union vertices with the non-equal number of partitions") {
+    withSpark { sc =>
+      val n = 10
+      val vertexA = VertexRDD(
+        sc.parallelize(1 to n).map(i => (i.toLong, i)))
+      val vertexB = VertexRDD(
+        vertexA.filter(v => v._1 % 2 == 0).partitionBy(new HashPartitioner(3)))
+      assert(vertexA.partitions.size != vertexB.partitions.size)
+      val vertexC = vertexA.unionJoin(vertexB) { (vid1, vid2, old, newVal) =>
+        old + newVal
+      }
+      assert(vertexC.collect().toSet ==
+        (1 to n).map(x => if (x % 2 == 0) (x.toLong, 2*x)
+                          else (x.toLong, x)).toSet)
+    }
+  }
+
   test("aggregateUsingIndex") {
     withSpark { sc =>
       val n = 100

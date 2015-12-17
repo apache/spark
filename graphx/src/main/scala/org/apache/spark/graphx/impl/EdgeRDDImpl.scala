@@ -113,6 +113,19 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     })
   }
 
+  override def union[ED2: ClassTag, ED3: ClassTag]
+  (other: EdgeRDD[ED2]) (f: (VertexId, VertexId, ED, ED2) => ED3)
+  (map: (ED) => ED3, rmap: (ED2) => ED3) : EdgeRDDImpl[ED3, VD] = {
+    val ed2Tag = classTag[ED2]
+    val ed3Tag = classTag[ED3]
+    this.withPartitionsRDD[ED3, VD](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
+      (thisIter, otherIter) =>
+        val (pid, thisEPart) = thisIter.next()
+        val (_, otherEPart) = otherIter.next()
+        Iterator(Tuple2(pid, thisEPart.union(otherEPart)(f)(map, rmap)(ed2Tag, ed3Tag)))
+    })
+  }
+
   def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](
       f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): EdgeRDDImpl[ED2, VD2] = {
     this.withPartitionsRDD[ED2, VD2](partitionsRDD.mapPartitions({ iter =>

@@ -51,6 +51,25 @@ private[graphx] object VertexPartitionBase {
     }
     (map.keySet, map._values, map.keySet.getBitSet)
   }
+
+  /**
+   * Construct the constituents of a VertexPartitionBase from the given two sets of vertices,
+   * merging duplicate entries using 'mergeFunc'
+   */
+
+
+  def initFrom[VD: ClassTag](iter1: Iterator[(VertexId, VD)],
+                             iter2: Iterator[(VertexId, VD)], mergeFunc : (VD, VD) => VD)
+  : (VertexIdToIndexMap, Array[VD], BitSet) = {
+    val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD]
+    iter1.foreach { pair =>
+      map.setMerge(pair._1, pair._2, mergeFunc)
+    }
+    iter2.foreach { pair =>
+      map.setMerge(pair._1, pair._2, mergeFunc)
+    }
+    (map.keySet, map._values, map.keySet.getBitSet)
+  }
 }
 
 /**

@@ -86,6 +86,21 @@ abstract class EdgeRDD[ED](
       (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3]
 
   /**
+   * Unions this EdgeRDD with another EdgeRDD, assuming both are partitioned using the same
+   * [[PartitionStrategy]].
+   *
+   * @param other the EdgeRDD to union with
+   * @param f the union function applied to corresponding values of `this` and `other`
+   * @param map the map function that maps `this` edge to unionized edge
+   * @param rmap the map function that maps `other` edge to unionized edge
+   * @return a new EdgeRDD containing all edges that appear in both `this` and `other`,
+   *         with values supplied by `f`
+   */
+  def union[ED2: ClassTag, ED3: ClassTag]
+      (other: EdgeRDD[ED2]) (f: (VertexId, VertexId, ED, ED2) => ED3)
+      (map: (ED) => ED3, rmap: (ED2) => ED3) : EdgeRDD[ED3]
+
+  /**
    * Changes the target storage level while preserving all other properties of the
    * EdgeRDD. Operations on the returned EdgeRDD will preserve this storage level.
    *
