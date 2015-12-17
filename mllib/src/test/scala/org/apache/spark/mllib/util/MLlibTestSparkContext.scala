@@ -44,7 +44,7 @@ trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
       if (sc != null) {
         sc.stop()
       }
-    sc = null
+      sc = null
     } finally {
       super.afterAll()
     }
