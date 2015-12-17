@@ -70,6 +70,9 @@ class ExecutorClassLoader(
   }
 
   override def findClass(name: String): Class[_] = {
+    if (name.contains("org.apache.spark.sql.catalyst.expressions.GeneratedClass")) {
+      throw new ClassNotFoundException(name)
+    }
     userClassPathFirst match {
       case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
       case false => {
