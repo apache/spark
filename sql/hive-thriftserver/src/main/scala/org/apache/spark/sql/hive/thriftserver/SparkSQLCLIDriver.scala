@@ -195,20 +195,18 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     // add shutdown hook to flush the history to history file
-    Runtime.getRuntime.addShutdownHook(new Thread(new Runnable() {
-      override def run() = {
-        reader.getHistory match {
-          case h: FileHistory =>
-            try {
-              h.flush()
-            } catch {
-              case e: IOException =>
-                logWarning("WARNING: Failed to write command history file: " + e.getMessage)
-            }
-          case _ =>
-        }
+    ShutdownHookManager.addShutdownHook { () =>
+      reader.getHistory match {
+        case h: FileHistory =>
+          try {
+            h.flush()
+          } catch {
+            case e: IOException =>
+              logWarning("WARNING: Failed to write command history file: " + e.getMessage)
+          }
+        case _ =>
       }
-    }))
+    }
 
     // TODO: missing
 /*
