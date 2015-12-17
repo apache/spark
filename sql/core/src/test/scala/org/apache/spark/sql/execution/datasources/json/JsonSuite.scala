@@ -1427,4 +1427,31 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
     }
   }
+
+  test("SPARK-12057 additional corrupt records do not throw exceptions") {
+    // Test if we can query corrupt records.
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      withTempTable("jsonTable") {
+        val schema = StructType(
+          StructField("_unparsed", StringType, true) ::
+            StructField("dummy", StringType, true) :: Nil)
+        val jsonDF = sqlContext.read.schema(schema).json(additionalCorruptRecords)
+        jsonDF.registerTempTable("jsonTable")
+
+        // In HiveContext, backticks should be used to access columns starting with a underscore.
+        checkAnswer(
+          sql(
+            """
+              |SELECT dummy, _unparsed
+              |FROM jsonTable
+            """.stripMargin),
+          Row("test", null) ::
+          Row(null, """42""") ::
+          Row(null, """     ","ian":"test"}""") :: Nil
+        )
+
+      }
+    }
+  }
+
 }
