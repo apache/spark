@@ -24,6 +24,29 @@ uses bcrypt before storing passwords.
     authenticate = True
     auth_backend = airflow.contrib.auth.backends.password_auth
 
+When password auth is enabled, an initial user credential will need to be created before anyone can login. An initial
+user was not created in the migrations for this authenication backend to prevent default Airflow installations from
+attack. Creating a new user has to be done via a Python REPL on the same machine Airflow is installed.
+
+.. code-block:: bash
+
+    # navigate to the airflow installation directory
+    $ cd ~/airflow
+    $ python
+    Python 2.7.9 (default, Feb 10 2015, 03:28:08)
+    Type "help", "copyright", "credits" or "license" for more information.
+    >>> import airflow
+    >>> from airflow import models, settings
+    >>> from airflow.contrib.auth.backends.password_auth import PasswordUser
+    >>> user = PasswordUser(models.User())
+    >>> user.username = 'new_user_name'
+    >>> user.email = 'new_user_email@example.com'
+    >>> user.password = 'set_the_password'
+    >>> session = settings.Session()
+    >>> session.add(user)
+    >>> session.commit()
+    >>> session.close()
+    >>> exit()
 
 LDAP
 ''''
