@@ -272,7 +272,8 @@ private[sql] object ParquetFilters {
           rhsFilter <- createFilter(schema, rhs)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
-      case sources.Not(pred) =>
+      case sources.Not(pred)
+        if !pred.isInstanceOf[sources.And] && !pred.isInstanceOf[sources.Or] =>
         createFilter(schema, pred).map(FilterApi.not)
 
       case _ => None
