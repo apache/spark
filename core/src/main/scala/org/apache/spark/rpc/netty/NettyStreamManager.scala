@@ -58,8 +58,11 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
         new File(dir, fname)
     }
 
-    require(file != null && file.isFile(), s"File not found: $streamId")
-    new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+    if (file != null && file.isFile()) {
+      new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+    } else {
+      null
+    }
   }
 
   override def addFile(file: File): String = {

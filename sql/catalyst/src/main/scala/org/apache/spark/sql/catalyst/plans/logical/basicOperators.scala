@@ -325,7 +325,14 @@ private[sql] object Expand {
           Literal.create(bitmask, IntegerType)
       })
     }
-    Expand(projections, child.output :+ gid, child)
+    val output = child.output.map { attr =>
+      if (groupByExprs.exists(_.semanticEquals(attr))) {
+        attr.withNullability(true)
+      } else {
+        attr
+      }
+    }
+    Expand(projections, output :+ gid, child)
   }
 }
 

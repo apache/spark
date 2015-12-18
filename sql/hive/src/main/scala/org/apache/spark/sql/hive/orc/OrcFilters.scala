@@ -74,21 +74,19 @@ private[orc] object OrcFilters extends Logging {
 
     expression match {
       case And(left, right) =>
-        val tryLeft = buildSearchArgument(left, newBuilder)
-        val tryRight = buildSearchArgument(right, newBuilder)
-
-        val conjunction = for {
-          _ <- tryLeft
-          _ <- tryRight
+        // At here, it is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        // Pushing one side of AND down is only safe to do at the top level.
+        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
+        for {
+          _ <- buildSearchArgument(left, newBuilder)
+          _ <- buildSearchArgument(right, newBuilder)
           lhs <- buildSearchArgument(left, builder.startAnd())
           rhs <- buildSearchArgument(right, lhs)
         } yield rhs.end()
-
-        // For filter `left AND right`, we can still push down `left` even if `right` is not
-        // convertible, and vice versa.
-        conjunction
-          .orElse(tryLeft.flatMap(_ => buildSearchArgument(left, builder)))
-          .orElse(tryRight.flatMap(_ => buildSearchArgument(right, builder)))
 
       case Or(left, right) =>
         for {
