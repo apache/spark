@@ -31,7 +31,6 @@ import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 import org.apache.spark.{SparkException, SparkConf, Logging, SparkContext}
 import org.apache.spark.util.Utils
 
-
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
  * methods the Mesos scheduler will use.
@@ -158,6 +157,12 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Partition the existing set of resources into two groups, those remaining to be
    * scheduled and those requested to be used for a new task.
+   *
+   * @note This method assumes there are enough resources to fulfill the request. In case
+   *       there aren't it will return partial results. For instance, if amountToUse is
+   *       2 cpus, but only 1 is available, it will return a used `Resource` for
+   *       1 cpu.
+   *
    * @param resources The full list of available resources
    * @param resourceName The name of the resource to take from the available resources
    * @param amountToUse The amount of resources to take from the available resources
@@ -197,7 +202,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     (attr.getName, attr.getText.getValue.split(',').toSet)
   }
 
-
   /** Build a Mesos resource protobuf object */
   protected def createResource(resourceName: String, quantity: Double): Protos.Resource = {
     Resource.newBuilder()
@@ -224,7 +228,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       (attr.getName, attrValue)
     }).toMap
   }
-
 
   /**
    * Match the requirements (if any) to the offer attributes.

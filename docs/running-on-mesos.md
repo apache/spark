@@ -191,7 +191,7 @@ to turn it on explictly in [SparkConf](configuration.html#spark-properties):
 conf.set("spark.mesos.coarse", "true")
 {% endhighlight %}
 
-In addition, for coarse-grained mode, you can control the maximum number of resources Spark will
+In addition, for both fine-grained and coarse-grained mode, you can control the maximum number of resources Spark will
 acquire. By default, it will acquire *all* cores in the cluster (that get offered by Mesos), which
 only makes sense if you run just one application at a time. You can cap the maximum number of cores
 using `conf.set("spark.cores.max", "10")` (for example).

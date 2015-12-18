@@ -1117,11 +1117,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>(not set)</td>
   <td>
     When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
-    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, the maximum amount of CPU cores to request for the application from
-    across the cluster (not from each machine). If not set, the default will be
-    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
-    infinite (all available cores) on Mesos.
+    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster</a>, the maximum
+    amount of CPU cores to request for the application from across the cluster (not from each
+    machine). If not set, the default will be <code>spark.deploy.defaultCores</code> on
+    Spark's standalone cluster manager, or infinite (all available cores) on Mesos.
   </td>
 </tr>
 <tr>

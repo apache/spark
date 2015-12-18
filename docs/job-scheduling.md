@@ -35,9 +35,8 @@ Resource allocation can be configured as follows, based on the cluster type:
   or change the default for applications that don't set this setting through `spark.deploy.defaultCores`.
   Finally, in addition to controlling cores, each application's `spark.executor.memory` setting controls
   its memory use.
-* **Mesos:** To use static partitioning on Mesos, set the `spark.mesos.coarse` configuration property to `true`,
-  and optionally set `spark.cores.max` to limit each application's resource share as in the standalone mode.
-  You should also set `spark.executor.memory` to control the executor memory.
+* **Mesos:** To use static partitioning on Mesos,  set `spark.cores.max` to limit each application's
+  resource share as in the standalone mode. You should also set `spark.executor.memory` to control the executor memory.
 * **YARN:** The `--num-executors` option to the Spark YARN client controls how many executors it will allocate
   on the cluster, while `--executor-memory` and `--executor-cores` control the resources per executor.
 
