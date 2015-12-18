@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.json4s.JsonAST._
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -121,6 +122,18 @@ case class Literal protected (value: Any, dataType: DataType)
       dataType.equals(o.dataType) &&
         (value == null && null == o.value || value != null && value.equals(o.value))
     case _ => false
+  }
+
+  override protected def jsonFields: List[JField] = {
+    // Turns all kinds of literal values to string in json field, as the type info is hard to
+    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
+    val jsonValue = (value, dataType) match {
+      case (null, _) => JNull
+      case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
+      case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
+      case (other, _) => JString(other.toString)
+    }
+    ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
   }
 
   override def eval(input: InternalRow): Any = value

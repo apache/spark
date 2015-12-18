@@ -728,8 +728,6 @@ private[hive] case class MetastoreRelation
     Objects.hashCode(databaseName, tableName, alias, output)
   }
 
-  override protected[sql] def otherCopyArgs: Seq[AnyRef] = table :: sqlContext :: Nil
-
   @transient val hiveQlTable: Table = {
     // We start by constructing an API table as Hive performs several important transformations
     // internally when converting an API table to a QL table.

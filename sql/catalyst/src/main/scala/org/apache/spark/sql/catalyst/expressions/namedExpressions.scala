@@ -262,7 +262,7 @@ case class AttributeReference(
     }
   }
 
-  override protected[sql] final def otherCopyArgs: Seq[AnyRef] = {
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifiers :: Nil
   }
 

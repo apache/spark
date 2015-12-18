@@ -346,7 +346,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * These are appended to the transformed args automatically by makeCopy
    * @return
    */
-  protected[sql] def otherCopyArgs: Seq[AnyRef] = Nil
+  protected def otherCopyArgs: Seq[AnyRef] = Nil
 
   /**
    * Creates a copy of this type of tree node after a transformation.
@@ -489,7 +489,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     def collectJsonValue(tn: BaseType): Unit = {
       val jsonFields = ("class" -> JString(tn.getClass.getName)) ::
-        ("num-children" -> JInt(tn.children.length)) :: getJsonFields(tn)
+        ("num-children" -> JInt(tn.children.length)) :: tn.jsonFields
       jsonValues += JObject(jsonFields)
       tn.children.foreach(collectJsonValue)
     }
@@ -498,34 +498,23 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     jsonValues
   }
 
-  private def getJsonFields(node: BaseType): List[JField] = node match {
-    // Turns all kinds of literal values to string in json field, as the type info is hard to
-    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
-    case lit: Literal =>
-      val value = (lit.value, lit.dataType) match {
-        case (null, _) => JNull
-        case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
-        case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
-        case (other, _) => JString(other.toString)
-      }
-      ("value" -> value) :: ("dataType" -> parseToJson(lit.dataType)) :: Nil
-    case _ =>
-      val fieldNames = getConstructorParameters(node.getClass).map(_._1)
-      val fieldValues = node.productIterator.toSeq ++ node.otherCopyArgs
-      assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
-        fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
+  protected def jsonFields: List[JField] = {
+    val fieldNames = getConstructorParameters(getClass).map(_._1)
+    val fieldValues = productIterator.toSeq ++ otherCopyArgs
+    assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
+      fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
 
-      fieldNames.zip(fieldValues).map {
-        // If the field value is a child, then use an int to encode it, represents the index of
-        // this child in all children.
-        case (name, value: TreeNode[_]) if node.containsChild(value) =>
-          name -> JInt(node.children.indexOf(value))
-        case (name, value: Seq[BaseType]) if value.toSet.subsetOf(containsChild) =>
-          name -> JArray(
-            value.map(v => JInt(node.children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
-          )
-        case (name, value) => name -> parseToJson(value)
-      }.toList
+    fieldNames.zip(fieldValues).map {
+      // If the field value is a child, then use an int to encode it, represents the index of
+      // this child in all children.
+      case (name, value: TreeNode[_]) if containsChild(value) =>
+        name -> JInt(children.indexOf(value))
+      case (name, value: Seq[BaseType]) if value.toSet.subsetOf(containsChild) =>
+        name -> JArray(
+          value.map(v => JInt(children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
+        )
+      case (name, value) => name -> parseToJson(value)
+    }.toList
   }
 
   private def parseToJson(obj: Any): JValue = obj match {
