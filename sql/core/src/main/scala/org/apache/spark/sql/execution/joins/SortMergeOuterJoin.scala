@@ -114,7 +114,7 @@ case class SortMergeOuterJoin(
           (r: InternalRow) => true
         }
       }
-      val resultProj: InternalRow => InternalRow = UnsafeProjection.create(schema)
+      val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
         case LeftOuter =>

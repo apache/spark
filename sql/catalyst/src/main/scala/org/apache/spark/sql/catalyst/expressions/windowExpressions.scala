@@ -329,7 +329,7 @@ abstract class OffsetWindowFunction
    */
   override def foldable: Boolean = input.foldable && (default == null || default.foldable)
 
-  override def nullable: Boolean = input.nullable && (default == null || default.nullable)
+  override def nullable: Boolean = default == null || default.nullable
 
   override lazy val frame = {
     // This will be triggered by the Analyzer.
@@ -381,7 +381,7 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   self: Product =>
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
   override def supportsPartial: Boolean = false
   override lazy val mergeExpressions =
     throw new UnsupportedOperationException("Window Functions do not support merging.")

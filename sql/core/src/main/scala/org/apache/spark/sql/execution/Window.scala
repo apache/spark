@@ -440,16 +440,17 @@ private[execution] final class OffsetWindowFunctionFrame(
   /** Create the projection. */
   private[this] val projection = {
     // Collect the expressions and bind them.
-    val numInputAttributes = inputSchema.size
+    val inputAttrs = inputSchema.map(_.withNullability(true))
+    val numInputAttributes = inputAttrs.size
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map {
       case e: OffsetWindowFunction =>
-        val input = BindReferences.bindReference(e.input, inputSchema)
+        val input = BindReferences.bindReference(e.input, inputAttrs)
         if (e.default == null || e.default.foldable && e.default.eval() == null) {
           // Without default value.
           input
         } else {
           // With default value.
-          val default = BindReferences.bindReference(e.default, inputSchema).transform {
+          val default = BindReferences.bindReference(e.default, inputAttrs).transform {
             // Shift the input reference to its default version.
             case BoundReference(o, dataType, nullable) =>
               BoundReference(o + numInputAttributes, dataType, nullable)
@@ -457,7 +458,7 @@ private[execution] final class OffsetWindowFunctionFrame(
           org.apache.spark.sql.catalyst.expressions.Coalesce(input :: default :: Nil)
         }
       case e =>
-        BindReferences.bindReference(e, inputSchema)
+        BindReferences.bindReference(e, inputAttrs)
     }
 
     // Create the projection.

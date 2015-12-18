@@ -87,18 +87,22 @@ object Cast {
   private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
 
   private def forceNullable(from: DataType, to: DataType) = (from, to) match {
-    case (StringType, _: NumericType) => true
-    case (StringType, TimestampType) => true
-    case (DoubleType, TimestampType) => true
-    case (FloatType, TimestampType) => true
-    case (StringType, DateType) => true
-    case (_: NumericType, DateType) => true
-    case (BooleanType, DateType) => true
-    case (DateType, _: NumericType) => true
-    case (DateType, BooleanType) => true
-    case (DoubleType, _: DecimalType) => true
-    case (FloatType, _: DecimalType) => true
-    case (_, DecimalType.Fixed(_, _)) => true // TODO: not all upcasts here can really give null
+    case (NullType, _) => true
+    case (_, _) if from == to => false
+
+    case (StringType, BinaryType) => false
+    case (StringType, _) => true
+    case (_, StringType) => false
+
+    case (FloatType | DoubleType, TimestampType) => true
+    case (TimestampType, DateType) => false
+    case (_, DateType) => true
+    case (DateType, TimestampType) => false
+    case (DateType, _) => true
+    case (_, CalendarIntervalType) => true
+
+    case (_, _: DecimalType) => true  // overflow
+    case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
     case _ => false
   }
 }

@@ -115,13 +115,19 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval.isNullAt($ordinal)) {
-          ${ev.isNull} = true;
-        } else {
+      if (nullable) {
+        s"""
+          if ($eval.isNullAt($ordinal)) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+          }
+        """
+      } else {
+        s"""
           ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
-        }
-      """
+        """
+      }
     })
   }
 }
@@ -139,7 +145,6 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def nullable: Boolean = child.nullable || containsNull || field.nullable
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {

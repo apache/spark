@@ -232,7 +232,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
-      Seq(AttributeReference("plan", StringType, nullable = false)()),
+      Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false)
   extends RunnableCommand {
 

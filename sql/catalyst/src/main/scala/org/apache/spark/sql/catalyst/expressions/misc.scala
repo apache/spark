@@ -57,6 +57,7 @@ case class Sha2(left: Expression, right: Expression)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
 

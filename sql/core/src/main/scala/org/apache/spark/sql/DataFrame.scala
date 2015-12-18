@@ -25,22 +25,20 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -455,7 +453,8 @@ class DataFrame private[sql](
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), None)).analyzed.asInstanceOf[Join]
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
+      .analyzed.asInstanceOf[Join]
 
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
@@ -473,15 +472,15 @@ class DataFrame private[sql](
         usingColumns.map(col => withPlan(joined.right).resolve(col))
       case FullOuter =>
         usingColumns.map { col =>
-          val leftCol = withPlan(joined.left).resolve(col)
-          val rightCol = withPlan(joined.right).resolve(col)
+          val leftCol = withPlan(joined.left).resolve(col).toAttribute.withNullability(true)
+          val rightCol = withPlan(joined.right).resolve(col).toAttribute.withNullability(true)
           Alias(Coalesce(Seq(leftCol, rightCol)), col)()
         }
     }
     // The nullability of output of joined could be different than original column,
     // so we can only compare them by exprId
-    val joinRefs = condition.map(_.references.toSeq.map(_.exprId)).getOrElse(Nil)
-    val resultCols = joinedCols ++ joined.output.filterNot(e => joinRefs.contains(e.exprId))
+    val joinRefs = AttributeSet(condition.toSeq.flatMap(_.references))
+    val resultCols = joinedCols ++ joined.output.filterNot(joinRefs.contains(_))
     withPlan {
       Project(
         resultCols,
