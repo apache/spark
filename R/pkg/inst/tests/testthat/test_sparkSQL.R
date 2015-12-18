@@ -1498,6 +1498,8 @@ test_that("read/write text files", {
   expect_equal(colnames(df2), c("value"))
   expect_equal(count(df2), count(df) * 2)
 
+  unlink(textPath)
+  unlink(textPath2)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
