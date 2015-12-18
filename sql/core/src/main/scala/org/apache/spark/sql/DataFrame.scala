@@ -479,8 +479,8 @@ class DataFrame private[sql](
     }
     // The nullability of output of joined could be different than original column,
     // so we can only compare them by exprId
-    val joinRefs = condition.map(_.references.toSeq.map(_.exprId)).getOrElse(Nil)
-    val resultCols = joinedCols ++ joined.output.filterNot(e => joinRefs.contains(e.exprId))
+    val joinRefs = AttributeSet(condition.toSeq.flatMap(_.references))
+    val resultCols = joinedCols ++ joined.output.filterNot(joinRefs.contains(_))
     withPlan {
       Project(
         resultCols,

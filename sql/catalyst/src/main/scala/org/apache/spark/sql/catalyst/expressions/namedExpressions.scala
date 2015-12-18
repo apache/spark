@@ -81,9 +81,10 @@ trait NamedExpression extends Expression {
 
   protected def typeSuffix =
     if (resolved) {
+      val suffix = if (nullable) "?" else ""
       dataType match {
-        case LongType => "L"
-        case _ => ""
+        case LongType => "L" + suffix
+        case _ => suffix
       }
     } else {
       ""
