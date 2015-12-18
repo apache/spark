@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.sql.types.DoubleType
-
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -42,6 +40,7 @@ import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 /**
