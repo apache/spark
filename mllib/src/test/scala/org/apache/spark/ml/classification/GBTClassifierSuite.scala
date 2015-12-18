@@ -119,8 +119,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     var dfWithTypes = df
     types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
 
-    val gbt = new GBTClassifier()
-      .setFeaturesCol("features")
+    val gbt = new GBTClassifier().setFeaturesCol("features")
 
     val refModel = gbt.setLabelCol(DoubleType.toString)
       .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))

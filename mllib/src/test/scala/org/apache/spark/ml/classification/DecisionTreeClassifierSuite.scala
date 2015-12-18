@@ -350,8 +350,7 @@ class DecisionTreeClassifierSuite
     var dfWithTypes = df
     types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
 
-    val dt = new DecisionTreeClassifier()
-      .setFeaturesCol("features")
+    val dt = new DecisionTreeClassifier().setFeaturesCol("features")
 
     val refModel = dt.setLabelCol(DoubleType.toString)
       .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))

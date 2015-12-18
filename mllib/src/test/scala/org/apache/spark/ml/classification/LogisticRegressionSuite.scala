@@ -952,17 +952,15 @@ class LogisticRegressionSuite
     var dfWithTypes = df
     types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
 
-    val lr = new LogisticRegression()
-      .setFeaturesCol("features")
+    val lr = new LogisticRegression().setFeaturesCol("features")
 
-    val refModel = lr.setLabelCol(DoubleType.toString)
-      .fit(dfWithTypes)
+    val expected = lr.setLabelCol(DoubleType.toString).fit(dfWithTypes)
     types.filter(_ != DoubleType).foreach { t =>
-      val actualModel = lr.setLabelCol(t.toString).fit(dfWithTypes)
-      assert(refModel.intercept === actualModel.intercept)
-      assert(refModel.coefficients.toArray === actualModel.coefficients.toArray)
-      assert(refModel.numClasses === actualModel.numClasses)
-      assert(refModel.numFeatures === actualModel.numFeatures)
+      val actual = lr.setLabelCol(t.toString).fit(dfWithTypes)
+      assert(expected.intercept === actual.intercept)
+      assert(expected.coefficients.toArray === actual.coefficients.toArray)
+      assert(expected.numClasses === actual.numClasses)
+      assert(expected.numFeatures === actual.numFeatures)
     }
   }
 
