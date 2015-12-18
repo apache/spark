@@ -23,13 +23,19 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.Partition
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+class JDBCSuite extends SparkFunSuite
+  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext
+{
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -427,6 +433,22 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(MySQLColumns === Seq("`abc`", "`key`"))
     assert(PostgresColumns === Seq(""""abc"""", """"key""""))
     assert(DerbyColumns === Seq(""""abc"""", """"key""""))
+  }
+
+  test("compile filters") {
+    val jdbcRdd = JDBCRDD.scanTable(
+      null, null, "", "", null, "", Array.empty[String], Array.empty[Filter], Array.empty[Partition])
+    val compileFilter = PrivateMethod[Unit]('compileFilter)
+    def doCompileFilter(f: Filter) = jdbcRdd invokePrivate compileFilter(f)
+
+    assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "col1 != abc")
+    assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
+    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === "col0 <= 5")
+    assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
+    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
+    assert(doCompileFilter(IsNull("col1")) === "col0 IS NULL")
+    assert(doCompileFilter(IsNotNull("col1")) === "col0 IS NOT NULL")
   }
 
   test("Dialect unregister") {
