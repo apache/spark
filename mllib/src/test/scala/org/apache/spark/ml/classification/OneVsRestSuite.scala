@@ -31,7 +31,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.Metadata
+import org.apache.spark.sql.types._
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -223,6 +223,59 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val ovaModel = ova.fit(dataset)
     val newOvaModel = testDefaultReadWrite(ovaModel, testParams = false)
     checkModelData(ovaModel, newOvaModel)
+  }
+
+  test("should support all NumericType labels") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (2, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+
+    var dfWithTypes = df
+    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+
+    val ovr = new OneVsRest()
+      .setClassifier(new LogisticRegression)
+      .setFeaturesCol("features")
+
+    val expected = ovr.setLabelCol(DoubleType.toString).fit(dfWithTypes)
+    val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+    types.filter(_ != DoubleType).foreach { t =>
+      val actual = ovr.setLabelCol(t.toString).fit(dfWithTypes)
+      val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+      assert(expectedModels.length === actualModels.length)
+      expectedModels.zip(actualModels).foreach { case (e, a) =>
+        assert(e.intercept === a.intercept)
+        assert(e.coefficients.toArray === a.coefficients.toArray)
+      }
+    }
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3)),
+      ("1", Vectors.dense(0, 3, 1)),
+      ("0", Vectors.dense(0, 2, 2)),
+      ("1", Vectors.dense(0, 3, 9)),
+      ("2", Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val ovr = new OneVsRest()
+      .setClassifier(new LogisticRegression)
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    // thrown by AttributeFactory#fromStructField and not by Predictor#validateAndTransformSchema
+    // because OneVsRest reimplements the fit method
+    intercept[IllegalArgumentException] {
+      ovr.fit(dfWithStringLabels)
+    }
   }
 }
 
