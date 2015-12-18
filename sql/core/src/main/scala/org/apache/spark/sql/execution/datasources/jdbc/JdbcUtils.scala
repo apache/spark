@@ -60,17 +60,6 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Returns a PreparedStatement that inserts a row into table via conn.
-   */
-  def insertStatement(conn: Connection,
-                      dialect: JdbcDialect,
-                      table: String,
-                      rddSchema: StructType): PreparedStatement = {
-    val sql = dialect.getInsertStatement(table, rddSchema)
-    conn.prepareStatement(sql)
-  }
-
-  /**
    * Retrieve standard jdbc types.
    * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
    * @return The default JdbcType for this DataType
@@ -136,7 +125,8 @@ object JdbcUtils extends Logging {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
       }
-      val stmt = insertStatement(conn, dialect, table, rddSchema)
+      val sql = dialect.getInsertStatement(table, rddSchema)
+      val stmt = conn.prepareStatement(sql)
       try {
         var rowCount = 0
         while (iterator.hasNext) {
