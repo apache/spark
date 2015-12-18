@@ -194,7 +194,7 @@ object JavaTypeInference {
 
       case c if c == classOf[java.sql.Date] =>
         StaticInvoke(
-          DateTimeUtils,
+          DateTimeUtils.getClass,
           ObjectType(c),
           "toJavaDate",
           getPath :: Nil,
@@ -202,7 +202,7 @@ object JavaTypeInference {
 
       case c if c == classOf[java.sql.Timestamp] =>
         StaticInvoke(
-          DateTimeUtils,
+          DateTimeUtils.getClass,
           ObjectType(c),
           "toJavaTimestamp",
           getPath :: Nil,
@@ -276,7 +276,7 @@ object JavaTypeInference {
             ObjectType(classOf[Array[Any]]))
 
         StaticInvoke(
-          ArrayBasedMapData,
+          ArrayBasedMapData.getClass,
           ObjectType(classOf[JMap[_, _]]),
           "toJavaMap",
           keyData :: valueData :: Nil)
@@ -341,21 +341,21 @@ object JavaTypeInference {
 
         case c if c == classOf[java.sql.Timestamp] =>
           StaticInvoke(
-            DateTimeUtils,
+            DateTimeUtils.getClass,
             TimestampType,
             "fromJavaTimestamp",
             inputObject :: Nil)
 
         case c if c == classOf[java.sql.Date] =>
           StaticInvoke(
-            DateTimeUtils,
+            DateTimeUtils.getClass,
             DateType,
             "fromJavaDate",
             inputObject :: Nil)
 
         case c if c == classOf[java.math.BigDecimal] =>
           StaticInvoke(
-            Decimal,
+            Decimal.getClass,
             DecimalType.SYSTEM_DEFAULT,
             "apply",
             inputObject :: Nil)
