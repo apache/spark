@@ -45,6 +45,13 @@ class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
       case NonFatal(e) => onError(e)
     }
   }
+
+  override def onError(e: Throwable): Unit = {
+    logError("Error in DAGSchedulerEventLoop: ", e)
+    dagScheduler.stop()
+    throw e
+  }
+
 }
 
 /**
@@ -300,13 +307,18 @@ class DAGSchedulerSuite
 
   test("zero split job") {
     var numResults = 0
+    var failureReason: Option[Exception] = None
     val fakeListener = new JobListener() {
-      override def taskSucceeded(partition: Int, value: Any) = numResults += 1
-      override def jobFailed(exception: Exception) = throw exception
+      override def taskSucceeded(partition: Int, value: Any): Unit = numResults += 1
+      override def jobFailed(exception: Exception): Unit = {
+        failureReason = Some(exception)
+      }
     }
     val jobId = submit(new MyRDD(sc, 0, Nil), Array(), listener = fakeListener)
     assert(numResults === 0)
     cancel(jobId)
+    assert(failureReason.isDefined)
+    assert(failureReason.get.getMessage() === "Job 0 cancelled ")
   }
 
   test("run trivial job") {
@@ -1673,6 +1685,18 @@ class DAGSchedulerSuite
 
     // should include the FunSuite setup:
     assert(stackTraceString.contains("org.scalatest.FunSuite"))
+  }
+
+  test("catch errors in event loop") {
+    // this is a test of our testing framework -- make sure errors in event loop don't get ignored
+
+    // just run some bad event that will throw an exception -- we'll give a null TaskEndReason
+    val rdd1 = new MyRDD(sc, 1, Nil)
+    submit(rdd1, Array(0))
+    intercept[Exception] {
+      complete(taskSets(0), Seq(
+        (null, makeMapStatus("hostA", 1))))
+    }
   }
 
   test("simple map stage submission") {

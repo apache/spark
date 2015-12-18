@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -34,6 +35,7 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcTimeout
@@ -609,11 +611,12 @@ class DAGScheduler(
       properties: Properties): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    waiter.awaitResult() match {
-      case JobSucceeded =>
+    Await.ready(waiter.completionFuture, atMost = Duration.Inf)
+    waiter.completionFuture.value.get match {
+      case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format
           (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
-      case JobFailed(exception: Exception) =>
+      case scala.util.Failure(exception) =>
         logInfo("Job %d failed: %s, took %f s".format
           (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
         // SPARK-8644: Include user stack trace in exceptions coming from DAGScheduler.
@@ -802,7 +805,8 @@ class DAGScheduler(
 
   private[scheduler] def cleanUpAfterSchedulerStop() {
     for (job <- activeJobs) {
-      val error = new SparkException("Job cancelled because SparkContext was shut down")
+      val error =
+        new SparkException(s"Job ${job.jobId} cancelled because SparkContext was shut down")
       job.listener.jobFailed(error)
       // Tell the listeners that all of the running stages have ended.  Don't bother
       // cancelling the stages because if the DAG scheduler is stopped, the entire application
@@ -997,9 +1001,10 @@ class DAGScheduler(
       // For ResultTask, serialize and broadcast (rdd, func).
       val taskBinaryBytes: Array[Byte] = stage match {
         case stage: ShuffleMapStage =>
-          closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef).array()
+          JavaUtils.bufferToArray(
+            closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef))
         case stage: ResultStage =>
-          closureSerializer.serialize((stage.rdd, stage.func): AnyRef).array()
+          JavaUtils.bufferToArray(closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
       }
 
       taskBinary = sc.broadcast(taskBinaryBytes)
@@ -1291,7 +1296,7 @@ class DAGScheduler(
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
-      case other =>
+      case _: ExecutorLostFailure | TaskKilled | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
     }

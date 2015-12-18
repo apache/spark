@@ -378,6 +378,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("value"))
   }
 
+  test("drop columns using drop") {
+    val src = Seq((0, 2, 3)).toDF("a", "b", "c")
+    val df = src.drop("a", "b")
+    checkAnswer(df, Row(3))
+    assert(df.schema.map(_.name) === Seq("c"))
+  }
+
   test("drop unknown column (no-op)") {
     val df = testData.drop("random")
     checkAnswer(
@@ -574,6 +581,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                            ||[1, 2, 3]|[1, 2, 3]|
                            ||[2, 3, 4]|[2, 3, 4]|
                            |+---------+---------+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
+  test("showString: binary") {
+    val df = Seq(
+      ("12".getBytes, "ABC.".getBytes),
+      ("34".getBytes, "12346".getBytes)
+    ).toDF()
+    val expectedAnswer = """+-------+----------------+
+                           ||     _1|              _2|
+                           |+-------+----------------+
+                           ||[31 32]|   [41 42 43 2E]|
+                           ||[33 34]|[31 32 33 34 36]|
+                           |+-------+----------------+
                            |""".stripMargin
     assert(df.showString(10) === expectedAnswer)
   }
@@ -1083,8 +1105,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     // Distribute into one partition and order by. This partition should contain all the values.
-    val df6 = data.repartition(1, $"a").sortWithinPartitions($"b".asc)
-    // Walk each partition and verify that it is sorted descending and not globally sorted.
+    val df6 = data.repartition(1, $"a").sortWithinPartitions("b")
+    // Walk each partition and verify that it is sorted ascending and not globally sorted.
     df6.rdd.foreachPartition { p =>
       var previousValue: Int = -1
       var allSequential: Boolean = true
@@ -1131,14 +1153,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
-    val df = Seq(
+    val df = sparkContext.parallelize(Seq(
       new java.lang.Integer(22) -> "John",
-      null.asInstanceOf[java.lang.Integer] -> "Lucy").toDF("age", "name")
+      null.asInstanceOf[java.lang.Integer] -> "Lucy")).toDF("age", "name")
 
+    // passing null into the UDF that could handle it
     val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
-      (i: java.lang.Integer) => if (i == null) null else i * 2
+      (i: java.lang.Integer) => if (i == null) -10 else null
     }
-    checkAnswer(df.select(boxedUDF($"age")), Row(44) :: Row(null) :: Nil)
+    checkAnswer(df.select(boxedUDF($"age")), Row(null) :: Row(-10) :: Nil)
+
+    sqlContext.udf.register("boxedUDF",
+      (i: java.lang.Integer) => (if (i == null) -10 else null): java.lang.Integer)
+    checkAnswer(sql("select boxedUDF(null), boxedUDF(-1)"), Row(-10, null) :: Nil)
 
     val primitiveUDF = udf((i: Int) => i * 2)
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)

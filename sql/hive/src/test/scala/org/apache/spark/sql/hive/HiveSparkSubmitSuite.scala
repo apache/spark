@@ -80,6 +80,8 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--conf", "spark.sql.hive.metastore.version=0.12",
+      "--conf", "spark.sql.hive.metastore.jars=maven",
       "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)

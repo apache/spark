@@ -1029,21 +1029,27 @@ case class ScalaUDF(
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString
-    val funcArguments = converterTerms.zip(evals).map {
-      case (converter, eval) => s"$converter.apply(${eval.value})"
-    }.mkString(",")
-    val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
-      s"(${ctx.boxedType(ctx.javaType(dataType))})${catalystConverterTerm}" +
-        s".apply($funcTerm.apply($funcArguments));"
+    val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
+      val eval = evals(i)
+      val argTerm = ctx.freshName("arg")
+      val convert = s"Object $argTerm = ${eval.isNull} ? null : $converter.apply(${eval.value});"
+      (convert, argTerm)
+    }.unzip
 
-    evalCode + s"""
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      Boolean ${ev.isNull};
+    val callFunc = s"${ctx.boxedType(dataType)} $resultTerm = " +
+      s"(${ctx.boxedType(dataType)})${catalystConverterTerm}" +
+        s".apply($funcTerm.apply(${funcArguments.mkString(", ")}));"
 
+    s"""
+      $evalCode
+      ${converters.mkString("\n")}
       $callFunc
 
-      ${ev.value} = $resultTerm;
-      ${ev.isNull} = $resultTerm == null;
+      boolean ${ev.isNull} = $resultTerm == null;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = $resultTerm;
+      }
     """
   }
 
