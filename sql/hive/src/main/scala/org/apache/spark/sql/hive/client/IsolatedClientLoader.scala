@@ -30,7 +30,7 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.{UserInput, HiveContext}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
@@ -233,9 +233,9 @@ private[hive] class IsolatedClientLoader(
   }
 
   /** The isolated client interface to Hive. */
-  private[hive] def createClient(): ClientInterface = {
+  private[hive] def createClient(userInput: Option[UserInput] = None): ClientInterface = {
     if (!isolationOn) {
-      return new ClientWrapper(version, config, baseClassLoader, this)
+      return new ClientWrapper(version, config, baseClassLoader, this, userInput)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -246,7 +246,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[ClientWrapper].getName)
         .getConstructors.head
-        .newInstance(version, config, classLoader, this)
+        .newInstance(version, config, classLoader, this, userInput)
         .asInstanceOf[ClientInterface]
     } catch {
       case e: InvocationTargetException =>

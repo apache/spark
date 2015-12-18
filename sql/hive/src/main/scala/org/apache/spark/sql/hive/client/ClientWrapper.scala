@@ -36,6 +36,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkException, Logging}
+import org.apache.spark.sql.hive.UserInput
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -61,10 +62,10 @@ private[hive] class ClientWrapper(
     override val version: HiveVersion,
     config: Map[String, String],
     initClassLoader: ClassLoader,
-    val clientLoader: IsolatedClientLoader)
+    val clientLoader: IsolatedClientLoader,
+    userInput: Option[UserInput])
   extends ClientInterface
   with Logging {
-
   overrideHadoopShims()
 
   // !! HACK ALERT !!
@@ -194,6 +195,10 @@ private[hive] class ClientWrapper(
       SessionState.start(state)
       state.out = new PrintStream(outputBuffer, true, "UTF-8")
       state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      userInput.foreach { input =>
+        state.setIsSilent(input.isSilent)
+        state.setIsVerbose(input.isVerbose)
+      }
       state
     } finally {
       Thread.currentThread().setContextClassLoader(original)
@@ -494,7 +499,7 @@ private[hive] class ClientWrapper(
           results
 
         case _ =>
-          if (state.out != null) {
+          if (state.out != null && !state.getIsSilent) {
             // scalastyle:off println
             state.out.println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
@@ -582,7 +587,7 @@ private[hive] class ClientWrapper(
   }
 
   def newSession(): ClientWrapper = {
-    clientLoader.createClient().asInstanceOf[ClientWrapper]
+    clientLoader.createClient(userInput).asInstanceOf[ClientWrapper]
   }
 
   def reset(): Unit = withHiveState {

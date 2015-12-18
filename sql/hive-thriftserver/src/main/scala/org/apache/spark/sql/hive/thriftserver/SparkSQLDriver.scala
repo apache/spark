@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{Arrays, ArrayList => JArrayList, List => JList}
-import org.apache.log4j.LogManager
 import org.apache.spark.sql.AnalysisException
 
 import scala.collection.JavaConverters._

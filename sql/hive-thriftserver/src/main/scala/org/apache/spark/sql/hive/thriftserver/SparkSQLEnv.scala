@@ -21,8 +21,10 @@ import java.io.PrintStream
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.hive.ql.session.SessionState
+
 import org.apache.spark.scheduler.StatsReportListener
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.{UserInput, HiveContext}
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.util.Utils
 
@@ -55,7 +57,10 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
-      hiveContext = new HiveContext(sparkContext)
+
+      val sessionState = SessionState.get()
+      hiveContext = new HiveContext(sparkContext,
+        Some(UserInput(sessionState.getIsSilent, sessionState.getIsVerbose)))
 
       hiveContext.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
       hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
