@@ -397,7 +397,7 @@ class StandaloneDynamicAllocationSuite
       // make sure the executor was killed and replaced
       assert(executorIdsBefore != executorIdsAfter)
     }
-    
+
     // kill old executor (which is killedAndReplaced) should fail
     assert(!sc.killExecutor(executors.head))
 
