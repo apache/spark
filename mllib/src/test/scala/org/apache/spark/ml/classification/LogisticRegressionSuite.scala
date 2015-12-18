@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.spark.sql.types._
+
 import scala.language.existentials
 import scala.util.Random
 
@@ -103,7 +105,7 @@ class LogisticRegressionSuite
     assert(model.hasSummary)
     // Validate that we re-insert a probability column for evaluation
     val fieldNames = model.summary.predictions.schema.fieldNames
-    assert((dataset.schema.fieldNames.toSet).subsetOf(
+    assert(dataset.schema.fieldNames.toSet.subsetOf(
       fieldNames.toSet))
     assert(fieldNames.exists(s => s.startsWith("probability_")))
   }
@@ -933,6 +935,55 @@ class LogisticRegressionSuite
     val lr = new LogisticRegression()
     testEstimatorAndModelReadWrite(lr, dataset, LogisticRegressionSuite.allParamSettings,
       checkModelData)
+  }
+
+  test("should support all NumericType labels") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (0, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+
+    var dfWithTypes = df
+    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+
+    val lr = new LogisticRegression()
+      .setFeaturesCol("features")
+
+    val refModel = lr.setLabelCol(DoubleType.toString)
+      .fit(dfWithTypes)
+    types.filter(_ != DoubleType).foreach { t =>
+      val actualModel = lr.setLabelCol(t.toString).fit(dfWithTypes)
+      assert(refModel.intercept === actualModel.intercept)
+      assert(refModel.coefficients.toArray === actualModel.coefficients.toArray)
+      assert(refModel.numClasses === actualModel.numClasses)
+      assert(refModel.numFeatures === actualModel.numFeatures)
+    }
+  }
+
+  test("shouldnt support non NumericType labels") {
+    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3)),
+      ("1", Vectors.dense(0, 3, 1)),
+      ("0", Vectors.dense(0, 2, 2)),
+      ("1", Vectors.dense(0, 3, 9)),
+      ("0", Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val lr = new LogisticRegression()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      lr.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 }
 

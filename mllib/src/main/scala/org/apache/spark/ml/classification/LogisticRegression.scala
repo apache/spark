@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.spark.sql.types.DoubleType
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -265,7 +267,7 @@ class LogisticRegression @Since("1.2.0") (
       LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
           Instance(label, weight, features)
       }
@@ -361,7 +363,7 @@ class LogisticRegression @Since("1.2.0") (
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size != numFeatures) {
           val vec = optInitialModel.get.coefficients
           logWarning(
-            s"Initial coefficients provided ${vec} did not match the expected size ${numFeatures}")
+            s"Initial coefficients provided $vec did not match the expected size $numFeatures")
         }
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
@@ -522,7 +524,7 @@ class LogisticRegressionModel private[spark] (
       (LogisticRegressionModel, String) = {
     $(probabilityCol) match {
       case "" =>
-        val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString()
+        val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString
         (copy(ParamMap.empty).setProbabilityCol(probabilityColName), probabilityColName)
       case p => (this, p)
     }
