@@ -88,9 +88,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 
+      // need to add projections from combineFilters in
+      val combineProjections =
+        projects.toSet.union(combineFilters.flatMap(_.references).toSet).toSeq
       val scan = buildPartitionedTableScan(
         l,
-        projects,
+        combineProjections,
         pushedFilters,
         t.partitionSpec.partitionColumns,
         selectedPartitions)
