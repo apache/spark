@@ -194,4 +194,45 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out1(4) === Row("Amy", null, null))
     assert(out1(5) === Row(null, null, null))
   }
+
+  test("Spark-12231: dropna with partitionBy and groupBy") {
+    withTempPath { dir =>
+      val df = sqlContext.range(10)
+      val df1 = df.withColumn("a", $"id".cast("int"))
+      df1.write.partitionBy("id").parquet(dir.getCanonicalPath)
+      val df2 = sqlContext.read.parquet(dir.getCanonicalPath)
+      val group = df2.na.drop().groupBy().count().collect()
+      assert(group(0).get(0) == 10)
+    }
+  }
+
+  test("Spark-12231: dropna with partitionBy") {
+    withTempPath { dir =>
+      val df = sqlContext.range(10)
+      val df1 = df.withColumn("a", $"id".cast("int"))
+      df1.write.partitionBy("id").parquet(dir.getCanonicalPath)
+      val df2 = sqlContext.read.parquet(dir.getCanonicalPath)
+      val group = df2.na.drop().count()
+      assert(group === 10L)
+    }
+  }
+
+  test("Spark-12231: dropna with sizable projection") {
+    // use a large projection to (almost) ensure that the projection ordering is respected
+    withTempPath { dir =>
+      val df = sqlContext.range(10)
+      val df1 = df.withColumn("a", $"id".cast("int"))
+        .withColumn("b", $"id".cast("int") + 1)
+        .withColumn("c", $"id".cast("int") + 2)
+        .withColumn("d", $"id".cast("int") + 3)
+
+      df1.write.partitionBy("id").parquet(dir.getCanonicalPath)
+
+      val df2 = sqlContext.read.parquet(dir.getCanonicalPath)
+
+      val group = df2.na.drop().orderBy("a").select("a", "b", "c", "d")
+      val result = group.collect()
+      assert(result(0) === Row(0, 1, 2, 3))
+    }
+  }
 }

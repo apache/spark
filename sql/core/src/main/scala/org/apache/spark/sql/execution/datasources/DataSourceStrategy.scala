@@ -88,16 +88,27 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 
+      // need to add projections from combineFilters in
+      val combineFilter = combineFilters.reduceLeftOption(expressions.And)
+      val combinedProjects = combineFilter.map(_.references.toSet.union(projects.toSet).toSeq)
+        .getOrElse(projects)
       val scan = buildPartitionedTableScan(
         l,
-        projects,
+        combinedProjects,
         pushedFilters,
         t.partitionSpec.partitionColumns,
         selectedPartitions)
 
-      combineFilters
-        .reduceLeftOption(expressions.And)
-        .map(execution.Filter(_, scan)).getOrElse(scan) :: Nil
+      // Add a Projection to guarantee the original projection:
+      // this is because "projs" may be different from the original "projects",
+      // in elements or their ordering
+      combineFilter.map(cf => if (projects.isEmpty || combinedProjects.size < 2) {
+        // If the original projection is empty or the scan's projection
+        // has 0 or one element, then no need for an extra Project
+        execution.Filter(cf, scan)
+      } else {
+        execution.Project(projects, execution.Filter(cf, scan))
+      }).getOrElse(scan) :: Nil
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _)) =>
