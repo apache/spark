@@ -462,6 +462,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case (_, Literal(false, BooleanType)) => Literal(false)
         // a && a  =>  a
         case (l, r) if l fastEquals r => l
+        // a && (not(a) || b) => a && b
+        case (l, Or(l1, r)) if (Not(l) == l1) => And(l, r)
+        case (l, Or(r, l1)) if (Not(l) == l1) => And(l, r)
+        case (Or(l, l1), r) if (l1 == Not(r)) => And(l, r)
+        case (Or(l1, l), r) if (l1 == Not(r)) => And(l, r)
         // (a || b) && (a || c)  =>  a || (b && c)
         case _ =>
           // 1. Split left and right to get the disjunctive predicates,
@@ -540,6 +545,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case LessThan(l, r) => GreaterThanOrEqual(l, r)
         // not(l <= r)  =>  l > r
         case LessThanOrEqual(l, r) => GreaterThan(l, r)
+        // not(l || r) => not(l) && not(r)
+        case Or(l, r) => And(Not(l), Not(r))
+        // not(l && r) => not(l) or not(r)
+        case And(l, r) => Or(Not(l), Not(r))
         // not(not(e))  =>  e
         case Not(e) => e
         case _ => not
