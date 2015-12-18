@@ -378,6 +378,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         checkAnswer(
           sqlContext.read.parquet(path).where("not (a = 2 and b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
+      }
+    }
+  }
 
   test("SPARK-11164: test the parquet filter in") {
     import testImplicits._
