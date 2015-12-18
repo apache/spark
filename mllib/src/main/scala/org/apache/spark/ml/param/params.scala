@@ -865,7 +865,7 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
     // Not using filterKeys also avoid SI-6654
     val filtered = map.filter {
       case (k, _) =>
-      k.parent == parent.uid
+        k.parent == parent.uid
     }
     new ParamMap(filtered)
   }
