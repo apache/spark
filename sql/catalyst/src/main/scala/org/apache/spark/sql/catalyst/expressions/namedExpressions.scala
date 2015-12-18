@@ -154,7 +154,7 @@ case class Alias(child: Expression, name: String)(
 
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
 
-  override protected[sql] final def otherCopyArgs: Seq[AnyRef] = {
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifiers :: explicitMetadata :: Nil
   }
 
