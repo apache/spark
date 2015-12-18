@@ -563,7 +563,8 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Returns the parameter names and types for the primary constructor of this class.
    *
-   * Note that it only works for scala classes with primary constructor.
+   * Note that it only works for scala classes with primary constructor, and currently doesn't
+   * support inner class.
    */
   def getConstructorParameters(cls: Class[_]): Seq[(String, Type)] = {
     val m = runtimeMirror(cls.getClassLoader)
@@ -707,7 +708,8 @@ trait ScalaReflection {
   /**
    * Returns the parameter names and types for the primary constructor of this type.
    *
-   * Note that it only works for scala classes with primary constructor.
+   * Note that it only works for scala classes with primary constructor, and currently doesn't
+   * support inner class.
    */
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
