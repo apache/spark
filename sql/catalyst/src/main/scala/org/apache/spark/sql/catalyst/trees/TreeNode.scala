@@ -545,13 +545,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     // TODO: currently if the class name ends with "$", we think it's a scala object, there is
     // probably a better way to check it.
     case obj if obj.getClass.getName.endsWith("$") => "object" -> obj.getClass.getName
-    case p: Product =>
+    // returns null if the product type doesn't have a primary constructor, e.g. HiveFunctionWrapper
+    case p: Product => try {
       val fieldNames = getConstructorParameters(p.getClass).map(_._1)
       val fieldValues = p.productIterator.toSeq
       assert(fieldNames.length == fieldValues.length)
       ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
         case (name, value) => name -> parseToJson(value)
       }.toList
+    } catch {
+      case _: RuntimeException => null
+    }
     case _ => JNull
   }
 }
