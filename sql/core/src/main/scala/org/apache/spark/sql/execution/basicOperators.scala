@@ -154,9 +154,11 @@ case class Range(
           }
         val safePartitionStart = getSafeMargin(partitionStart)
         val safePartitionEnd = getSafeMargin(partitionEnd)
-        val bufferHolder = new BufferHolder(LongType.defaultSize)
+        // The extra 8 bytes are for the bitset
+        val sizeOfRow = LongType.defaultSize + 8
+        val buffer = new Array[Byte](sizeOfRow)
         val unsafeRow = new UnsafeRow
-        unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
+        unsafeRow.pointTo(buffer, 1, sizeOfRow)
 
         new Iterator[InternalRow] {
           private[this] var number: Long = safePartitionStart
@@ -181,7 +183,6 @@ case class Range(
               overflow = true
             }
 
-            bufferHolder.reset()
             unsafeRow.setLong(0, ret)
             unsafeRow
           }
