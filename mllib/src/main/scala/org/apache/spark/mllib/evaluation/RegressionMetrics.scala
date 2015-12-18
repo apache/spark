@@ -23,7 +23,6 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
 import org.apache.spark.sql.DataFrame
-
 /**
  * Evaluator for regression.
  *
@@ -31,13 +30,17 @@ import org.apache.spark.sql.DataFrame
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("1.2.0") (
-    predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+    predictionAndObservations: RDD[(Double, Double)], isUnbiased: Boolean = true)
+    extends Logging {
 
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param predictionAndObservations a DataFrame with two double columns:
    *                                  prediction and observation
    */
+  def this(predictionAndObservations: RDD[(Double, Double)]) =
+    this(predictionAndObservations: RDD[(Double, Double)], true)
+
   private[mllib] def this(predictionAndObservations: DataFrame) =
     this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
@@ -61,7 +64,9 @@ class RegressionMetrics @Since("1.2.0") (
       case (prediction, _) => math.pow(prediction - yMean, 2)
     }.sum()
   }
-
+  private lazy val SSy = predictionAndObservations.map {
+    case (_, observation) => math.pow(observation, 2)
+  }.sum()
   /**
    * Returns the variance explained by regression.
    * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
@@ -105,6 +110,12 @@ class RegressionMetrics @Since("1.2.0") (
    */
   @Since("1.2.0")
   def r2: Double = {
-    1 - SSerr / SStot
+    // In case of regression through the origin (biased case), the definition of R^2 is
+    // to be modified. See jira SPARK-12331
+    if (isUnbiased) {
+      1 - SSerr / SStot
+    } else {
+      1 - SSerr / SSy
+    }
   }
 }
