@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.param
 
+import java.io.{ByteArrayOutputStream, NotSerializableException, ObjectOutputStream}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.MyParams
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -367,8 +369,23 @@ class ParamsSuite extends SparkFunSuite {
         assert(p.parent === params1.uid)
     }
 
-    // Following assertion is to avoid SI-6654
-    assert(filteredParamMap.isInstanceOf[Serializable])
+    // At the previous implementation of ParamMap#filter,
+    // mutable.Map#filterKeys was used internally but
+    // the return type of the method is not serializable (see SI-6654).
+    // Now mutable.Map#filter is used instead of filterKeys and the return type is serializable.
+    // So let's ensure serializability.
+    val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
+    try {
+      objOut.writeObject(filteredParamMap)
+    } catch {
+      case _: NotSerializableException =>
+        fail("The field of ParamMap 'map' may not be serializable. " +
+          "See SI-6654 and the implementation of ParamMap#filter")
+      case e: Exception =>
+        fail(s"Exception was thrown unexpectedly during the serializability test: ${e.getMessage}")
+    } finally {
+      objOut.close()
+    }
   }
 }
 
