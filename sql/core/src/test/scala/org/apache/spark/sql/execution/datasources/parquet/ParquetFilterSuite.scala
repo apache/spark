@@ -378,6 +378,33 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         checkAnswer(
           sqlContext.read.parquet(path).where("not (a = 2 and b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
+
+  test("SPARK-11164: test the parquet filter in") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/table1"
+          (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
+
+          // When a filter is pushed to Parquet, Parquet can apply it to every row.
+          // So, we can check the number of rows returned from the Parquet
+          // to make sure our filter pushdown work.
+          val df = sqlContext.read.parquet(path).where("b in (0,2)")
+          assert(stripSparkFilter(df).count == 3)
+
+          val df1 = sqlContext.read.parquet(path).where("not (b in (1))")
+          assert(stripSparkFilter(df1).count == 3)
+
+          val df2 = sqlContext.read.parquet(path).where("not (b in (1,3) or a <= 2)")
+          assert(stripSparkFilter(df2).count == 2)
+
+          val df3 = sqlContext.read.parquet(path).where("not (b in (1,3) and a <= 2)")
+          assert(stripSparkFilter(df3).count == 4)
+
+          val df4 = sqlContext.read.parquet(path).where("not (a <= 2)")
+          assert(stripSparkFilter(df4).count == 3)
+        }
       }
     }
   }
