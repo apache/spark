@@ -39,4 +39,6 @@ private[master] object MasterMessages {
   case object BoundPortsRequest
 
   case class BoundPortsResponse(rpcEndpointPort: Int, webUIPort: Int, restPort: Option[Int])
+
+  case class AttachCompletedRebuildUI(appId: String)
 }

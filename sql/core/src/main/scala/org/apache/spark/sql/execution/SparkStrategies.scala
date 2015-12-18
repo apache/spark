@@ -366,7 +366,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
-      case BroadcastHint(child) => apply(child)
+      case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil
     }
   }

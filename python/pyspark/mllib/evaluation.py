@@ -44,7 +44,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
 
     def __init__(self, scoreAndLabels):
         sc = scoreAndLabels.ctx
-        sql_ctx = SQLContext(sc)
+        sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(scoreAndLabels, schema=StructType([
             StructField("score", DoubleType(), nullable=False),
             StructField("label", DoubleType(), nullable=False)]))
@@ -103,7 +103,7 @@ class RegressionMetrics(JavaModelWrapper):
 
     def __init__(self, predictionAndObservations):
         sc = predictionAndObservations.ctx
-        sql_ctx = SQLContext(sc)
+        sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(predictionAndObservations, schema=StructType([
             StructField("prediction", DoubleType(), nullable=False),
             StructField("observation", DoubleType(), nullable=False)]))
@@ -197,7 +197,7 @@ class MulticlassMetrics(JavaModelWrapper):
 
     def __init__(self, predictionAndLabels):
         sc = predictionAndLabels.ctx
-        sql_ctx = SQLContext(sc)
+        sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(predictionAndLabels, schema=StructType([
             StructField("prediction", DoubleType(), nullable=False),
             StructField("label", DoubleType(), nullable=False)]))
@@ -338,7 +338,7 @@ class RankingMetrics(JavaModelWrapper):
 
     def __init__(self, predictionAndLabels):
         sc = predictionAndLabels.ctx
-        sql_ctx = SQLContext(sc)
+        sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(predictionAndLabels,
                                      schema=sql_ctx._inferSchema(predictionAndLabels))
         java_model = callMLlibFunc("newRankingMetrics", df._jdf)
@@ -424,7 +424,7 @@ class MultilabelMetrics(JavaModelWrapper):
 
     def __init__(self, predictionAndLabels):
         sc = predictionAndLabels.ctx
-        sql_ctx = SQLContext(sc)
+        sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(predictionAndLabels,
                                      schema=sql_ctx._inferSchema(predictionAndLabels))
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MultilabelMetrics
