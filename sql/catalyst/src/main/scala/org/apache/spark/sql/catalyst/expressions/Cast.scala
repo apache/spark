@@ -92,6 +92,7 @@ object Cast {
 
     case (StringType, BinaryType) => false
     case (StringType, _) => true
+    case (_, StringType) => false
 
     case (FloatType | DoubleType, TimestampType) => true
     case (TimestampType, DateType) => false
