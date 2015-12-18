@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql
 
-import org.apache.spark.sql.{Row, QueryTest}
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.types.{DataType, LongType, StructType}
 
-class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
-  import hiveContext.implicits._
-  import hiveContext.sql
+class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
@@ -55,10 +54,7 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
     checkAnswer(
       df.select(
         lead("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      sql(
-        """SELECT
-          | lead(value) OVER (PARTITION BY key ORDER BY value)
-          | FROM window_table""".stripMargin).collect())
+      Row("1") :: Row(null) :: Row("2") :: Row(null) :: Nil)
   }
 
   test("lag") {
@@ -68,10 +64,7 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
     checkAnswer(
       df.select(
         lag("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      sql(
-        """SELECT
-          | lag(value) OVER (PARTITION BY key ORDER BY value)
-          | FROM window_table""".stripMargin).collect())
+      Row(null) :: Row("1") :: Row(null) :: Row("2") :: Nil)
   }
 
   test("lead with default value") {
@@ -81,10 +74,7 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
     checkAnswer(
       df.select(
         lead("value", 2, "n/a").over(Window.partitionBy("key").orderBy("value"))),
-      sql(
-        """SELECT
-          | lead(value, 2, "n/a") OVER (PARTITION BY key ORDER BY value)
-          | FROM window_table""".stripMargin).collect())
+      Seq(Row("1"), Row("1"), Row("n/a"), Row("n/a"), Row("2"), Row("n/a"), Row("n/a")))
   }
 
   test("lag with default value") {
@@ -94,10 +84,7 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
     checkAnswer(
       df.select(
         lag("value", 2, "n/a").over(Window.partitionBy($"key").orderBy($"value"))),
-      sql(
-        """SELECT
-          | lag(value, 2, "n/a") OVER (PARTITION BY key ORDER BY value)
-          | FROM window_table""".stripMargin).collect())
+      Seq(Row("n/a"), Row("n/a"), Row("1"), Row("1"), Row("n/a"), Row("n/a"), Row("2")))
   }
 
   test("rank functions in unspecific window") {
@@ -112,78 +99,52 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
         count("key").over(Window.partitionBy("value").orderBy("key")),
         sum("key").over(Window.partitionBy("value").orderBy("key")),
         ntile(2).over(Window.partitionBy("value").orderBy("key")),
-        rowNumber().over(Window.partitionBy("value").orderBy("key")),
-        denseRank().over(Window.partitionBy("value").orderBy("key")),
+        row_number().over(Window.partitionBy("value").orderBy("key")),
+        dense_rank().over(Window.partitionBy("value").orderBy("key")),
         rank().over(Window.partitionBy("value").orderBy("key")),
-        cumeDist().over(Window.partitionBy("value").orderBy("key")),
-        percentRank().over(Window.partitionBy("value").orderBy("key"))),
-      sql(
-        s"""SELECT
-           |key,
-           |max(key) over (partition by value order by key),
-           |min(key) over (partition by value order by key),
-           |avg(key) over (partition by value order by key),
-           |count(key) over (partition by value order by key),
-           |sum(key) over (partition by value order by key),
-           |ntile(2) over (partition by value order by key),
-           |row_number() over (partition by value order by key),
-           |dense_rank() over (partition by value order by key),
-           |rank() over (partition by value order by key),
-           |cume_dist() over (partition by value order by key),
-           |percent_rank() over (partition by value order by key)
-           |FROM window_table""".stripMargin).collect())
+        cume_dist().over(Window.partitionBy("value").orderBy("key")),
+        percent_rank().over(Window.partitionBy("value").orderBy("key"))),
+      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
+      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
+      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
+      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
   }
 
   test("aggregation and rows between") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    val df = Seq((1, "1"), (2, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 2))),
-      sql(
-        """SELECT
-          | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key ROWS BETWEEN 1 preceding and 2 following)
-          | FROM window_table""".stripMargin).collect())
+      Seq(Row(4.0d / 3.0d), Row(4.0d / 3.0d), Row(3.0d / 2.0d), Row(2.0d), Row(2.0d)))
   }
 
-  test("aggregation and range betweens") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+  test("aggregation and range between") {
+    val df = Seq((1, "1"), (1, "1"), (3, "1"), (2, "2"), (2, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         avg("key").over(Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 1))),
-      sql(
-        """SELECT
-          | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key RANGE BETWEEN 1 preceding and 1 following)
-          | FROM window_table""".stripMargin).collect())
+      Seq(Row(4.0d / 3.0d), Row(4.0d / 3.0d), Row(7.0d / 4.0d), Row(5.0d / 2.0d),
+        Row(2.0d), Row(2.0d)))
   }
 
-  test("aggregation and rows betweens with unbounded") {
+  test("aggregation and rows between with unbounded") {
     val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
       df.select(
         $"key",
-        last("value").over(
+        last("key").over(
           Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
-        last("value").over(
+        last("key").over(
           Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
-        last("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 3))),
-      sql(
-        """SELECT
-          | key,
-          | last_value(value) OVER
-          |   (PARTITION BY value ORDER BY key ROWS between current row and unbounded following),
-          | last_value(value) OVER
-          |   (PARTITION BY value ORDER BY key ROWS between unbounded preceding and current row),
-          | last_value(value) OVER
-          |   (PARTITION BY value ORDER BY key ROWS between 1 preceding and 3 following)
-          | FROM window_table""".stripMargin).collect())
+        last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1))),
+      Seq(Row(1, 1, 1, 1), Row(2, 3, 2, 3), Row(3, 3, 3, 3), Row(1, 4, 1, 2), Row(2, 4, 2, 4),
+        Row(4, 4, 4, 4)))
   }
 
-  test("aggregation and range betweens with unbounded") {
+  test("aggregation and range between with unbounded") {
     val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
     df.registerTempTable("window_table")
     checkAnswer(
@@ -200,18 +161,12 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
         avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 0))
           .as("avg_key3")
       ),
-      sql(
-        """SELECT
-          | key,
-          | last_value(value) OVER
-          |   (PARTITION BY value ORDER BY key RANGE BETWEEN 2 preceding and 1 preceding) == "2",
-          | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key RANGE BETWEEN unbounded preceding and 1 following),
-          | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key RANGE BETWEEN current row and unbounded following),
-          | avg(key) OVER
-          |   (PARTITION BY value ORDER BY key RANGE BETWEEN 1 preceding and current row)
-          | FROM window_table""".stripMargin).collect())
+      Seq(Row(3, null, 3.0d, 4.0d, 3.0d),
+        Row(5, false, 4.0d, 5.0d, 5.0d),
+        Row(2, null, 2.0d, 17.0d / 4.0d, 2.0d),
+        Row(4, true, 11.0d / 3.0d, 5.0d, 4.0d),
+        Row(5, true, 17.0d / 4.0d, 11.0d / 2.0d, 4.5d),
+        Row(6, true, 17.0d / 4.0d, 6.0d, 11.0d / 2.0d)))
   }
 
   test("reverse sliding range frame") {
@@ -254,6 +209,87 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
         sum($"value").over(window.rangeBetween(1, Long.MaxValue))),
       Row(1, 13, null) :: Row(2, 13, 2) :: Row(4, 7, 9) ::
         Row(3, 11, 6) :: Row(2, 13, 2) :: Row(1, 13, null) :: Nil)
+  }
 
+  test("statistical functions") {
+    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2)).
+      toDF("key", "value")
+    val window = Window.partitionBy($"key")
+    checkAnswer(
+      df.select(
+        $"key",
+        var_pop($"value").over(window),
+        var_samp($"value").over(window),
+        approxCountDistinct($"value").over(window)),
+      Seq.fill(4)(Row("a", 1.0d / 4.0d, 1.0d / 3.0d, 2))
+      ++ Seq.fill(3)(Row("b", 2.0d / 3.0d, 1.0d, 3)))
+  }
+
+  test("window function with aggregates") {
+    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2)).
+      toDF("key", "value")
+    val window = Window.orderBy()
+    checkAnswer(
+      df.groupBy($"key")
+        .agg(
+          sum($"value"),
+          sum(sum($"value")).over(window) - sum($"value")),
+      Seq(Row("a", 6, 9), Row("b", 9, 6)))
+  }
+
+  test("window function with udaf") {
+    val udaf = new UserDefinedAggregateFunction {
+      def inputSchema: StructType = new StructType()
+        .add("a", LongType)
+        .add("b", LongType)
+
+      def bufferSchema: StructType = new StructType()
+        .add("product", LongType)
+
+      def dataType: DataType = LongType
+
+      def deterministic: Boolean = true
+
+      def initialize(buffer: MutableAggregationBuffer): Unit = {
+        buffer(0) = 0L
+      }
+
+      def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+        if (!(input.isNullAt(0) || input.isNullAt(1))) {
+          buffer(0) = buffer.getLong(0) + input.getLong(0) * input.getLong(1)
+        }
+      }
+
+      def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+        buffer1(0) = buffer1.getLong(0) + buffer2.getLong(0)
+      }
+
+      def evaluate(buffer: Row): Any =
+        buffer.getLong(0)
+    }
+    val df = Seq(
+      ("a", 1, 1),
+      ("a", 1, 5),
+      ("a", 2, 10),
+      ("a", 2, -1),
+      ("b", 4, 7),
+      ("b", 3, 8),
+      ("b", 2, 4))
+      .toDF("key", "a", "b")
+    val window = Window.partitionBy($"key").orderBy($"a").rangeBetween(Long.MinValue, 0L)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"a",
+        $"b",
+        udaf($"a", $"b").over(window)),
+      Seq(
+        Row("a", 1, 1, 6),
+        Row("a", 1, 5, 6),
+        Row("a", 2, 10, 24),
+        Row("a", 2, -1, 24),
+        Row("b", 4, 7, 60),
+        Row("b", 3, 8, 32),
+        Row("b", 2, 4, 8)))
   }
 }

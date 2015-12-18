@@ -232,7 +232,7 @@ private[netty] class NettyRpcEnv(
     val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
       override def run(): Unit = {
         promise.tryFailure(
-          new TimeoutException("Cannot receive any reply in ${timeout.duration}"))
+          new TimeoutException(s"Cannot receive any reply in ${timeout.duration}"))
       }
     }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
     promise.future.onComplete { v =>
@@ -363,15 +363,14 @@ private[netty] class NettyRpcEnv(
     }
 
     override def read(dst: ByteBuffer): Int = {
-      val result = if (error == null) {
-        Try(source.read(dst))
-      } else {
-        Failure(error)
-      }
-
-      result match {
+      Try(source.read(dst)) match {
         case Success(bytesRead) => bytesRead
-        case Failure(error) => throw error
+        case Failure(readErr) =>
+          if (error != null) {
+            throw error
+          } else {
+            throw readErr
+          }
       }
     }
 
@@ -397,7 +396,7 @@ private[netty] class NettyRpcEnv(
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
-      logError(s"Error downloading stream $streamId.", cause)
+      logDebug(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
     }
