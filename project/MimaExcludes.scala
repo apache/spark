@@ -34,7 +34,141 @@ import com.typesafe.tools.mima.core.ProblemFilters._
 object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("2.0") =>
-      Seq.empty
+      // When 1.6 is officially released, update this exclusion list.
+      Seq(
+        MimaBuild.excludeSparkPackage("deploy"),
+        MimaBuild.excludeSparkPackage("network"),
+        MimaBuild.excludeSparkPackage("unsafe"),
+        // These are needed if checking against the sbt build, since they are part of
+        // the maven-generated artifacts in 1.3.
+        excludePackage("org.spark-project.jetty"),
+        MimaBuild.excludeSparkPackage("unused"),
+        // SQL execution is considered private.
+        excludePackage("org.apache.spark.sql.execution"),
+        // SQL columnar is considered private.
+        excludePackage("org.apache.spark.sql.columnar"),
+        // The shuffle package is considered private.
+        excludePackage("org.apache.spark.shuffle"),
+        // The collections utlities are considered pricate.
+        excludePackage("org.apache.spark.util.collection")
+      ) ++
+      MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
+      MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
+      Seq(
+        // MiMa does not deal properly with sealed traits
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
+      ) ++ Seq(
+        // SPARK-11530
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this")
+      ) ++ Seq(
+        // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
+        // This class is marked as `private` but MiMa still seems to be confused by the change.
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.task"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$2"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.taskAttempt"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.copy$default$3"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.clearLastInstantiatedContext"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.setLastInstantiatedContext"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.sql.SQLContext$SQLSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.detachSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.tlSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.defaultSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.currentSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.openSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.setSession"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.createSession")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.SparkContext.preferredNodeLocationData_="),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSQLParser")
+      ) ++ Seq(
+        // SPARK-11485
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df"),
+        // SPARK-11541 mark various JDBC dialects as private
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productElement"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productArity"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.canEqual"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productIterator"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productPrefix"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.toString"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.hashCode"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.PostgresDialect$"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productElement"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productArity"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.canEqual"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productIterator"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productPrefix"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.toString"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.hashCode"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
+      ) ++ Seq (
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.ApplicationInfo.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.StageData.this")
+      ) ++ Seq(
+        // SPARK-11766 add toJson to Vector
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.mllib.linalg.Vector.toJson")
+      ) ++ Seq(
+        // SPARK-9065 Support message handler in Kafka Python API
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
+      ) ++ Seq(
+        // SPARK-4557 Changed foreachRDD to use VoidFunction
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.api.java.JavaDStreamLike.foreachRDD")
+      ) ++ Seq(
+        // SPARK-11996 Make the executor thread dump work again
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
+      ) ++ Seq(
+        // SPARK-3580 Add getNumPartitions method to JavaRDD
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
+      ) ++
+      // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
+      // private class.
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
