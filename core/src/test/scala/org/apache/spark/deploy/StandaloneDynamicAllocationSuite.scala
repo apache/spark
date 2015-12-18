@@ -388,25 +388,23 @@ class StandaloneDynamicAllocationSuite
     val executors = getExecutorIds(sc)
     val executorIdsBefore = executors.toSet
     assert(executors.size === 2)
-    // kill executor 1, and replace it
+    // kill and replace an executor
     assert(sc.killAndReplaceExecutor(executors.head))
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
       assert(apps.head.executors.size === 2)
       val executorIdsAfter = getExecutorIds(sc).toSet
-      // make sure the old executors head has been killedAndReplaced.
+      // make sure the executor was killed and replaced
       assert(executorIdsBefore != executorIdsAfter)
     }
 
-    var apps = getApplications()
-    // kill executor 1, and actually nothing to kill
-    assert(!sc.killExecutor(executors.head))
-    apps = getApplications()
-    assert(apps.head.executors.size === 2)
-    assert(apps.head.getExecutorLimit === 2)
-    // kill executor 2
-    assert(sc.killExecutor(executors(1)))
-    apps = getApplications()
+    // refresh executors list
+    val newExecutors = getExecutorIds(sc)
+    syncExecutors(sc)
+
+    // kill executor 1 and do not replace it
+    assert(sc.killExecutor(newExecutors.head))
+    val apps = getApplications()
     assert(apps.head.executors.size === 1)
     assert(apps.head.getExecutorLimit === 1)
   }
