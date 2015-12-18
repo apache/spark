@@ -141,7 +141,12 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       return;
     }
 
-    respond(new StreamResponse(req.streamId, buf.size(), buf));
+    if (buf != null) {
+      respond(new StreamResponse(req.streamId, buf.size(), buf));
+    } else {
+      respond(new StreamFailure(req.streamId, String.format(
+        "Stream '%s' was not found.", req.streamId)));
+    }
   }
 
   private void processRpcRequest(final RpcRequest req) {
