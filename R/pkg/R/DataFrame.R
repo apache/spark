@@ -2260,7 +2260,7 @@ setMethod("str",
             # The number of observations will not be displayed as computing the
             # number of rows is a very expensive operation
             cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
-  
+
             if (nrow(localDF) > 0) {
               for (i in 1 : ncol(localDF)) {
                 # Get the first elements for each column
