@@ -336,39 +336,45 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 class SQLListenerMemoryLeakSuite extends SparkFunSuite {
 
   test("no memory leak") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
-      .set("spark.task.maxFailures", "1") // Don't retry the tasks to run this test quickly
-      .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
-    val sc = new SparkContext(conf)
+    val oldLogLevel = org.apache.log4j.Logger.getRootLogger().getLevel()
     try {
-      SQLContext.clearSqlListener()
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
-      // Run 100 successful executions and 100 failed executions.
-      // Each execution only has one job and one stage.
-      for (i <- 0 until 100) {
-        val df = Seq(
-          (1, 1),
-          (2, 2)
-        ).toDF()
-        df.collect()
-        try {
-          df.foreach(_ => throw new RuntimeException("Oops"))
-        } catch {
-          case e: SparkException => // This is expected for a failed job
+      org.apache.log4j.Logger.getRootLogger().setLevel(org.apache.log4j.Level.FATAL)
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName("test")
+        .set("spark.task.maxFailures", "1") // Don't retry the tasks to run this test quickly
+        .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
+      val sc = new SparkContext(conf)
+      try {
+        SQLContext.clearSqlListener()
+        val sqlContext = new SQLContext(sc)
+        import sqlContext.implicits._
+        // Run 100 successful executions and 100 failed executions.
+        // Each execution only has one job and one stage.
+        for (i <- 0 until 100) {
+          val df = Seq(
+            (1, 1),
+            (2, 2)
+          ).toDF()
+          df.collect()
+          try {
+            df.foreach(_ => throw new RuntimeException("Oops"))
+          } catch {
+            case e: SparkException => // This is expected for a failed job
+          }
         }
+        sc.listenerBus.waitUntilEmpty(10000)
+        assert(sqlContext.listener.getCompletedExecutions.size <= 50)
+        assert(sqlContext.listener.getFailedExecutions.size <= 50)
+        // 50 for successful executions and 50 for failed executions
+        assert(sqlContext.listener.executionIdToData.size <= 100)
+        assert(sqlContext.listener.jobIdToExecutionId.size <= 100)
+        assert(sqlContext.listener.stageIdToStageMetrics.size <= 100)
+      } finally {
+        sc.stop()
       }
-      sc.listenerBus.waitUntilEmpty(10000)
-      assert(sqlContext.listener.getCompletedExecutions.size <= 50)
-      assert(sqlContext.listener.getFailedExecutions.size <= 50)
-      // 50 for successful executions and 50 for failed executions
-      assert(sqlContext.listener.executionIdToData.size <= 100)
-      assert(sqlContext.listener.jobIdToExecutionId.size <= 100)
-      assert(sqlContext.listener.stageIdToStageMetrics.size <= 100)
     } finally {
-      sc.stop()
+      org.apache.log4j.Logger.getRootLogger().setLevel(oldLogLevel)
     }
   }
 }
