@@ -61,16 +61,16 @@ object JdbcUtils extends Logging {
 
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
+   * If a columnMapping is provided, it will be used to translate RDD
+   * column names into table column names.
    */
-  def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
-    var fieldsLeft = rddSchema.fields.length
-    while (fieldsLeft > 0) {
-      sql.append("?")
-      if (fieldsLeft > 1) sql.append(", ") else sql.append(")")
-      fieldsLeft = fieldsLeft - 1
-    }
-    conn.prepareStatement(sql.toString())
+  def insertStatement(conn: Connection,
+                      dialect: JdbcDialect,
+                      table: String,
+                      rddSchema: StructType,
+                      columnMapping: scala.collection.Map[String, String]): PreparedStatement = {
+    val sql = dialect.getInsertStatement(table, rddSchema, columnMapping)
+    conn.prepareStatement(sql)
   }
 
   /**
@@ -122,6 +122,7 @@ object JdbcUtils extends Logging {
       iterator: Iterator[Row],
       rddSchema: StructType,
       nullTypes: Array[Int],
+      columnMapping: scala.collection.Map[String, String] = null,
       batchSize: Int,
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
@@ -139,7 +140,7 @@ object JdbcUtils extends Logging {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
       }
-      val stmt = insertStatement(conn, table, rddSchema)
+      val stmt = insertStatement(conn, dialect, table, rddSchema, columnMapping)
       try {
         var rowCount = 0
         while (iterator.hasNext) {
@@ -234,7 +235,8 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      properties: Properties = new Properties()) {
+      properties: Properties = new Properties(),
+      columnMapping: scala.collection.Map[String, String] = null) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
@@ -245,7 +247,8 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes,
+                    columnMapping, batchSize, dialect)
     }
   }
 

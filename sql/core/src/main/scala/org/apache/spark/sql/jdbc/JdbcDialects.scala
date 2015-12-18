@@ -108,6 +108,30 @@ abstract class JdbcDialect extends Serializable {
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
   }
 
+  /**
+   * Get the SQL statement that should be used to insert new records into the table.
+   * Dialects can override this method to return a statement that works best in a particular
+   * database.
+   * @param table          The name of the table.
+   * @param rddSchema      The schema of DataFrame to be inserted
+   * @param columnMapping  An optional mapping from DataFrame field names to database column
+   *                       names
+   * @return The SQL statement to use for inserting into the table.
+   */
+  def getInsertStatement(table: String,
+                         rddSchema: StructType,
+                         columnMapping: scala.collection.Map[String, String] = null): String = {
+    if (columnMapping == null) {
+      rddSchema.fields.map(_ => "?")
+      .mkString(s"INSERT INTO $table VALUES (", ", ", " ) ")
+    } else {
+      rddSchema.fields.map(
+        field => columnMapping.getOrElse(field.name, field.name)
+      ).mkString(s"INSERT INTO $table ( ", ", ", " ) " ) +
+      rddSchema.fields.map(field => "?").mkString("VALUES ( ", ", ", " )" )
+    }
+  }
+
 }
 
 /**
