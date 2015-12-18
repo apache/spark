@@ -121,11 +121,11 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val gbt = new GBTClassifier().setFeaturesCol("features")
 
-    val refModel = gbt.setLabelCol(DoubleType.toString)
+    val expected = gbt.setLabelCol(DoubleType.toString)
       .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))
     types.filter(_ != DoubleType).foreach { t =>
-      TreeTests.checkEqual(refModel, gbt.setLabelCol(t.toString)
-        .fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
+      TreeTests.checkEqual(expected,
+        gbt.setLabelCol(t.toString).fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
     }
   }
 

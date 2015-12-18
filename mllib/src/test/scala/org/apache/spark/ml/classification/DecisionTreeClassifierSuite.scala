@@ -352,11 +352,11 @@ class DecisionTreeClassifierSuite
 
     val dt = new DecisionTreeClassifier().setFeaturesCol("features")
 
-    val refModel = dt.setLabelCol(DoubleType.toString)
+    val expected = dt.setLabelCol(DoubleType.toString)
       .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))
     types.filter(_ != DoubleType).foreach { t =>
-      TreeTests.checkEqual(refModel, dt.setLabelCol(t.toString)
-        .fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
+      TreeTests.checkEqual(expected,
+        dt.setLabelCol(t.toString).fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
     }
   }
 
