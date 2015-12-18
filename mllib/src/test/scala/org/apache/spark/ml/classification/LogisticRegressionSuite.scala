@@ -959,12 +959,10 @@ class LogisticRegressionSuite
       val actual = lr.setLabelCol(t.toString).fit(dfWithTypes)
       assert(expected.intercept === actual.intercept)
       assert(expected.coefficients.toArray === actual.coefficients.toArray)
-      assert(expected.numClasses === actual.numClasses)
-      assert(expected.numFeatures === actual.numFeatures)
     }
   }
 
-  test("shouldnt support non NumericType labels") {
+  test("shouldn't support non NumericType labels") {
     val dfWithStringLabels = sqlContext.createDataFrame(Seq(
       ("0", Vectors.dense(0, 2, 3)),
       ("1", Vectors.dense(0, 3, 1)),

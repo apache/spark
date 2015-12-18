@@ -27,6 +27,7 @@ import org.apache.spark.mllib.classification.NaiveBayesSuite._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 
 class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -184,6 +185,51 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
     val nb = new NaiveBayes()
     testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings, checkModelData)
+  }
+
+  test("should support all NumericType labels") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (0, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+
+    var dfWithTypes = df
+    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+
+    val nb = new NaiveBayes().setFeaturesCol("features")
+
+    val expected = nb.setLabelCol(DoubleType.toString).fit(dfWithTypes)
+    types.filter(_ != DoubleType).foreach { t =>
+      val actual = nb.setLabelCol(t.toString).fit(dfWithTypes)
+      assert(expected.pi === actual.pi)
+      assert(expected.theta === actual.theta)
+    }
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3)),
+      ("1", Vectors.dense(0, 3, 1)),
+      ("0", Vectors.dense(0, 2, 2)),
+      ("1", Vectors.dense(0, 3, 9)),
+      ("0", Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val nb = new NaiveBayes()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      nb.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 }
 
