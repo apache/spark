@@ -27,6 +27,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
@@ -110,7 +111,51 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
+  }
 
+  test("should support all NumericType labels") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (0, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+
+    var dfWithTypes = df
+    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+
+    val gbt = new GBTRegressor().setFeaturesCol("features")
+
+    val expected = gbt.setLabelCol(DoubleType.toString)
+      .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))
+    types.filter(_ != DoubleType).foreach { t =>
+      TreeTests.checkEqual(expected,
+        gbt.setLabelCol(t.toString).fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
+    }
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3)),
+      ("1", Vectors.dense(0, 3, 1)),
+      ("0", Vectors.dense(0, 2, 2)),
+      ("1", Vectors.dense(0, 3, 9)),
+      ("0", Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2, "label")
+
+    val gbt = new GBTRegressor()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      gbt.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 
   // TODO: Reinstate test once runWithValidation is implemented  SPARK-7132
