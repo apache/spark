@@ -110,21 +110,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
-  /**
-   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
-   */
-  protected def stripSparkFilter(df: DataFrame): DataFrame = {
-    val schema = df.schema
-    val childRDD = df
-      .queryExecution
-      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-      .child
-      .execute()
-      .map(row => Row.fromSeq(row.toSeq(schema)))
-
-    sqlContext.createDataFrame(childRDD, schema)
-  }
-
   test("filter pushdown - boolean") {
     withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
@@ -374,6 +359,25 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           // to make sure our filter pushdown work.
           assert(stripSparkFilter(df).count == 1)
         }
+      }
+    }
+  }
+
+  test("SPARK-12218: 'Not' is included in Parquet filter pushdown") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.parquet(path)
+
+        checkAnswer(
+          sqlContext.read.parquet(path).where("not (a = 2) or not(b in ('1'))"),
+          (1 to 5).map(i => Row(i, (i % 2).toString)))
+
+        checkAnswer(
+          sqlContext.read.parquet(path).where("not (a = 2 and b in ('1'))"),
+          (1 to 5).map(i => Row(i, (i % 2).toString)))
       }
     }
   }

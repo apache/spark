@@ -53,7 +53,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
 
   override def children: Seq[Expression] = Seq(child)
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
   override def dataType: DataType = DoubleType
 

@@ -23,11 +23,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 /**
@@ -44,16 +42,14 @@ import org.apache.spark.sql.types._
  *                      of calling the function.
  */
 case class StaticInvoke(
-    staticObject: Any,
+    staticObject: Class[_],
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true) extends Expression {
 
-  val objectName = staticObject match {
-    case c: Class[_] => c.getName
-    case other => other.getClass.getName.stripSuffix("$")
-  }
+  val objectName = staticObject.getName.stripSuffix("$")
+
   override def nullable: Boolean = true
   override def children: Seq[Expression] = arguments
 
@@ -295,15 +291,16 @@ case class UnwrapOption(
  * Converts the result of evaluating `child` into an option, checking both the isNull bit and
  * (in the case of reference types) equality with null.
  * @param child The expression to evaluate and wrap.
+ * @param optType The type of this option.
  */
-case class WrapOption(child: Expression)
+case class WrapOption(child: Expression, optType: DataType)
   extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
   override def nullable: Boolean = true
 
-  override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = optType :: Nil
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")

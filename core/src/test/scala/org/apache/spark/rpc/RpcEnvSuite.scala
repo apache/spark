@@ -545,6 +545,48 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("network events between non-client-mode RpcEnvs") {
+    val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
+    env.setupEndpoint("network-events-non-client", new ThreadSafeRpcEndpoint {
+      override val rpcEnv = env
+
+      override def receive: PartialFunction[Any, Unit] = {
+        case "hello" =>
+        case m => events += "receive" -> m
+      }
+
+      override def onConnected(remoteAddress: RpcAddress): Unit = {
+        events += "onConnected" -> remoteAddress
+      }
+
+      override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+        events += "onDisconnected" -> remoteAddress
+      }
+
+      override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+        events += "onNetworkError" -> remoteAddress
+      }
+
+    })
+
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = false)
+    // Use anotherEnv to find out the RpcEndpointRef
+    val rpcEndpointRef = anotherEnv.setupEndpointRef(
+      "local", env.address, "network-events-non-client")
+    val remoteAddress = anotherEnv.address
+    rpcEndpointRef.send("hello")
+    eventually(timeout(5 seconds), interval(5 millis)) {
+      assert(events.contains(("onConnected", remoteAddress)))
+    }
+
+    anotherEnv.shutdown()
+    anotherEnv.awaitTermination()
+    eventually(timeout(5 seconds), interval(5 millis)) {
+      assert(events.contains(("onConnected", remoteAddress)))
+      assert(events.contains(("onDisconnected", remoteAddress)))
+    }
+  }
+
   test("sendWithReply: unserializable error") {
     env.setupEndpoint("sendWithReply-unserializable-error", new RpcEndpoint {
       override val rpcEnv = env
@@ -729,6 +771,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir, "file")
     Files.write(UUID.randomUUID().toString(), file, UTF_8)
+    val fileWithSpecialChars = new File(tempDir, "file name")
+    Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
     val empty = new File(tempDir, "empty")
     Files.write("", empty, UTF_8);
     val jar = new File(tempDir, "jar")
@@ -745,6 +789,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
 
     val fileUri = env.fileServer.addFile(file)
+    val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
     val emptyUri = env.fileServer.addFile(empty)
     val jarUri = env.fileServer.addJar(jar)
     val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
@@ -763,6 +808,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val files = Seq(
       (file, fileUri),
+      (fileWithSpecialChars, fileWithSpecialCharsUri),
       (empty, emptyUri),
       (jar, jarUri),
       (subFile1, dir1Uri + "/file1"),
