@@ -958,6 +958,10 @@ class TaskInstance(Base):
                 session.merge(self)
             session.commit()
             session.close()
+
+            # Closing all pooled connections to prevent
+            # "max number of connections reached"
+            settings.engine.dispose()
             if verbose:
                 if mark_success:
                     msg = "Marking success for "
