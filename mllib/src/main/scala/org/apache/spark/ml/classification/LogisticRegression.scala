@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.sql.types.DoubleType
-
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -40,6 +38,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 /**
