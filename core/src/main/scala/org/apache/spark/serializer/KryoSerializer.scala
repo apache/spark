@@ -36,6 +36,7 @@ import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult}
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.collection.CompactBuffer
@@ -109,6 +110,8 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
+    kryo.register(classOf[DirectTaskResult], new KryoJavaSerializer())
+    kryo.register(classOf[IndirectTaskResult], new KryoJavaSerializer())
 
     kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
     kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
