@@ -26,6 +26,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types._
 
 /**
  * Test suite for [[RandomForestRegressor]].
@@ -92,6 +93,51 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  test("should support all NumericType labels") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (0, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features")
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+
+    var dfWithTypes = df
+    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+
+    val rf = new RandomForestRegressor().setFeaturesCol("features")
+
+    val expected = rf.setLabelCol(DoubleType.toString)
+      .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))
+    types.filter(_ != DoubleType).foreach { t =>
+      TreeTests.checkEqual(expected,
+        rf.setLabelCol(t.toString).fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
+    }
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3)),
+      ("1", Vectors.dense(0, 3, 1)),
+      ("0", Vectors.dense(0, 2, 2)),
+      ("1", Vectors.dense(0, 3, 9)),
+      ("0", Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2, "label")
+
+    val rf = new RandomForestRegressor()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      rf.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 
   /////////////////////////////////////////////////////////////////////////////
