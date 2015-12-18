@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.sql.types._
-
 import scala.language.existentials
 import scala.util.Random
 
@@ -31,6 +29,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.lit
 
