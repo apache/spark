@@ -586,19 +586,23 @@ object TreeNode {
             parseFromJson(nextNode \ fieldName, fieldType, children, sc)
         }.toArray
 
-        val ctors = cls.getConstructors
-        if (ctors.isEmpty) {
+        val maybeCtor = cls.getConstructors.find { p =>
+          val expectedTypes = p.getParameterTypes
+          expectedTypes.length == fields.length && expectedTypes.zip(fields.map(_._2)).forall {
+            case (cls, tpe) => cls == getClassFromType(tpe)
+          }
+        }
+        if (maybeCtor.isEmpty) {
           sys.error(s"No valid constructor for ${cls.getName}")
         } else {
-          val defaultCtor = ctors.maxBy(_.getParameterTypes.size)
           try {
-            defaultCtor.newInstance(parameters: _*).asInstanceOf[TreeNode[_]]
+            maybeCtor.get.newInstance(parameters: _*).asInstanceOf[TreeNode[_]]
           } catch {
             case e: java.lang.IllegalArgumentException =>
               throw new RuntimeException(
                 s"""
                   |Failed to construct tree node: ${cls.getName}
-                  |ctor: $defaultCtor
+                  |ctor: ${maybeCtor.get}
                   |types: ${parameters.map(_.getClass).mkString(", ")}
                   |args: ${parameters.mkString(", ")}
                 """.stripMargin, e)

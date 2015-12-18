@@ -68,7 +68,7 @@ object ScalaReflection extends ScalaReflection {
             val TypeRef(_, _, Seq(elementType)) = tpe
             arrayClassFor(elementType)
           case other =>
-            val clazz = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
+            val clazz = getClassFromType(tpe)
             ObjectType(clazz)
         }
     }
@@ -323,7 +323,7 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[Product] =>
         val params = getConstructorParameters(t)
 
-        val cls = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
+        val cls = getClassFromType(tpe)
 
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
           val dataType = schemaFor(fieldType).dataType
@@ -571,6 +571,8 @@ object ScalaReflection extends ScalaReflection {
     val t = classSymbol.selfType
     getConstructorParameters(t)
   }
+
+  def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 }
 
 /**
