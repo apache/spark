@@ -33,7 +33,7 @@ import org.apache.spark.scheduler.{DirectTaskResult, HighlyCompressedMapStatus, 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.Utils
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockManagerId, TaskResultBlockId}
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -161,8 +161,8 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
-    check(DirectTaskResult[Int](ser.serialize(1), mutable.Map.empty, new TaskMetrics))
-    check(IndirectTaskResult[Any](TaskResultBlockId(1), 2))
+    check(new DirectTaskResult[Int](ser.serialize(1), mutable.Map.empty, new TaskMetrics))
+    check(new IndirectTaskResult[Any](TaskResultBlockId(1), 2))
   }
 
   test("Bug: SPARK-10251") {
