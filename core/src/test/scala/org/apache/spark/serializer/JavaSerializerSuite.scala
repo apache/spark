@@ -31,7 +31,8 @@ class JavaSerializerSuite extends SparkFunSuite {
   test("Deserialize object containing a primitive Class as attribute") {
     val serializer = new JavaSerializer(new SparkConf())
     val instance = serializer.newInstance()
-    val obj = instance.deserialize[ContainsPrimitiveClass](instance.serialize(new ContainsPrimitiveClass()))
+    val obj = instance.deserialize[ContainsPrimitiveClass](instance.serialize(
+      new ContainsPrimitiveClass()))
     // enforce class cast
     obj.getClass
   }
