@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
@@ -143,9 +143,6 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
    */
   def defaultResult: Option[Literal] = None
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
-
   /**
    * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] because
    * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
@@ -186,7 +183,7 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
  * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
  * and `inputAggBufferAttributes`.
  */
-abstract class ImperativeAggregate extends AggregateFunction {
+abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
 
   /**
    * The offset of this function's first buffer value in the underlying shared mutable aggregation
