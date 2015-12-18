@@ -572,7 +572,7 @@ object TreeNode {
 
       val cls = Utils.classForName((nextNode \ "class").asInstanceOf[JString].s)
       if (cls == classOf[Literal]) {
-        parseToLiteral(nextNode)
+        Literal.fromJSON(nextNode)
       } else if (cls.getName.endsWith("$")) {
         cls.getField("MODULE$").get(cls).asInstanceOf[TreeNode[_]]
       } else {
@@ -591,40 +591,23 @@ object TreeNode {
           sys.error(s"No valid constructor for ${cls.getName}")
         } else {
           val defaultCtor = ctors.maxBy(_.getParameterTypes.size)
-          defaultCtor.newInstance(parameters: _*).asInstanceOf[TreeNode[_]]
+          try {
+            defaultCtor.newInstance(parameters: _*).asInstanceOf[TreeNode[_]]
+          } catch {
+            case e: java.lang.IllegalArgumentException =>
+              throw new RuntimeException(
+                s"""
+                  |Failed to construct tree node: ${cls.getName}
+                  |ctor: $defaultCtor
+                  |types: ${parameters.map(_.getClass).mkString(", ")}
+                  |args: ${parameters.mkString(", ")}
+                """.stripMargin, e)
+          }
         }
       }
     }
 
     parseNextNode()
-  }
-
-  private def parseToLiteral(json: JObject): Literal = {
-    val dataType = DataType.parseDataType(json \ "dataType")
-    json \ "value" match {
-      case JNull => Literal.create(null, dataType)
-      case JString(str) =>
-        val value = dataType match {
-          case BooleanType => str.toBoolean
-          case ByteType => str.toByte
-          case ShortType => str.toShort
-          case IntegerType => str.toInt
-          case LongType => str.toLong
-          case FloatType => str.toFloat
-          case DoubleType => str.toDouble
-          case StringType => UTF8String.fromString(str)
-          case DateType => java.sql.Date.valueOf(str)
-          case TimestampType => java.sql.Timestamp.valueOf(str)
-          case CalendarIntervalType => CalendarInterval.fromString(str)
-          case t: DecimalType =>
-            val d = Decimal(str)
-            assert(d.changePrecision(t.precision, t.scale))
-            d
-          case _ => null
-        }
-        Literal.create(value, dataType)
-      case other => sys.error(s"$other is not a valid Literal json value")
-    }
   }
 
   import universe._
