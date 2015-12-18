@@ -276,17 +276,6 @@ private[sql] class JDBCRDD(
     if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
-    * Construct the LIKE clause based on the position.
-    */
-  private def constructLikeString(value: String, position: String) = {
-    position match {
-      case "starts" => s"'${escapeSql(value)}%'"
-      case "contains" => s"'%${escapeSql(value)}%'"
-      case "ends" => s"'%${escapeSql(value)}'"
-    }
-  }
-
-  /**
    * Turns a single Filter into a String representing a SQL expression.
    * Returns null for an unhandled filter.
    */
@@ -299,9 +288,9 @@ private[sql] class JDBCRDD(
     case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
     case IsNull(attr) => s"$attr IS NULL"
     case IsNotNull(attr) => s"$attr IS NOT NULL"
-    case StringStartsWith(attr, value) => s"$attr LIKE ${constructLikeString(value, "starts")}"
-    case StringContains(attr, value) => s"$attr LIKE ${constructLikeString(value, "contains")}"
-    case StringEndsWith(attr, value) => s"$attr LIKE ${constructLikeString(value, "ends")}"
+    case StringStartsWith(attr, value) => s"$attr LIKE '${escapeSql(value)}%'"
+    case StringContains(attr, value) => s"$attr LIKE '%${escapeSql(value)}%'"
+    case StringEndsWith(attr, value) => s"$attr LIKE '%${escapeSql(value)}'"
     case _ => null
   }
 
