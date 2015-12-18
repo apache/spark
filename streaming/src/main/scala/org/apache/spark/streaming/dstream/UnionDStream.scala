@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkException
-import org.apache.spark.rdd.{RDD, UnionRDD}
+import org.apache.spark.rdd.{RDD, UnionRDD, PartitionerAwareUnionRDD}
 import org.apache.spark.streaming.{Duration, Time}
 
 private[streaming]
@@ -45,7 +45,11 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
         s" time $validTime")
     }
     if (rdds.nonEmpty) {
-      Some(new UnionRDD(ssc.sc, rdds))
+      if(rdds.forall(_.partitioner.isDefined) && rdds.flatMap(_.partitioner).toSet.size == 1) {
+        Some(new PartitionerAwareUnionRDD(ssc.sc, rdds))
+      } else {
+        Some(new UnionRDD(ssc.sc, rdds))
+      }
     } else {
       None
     }
