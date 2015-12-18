@@ -53,7 +53,7 @@ private[ml] trait PredictorParams extends Params
       val actualDataType = schema($(labelCol)).dataType
       val labelColName = $(labelCol)
       require(actualDataType.isInstanceOf[NumericType], s"Column $labelColName must be of type " +
-        "NumericType but was actually of type $actualDataType")
+        s"NumericType but was actually of type $actualDataType")
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
