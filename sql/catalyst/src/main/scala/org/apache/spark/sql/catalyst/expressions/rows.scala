@@ -201,7 +201,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
   override def toSeq: Seq[Any] = values.toSeq
 
-  override def copy(): Row = this
+  override def copy(): Row = new GenericRow(values.clone())
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
