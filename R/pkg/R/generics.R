@@ -531,6 +531,10 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
 #' @export
 setGeneric("str")
 
+#' @rdname withColumn
+#' @export
+setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
+
 #' @rdname write.df
 #' @export
 setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
