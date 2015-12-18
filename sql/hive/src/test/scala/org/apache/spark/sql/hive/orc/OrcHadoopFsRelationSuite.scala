@@ -23,6 +23,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{Row, SQLConf}
 import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Row, SQLConf}
 
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
