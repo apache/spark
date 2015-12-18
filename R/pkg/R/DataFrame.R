@@ -2263,13 +2263,12 @@ setMethod("str",
 
             if (nrow(localDF) > 0) {
               for (i in 1 : ncol(localDF)) {
-                firstElements <- ""
-
                 # Get the first elements for each column
-                if (types[i] == "character") {
-                  firstElements <- paste(paste0("\"", localDF[,i], "\""), collapse = " ")
+                
+                firstElements <- if (types[i] == "character") {
+                  paste(paste0("\"", localDF[,i], "\""), collapse = " ")
                 } else {
-                  firstElements <- paste(localDF[,i], collapse = " ")
+                  paste(localDF[,i], collapse = " ")
                 }
 
                 # Add the corresponding number of spaces for alignment
