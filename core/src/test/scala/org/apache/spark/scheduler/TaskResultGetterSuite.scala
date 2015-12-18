@@ -81,6 +81,16 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
   // as we can make it) so the tests don't take too long.
   def conf: SparkConf = new SparkConf().set("spark.akka.frameSize", "1")
 
+  test("Kryo serializer for TaskResult") {
+    val conf1 = new SparkConf(false)
+    conf1.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf1.set("spark.kryoserializer.buffer", "1m")
+    conf1.set("spark.kryoserializer.buffer.max", "2m")
+    sc = new SparkContext("local", "test", conf1)
+    val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
+    assert(result === 2)
+  }
+
   test("handling results smaller than Akka frame size") {
     sc = new SparkContext("local", "test", conf)
     val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
