@@ -61,21 +61,21 @@ object RowEncoder {
 
     case TimestampType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         TimestampType,
         "fromJavaTimestamp",
         inputObject :: Nil)
 
     case DateType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         DateType,
         "fromJavaDate",
         inputObject :: Nil)
 
     case _: DecimalType =>
       StaticInvoke(
-        Decimal,
+        Decimal.getClass,
         DecimalType.SYSTEM_DEFAULT,
         "apply",
         inputObject :: Nil)
@@ -172,14 +172,14 @@ object RowEncoder {
 
     case TimestampType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Timestamp]),
         "toJavaTimestamp",
         input :: Nil)
 
     case DateType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Date]),
         "toJavaDate",
         input :: Nil)
@@ -197,7 +197,7 @@ object RowEncoder {
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(
-        scala.collection.mutable.WrappedArray,
+        scala.collection.mutable.WrappedArray.getClass,
         ObjectType(classOf[Seq[_]]),
         "make",
         arrayData :: Nil)
@@ -210,7 +210,7 @@ object RowEncoder {
       val valueData = constructorFor(Invoke(input, "valueArray", valueArrayType))
 
       StaticInvoke(
-        ArrayBasedMapData,
+        ArrayBasedMapData.getClass,
         ObjectType(classOf[Map[_, _]]),
         "toScalaMap",
         keyData :: valueData :: Nil)
