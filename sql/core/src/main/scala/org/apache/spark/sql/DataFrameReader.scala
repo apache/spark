@@ -313,14 +313,18 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         Try(SparkHadoopUtil.get.globPathIfNecessary(qualified))
-      }.collect { case Success(s) =>s }.flatten.toArray
+      }.collect { case Success(s) => s }.flatten.toArray
 
       if (globbedPaths.isEmpty) {
         sqlContext.emptyDataFrame
-      } else
+      } else {
         sqlContext.baseRelationToDataFrame(
           new ParquetRelation(
-            globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
+            globbedPaths.map(_.toString),
+            userSpecifiedSchema,
+            None,
+            extraOptions.toMap)(sqlContext))
+      }
     }
   }
 
