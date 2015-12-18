@@ -122,16 +122,13 @@ abstract class JdbcDialect extends Serializable {
                          rddSchema: StructType,
                          columnMapping: scala.collection.Map[String, String] = null): String = {
     if (columnMapping == null) {
-      rddSchema.fields.map(field => "?")
-      .mkString( s"INSERT INTO $table VALUES (", ", ", " ) ")
+      rddSchema.fields.map(_ => "?")
+      .mkString(s"INSERT INTO $table VALUES (", ", ", " ) ")
     } else {
       rddSchema.fields.map(
-        field => columnMapping.get(field.name) match {
-          case Some(name) => name
-          case None => field.name
-        }
-      ).mkString( s"INSERT INTO $table ( ", ", ", " ) " ) +
-      rddSchema.fields.map(field => "?").mkString( "VALUES ( ", ", ", " )" )
+        field => columnMapping.getOrElse(field.name, field.name)
+      ).mkString(s"INSERT INTO $table ( ", ", ", " ) " ) +
+      rddSchema.fields.map(field => "?").mkString("VALUES ( ", ", ", " )" )
     }
   }
 

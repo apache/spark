@@ -341,8 +341,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   def jdbc(url: String,
            table: String,
            connectionProperties: Properties): Unit = {
-    val columnMapping: scala.collection.Map[String, String] = null
-    jdbc(url, table, connectionProperties, columnMapping)
+    jdbc(url, table, connectionProperties, null.asInstanceOf[Map[String, String]])
   }
 
   /**
