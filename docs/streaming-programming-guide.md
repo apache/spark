@@ -1417,7 +1417,7 @@ Note that the connections in the pool should be lazily created on demand and tim
 
 ## Accumulator and Broadcast
 
-Accumulator and Broadcast cannot be recovered from checkpoint in Streaming. If you enable checkpoint and use Accumulator or Broadcast as well, you have to create lazily instantiated singleton instances for Accumulator and Broadcast so that they can be restarted on driver failures. This is shown in the following example.
+Accumulator and Broadcast cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use Accumulator or Broadcast as well, you'll have to create lazily instantiated singleton instances for Accumulator and Broadcast so that they can be restarted on driver failures. This is shown in the following example.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
