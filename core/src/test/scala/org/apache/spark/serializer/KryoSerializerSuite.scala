@@ -29,7 +29,8 @@ import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
-import org.apache.spark.scheduler.HighlyCompressedMapStatus
+import org.apache.spark.scheduler.{DirectTaskResult, HighlyCompressedMapStatus, IndirectTaskResult}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.BlockManagerId
@@ -152,6 +153,16 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
       mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
+  }
+
+  test("Bug: SPARK-12415") {
+    val ser = new KryoSerializer(conf.clone.set("spark.kryo.registrationRequired", "true"))
+      .newInstance()
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    check(DirectTaskResult[Int](ser.serialize(1), mutable.Map.empty, new TaskMetrics))
+    check(IndirectTaskResult[Any](TaskResultBlockId(1), 2))
   }
 
   test("Bug: SPARK-10251") {
