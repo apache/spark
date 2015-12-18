@@ -397,13 +397,16 @@ class StandaloneDynamicAllocationSuite
       // make sure the executor was killed and replaced
       assert(executorIdsBefore != executorIdsAfter)
     }
+    
+    // kill old executor (which is killedAndReplaced) should fail
+    assert(!sc.killExecutor(executors.head))
 
     // refresh executors list
     val newExecutors = getExecutorIds(sc)
     syncExecutors(sc)
 
-    // kill executor 1 and do not replace it
-    assert(sc.killExecutor(newExecutors.head))
+    // kill newly created executor and do not replace it
+    assert(sc.killExecutor(newExecutors(1)))
     val apps = getApplications()
     assert(apps.head.executors.size === 1)
     assert(apps.head.getExecutorLimit === 1)
