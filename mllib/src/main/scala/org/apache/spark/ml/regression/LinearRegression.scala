@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import org.apache.spark.sql.types.DoubleType
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -171,7 +173,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       // For low dimensional data, WeightedLeastSquares is more efficiently since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
       val instances: RDD[Instance] = dataset.select(
-        col($(labelCol)), w, col($(featuresCol))).rdd.map {
+        col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
           case Row(label: Double, weight: Double, features: Vector) =>
             Instance(label, weight, features)
       }
@@ -431,7 +433,7 @@ class LinearRegressionModel private[ml] (
   private[regression] def findSummaryModelAndPredictionCol(): (LinearRegressionModel, String) = {
     $(predictionCol) match {
       case "" =>
-        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString
         (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
       case p => (this, p)
     }
@@ -550,7 +552,7 @@ class LinearRegressionSummary private[regression] (
 
   @transient private val metrics = new RegressionMetrics(
     predictions
-      .select(predictionCol, labelCol)
+      .select(col(predictionCol), col(labelCol).cast(DoubleType))
       .rdd
       .map { case Row(pred: Double, label: Double) => (pred, label) },
     !model.getFitIntercept)
@@ -653,7 +655,7 @@ class LinearRegressionSummary private[regression] (
           col(model.getWeightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
       }
       val sigma2 = rss / degreesOfFreedom
-      diagInvAtWA.map(_ * sigma2).map(math.sqrt(_))
+      diagInvAtWA.map(_ * sigma2).map(math.sqrt)
     }
   }
 
@@ -826,7 +828,7 @@ private class LeastSquaresAggregator(
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new sample." +
         s" Expecting $dim but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 

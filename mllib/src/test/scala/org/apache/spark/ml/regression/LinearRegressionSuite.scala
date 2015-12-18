@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import org.apache.spark.sql.types._
+
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
@@ -687,7 +689,7 @@ class LinearRegressionSuite
       // Validate that we re-insert a prediction column for evaluation
       val modelNoPredictionColFieldNames
       = modelNoPredictionCol.summary.predictions.schema.fieldNames
-      assert((datasetWithDenseFeature.schema.fieldNames.toSet).subsetOf(
+      assert(datasetWithDenseFeature.schema.fieldNames.toSet.subsetOf(
         modelNoPredictionColFieldNames.toSet))
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
@@ -1005,6 +1007,51 @@ class LinearRegressionSuite
     val lr = new LinearRegression()
     testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
       checkModelData)
+  }
+
+  test("should support all NumericType labels") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0)),
+      (1, Vectors.dense(1)),
+      (2, Vectors.dense(2)),
+      (3, Vectors.dense(3)),
+      (4, Vectors.dense(4))
+    )).toDF("label", "features")
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+
+    var dfWithTypes = df
+    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+
+    val lr = new LinearRegression().setFeaturesCol("features")
+
+    val expected = lr.setLabelCol(DoubleType.toString).fit(dfWithTypes)
+    types.filter(_ != DoubleType).foreach { t =>
+      val actual = lr.setLabelCol(t.toString).fit(dfWithTypes)
+      assert(expected.intercept === actual.intercept)
+      assert(expected.coefficients === actual.coefficients)
+    }
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0)),
+      ("1", Vectors.dense(1)),
+      ("2", Vectors.dense(2)),
+      ("3", Vectors.dense(3)),
+      ("4", Vectors.dense(4))
+    )).toDF("label", "features")
+
+    val lr = new LinearRegression()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      lr.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 }
 
