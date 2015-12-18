@@ -22,6 +22,7 @@ import java.util.{Locale, TimeZone}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
@@ -185,8 +186,8 @@ abstract class QueryTest extends PlanTest {
   }
 
   private def checkJsonFormat(df: DataFrame): Unit = {
-    import TreeNodeJsonFormatter._
     val logicalPlan = df.queryExecution.analyzed
+    // bypass some cases that we can't handle currently.
     logicalPlan.transform {
       case _: MapPartitions[_, _] => return
       case _: MapGroups[_, _, _] => return
@@ -197,20 +198,8 @@ abstract class QueryTest extends PlanTest {
       case a: ImperativeAggregate => return
     }
 
-    // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains
-    // these non-serializable stuff, and use these original ones to replace the null-placeholders
-    // in the logical plans parsed from JSON.
-    var logicalRDDs = logicalPlan.collect { case l: LogicalRDD => l }
-    var localRelations = logicalPlan.collect { case l: LocalRelation => l }
-    var inMemoryRelations = logicalPlan.collect { case i: InMemoryRelation => i }
-
-    val normalized1 = logicalPlan.transformAllExpressions {
-      case udf: ScalaUDF => udf.copy(function = null)
-      case gen: UserDefinedGenerator => gen.copy(function = null)
-    }
-
     val jsonString = try {
-      toJSON(logicalPlan)
+      logicalPlan.toJSON
     } catch {
       case e =>
         fail(
@@ -220,8 +209,25 @@ abstract class QueryTest extends PlanTest {
            """.stripMargin, e)
     }
 
+    // bypass hive tests before we fix all corner cases in hive module.
+    if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
+
+    // scala function is not serializable to JSON, use null to replace them so that we can compare
+    // the plans later.
+    val normalized1 = logicalPlan.transformAllExpressions {
+      case udf: ScalaUDF => udf.copy(function = null)
+      case gen: UserDefinedGenerator => gen.copy(function = null)
+    }
+
+    // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains
+    // these non-serializable stuff, and use these original ones to replace the null-placeholders
+    // in the logical plans parsed from JSON.
+    var logicalRDDs = logicalPlan.collect { case l: LogicalRDD => l }
+    var localRelations = logicalPlan.collect { case l: LocalRelation => l }
+    var inMemoryRelations = logicalPlan.collect { case i: InMemoryRelation => i }
+
     val jsonBackPlan = try {
-      fromJSON(jsonString, sqlContext.sparkContext).asInstanceOf[LogicalPlan]
+      TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
     } catch {
       case e =>
         fail(
