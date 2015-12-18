@@ -123,7 +123,6 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
-    // Temp work-around. Not to be commited!!!!
     val supportsTransactions = try {
       conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
       conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
