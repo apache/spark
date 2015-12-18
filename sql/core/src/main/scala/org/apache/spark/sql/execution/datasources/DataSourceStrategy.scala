@@ -100,8 +100,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         selectedPartitions)
 
       // Add a Projection to guarantee the original projection:
-      // this is because "projs" may be different from the original "projects",
-      // in elements or their ordering
+      // this is because "combinedProjects" may be different from the
+      // original "projects", in elements or their ordering
       combineFilter.map(cf => if (projects.isEmpty || combinedProjects.size < 2) {
         // If the original projection is empty or the scan's projection
         // has 0 or one element, then no need for an extra Project
