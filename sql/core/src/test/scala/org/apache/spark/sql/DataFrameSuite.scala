@@ -176,6 +176,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.select("key").collect().toSeq)
   }
 
+  test("selectExpr with udtf") {
+    val df = Seq((Map("1" -> 1), 1)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("explode(a)"),
+      Row("1", 1) :: Nil)
+  }
+
   test("filterExpr") {
     val res = testData.collect().filter(_.getInt(0) > 90).toSeq
     checkAnswer(testData.filter("key > 90"), res)
