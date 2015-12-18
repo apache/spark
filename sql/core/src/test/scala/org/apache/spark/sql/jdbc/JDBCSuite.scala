@@ -184,6 +184,18 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
     assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+    assert(stripSparkFilter(sql(
+      "SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')")).collect().size === 2)
+    assert(stripSparkFilter(sql(
+      "SELECT * FROM foobar WHERE NAME NOT IN ('mary', 'fred')")).collect().size === 1)
+    assert(stripSparkFilter(sql(
+      "SELECT * FROM foobar WHERE THEID IN (1,3)")).collect().size === 2)
+    assert(stripSparkFilter(sql(
+      "SELECT * FROM foobar WHERE THEID NOT IN (1,3)")).collect().size === 1)
+    assert(stripSparkFilter(sql(
+      "SELECT * FROM foobar WHERE THEID=1 OR NAME = 'mary'")).collect().size === 2)
+    assert(stripSparkFilter(sql(
+      "SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' AND THEID = 2")).collect().size === 2)
   }
 
   test("SELECT * WHERE (quoted strings)") {
