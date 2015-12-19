@@ -20,6 +20,12 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class ReflectData(
@@ -126,6 +132,40 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
 
     Seq(data).toDF().registerTempTable("reflectComplexData")
     assert(sql("SELECT * FROM reflectComplexData").collect().head ===
+      Row(
+        Seq(1, 2, 3),
+        Seq(1, 2, null),
+        Map(1 -> 10L, 2 -> 20L),
+        Map(1 -> 10L, 2 -> 20L, 3 -> null),
+        Row(
+          Seq(10, 20, 30),
+          Seq(10, 20, null),
+          Map(10 -> 100L, 20 -> 200L),
+          Map(10 -> 100L, 20 -> 200L, 30 -> null),
+          Row(null, "abc"))))
+  }
+
+  test("query complex data with ScalaReflection") {
+    val data = ComplexReflectData(
+      Seq(1, 2, 3),
+      Seq(Some(1), Some(2), None),
+      Map(1 -> 10L, 2 -> 20L),
+      Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None),
+      Data(
+        Seq(10, 20, 30),
+        Seq(Some(10), Some(20), None),
+        Map(10 -> 100L, 20 -> 200L),
+        Map(10 -> Some(100L), 20 -> Some(200L), 30 -> None),
+        Nested(None, "abc")))
+
+    val schema = ScalaReflection.schemaFor[ComplexReflectData].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    val complexDataEncoder = encoderFor[ComplexReflectData]
+    val unsafeRows = Seq(data).map(complexDataEncoder.toRow(_).copy())
+    val df = DataFrame(sqlContext, LocalRelation(attributeSeq, unsafeRows))
+    val decodedData = df.collect()
+
+    assert(df.collect()(0) ===
       Row(
         Seq(1, 2, 3),
         Seq(1, 2, null),
