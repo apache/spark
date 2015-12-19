@@ -43,6 +43,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty. `outer` has no effect when `join` is false.
+ * @param generatorOutput the output schema of the Generator.
  * @param output the output attributes of this node, which constructed in analysis phase,
  *               and we can not change it, as the parent node bound with it already.
  */
@@ -51,8 +52,11 @@ case class Generate(
     join: Boolean,
     outer: Boolean,
     output: Seq[Attribute],
+    generatorOutput: Seq[Attribute],
     child: SparkPlan)
   extends UnaryNode {
+
+  override def missingInput: AttributeSet = super.missingInput -- generatorOutput
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
