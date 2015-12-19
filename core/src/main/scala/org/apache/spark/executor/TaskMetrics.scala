@@ -218,7 +218,7 @@ class TaskMetrics extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case that: TaskMetrics => {
       if (this.hostname == null && that.hostname != null) return false
-      this.hostname.equals(that.hostname)
+      if (this.hostname != null) this.hostname.equals(that.hostname) else true
     }
     case _ => false
   }
