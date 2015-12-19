@@ -26,21 +26,25 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for regression.
  *
- * @param predictionAndObservations an RDD of (prediction, observation) pairs.
+ * @param predictionAndObservations an RDD of (prediction, observation) pairs,
+ * @param isUnbiased true if intercept is included in linear regression model
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("1.2.0") (
-    predictionAndObservations: RDD[(Double, Double)], isUnbiased: Boolean = true)
+    predictionAndObservations: RDD[(Double, Double)], isUnbiased: Boolean)
     extends Logging {
+  /**
+    * @param predictionAndObservations an RDD with two double columns:
+    *                                  prediction and observation
+    */
+  def this(predictionAndObservations: RDD[(Double, Double)]) =
+    this(predictionAndObservations, true)
 
   /**
-   * An auxiliary constructor taking a DataFrame.
-   * @param predictionAndObservations a DataFrame with two double columns:
-   *                                  prediction and observation
-   */
-  def this(predictionAndObservations: RDD[(Double, Double)]) =
-    this(predictionAndObservations: RDD[(Double, Double)], true)
-
+    * An auxiliary constructor taking a DataFrame.
+    * @param predictionAndObservations a DataFrame with two double columns:
+    *                                  prediction and observation
+    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
     this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
@@ -56,6 +60,7 @@ class RegressionMetrics @Since("1.2.0") (
       )
     summary
   }
+  private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
   private lazy val SStot = summary.variance(0) * (summary.count - 1)
   private lazy val SSreg = {
@@ -64,9 +69,6 @@ class RegressionMetrics @Since("1.2.0") (
       case (prediction, _) => math.pow(prediction - yMean, 2)
     }.sum()
   }
-  private lazy val SSy = predictionAndObservations.map {
-    case (_, observation) => math.pow(observation, 2)
-  }.sum()
   /**
    * Returns the variance explained by regression.
    * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
@@ -111,7 +113,9 @@ class RegressionMetrics @Since("1.2.0") (
   @Since("1.2.0")
   def r2: Double = {
     // In case of regression through the origin (biased case), the definition of R^2 is
-    // to be modified. See jira SPARK-12331
+    // to be modified. Here is a review paper which explains why:
+    // J. G. Eisenhauer, Regression through the Origin. Teaching Statistics 25, 76–80 (2003)
+    // https://online.stat.psu.edu/~ajw13/stat501/SpecialTopics/Reg_thru_origin.pdf
     if (isUnbiased) {
       1 - SSerr / SStot
     } else {

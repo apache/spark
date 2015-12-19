@@ -534,7 +534,8 @@ class LinearRegressionSummary private[regression] (
   @transient private val metrics = new RegressionMetrics(
     predictions
       .select(predictionCol, labelCol)
-      .map { case Row(pred: Double, label: Double) => (pred, label) }, model.getFitIntercept)
+      .map { case Row(pred: Double, label: Double) => (pred, label) },
+    model.getFitIntercept)
 
   /**
    * Returns the explained variance regression score.
