@@ -84,14 +84,29 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   }
 
   @Override
-  public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
     try {
-      requestHandler.channelUnregistered();
+      requestHandler.channelActive();
+    } catch (RuntimeException e) {
+      logger.error("Exception from request handler while registering channel", e);
+    }
+    try {
+      responseHandler.channelActive();
+    } catch (RuntimeException e) {
+      logger.error("Exception from response handler while registering channel", e);
+    }
+    super.channelRegistered(ctx);
+  }
+
+  @Override
+  public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    try {
+      requestHandler.channelInactive();
     } catch (RuntimeException e) {
       logger.error("Exception from request handler while unregistering channel", e);
     }
     try {
-      responseHandler.channelUnregistered();
+      responseHandler.channelInactive();
     } catch (RuntimeException e) {
       logger.error("Exception from response handler while unregistering channel", e);
     }

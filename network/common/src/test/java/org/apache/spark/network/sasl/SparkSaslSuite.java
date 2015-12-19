@@ -160,7 +160,7 @@ public class SparkSaslSuite {
       long deadline = System.nanoTime() + TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
       while (deadline > System.nanoTime()) {
         try {
-          verify(rpcHandler, times(2)).connectionTerminated(any(TransportClient.class));
+          verify(rpcHandler, times(2)).channelInactive(any(TransportClient.class));
           error = null;
           break;
         } catch (Throwable t) {
@@ -362,8 +362,8 @@ public class SparkSaslSuite {
     saslHandler.getStreamManager();
     verify(handler).getStreamManager();
 
-    saslHandler.connectionTerminated(null);
-    verify(handler).connectionTerminated(any(TransportClient.class));
+    saslHandler.channelInactive(null);
+    verify(handler).channelInactive(any(TransportClient.class));
 
     saslHandler.exceptionCaught(null, null);
     verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
