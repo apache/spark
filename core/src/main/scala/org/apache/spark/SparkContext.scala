@@ -1248,7 +1248,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Get an RDD that has no partitions or elements. */
-  def emptyRDD[T: ClassTag]: EmptyRDD[T] = new EmptyRDD[T](this)
+  def emptyRDD[T: ClassTag]: RDD[T] = new EmptyRDD[T](this)
 
   // Methods for creating shared variables
 
