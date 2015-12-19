@@ -35,7 +35,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path,LocalFileSystem}
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
   FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
@@ -2072,14 +2072,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Otherwise, the driver may attempt to reconstruct the checkpointed RDD from
     // its own local file system, which is incorrect because the checkpoint files
     // are actually on the executor machines.
-    if (!isLocal && Utils.nonLocalPaths(directory).isEmpty) {
+    val path = new Path(directory, UUID.randomUUID().toString)
+    val fs = path.getFileSystem(hadoopConfiguration)
+    val isDirLocal = fs.isInstanceOf[LocalFileSystem]
+    if (!isLocal && Utils.nonLocalPaths(directory).isEmpty && !isDirLocal) {
       logWarning("Checkpoint directory must be non-local " +
         "if Spark is running on a cluster: " + directory)
     }
 
     checkpointDir = Option(directory).map { dir =>
-      val path = new Path(dir, UUID.randomUUID().toString)
-      val fs = path.getFileSystem(hadoopConfiguration)
       fs.mkdirs(path)
       fs.getFileStatus(path).getPath.toString
     }
