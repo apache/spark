@@ -1157,52 +1157,41 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-12398 truncated toString") {
-    val df1 = Seq((1: Long, "row1": String)).toDF("id", "name")
+    val df1 = Seq((1L, "row1")).toDF("id", "name")
     assert(df1.toString() === "[id: bigint, name: string]")
 
-    val df2 = Seq((1: Long, "c2": String, false: Boolean)).toDF("c1", "c2", "c3")
+    val df2 = Seq((1L, "c2", false)).toDF("c1", "c2", "c3")
     assert(df2.toString === "[c1: bigint, c2: string ... 1 more field]")
 
-    val df3 = Seq((1: Long, "c2": String, false: Boolean, 10: Integer)).toDF("c1", "c2", "c3", "c4")
+    val df3 = Seq((1L, "c2", false, 10)).toDF("c1", "c2", "c3", "c4")
     assert(df3.toString === "[c1: bigint, c2: string ... 2 more fields]")
 
-    val df4 = Seq((1: Long, Tuple2(1: Long, "val": String))).toDF("c1", "c2")
-    assert(df4.toString === "[c1: bigint, c2: struct<_1: bigint,_2: string>]")
+    val df4 = Seq((1L, Tuple2(1L, "val"))).toDF("c1", "c2")
+    assert(df4.toString === "[c1: bigint, c2: struct<_1: bigint, _2: string>]")
 
-    val df5 = Seq((1: Long, Tuple2(1: Long, "val": String), 20.0: Double)).toDF("c1", "c2", "c3")
-    assert(df5.toString === "[c1: bigint, c2: struct<_1: bigint,_2: string> ... 1 more field]")
+    val df5 = Seq((1L, Tuple2(1L, "val"), 20.0)).toDF("c1", "c2", "c3")
+    assert(df5.toString === "[c1: bigint, c2: struct<_1: bigint, _2: string> ... 1 more field]")
 
-    val df6 =
-      Seq((1: Long,
-        Tuple2(1: Long, "val": String),
-        20.0: Double, 1: Integer)).toDF("c1", "c2", "c3", "c4")
-    assert(df6.toString === "[c1: bigint, c2: struct<_1: bigint,_2: string> ... 2 more fields]")
+    val df6 = Seq((1L, Tuple2(1L, "val"), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
+    assert(df6.toString === "[c1: bigint, c2: struct<_1: bigint, _2: string> ... 2 more fields]")
 
-    val df7 =
-      Seq((1: Long,
-        Tuple3(1: Long, "val": String, 2: Short),
-        20.0: Double, 1: Integer)).toDF("c1", "c2", "c3", "c4")
+    val df7 = Seq((1L, Tuple3(1L, "val", 2), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
     assert(
       df7.toString ===
-        "[c1: bigint, c2: struct<_1: bigint,_2: string ... 1 more field> ... 2 more fields]")
+        "[c1: bigint, c2: struct<_1: bigint, _2: string ... 1 more field> ... 2 more fields]")
 
-    val df8 =
-      Seq((1: Long,
-        Tuple7(1: Long, "val": String, 2: Short, 3: Integer, 4: Integer, 5: Integer, 6: Integer ),
-        20.0: Double, 1: Integer)).toDF("c1", "c2", "c3", "c4")
+    val df8 = Seq((1L, Tuple7(1L, "val", 2, 3, 4, 5, 6), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
     assert(
       df8.toString ===
-        "[c1: bigint, c2: struct<_1: bigint,_2: string ... 5 more fields> ... 2 more fields]")
+        "[c1: bigint, c2: struct<_1: bigint, _2: string ... 5 more fields> ... 2 more fields]")
 
     val df9 =
-      Seq((1: Long,
-        Tuple4(1: Long, Tuple4(1: Long, 2: Long, 3: Long, 4: Long), 2: Long, 3: Long),
-        20.0: Double, 1: Integer)).toDF("c1", "c2", "c3", "c4")
+      Seq((1L, Tuple4(1L, Tuple4(1L, 2L, 3L, 4L), 2L, 3L), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
     assert(
       df9.toString ===
         "[c1: bigint, c2: struct<_1: bigint," +
-          "_2: struct<_1: bigint," +
-          "_2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
+          " _2: struct<_1: bigint," +
+          " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
 
   }
 }
