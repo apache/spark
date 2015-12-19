@@ -215,6 +215,14 @@ class TaskMetrics extends Serializable {
     inputMetrics.foreach(_.updateBytesRead())
   }
 
+  override def equals(other: Any): Boolean = other match {
+    case that: TaskMetrics => {
+      if (this.hostname == null && that.hostname != null) return false
+      this.hostname.equals(that.hostname)
+    }
+    case _ => false
+  }
+
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
