@@ -235,7 +235,7 @@ abstract class QueryTest extends PlanTest {
              |Failed to rebuild the logical plan from JSON:
              |${logicalPlan.treeString}
              |
-             |$jsonString
+             |${logicalPlan.prettyJson}
            """.stripMargin, e)
     }
 

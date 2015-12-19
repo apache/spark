@@ -480,9 +480,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     s"$nodeName(${args.mkString(",")})"
   }
 
-  def toJSON: String = {
-    pretty(render(jsonValue))
-  }
+  def toJSON: String = compact(render(jsonValue))
+
+  def prettyJson: String = pretty(render(jsonValue))
 
   private def jsonValue: JValue = {
     val jsonValues = scala.collection.mutable.ArrayBuffer.empty[JValue]
