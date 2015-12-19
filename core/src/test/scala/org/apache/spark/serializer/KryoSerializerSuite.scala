@@ -159,9 +159,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf.clone.set("spark.kryo.registrationRequired", "true"))
       .newInstance()
     def check[T: ClassTag](t: T) {
-      assert(ser.deserialize[T](ser.serialize(t)) === t)
+      assert(ser.deserialize[T](ser.serialize(t)).equals(t))
     }
-    check(new DirectTaskResult[Int](ser.serialize(1), mutable.Map.empty, new TaskMetrics))
+    var metrics = new TaskMetrics
+    metrics.setHostname(Utils.localHostName())
+    check(new DirectTaskResult[Int](ser.serialize(1), mutable.Map.empty, metrics))
     check(new IndirectTaskResult[Any](TaskResultBlockId(1), 2))
   }
 
