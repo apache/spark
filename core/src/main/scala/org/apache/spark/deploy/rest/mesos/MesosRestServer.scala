@@ -99,11 +99,7 @@ private[mesos] class MesosSubmitRequestServlet(
     // cause spark-submit script to look for files in SPARK_HOME instead.
     // We only need the ability to specify where to find spark-submit script
     // which user can user spark.executor.home or spark.home configurations.
-    //
-    // Do not use `filterKeys` here to avoid SI-6654, which breaks ZK persistence
-    val environmentVariables = request.environmentVariables.filter { case (k, _) =>
-      k != "SPARK_HOME"
-    }
+    val environmentVariables = request.environmentVariables.filterKeys(!_.equals("SPARK_HOME"))
     val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
 
     // Construct driver description
