@@ -35,6 +35,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult}
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
