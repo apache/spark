@@ -68,7 +68,7 @@ Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.reco
 
 {% include_example scala/org/apache/spark/examples/mllib/RecommendationExample.scala %}
 
-If the rating matrix is derived from another source of information (e.g., it is inferred from
+If the rating matrix is derived from another source of information (e.g. it is inferred from
 other signals), you can use the `trainImplicit` method to get better results.
 
 {% highlight scala %}
@@ -99,7 +99,7 @@ Refer to the [`ALS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.rec
 
 {% include_example python/mllib/recommendation_example.py %}
 
-If the rating matrix is derived from other source of information (i.e., it is inferred from other
+If the rating matrix is derived from other source of information (e.g. it is inferred from other
 signals), you can use the trainImplicit method to get better results.
 
 {% highlight python %}
