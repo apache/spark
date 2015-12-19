@@ -110,6 +110,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
+    kryo.register(classOf[TaskMetrics], new KryoJavaSerializer())
     kryo.register(classOf[DirectTaskResult[_]], new KryoJavaSerializer())
     kryo.register(classOf[IndirectTaskResult[_]], new KryoJavaSerializer())
 
