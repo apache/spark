@@ -116,7 +116,11 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   @Override
-  public void channelUnregistered() {
+  public void channelActive() {
+  }
+
+  @Override
+  public void channelInactive() {
     if (numOutstandingRequests() > 0) {
       String remoteAddress = NettyUtils.getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
