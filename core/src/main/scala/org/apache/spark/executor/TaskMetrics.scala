@@ -247,7 +247,7 @@ private[spark] object TaskMetrics {
   def empty: TaskMetrics = new TaskMetrics
 
   def getCachedHostName(host: String): String = {
-    val canonicalHost = hostNameCache.putIfAbsent(host, host)
+    val canonicalHost = hostNameCache != null ? hostNameCache.putIfAbsent(host, host) : null
     if (canonicalHost != null) canonicalHost else host
   }
 }
