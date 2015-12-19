@@ -106,6 +106,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     val unsafeRows = points.map(pointEncoder.toRow(_).copy())
     val df = DataFrame(sqlContext, LocalRelation(attributeSeq, unsafeRows))
     val decodedPoints = df.collect()
+    points.zip(decodedPoints).foreach { case (p, p2) =>
+      assert(p.label == p2(0) && p.features == p2(1))
+    }
   }
 
   test("UDTs and UDFs") {
