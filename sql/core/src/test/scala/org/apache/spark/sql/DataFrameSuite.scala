@@ -131,6 +131,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       df.explode('letters) {
         case Row(letters: String) => letters.split(" ").map(Tuple1(_)).toSeq
       }
+    assert(!df2.queryExecution.toString.contains("!"))
 
     checkAnswer(
       df2
@@ -157,10 +158,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("explode alias and star") {
-    val df = Seq((Array("a"), 1)).toDF("a", "b")
+    val df = Seq((Array("a"), 1)).toDF("a", "b").select(explode($"a").as("a"), $"*")
+    assert(!df.queryExecution.toString.contains("!"))
 
     checkAnswer(
-      df.select(explode($"a").as("a"), $"*"),
+      df,
       Row("a", Seq("a"), 1) :: Nil)
   }
 
@@ -177,9 +179,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("selectExpr with udtf") {
-    val df = Seq((Map("1" -> 1), 1)).toDF("a", "b")
+    val df = Seq((Map("1" -> 1), 1)).toDF("a", "b").selectExpr("explode(a)")
+    assert(!df.queryExecution.toString.contains("!"))
     checkAnswer(
-      df.selectExpr("explode(a)"),
+      df,
       Row("1", 1) :: Nil)
   }
 
