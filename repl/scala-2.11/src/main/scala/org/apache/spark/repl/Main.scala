@@ -37,7 +37,6 @@ object Main extends Logging {
   // the creation of SecurityManager has to be lazy so SPARK_YARN_MODE is set if needed
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
-  var useHiveContext: Boolean = conf.getBoolean("spark.sql.useHiveContext", true)
   var interp = new SparkILoop // this is a public var because tests reset it.
 
   private var hasErrors = false
@@ -100,6 +99,7 @@ object Main extends Logging {
   }
 
   def createSQLContext(): SQLContext = {
+    val useHiveContext = conf.getBoolean("spark.sql.useHiveContext", true)
     val name = {
       if (useHiveContext) "org.apache.spark.sql.hive.HiveContext"
       else "org.apache.spark.sql.SQLContext"
@@ -120,8 +120,8 @@ object Main extends Logging {
       case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError
         if useHiveContext =>
         sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context without Hive support, " +
-          "build Spark with -Phive to enable Hive support.")
+        logInfo("Created sql context without Hive support. " +
+          "To enable Hive support, build Spark with -Phive profile.")
     }
     sqlContext
   }

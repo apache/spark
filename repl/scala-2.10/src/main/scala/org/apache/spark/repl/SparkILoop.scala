@@ -132,7 +132,6 @@ class SparkILoop(
   @DeveloperApi
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
-  var useHiveContext: Boolean = _
 
   override def echoCommandMessage(msg: String) {
     intp.reporter printMessage msg
@@ -1027,7 +1026,7 @@ class SparkILoop(
 
   @DeveloperApi
   def createSQLContext(): SQLContext = {
-    useHiveContext = sparkContext.getConf.getBoolean("spark.sql.useHiveContext", true)
+    val useHiveContext = sparkContext.getConf.getBoolean("spark.sql.useHiveContext", true)
     val name = {
       if (useHiveContext) "org.apache.spark.sql.hive.HiveContext"
       else "org.apache.spark.sql.SQLContext"
@@ -1049,8 +1048,8 @@ class SparkILoop(
       case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError
         if useHiveContext =>
         sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context without Hive support, " +
-          "build Spark with -Phive to enable Hive support.")
+        logInfo("Created sql context without Hive support. " +
+          "To enable Hive support, build Spark with -Phive profile.")
     }
     sqlContext
   }
