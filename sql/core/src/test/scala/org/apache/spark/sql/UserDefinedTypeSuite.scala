@@ -20,9 +20,14 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 
 import scala.beans.{BeanInfo, BeanProperty}
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
+import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -87,6 +92,20 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     assert(featuresArrays.size === 2)
     assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
+  }
+
+  test("user type with ScalaReflection") {
+    val points = Seq(
+      MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
+      MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
+
+    val schema = ScalaReflection.schemaFor[MyLabeledPoint].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+
+    val pointEncoder = encoderFor[MyLabeledPoint]
+    val unsafeRows = points.map(pointEncoder.toRow(_).copy())
+    val df = DataFrame(sqlContext, LocalRelation(attributeSeq, unsafeRows))
+    val decodedPoints = df.collect()
   }
 
   test("UDTs and UDFs") {
