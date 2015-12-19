@@ -64,7 +64,7 @@ We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.rec
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
-Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for details on the API.
+Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/RecommendationExample.scala %}
 
@@ -85,7 +85,7 @@ Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a 
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
 
-Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for details on the API.
+Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for more details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaRecommendationExample.java %}
 </div>
