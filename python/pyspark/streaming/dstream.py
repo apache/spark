@@ -208,10 +208,10 @@ class DStream(object):
     def cache(self):
         """
         Persist the RDDs of this DStream with the default storage level
-        (C{MEMORY_ONLY_SER}).
+        (C{MEMORY_ONLY}).
         """
         self.is_cached = True
-        self.persist(StorageLevel.MEMORY_ONLY_SER)
+        self.persist(StorageLevel.MEMORY_ONLY)
         return self
 
     def persist(self, storageLevel):

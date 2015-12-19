@@ -1196,14 +1196,14 @@ storage levels is:
     partitions that don't fit on disk, and read them from there when they're needed. </td>
 </tr>
 <tr>
-  <td> MEMORY_ONLY_SER </td>
+  <td> MEMORY_ONLY_SER <br /> (Java and Scala) </td>
   <td> Store RDD as <i>serialized</i> Java objects (one byte array per partition).
     This is generally more space-efficient than deserialized objects, especially when using a
     <a href="tuning.html">fast serializer</a>, but more CPU-intensive to read.
   </td>
 </tr>
 <tr>
-  <td> MEMORY_AND_DISK_SER </td>
+  <td> MEMORY_AND_DISK_SER <br /> (Java and Scala) </td>
   <td> Similar to MEMORY_ONLY_SER, but spill partitions that don't fit in memory to disk instead of
     recomputing them on the fly each time they're needed. </td>
 </tr>
@@ -1230,7 +1230,9 @@ storage levels is:
 </tr>
 </table>
 
-**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, so it does not matter whether you choose a serialized level.*
+**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, 
+so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`, 
+`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, `DISK_ONLY_2` and `OFF_HEAP`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
 
@@ -1243,7 +1245,7 @@ efficiency. We recommend going through the following process to select one:
   This is the most CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
 
 * If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to
-make the objects much more space-efficient, but still reasonably fast to access.
+make the objects much more space-efficient, but still reasonably fast to access. (Java and Scala)
 
 * Don't spill to disk unless the functions that computed your datasets are expensive, or they filter
 a large amount of the data. Otherwise, recomputing a partition may be as fast as reading it from
