@@ -19,8 +19,7 @@ by a small set of latent factors that can be used to predict missing entries.
 algorithm to learn these latent factors. The implementation in `spark.ml` has the
 following parameters:
 
-* *numUserBlocks* is the number of blocks the users will be partitioned into in order to parallelize computaiton (defaults to 10).
-* *numItemBlocks* is the number of blocks the items will be partitioned into in order to parallelize computaiton (defaults to 10).
+* *numBlocks* is the number of blocks the users and items will be partitioned into in order to parallelize computation (defaults to 10).
 * *rank* is the number of latent factors in the model (defaults to 10).
 * *maxIter* is the maximum number of iterations to run (defaults to 10).
 * *regParam* specifies the regularization parameter in ALS (defaults to 1.0).
@@ -28,7 +27,7 @@ following parameters:
   *implicit feedback* data (defaults to `false` which means using *explicit feedback*).
 * *alpha* is a parameter applicable to the implicit feedback variant of ALS that governs the
   *baseline* confidence in preference observations (defaults to 1.0).
-* *nonnegative* specifies whether or not to use nonnegative constraints for ALS (defaults to `false`).
+* *nonnegative* specifies whether or not to use nonnegative constraints for least squares (defaults to `false`).
 
 ### Explicit vs. implicit feedback
 
@@ -59,61 +58,30 @@ and expect similar performance.
 ## Examples
 
 <div class="codetabs">
-
 <div data-lang="scala" markdown="1">
-In the following example we load rating data. Each row consists of a user, a product and a rating.
-We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS$) 
-method which assumes ratings are explicit. We evaluate the
-recommendation model by measuring the Mean Squared Error of rating prediction.
 
-Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for details on the API.
+Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.ml.recommendation.ALS)
+for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/RecommendationExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/ALSExample.scala %}
 
-If the rating matrix is derived from another source of information (e.g., it is inferred from
-other signals), you can use the `trainImplicit` method to get better results.
-
-{% highlight scala %}
-val alpha = 0.01
-val lambda = 0.01
-val model = ALS.trainImplicit(ratings, rank, numIterations, lambda, alpha)
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
-All of MLlib's methods use Java-friendly types, so you can import and call them there the same
-way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
-Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. A self-contained application example
-that is equivalent to the provided example in Scala is given below:
 
-Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for details on the API.
+Refer to the [`ALS` Java docs](api/java/org/apache/spark/ml/recommendation/ALS.html)
+for more details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaRecommendationExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaALSExample.java %}
+
 </div>
 
 <div data-lang="python" markdown="1">
-In the following example we load rating data. Each row consists of a user, a product and a rating.
-We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
-recommendation by measuring the Mean Squared Error of rating prediction.
 
-Refer to the [`ALS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.recommendation.ALS) for more details on the API.
+Refer to the [`ALS` Python docs](api/python/pyspark.ml.html#pyspark.ml.recommendation.ALS)
+for more details on the API.
 
-{% include_example python/mllib/recommendation_example.py %}
-
-If the rating matrix is derived from other source of information (i.e., it is inferred from other
-signals), you can use the trainImplicit method to get better results.
-
-{% highlight python %}
-# Build the recommendation model using Alternating Least Squares based on implicit ratings
-model = ALS.trainImplicit(ratings, rank, numIterations, alpha=0.01)
-{% endhighlight %}
-</div>
+{% include_example python/ml/als_example.py %}
 
 </div>
-
-In order to run the above application, follow the instructions
-provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
-section of the Spark
-Quick Start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
+</div>
