@@ -87,6 +87,7 @@ class Word2Vec extends Serializable with Logging {
    *                          while not overflow memory
    * @return this object
    */
+  @Since("1.6.1")
   def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
     this.maxSentenceLength = maxSentenceLength
     this
