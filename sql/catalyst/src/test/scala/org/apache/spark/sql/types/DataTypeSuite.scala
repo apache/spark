@@ -64,6 +64,35 @@ class DataTypeSuite extends SparkFunSuite {
     assert(StructField("c", StringType, true) === struct("c"))
   }
 
+  test("lightweight DSL for constructing schema") {
+    val actual = StructType(
+      "f0" -> IntegerType.!,
+      "f1" -> ArrayType(IntegerType).!,
+      "f2" -> MapType(
+        IntegerType,
+        StructType(
+          "f20" -> DoubleType.!,
+          "f21" -> StringType
+        ).!
+      )
+    )
+
+    val expected = StructType(Seq(
+      StructField("f0", IntegerType, nullable = false),
+      StructField("f1", ArrayType(IntegerType, containsNull = true), nullable = false),
+      StructField("f2", MapType(
+        IntegerType,
+        StructType(Seq(
+          StructField("f20", DoubleType, nullable = false),
+          StructField("f21", StringType, nullable = true)
+        )),
+        valueContainsNull = false
+      ), nullable = true)
+    ))
+
+    assert(actual === expected)
+  }
+
   test("extract fields from a StructType") {
     val struct = StructType(
       StructField("a", IntegerType, true) ::

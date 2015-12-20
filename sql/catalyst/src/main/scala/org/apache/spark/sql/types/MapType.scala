@@ -87,4 +87,9 @@ object MapType extends AbstractDataType {
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
     MapType(keyType: DataType, valueType: DataType, valueContainsNull = true)
+
+  def apply(keyType: DataType, valueTypeSpec: (DataType, Boolean)): MapType = {
+    val (valueType, valueContainsNull) = valueTypeSpec
+    apply(keyType, valueType, valueContainsNull)
+  }
 }

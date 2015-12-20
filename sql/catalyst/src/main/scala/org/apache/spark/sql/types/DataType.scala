@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import scala.language.implicitConversions
 import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
@@ -87,6 +88,62 @@ abstract class DataType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
+
+  /**
+   * This method and [[?]] are used together with constructors of complex types ([[ArrayType]],
+   * [[MapType]], and [[StructType]]), to indicate nullability of a struct field, an array element
+   * type.
+   *
+   * Examples:
+   *
+   *  - `StructType`:
+   *
+   *    {{{
+   *      StructType(
+   *        "a" -> IntegerType.!,
+   *        "b" -> StringType.?
+   *      )
+   *    }}}
+   *    is equivalent to
+   *    {{{
+   *      StructType(Seq(
+   *        StructField("a", IntegerType, nullable = false),
+   *        StructField("b", IntegerType, nullable = true)
+   *      ))
+   *    }}}
+   *
+   *  - `ArrayType`:
+   *
+   *    {{{
+   *      ArrayType(IntegerType.!)
+   *    }}}
+   *    is equivalent to
+   *    {{{
+   *      ArrayType(IntegerType, containsNull = false)
+   *    }}}
+   *
+   *  - `MapType`:
+   *
+   *    {{{
+   *      MapType(IntegerType, StringType.?)
+   *    }}}
+   *    is equivalent to
+   *    {{{
+   *      MapType(IntegerType, StringType, valueContainsNull = true)
+   *    }}}
+   *
+   * @see [[?]]
+   */
+  def ! : (DataType, Boolean) = (this, false)
+
+  /**
+   * This method and [[!]] are used together with constructors of complex types ([[ArrayType]],
+   * [[MapType]], and [[StructType]]), to indicate nullability of a struct field, an array element
+   * type.
+   *
+   * @see [[!]] for examples
+   */
+  def ? : (DataType, Boolean) = (this, true)
 }
 
 
@@ -317,4 +374,6 @@ object DataType {
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
+
+  implicit def dataTypeWithNullability(dataType: DataType): (DataType, Boolean) = dataType -> true
 }
