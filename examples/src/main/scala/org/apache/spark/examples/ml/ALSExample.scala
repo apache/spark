@@ -31,14 +31,22 @@ object ALSExample {
     val conf = new SparkConf().setAppName("ALSExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
     // $example on$
-    // Load the data stored in csv format as a DataFrame.
-    val data = sc.textFile("data/mllib/als/test.data")
-    val ratings = data.map(_.split(',') match { case Array(user, item, rating) =>
-      (user.toInt, item.toInt, rating.toFloat)
-    }).toDF("user", "item", "rating")
+    val data = sqlContext.createDataFrame(Seq(
+      (1, 1, 5.0),
+      (1, 2, 1.0),
+      (1, 4, 1.0),
+      (2, 1, 5.0),
+      (2, 2, 1.0),
+      (2, 3, 5.0),
+      (3, 2, 5.0),
+      (3, 3, 1.0),
+      (3, 4, 5.0),
+      (4, 1, 1.0),
+      (4, 3, 1.0),
+      (4, 4, 5.0)
+    )).toDF("user", "item", "rating")
 
     // Build the recommandation model using ALS
     val als = new ALS()
@@ -47,10 +55,10 @@ object ALSExample {
       .setUserCol("user")
       .setItemCol("item")
       .setRatingCol("rating")
-    val model = als.fit(ratings)
+    val model = als.fit(data)
 
     // Evaluating the model by computing the RMSE on the same dataset
-    val predictions = model.transform(ratings)
+    val predictions = model.transform(data)
     val mse = predictions
       .select("rating", "prediction")
       .map { case Row(rating: Float, prediction: Float) =>
