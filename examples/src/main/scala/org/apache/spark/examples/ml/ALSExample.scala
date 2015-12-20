@@ -27,10 +27,6 @@ import org.apache.spark.sql.Row
 
 object ALSExample {
 
-  // $example on$
-  case class Rating(userId: Int, itemId: Int, rating: Float)
-  // $example off$
-
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("ALSExample")
     val sc = new SparkContext(conf)
@@ -41,7 +37,7 @@ object ALSExample {
     // Load the data stored in csv format as a DataFrame.
     val data = sc.textFile("data/mllib/als/test.data")
     val ratings = data.map(_.split(',') match { case Array(user, item, rating) =>
-      Rating(user.toInt, item.toInt, rating.toFloat)
+      (user.toInt, item.toInt, rating.toFloat)
     }).toDF("user", "item", "rating")
 
     // Build the recommandation model using ALS
