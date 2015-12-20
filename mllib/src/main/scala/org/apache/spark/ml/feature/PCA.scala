@@ -168,7 +168,7 @@ object PCAModel extends MLReadable[PCAModel] {
     private val className = classOf[PCAModel].getName
 
     /**
-     * Loads a [[PCAModel]] from data the input path. Note that the model includes an
+     * Loads a [[PCAModel]] from data located at the input path. Note that the model includes an
      * `explainedVariance` member that is not recorded by Spark 1.6 and earlier. A model
      * can be loaded from such older data but will have an empty vector for
      * `explainedVariance`.
