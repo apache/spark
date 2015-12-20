@@ -154,8 +154,8 @@ case class Range(
           }
         val safePartitionStart = getSafeMargin(partitionStart)
         val safePartitionEnd = getSafeMargin(partitionEnd)
-        // The extra 8 bytes are for the bitset
-        val unsafeRow = UnsafeRow.createFromByteArray(LongType.defaultSize + 8, 1)
+        val rowSize = UnsafeRow.calculateBitSetWidthInBytes(1) + LongType.defaultSize
+        val unsafeRow = UnsafeRow.createFromByteArray(rowSize, 1)
 
         new Iterator[InternalRow] {
           private[this] var number: Long = safePartitionStart
