@@ -517,7 +517,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e.getMessage.contains("cannot resolve 'c' given input columns a, b"), e.getMessage)
   }
 
-  test("check nullability") {
+  test("analysis time nullability check") {
     val rowRDD = sqlContext.sparkContext.parallelize(Seq(
       Row(Row("hello", 1: Integer)),
       Row(Row("world", null))
@@ -542,6 +542,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         |  |    |-- b: integer (nullable = false)    |    |-- b: integer (nullable = false)
       """.stripMargin
     ))
+  }
+
+  test("runtime nullability check") {
+    val schema = StructType(Seq(
+      StructField("f", StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", IntegerType, nullable = false)
+      )), nullable = true)
+    ))
+
+    def buildDataset(rows: Row*): Dataset[NestedStruct] = {
+      val rowRDD = sqlContext.sparkContext.parallelize(rows)
+      sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct]
+    }
+
+    checkAnswer(
+      buildDataset(Row(Row("hello", 1))),
+      NestedStruct(ClassData("hello", 1))
+    )
+
+    // Shouldn't throw runtime exception when parent object (`ClassData`) is null
+    assert(buildDataset(Row(null)).collect() === Array(NestedStruct(null)))
+
+    val message = intercept[RuntimeException] {
+      buildDataset(Row(Row("hello", null))).collect()
+    }.getMessage
+
+    assert(message.contains("Null value appeared in non-nullable field"))
   }
 }
 
