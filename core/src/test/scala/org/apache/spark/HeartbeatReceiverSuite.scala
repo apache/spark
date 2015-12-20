@@ -212,6 +212,7 @@ class HeartbeatReceiverSuite
       executorId: String,
       executorShouldReregister: Boolean): Unit = {
     val metrics = new TaskMetrics
+    metrics.setHostname("localhost")
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
       Heartbeat(executorId, Array(1L -> metrics), blockManagerId))
