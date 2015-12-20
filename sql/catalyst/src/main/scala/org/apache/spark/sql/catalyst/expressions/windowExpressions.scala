@@ -353,6 +353,18 @@ abstract class OffsetWindowFunction
   override def toString: String = s"$prettyName($input, $offset, $default)"
 }
 
+/**
+ * The Lead function returns the value of 'x' at 'offset' rows after the current row in the window.
+ * Offsets start at 0, which is the current row. The offset must be constant integer value. The
+ * default offset is 1. When the value of 'x' is null at the offset, or when the offset is larger
+ * than the window, the default expression is evaluated.
+ *
+ * @param input expression to evaluate 'offset' rows after the current row.
+ * @param offset rows to jump ahead in the partition.
+ * @param default to use when the input value is null or when the offset is larger than the window.
+ */
+@ExpressionDescription(usage = "_FUNC_(input, offset, default) - LEAD returns the value of 'x' " +
+  "at 'offset' rows after the current row in the window")
 case class Lead(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -365,6 +377,18 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   override val direction = Ascending
 }
 
+/**
+ * The Lag function returns the value of 'x' at 'offset' rows before the current row in the window.
+ * Offsets start at 0, which is the current row. The offset must be constant integer value. The
+ * default offset is 1. When the value of 'x' is null at the offset, or when the offset is smaller
+ * than the window, the default expression is evaluated.
+ *
+ * @param input expression to evaluate 'offset' rows before the current row.
+ * @param offset rows to jump back in the partition.
+ * @param default to use when the input value is null or when the offset is smaller than the window.
+ */
+@ExpressionDescription(usage = "_FUNC_(input, offset, default) - LAG returns the value of 'x' " +
+  "at 'offset' rows before the current row in the window")
 case class Lag(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -409,10 +433,25 @@ object SizeBasedWindowFunction {
   val n = AttributeReference("window__partition__size", IntegerType, nullable = false)()
 }
 
+/**
+ * The RowNumber function computes a unique, sequential number to each row, starting with one,
+ * according to the ordering of rows within the window partition.
+ */
+@ExpressionDescription(usage = "_FUNC_() - The ROW_NUMBER() function assigns a unique, sequential" +
+  "number to each row, starting with one, according to the ordering of rows within the window" +
+  "partition.")
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
 }
 
+/**
+ * The CumeDist function computes the position of a value relative to a all values in the partition.
+ * The result is the number of rows preceding or equal to the current row in the ordering of the
+ * partition divided by the total number of rows in the window partition. Any tie values in the
+ * ordering will evaluate to the same position.
+ */
+@ExpressionDescription(usage = "_FUNC_(x) - The CUME_DIST() function computes the position of a " +
+  "value relative to a all values in the partition.")
 case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
@@ -421,6 +460,19 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
 }
 
+/**
+ * The NTile function divides the rows for each window partition into 'n' buckets ranging from 1 to
+ * at most 'n'. Bucket values will differ by at most 1. If the number of rows in the partition does
+ * not divide evenly into the number of buckets, then the remainder values are distributed one per
+ * bucket, starting with the first bucket.
+ *
+ * The NTile function is particularly useful for the calculation of tertiles, quartiles, deciles and
+ * other common summary statistics
+ *
+ * @param buckets number of buckets to divide the rows in.
+ */
+@ExpressionDescription(usage = "_FUNC_(x) - The NTILE(n) function divides the rows for each " +
+  "window partition into 'n' buckets ranging from 1 to at most 'n'.")
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
@@ -513,11 +565,35 @@ abstract class RankLike extends AggregateWindowFunction {
   def withOrder(order: Seq[Expression]): RankLike
 }
 
+/**
+ * The Rank function computes the rank of a value in a group of values. The result is one plus the
+ * number of rows preceding or equal to the current row in the ordering of the partition. Tie values
+ * will produce gaps in the sequence.
+ *
+ * @param children to base the rank on; a change in the value of one the children will trigger a
+ *                 change in rank. This is an internal parameter and will be assigned by the
+ *                 Analyser.
+ */
+@ExpressionDescription(usage = "_FUNC_(x) -  RANK() computes the rank of a value in a group of" +
+  "values. The result is one plus the number of rows preceding or equal to the current row in " +
+  "the ordering of the partition. Tie values will produce gaps in the sequence.")
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
 }
 
+/**
+ * The DenseRank function computes the rank of a value in a group of values. The result is one plus
+ * the previously assigned rank values. Unlike Rank, DenseRank will not produce gaps in the ranking
+ * sequence.
+ *
+ * @param children to base the rank on; a change in the value of one the children will trigger a
+ *                 change in rank. This is an internal parameter and will be assigned by the
+ *                 Analyser.
+ */
+@ExpressionDescription(usage = "_FUNC_(x) - The DENSE_RANK() function computes the rank of a " +
+  "value in a group of values. The result is one plus the previously assigned rank values. " +
+  "Unlike Rank, DenseRank will not produce gaps in the ranking sequence.")
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
@@ -527,6 +603,20 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   override val initialValues = zero +: orderInit
 }
 
+/**
+ * The PercentRank function computes the percentage ranking of a value in a group of values. The
+ * result the rank of the minus one divided by the total number of rows in the partitiion minus one:
+ * (r - 1) / (n - 1). If a partition only contains one row, the function will return 0.
+ *
+ * The PercentRank function is similar to the CumeDist function, but it uses rank values instead of
+ * row counts in the its numerator.
+ *
+ * @param children to base the rank on; a change in the value of one the children will trigger a
+ *                 change in rank. This is an internal parameter and will be assigned by the
+ *                 Analyser.
+ */
+@ExpressionDescription(usage = "_FUNC_(x) - PERCENT_RANK() The PercentRank function computes the " +
+  "percentage ranking of a value in a group of values.")
 case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
