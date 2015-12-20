@@ -222,7 +222,7 @@ object JdbcUtils extends Logging {
       val name = field.name
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
-      sb.append(s", $name $typ $nullable")
+      sb.append(s", '$name' $typ $nullable")
     }}
     if (sb.length < 2) "" else sb.substring(2)
   }

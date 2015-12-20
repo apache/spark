@@ -296,7 +296,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       // Create the table if the table didn't exist.
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
-        val sql = s"CREATE TABLE $table ($schema)"
+        val sql = s"CREATE TABLE '$table' ($schema)"
         conn.createStatement.executeUpdate(sql)
       }
     } finally {
@@ -311,7 +311,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * This is equivalent to:
    * {{{
    *   format("json").save(path)
-   * }}}
+   * }}}$table
    *
    * @since 1.4.0
    */
