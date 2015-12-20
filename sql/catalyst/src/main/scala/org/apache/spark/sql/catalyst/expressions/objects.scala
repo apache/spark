@@ -655,7 +655,7 @@ case class AssertNotNull(
 
       if (${childGen.isNull}) {
         throw new RuntimeException(
-          "Null value appeared in non-nullable field $fieldType.$fieldName of type $fieldType. " +
+          "Null value appeared in non-nullable field $parentType.$fieldName of type $fieldType. " +
           "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
           "please try to use scala.Option[_] or other nullable types " +
           "(e.g. java.lang.Integer instead of int/scala.Int)."

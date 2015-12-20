@@ -569,7 +569,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       buildDataset(Row(Row("hello", null))).collect()
     }.getMessage
 
-    assert(message.contains("Null value appeared in non-nullable field"))
+    assert(message.contains(
+      "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
+    ))
   }
 }
 
