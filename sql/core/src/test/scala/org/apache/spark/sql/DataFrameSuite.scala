@@ -26,8 +26,9 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -139,6 +140,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
+  }
+
+  test("Generate can process unsafe rows") {
+    // InMemoryColumnarTableScan's outputsUnsafeRows is unsafe
+    val df = Seq((Map("AA" -> 3), 1), (Map("BB" -> 4), 2)).toDF("a", "b").persist()
+    val explodeDF = df.selectExpr("explode(a)")
+    val preparedPlan = explodeDF.queryExecution.executedPlan
+    // unsafe->safe convertor is not inserted between Generate and InMemoryColumnarTableScan
+    assert(preparedPlan.children.head.isInstanceOf[InMemoryColumnarTableScan])
+
+    checkAnswer(
+      explodeDF,
+      Row("AA", 3) :: Row("BB", 4) :: Nil)
   }
 
   test("SPARK-8930: explode should fail with a meaningful message if it takes a star") {

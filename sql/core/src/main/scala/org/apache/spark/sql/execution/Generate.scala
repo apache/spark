@@ -56,6 +56,10 @@ case class Generate(
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     if (join) {
