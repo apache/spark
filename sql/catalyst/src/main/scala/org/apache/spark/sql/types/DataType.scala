@@ -87,6 +87,10 @@ abstract class DataType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
+
+  def ! : (DataType, Boolean) = (this, false)
+
+  def ? : (DataType, Boolean) = (this, true)
 }
 
 

@@ -332,6 +332,15 @@ object StructType extends AbstractDataType {
     StructType(fields.asScala)
   }
 
+  def apply(
+      firstField: (String, (DataType, Boolean)),
+      restFields: (String, (DataType, Boolean))*): StructType = {
+    apply((firstField +: restFields).map {
+      case (name, (dataType, nullable)) =>
+        StructField(name, dataType, nullable)
+    })
+  }
+
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
