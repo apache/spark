@@ -48,7 +48,7 @@ object ALSExample {
       (4, 4, 5.0)
     )).toDF("user", "item", "rating")
 
-    // Build the recommandation model using ALS
+    // Build the recommendation model using ALS
     val als = new ALS()
       .setMaxIter(5)
       .setRegParam(0.01)
@@ -57,12 +57,12 @@ object ALSExample {
       .setRatingCol("rating")
     val model = als.fit(data)
 
-    // Evaluating the model by computing the RMSE on the same dataset
+    // Evaluate the model by computing the RMSE on the same dataset
     val predictions = model.transform(data)
     val mse = predictions
       .select("rating", "prediction")
-      .map { case Row(rating: Float, prediction: Float) =>
-        val err = rating.toDouble - prediction.toDouble
+      .map { case Row(rating: Double, prediction: Float) =>
+        val err = rating - prediction.toDouble
         err * err
       }.mean()
     val rmse = math.sqrt(mse)
