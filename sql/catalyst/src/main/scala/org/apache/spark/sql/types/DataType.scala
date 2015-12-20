@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import scala.language.implicitConversions
 import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
@@ -373,4 +374,6 @@ object DataType {
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
+
+  implicit def dataTypeWithNullability(dataType: DataType): (DataType, Boolean) = dataType -> true
 }

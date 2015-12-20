@@ -67,14 +67,14 @@ class DataTypeSuite extends SparkFunSuite {
   test("lightweight DSL for constructing schema") {
     val actual = StructType(
       "f0" -> IntegerType.!,
-      "f1" -> ArrayType(IntegerType.?).!,
+      "f1" -> ArrayType(IntegerType).!,
       "f2" -> MapType(
         IntegerType,
         StructType(
           "f20" -> DoubleType.!,
-          "f21" -> StringType.?
+          "f21" -> StringType
         ).!
-      ).?
+      )
     )
 
     val expected = StructType(Seq(
