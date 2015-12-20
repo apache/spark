@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
+import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -251,6 +252,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       grouped.keys,
       (1, 1))
+  }
+
+  test("MapPartitions can process unsafe rows") {
+    // InMemoryColumnarTableScan's outputsUnsafeRows is unsafe
+    val ds = sparkContext.makeRDD(Seq("a", "b", "c"), 3).toDS().cache()
+    val dsMapPartitions = ds.mapPartitions(_ => Iterator(1))
+    val preparedPlan = dsMapPartitions.queryExecution.executedPlan
+    // unsafe->safe convertor is not inserted between Generate and InMemoryColumnarTableScan
+    assert(preparedPlan.children.head.isInstanceOf[InMemoryColumnarTableScan])
+    checkAnswer(
+      dsMapPartitions,
+      1, 1, 1)
   }
 
   test("groupBy function, map") {
