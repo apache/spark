@@ -38,11 +38,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("toDS with RDD") {
     val ds = sparkContext.makeRDD(Seq("a", "b", "c"), 3).toDS()
+    val mapPartitionsDS = ds.mapPartitions(_ => Iterator(1))
+    assert(!mapPartitionsDS.queryExecution.toString.contains("!"))
+
     checkAnswer(
-      ds.mapPartitions(_ => Iterator(1)),
+      mapPartitionsDS,
       1, 1, 1)
   }
-
 
   test("SPARK-12404: Datatype Helper Serializablity") {
     val ds = sparkContext.parallelize((
@@ -317,6 +319,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1").keyAs[String]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
+    assert(!agged.queryExecution.toString.contains("!"))
 
     checkAnswer(
       agged,
@@ -385,6 +388,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) { case (key, data1, data2) =>
       Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
     }
+    assert(!cogrouped.queryExecution.toString.contains("!"))
 
     checkAnswer(
       cogrouped,
