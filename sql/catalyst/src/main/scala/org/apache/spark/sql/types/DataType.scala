@@ -88,8 +88,60 @@ abstract class DataType extends AbstractDataType {
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 
+  /**
+   * This method and [[?]] are used together with constructors of complex types ([[ArrayType]],
+   * [[MapType]], and [[StructType]]), to indicate nullability of a struct field, an array element
+   * type.
+   *
+   * Examples:
+   *
+   *  - `StructType`:
+   *
+   *    {{{
+   *      StructType(
+   *        "a" -> IntegerType.!,
+   *        "b" -> StringType.?
+   *      )
+   *    }}}
+   *    is equivalent to
+   *    {{{
+   *      StructType(Seq(
+   *        StructField("a", IntegerType, nullable = false),
+   *        StructField("b", IntegerType, nullable = true)
+   *      ))
+   *    }}}
+   *
+   *  - `ArrayType`:
+   *
+   *    {{{
+   *      ArrayType(IntegerType.!)
+   *    }}}
+   *    is equivalent to
+   *    {{{
+   *      ArrayType(IntegerType, containsNull = false)
+   *    }}}
+   *
+   *  - `MapType`:
+   *
+   *    {{{
+   *      MapType(IntegerType, StringType.?)
+   *    }}}
+   *    is equivalent to
+   *    {{{
+   *      MapType(IntegerType, StringType, valueContainsNull = true)
+   *    }}}
+   *
+   * @see [[?]]
+   */
   def ! : (DataType, Boolean) = (this, false)
 
+  /**
+   * This method and [[!]] are used together with constructors of complex types ([[ArrayType]],
+   * [[MapType]], and [[StructType]]), to indicate nullability of a struct field, an array element
+   * type.
+   *
+   * @see [[!]] for examples
+   */
   def ? : (DataType, Boolean) = (this, true)
 }
 
