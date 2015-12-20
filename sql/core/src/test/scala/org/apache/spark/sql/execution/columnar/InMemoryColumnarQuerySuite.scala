@@ -19,12 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
@@ -140,18 +135,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT * FROM test_fixed_decimal"),
       (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
-  }
-
-  test("decimal type with ScalaReflection") {
-    val data = (1 to 10)
-      .map(i => Tuple1(Decimal(i, 15, 10)))
-
-    val schema = ScalaReflection.schemaFor[Tuple1[Decimal]].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-    val dataEncoder = encoderFor[Tuple1[Decimal]]
-    val unsafeRows = data.map(dataEncoder.toRow(_).copy())
-    val df = DataFrame(sqlContext, LocalRelation(attributeSeq, unsafeRows))
-    assert(df.collect() === (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
   }
 
   test("test different data types") {

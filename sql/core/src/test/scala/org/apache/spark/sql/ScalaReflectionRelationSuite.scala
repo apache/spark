@@ -20,6 +20,12 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.types.{Decimal, StructType}
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class ReflectData(
@@ -137,5 +143,17 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
           Map(10 -> 100L, 20 -> 200L),
           Map(10 -> 100L, 20 -> 200L, 30 -> null),
           Row(null, "abc"))))
+  }
+
+  test("decimal type with ScalaReflection") {
+    val data = (1 to 10)
+      .map(i => Tuple1(Decimal(i, 15, 10)))
+
+    val schema = ScalaReflection.schemaFor[Tuple1[Decimal]].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    val dataEncoder = encoderFor[Tuple1[Decimal]]
+    val unsafeRows = data.map(dataEncoder.toRow(_).copy())
+    val df = DataFrame(sqlContext, LocalRelation(attributeSeq, unsafeRows))
+    assert(df.collect() === (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
   }
 }
