@@ -61,6 +61,7 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< definitions.ByteTpe => ByteType
       case t if t <:< definitions.BooleanTpe => BooleanType
       case t if t <:< localTypeOf[Array[Byte]] => BinaryType
+      case t if t <:< localTypeOf[Decimal] => DecimalType.SYSTEM_DEFAULT
       case _ =>
         val className = getClassNameFromType(tpe)
         className match {
