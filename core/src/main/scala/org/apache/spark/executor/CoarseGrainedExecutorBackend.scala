@@ -20,20 +20,18 @@ package org.apache.spark.executor
 import java.net.URL
 import java.nio.ByteBuffer
 
-import org.apache.hadoop.conf.Configuration
-
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 
-import org.apache.spark.rpc._
-import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
+import org.apache.spark.rpc._
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.spark.util.{SignalLogger, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -203,6 +201,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   }
 
   def main(args: Array[String]) {
+    log.info(s"Started executor with process name: ${Utils.getProcessName()}")
+
     var driverUrl: String = null
     var executorId: String = null
     var hostname: String = null

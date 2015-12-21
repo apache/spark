@@ -121,6 +121,7 @@ private[spark] class MesosExecutorBackend
  */
 private[spark] object MesosExecutorBackend extends Logging {
   def main(args: Array[String]) {
+    log.info(s"Started executor with process name: ${Utils.getProcessName()}")
     SignalLogger.register(log)
     // Create a new Executor and start it running
     val runner = new MesosExecutorBackend()
