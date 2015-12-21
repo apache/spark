@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
-import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.execution.ConvertToSafe
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -260,7 +260,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val dsMapPartitions = ds.mapPartitions(_ => Iterator(1))
     val preparedPlan = dsMapPartitions.queryExecution.executedPlan
     // unsafe->safe convertor is not inserted between Generate and InMemoryColumnarTableScan
-    assert(preparedPlan.children.head.isInstanceOf[InMemoryColumnarTableScan])
+    assert(preparedPlan.find(_.isInstanceOf[ConvertToSafe]).isEmpty)
     checkAnswer(
       dsMapPartitions,
       1, 1, 1)
