@@ -60,28 +60,86 @@ and expect similar performance.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
+In the following example, we load rating data, each row consisting of a user, an
+item and a rating.
+We then train an ALS model which assumes, by default, that the ratings are
+explicit (`implicitPrefs` is `false`).
+We evaluate the recommendation model by measuring the root-mean-square error of
+rating prediction.
+
 Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.ml.recommendation.ALS)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ALSExample.scala %}
 
+If the rating matrix is derived from another source of information (e.g. it is
+inferred from other signals), you can set `implicitPrefs` to `true` to get
+better results:
+
+{% highlight scala %}
+val als = new ALS()
+  .setMaxIter(5)
+  .setRegParam(0.01)
+  .setImplicitPrefs(true)
+  .setUserCol("user")
+  .setItemCol("item")
+  .setRatingCol("rating")
+{% endhighlight %}
+
 </div>
 
 <div data-lang="java" markdown="1">
+
+In the following example, we load rating data, each row consisting of a user, an
+item and a rating.
+We then train an ALS model which assumes, by default, that the ratings are
+explicit (`implicitPrefs` is `false`).
+We evaluate the recommendation model by measuring the root-mean-square error of
+rating prediction.
 
 Refer to the [`ALS` Java docs](api/java/org/apache/spark/ml/recommendation/ALS.html)
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaALSExample.java %}
 
+If the rating matrix is derived from another source of information (e.g. it is
+inferred from other signals), you can set `implicitPrefs` to `true` to get
+better results:
+
+{% highlight java %}
+ALS als = new ALS()
+  .setMaxIter(5)
+  .setRegParam(0.01)
+  .setImplicitPrefs(true)
+  .setUserCol("user")
+  .setItemCol("item")
+  .setRatingCol("rating");
+{% endhighlight %}
+
 </div>
 
 <div data-lang="python" markdown="1">
+
+In the following example, we load rating data, each row consisting of a user, an
+item and a rating.
+We then train an ALS model which assumes, by default, that the ratings are
+explicit (`implicitPrefs` is `False`).
+We evaluate the recommendation model by measuring the root-mean-square error of
+rating prediction.
 
 Refer to the [`ALS` Python docs](api/python/pyspark.ml.html#pyspark.ml.recommendation.ALS)
 for more details on the API.
 
 {% include_example python/ml/als_example.py %}
+
+If the rating matrix is derived from another source of information (e.g. it is
+inferred from other signals), you can set `implicitPrefs` to `True` to get
+better results:
+
+{% highlight python %}
+als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
+          userCol="user", itemCol="item", ratingCol="rating")
+{% endhighlight %}
 
 </div>
 </div>
