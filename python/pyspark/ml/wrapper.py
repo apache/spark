@@ -131,8 +131,10 @@ class JavaEstimator(Estimator, JavaWrapper):
 
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
-        return self._create_model(java_model)
-
+        a = self._create_model(java_model)                                           
+        a._paramMap = self.extractParamMap()                                         
+        return a 
+        
 
 @inherit_doc
 class JavaTransformer(Transformer, JavaWrapper):
