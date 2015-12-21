@@ -46,10 +46,31 @@ def get_ldap_connection(dn=None, password=None):
 
     return conn
 
+def group_contains_user(conn, search_base, group_filter, user_name_attr, username):
+    if not search_base or not group_filter:
+        LOG.debug("Skipping group check for %s %s", search_base, group_filter)
+        # Normally, would return false here. Return true to maintain backwards compatibility with legacy
+        # behavior, which always returned true for superuser and data profiler.
+        return True
+    else:
+        search_filter = '(&({0}))'.format(group_filter)
+        if not conn.search(search_base, search_filter, attributes=[user_name_attr]):
+            LOG.warn("Unable to find group for %s %s", search_base, search_filter)
+        else:
+            for resp in conn.response:
+                if resp.has_key('attributes') and resp['attributes'].get(user_name_attr)[0] == username:
+                    return True
+    return False
+
 
 class LdapUser(models.User):
     def __init__(self, user):
         self.user = user
+
+        # Load and cache superuser and data_profiler settings.
+        conn = get_ldap_connection(configuration.get("ldap", "bind_user"), configuration.get("ldap", "bind_password"))
+        self.superuser = group_contains_user(conn, configuration.get("ldap", "basedn"), configuration.get("ldap", "superuser_filter"), configuration.get("ldap", "user_name_attr"), user.username)
+        self.data_profiler = group_contains_user(conn, configuration.get("ldap", "basedn"), configuration.get("ldap", "data_profiler_filter"), configuration.get("ldap", "user_name_attr"), user.username)
 
     @staticmethod
     def try_login(username, password):
@@ -97,11 +118,11 @@ class LdapUser(models.User):
 
     def data_profiling(self):
         '''Provides access to data profiling tools'''
-        return True
+        return self.data_profiler
 
     def is_superuser(self):
         '''Access all the things'''
-        return True
+        return self.superuser
 
 
 @login_manager.user_loader
