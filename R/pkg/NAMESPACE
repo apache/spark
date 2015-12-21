@@ -92,7 +92,9 @@ exportMethods("arrange",
               "with",
               "withColumn",
               "withColumnRenamed",
-              "write.df")
+              "write.df",
+              "write.json",
+              "write.parquet")
 
 exportClasses("Column")
 
@@ -267,9 +269,11 @@ export("as.DataFrame",
        "createExternalTable",
        "dropTempTable",
        "jsonFile",
+       "read.json",
        "loadDF",
        "parquetFile",
        "read.df",
+       "read.parquet",
        "sql",
        "table",
        "tableNames",

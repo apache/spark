@@ -258,7 +258,7 @@ class StreamingContext(object):
         """
         self._jssc.checkpoint(directory)
 
-    def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
+    def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_2):
         """
         Create an input from TCP source hostname:port. Data is received using
         a TCP socket and receive byte is interpreted as UTF8 encoded ``\\n`` delimited

@@ -244,13 +244,46 @@ case class ExpressionEncoder[T](
   def resolve(
       schema: Seq[Attribute],
       outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
-    val positionToAttribute = AttributeMap.toIndex(schema)
+    def fail(st: StructType, maxOrdinal: Int): Unit = {
+      throw new AnalysisException(s"Try to map ${st.simpleString} to Tuple${maxOrdinal + 1}, " +
+        "but failed as the number of fields does not line up.\n" +
+        " - Input schema: " + StructType.fromAttributes(schema).simpleString + "\n" +
+        " - Target schema: " + this.schema.simpleString)
+    }
+
+    var maxOrdinal = -1
+    fromRowExpression.foreach {
+      case b: BoundReference => if (b.ordinal > maxOrdinal) maxOrdinal = b.ordinal
+      case _ =>
+    }
+    if (maxOrdinal >= 0 && maxOrdinal != schema.length - 1) {
+      fail(StructType.fromAttributes(schema), maxOrdinal)
+    }
+
     val unbound = fromRowExpression transform {
-      case b: BoundReference => positionToAttribute(b.ordinal)
+      case b: BoundReference => schema(b.ordinal)
+    }
+
+    val exprToMaxOrdinal = scala.collection.mutable.HashMap.empty[Expression, Int]
+    unbound.foreach {
+      case g: GetStructField =>
+        val maxOrdinal = exprToMaxOrdinal.getOrElse(g.child, -1)
+        if (maxOrdinal < g.ordinal) {
+          exprToMaxOrdinal.update(g.child, g.ordinal)
+        }
+      case _ =>
+    }
+    exprToMaxOrdinal.foreach {
+      case (expr, maxOrdinal) =>
+        val schema = expr.dataType.asInstanceOf[StructType]
+        if (maxOrdinal != schema.length - 1) {
+          fail(schema, maxOrdinal)
+        }
     }
 
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
+    SimpleAnalyzer.checkAnalysis(analyzedPlan)
     val optimizedPlan = SimplifyCasts(analyzedPlan)
 
     // In order to construct instances of inner classes (for example those declared in a REPL cell),

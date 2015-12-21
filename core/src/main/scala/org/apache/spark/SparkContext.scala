@@ -457,6 +457,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
 
+    // If running the REPL, register the repl's output dir with the file server.
+    _conf.getOption("spark.repl.class.outputDir").foreach { path =>
+      val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
+      _conf.set("spark.repl.class.uri", replUri)
+    }
+
     _metadataCleaner = new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, _conf)
 
     _statusTracker = new SparkStatusTracker(this)
@@ -753,7 +759,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val numElements: BigInt = {
       val safeStart = BigInt(start)
       val safeEnd = BigInt(end)
-      if ((safeEnd - safeStart) % step == 0 || safeEnd > safeStart ^ step > 0) {
+      if ((safeEnd - safeStart) % step == 0 || (safeEnd > safeStart) != (step > 0)) {
         (safeEnd - safeStart) / step
       } else {
         // the remainder has the same sign with range, could add 1 more
@@ -1242,7 +1248,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Get an RDD that has no partitions or elements. */
-  def emptyRDD[T: ClassTag]: EmptyRDD[T] = new EmptyRDD[T](this)
+  def emptyRDD[T: ClassTag]: RDD[T] = new EmptyRDD[T](this)
 
   // Methods for creating shared variables
 

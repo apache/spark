@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst
 
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
-
-  protected[spark] def specializeSingleDistinctAggPlanning: Boolean
 }
 
 /**
@@ -31,13 +29,8 @@ object EmptyConf extends CatalystConf {
   override def caseSensitiveAnalysis: Boolean = {
     throw new UnsupportedOperationException
   }
-
-  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean = {
-    throw new UnsupportedOperationException
-  }
 }
 
 /** A CatalystConf that can be used for local testing. */
 case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf {
-  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean = true
 }

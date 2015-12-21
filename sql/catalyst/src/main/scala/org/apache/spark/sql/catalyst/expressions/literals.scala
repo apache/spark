@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.json4s.JsonAST._
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -54,6 +55,34 @@ object Literal {
    * into code generation.
    */
   def fromObject(obj: AnyRef): Literal = new Literal(obj, ObjectType(obj.getClass))
+
+  def fromJSON(json: JValue): Literal = {
+    val dataType = DataType.parseDataType(json \ "dataType")
+    json \ "value" match {
+      case JNull => Literal.create(null, dataType)
+      case JString(str) =>
+        val value = dataType match {
+          case BooleanType => str.toBoolean
+          case ByteType => str.toByte
+          case ShortType => str.toShort
+          case IntegerType => str.toInt
+          case LongType => str.toLong
+          case FloatType => str.toFloat
+          case DoubleType => str.toDouble
+          case StringType => UTF8String.fromString(str)
+          case DateType => java.sql.Date.valueOf(str)
+          case TimestampType => java.sql.Timestamp.valueOf(str)
+          case CalendarIntervalType => CalendarInterval.fromString(str)
+          case t: DecimalType =>
+            val d = Decimal(str)
+            assert(d.changePrecision(t.precision, t.scale))
+            d
+          case _ => null
+        }
+        Literal.create(value, dataType)
+      case other => sys.error(s"$other is not a valid Literal json value")
+    }
+  }
 
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
@@ -121,6 +150,18 @@ case class Literal protected (value: Any, dataType: DataType)
       dataType.equals(o.dataType) &&
         (value == null && null == o.value || value != null && value.equals(o.value))
     case _ => false
+  }
+
+  override protected def jsonFields: List[JField] = {
+    // Turns all kinds of literal values to string in json field, as the type info is hard to
+    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
+    val jsonValue = (value, dataType) match {
+      case (null, _) => JNull
+      case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
+      case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
+      case (other, _) => JString(other.toString)
+    }
+    ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
   }
 
   override def eval(input: InternalRow): Any = value
