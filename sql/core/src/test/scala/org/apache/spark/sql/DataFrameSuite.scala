@@ -769,6 +769,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     val res11 = sqlContext.range(-1).select("id")
     assert(res11.count == 0)
+
+    // using the default slice number
+    val res12 = sqlContext.range(3, 15, 3).select("id")
+    assert(res12.count == 4)
+    assert(res12.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
   }
 
   test("SPARK-8621: support empty string column name") {
