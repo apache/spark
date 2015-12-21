@@ -24,6 +24,8 @@ import java.util.regex.Pattern
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConverters._
+import scala.concurrent.{Future, ExecutionContext}
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
@@ -141,6 +143,7 @@ private[yarn] class YarnAllocator(
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
+  implicit private val executionContext = ExecutionContext.fromExecutor(launcherPool)
 
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)
@@ -472,41 +475,62 @@ private[yarn] class YarnAllocator(
    */
   private def runAllocatedContainers(containersToUse: ArrayBuffer[Container]): Unit = {
     for (container <- containersToUse) {
-      numExecutorsRunning += 1
-      assert(numExecutorsRunning <= targetNumExecutors)
+      executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
       val containerId = container.getId
-      executorIdCounter += 1
       val executorId = executorIdCounter.toString
-
       assert(container.getResource.getMemory >= resource.getMemory)
-
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
-      executorIdToContainer(executorId) = container
-      containerIdToExecutorId(container.getId) = executorId
 
-      val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
-        new HashSet[ContainerId])
+      def updateInternalState(): Unit = {
+        numExecutorsRunning += 1
+        assert(numExecutorsRunning <= targetNumExecutors)
+        executorIdToContainer(executorId) = container
+        containerIdToExecutorId(container.getId) = executorId
 
-      containerSet += containerId
-      allocatedContainerToHostMap.put(containerId, executorHostname)
+        val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
+          new HashSet[ContainerId])
+        containerSet += containerId
+        allocatedContainerToHostMap.put(containerId, executorHostname)
+      }
 
-      val executorRunnable = new ExecutorRunnable(
-        container,
-        conf,
-        sparkConf,
-        driverUrl,
-        executorId,
-        executorHostname,
-        executorMemory,
-        executorCores,
-        appAttemptId.getApplicationId.toString,
-        securityMgr,
-        localResources)
       if (launchContainers) {
         logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
           driverUrl, executorHostname))
-        launcherPool.execute(executorRunnable)
+
+        val future = Future {
+          new ExecutorRunnable(
+            container,
+            conf,
+            sparkConf,
+            driverUrl,
+            executorId,
+            executorHostname,
+            executorMemory,
+            executorCores,
+            appAttemptId.getApplicationId.toString,
+            securityMgr,
+            localResources)
+            .run()
+        }
+
+        future onSuccess {
+          case _ =>
+            // Only change the state when executor is successfully launched.
+            updateInternalState()
+        }
+
+        future onFailure {
+          case NonFatal(e) =>
+            logError(s"Failed to launch executor $executorId on container $containerId", e)
+            // Assigned container should be released immediately to avoid unnecessary resource
+            // occupation.
+            amClient.releaseAssignedContainer(containerId)
+          case t => throw t
+        }
+      } else {
+        // For test only
+        updateInternalState()
       }
     }
   }
