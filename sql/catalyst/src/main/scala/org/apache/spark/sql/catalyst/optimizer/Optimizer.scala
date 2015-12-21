@@ -58,6 +58,7 @@ object DefaultOptimizer extends Optimizer {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      CNFNormalization,
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
@@ -464,6 +465,27 @@ object OptimizeIn extends Rule[LogicalPlan] {
 }
 
 /**
+  * Convert an expression into its conjunctive normal form (CNF), i.e. AND of ORs.
+  * For example, a && b || c is normalized to (a || c) && (b || c) by this method.
+  *
+  * Refer to https://en.wikipedia.org/wiki/Conjunctive_normal_form for more information
+  */
+object CNFNormalization extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case or @ Or(left, right) => (left, right) match {
+        // reverse Or with its And child to eliminate (And under Or) occurrence
+        case (And(innerLhs, innerRhs), rhs) =>
+          And(Or(innerLhs, rhs), Or(innerRhs, rhs))
+        case (lhs, And(innerLhs, innerRhs)) =>
+          And(Or(lhs, innerLhs), Or(lhs, innerRhs))
+        case _ => or
+      }
+    }
+  }
+}
+
+/**
  * Simplifies boolean expressions:
  * 1. Simplifies expressions whose answer can be determined without evaluating both sides.
  * 2. Eliminates / extracts common factors.
@@ -489,13 +511,13 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case (l, Or(r, l1)) if (Not(l) == l1) => And(l, r)
         case (Or(l, l1), r) if (l1 == Not(r)) => And(l, r)
         case (Or(l1, l), r) if (l1 == Not(r)) => And(l, r)
-        // (a || b) && (a || c)  =>  a || (b && c)
+        // (a || b) && (a || b || c)  =>  a || b
         case _ =>
           // 1. Split left and right to get the disjunctive predicates,
-          //   i.e. lhs = (a, b), rhs = (a, c)
-          // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-          // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-          // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
+          //   i.e. lhs = (a, b), rhs = (a, b, c)
+          // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a, b)
+          // 3. If lhsSet or rhsSet contains only the common part, i.e. ldiff = ()
+          //   apply the formula, get the optimized predicate: common
           val lhs = splitDisjunctivePredicates(left)
           val rhs = splitDisjunctivePredicates(right)
           val common = lhs.filter(e => rhs.exists(e.semanticEquals(_)))
@@ -509,9 +531,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
               // (a || b || c || ...) && (a || b) => (a || b)
               common.reduce(Or)
             } else {
-              // (a || b || c || ...) && (a || b || d || ...) =>
-              // ((c || ...) && (d || ...)) || a || b
-              (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+              // both hand sides contain remaining parts, we cannot do simplification here
+              and
             }
           }
       }  // end of And(left, right)

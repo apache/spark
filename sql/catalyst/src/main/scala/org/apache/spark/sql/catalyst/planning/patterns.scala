@@ -62,8 +62,7 @@ object PhysicalOperation extends PredicateHelper {
       case Filter(condition, child) if condition.deterministic =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
-        (fields, filters ++ splitConjunctivePredicates(cnfNormalization(substitutedCondition)),
-          other, aliases)
+        (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
 
       case other =>
         (None, Nil, other, Map.empty)

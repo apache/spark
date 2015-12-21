@@ -37,6 +37,7 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
+        CNFNormalization,
         SimplifyFilters) :: Nil
   }
 
@@ -64,9 +65,9 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
     val resultFilterExpression = actual.collectFirst { case f: Filter => f.condition }.get
     val expectedFilterExpression = correctAnswer.collectFirst { case f: Filter => f.condition }.get
 
-    val exprs = splitConjunctivePredicates(cnfNormalization(resultFilterExpression))
+    val exprs = splitConjunctivePredicates(resultFilterExpression)
       .map(normalizeOrExpression).sortBy(_.toString)
-    val expectedExprs = splitConjunctivePredicates(cnfNormalization(expectedFilterExpression))
+    val expectedExprs = splitConjunctivePredicates(expectedFilterExpression)
       .map(normalizeOrExpression).sortBy(_.toString)
 
     assert(exprs === expectedExprs)
