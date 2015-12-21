@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -63,12 +64,12 @@ public class JavaVectorSlicerSuite {
     };
     AttributeGroup group = new AttributeGroup("userFeatures", attrs);
 
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(Vectors.sparse(3, new int[]{0, 1}, new double[]{-2.0, 2.3})),
       RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
-    ));
+    );
 
-    DataFrame dataset = jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
+    DataFrame dataset = jsql.createDataFrame(data, (new StructType()).add(group.toStructField()));
 
     VectorSlicer vectorSlicer = new VectorSlicer()
       .setInputCol("userFeatures").setOutputCol("features");

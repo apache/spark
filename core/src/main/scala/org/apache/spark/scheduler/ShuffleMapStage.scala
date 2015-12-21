@@ -23,7 +23,15 @@ import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
 /**
- * The ShuffleMapStage represents the intermediate stages in a job.
+ * ShuffleMapStages are intermediate stages in the execution DAG that produce data for a shuffle.
+ * They occur right before each shuffle operation, and might contain multiple pipelined operations
+ * before that (e.g. map and filter). When executed, they save map output files that can later be
+ * fetched by reduce tasks. The `shuffleDep` field describes the shuffle each stage is part of,
+ * and variables like `outputLocs` and `numAvailableOutputs` track how many map outputs are ready.
+ *
+ * ShuffleMapStages can also be submitted independently as jobs with DAGScheduler.submitMapStage.
+ * For such stages, the ActiveJobs that submitted them are tracked in `mapStageJobs`. Note that
+ * there can be multiple ActiveJobs trying to compute the same shuffle map stage.
  */
 private[spark] class ShuffleMapStage(
     id: Int,
@@ -35,19 +43,61 @@ private[spark] class ShuffleMapStage(
     val shuffleDep: ShuffleDependency[_, _, _])
   extends Stage(id, rdd, numTasks, parents, firstJobId, callSite) {
 
+  private[this] var _mapStageJobs: List[ActiveJob] = Nil
+
+  private[this] var _numAvailableOutputs: Int = 0
+
+  /**
+   * List of [[MapStatus]] for each partition. The index of the array is the map partition id,
+   * and each value in the array is the list of possible [[MapStatus]] for a partition
+   * (a single task might run multiple times).
+   */
+  private[this] val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+
   override def toString: String = "ShuffleMapStage " + id
 
-  var numAvailableOutputs: Int = 0
+  /**
+   * Returns the list of active jobs,
+   * i.e. map-stage jobs that were submitted to execute this stage independently (if any).
+   */
+  def mapStageJobs: Seq[ActiveJob] = _mapStageJobs
 
-  def isAvailable: Boolean = numAvailableOutputs == numPartitions
+  /** Adds the job to the active job list. */
+  def addActiveJob(job: ActiveJob): Unit = {
+    _mapStageJobs = job :: _mapStageJobs
+  }
 
-  val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+  /** Removes the job from the active job list. */
+  def removeActiveJob(job: ActiveJob): Unit = {
+    _mapStageJobs = _mapStageJobs.filter(_ != job)
+  }
+
+  /**
+   * Number of partitions that have shuffle outputs.
+   * When this reaches [[numPartitions]], this map stage is ready.
+   * This should be kept consistent as `outputLocs.filter(!_.isEmpty).size`.
+   */
+  def numAvailableOutputs: Int = _numAvailableOutputs
+
+  /**
+   * Returns true if the map stage is ready, i.e. all partitions have shuffle outputs.
+   * This should be the same as `outputLocs.contains(Nil)`.
+   */
+  def isAvailable: Boolean = _numAvailableOutputs == numPartitions
+
+  /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
+  override def findMissingPartitions(): Seq[Int] = {
+    val missing = (0 until numPartitions).filter(id => outputLocs(id).isEmpty)
+    assert(missing.size == numPartitions - _numAvailableOutputs,
+      s"${missing.size} missing, expected ${numPartitions - _numAvailableOutputs}")
+    missing
+  }
 
   def addOutputLoc(partition: Int, status: MapStatus): Unit = {
     val prevList = outputLocs(partition)
     outputLocs(partition) = status :: prevList
     if (prevList == Nil) {
-      numAvailableOutputs += 1
+      _numAvailableOutputs += 1
     }
   }
 
@@ -56,8 +106,17 @@ private[spark] class ShuffleMapStage(
     val newList = prevList.filterNot(_.location == bmAddress)
     outputLocs(partition) = newList
     if (prevList != Nil && newList == Nil) {
-      numAvailableOutputs -= 1
+      _numAvailableOutputs -= 1
     }
+  }
+
+  /**
+   * Returns an array of [[MapStatus]] (index by partition id). For each partition, the returned
+   * value contains only one (i.e. the first) [[MapStatus]]. If there is no entry for the partition,
+   * that position is filled with null.
+   */
+  def outputLocInMapOutputTrackerFormat(): Array[MapStatus] = {
+    outputLocs.map(_.headOption.orNull)
   }
 
   /**
@@ -73,12 +132,12 @@ private[spark] class ShuffleMapStage(
       outputLocs(partition) = newList
       if (prevList != Nil && newList == Nil) {
         becameUnavailable = true
-        numAvailableOutputs -= 1
+        _numAvailableOutputs -= 1
       }
     }
     if (becameUnavailable) {
       logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
-        this, execId, numAvailableOutputs, numPartitions, isAvailable))
+        this, execId, _numAvailableOutputs, numPartitions, isAvailable))
     }
   }
 }

@@ -39,9 +39,10 @@ import org.apache.parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetO
  *
  *   NEVER use [[DirectParquetOutputCommitter]] when appending data, because currently there's
  *   no safe way undo a failed appending job (that's why both `abortTask()` and `abortJob()` are
- *   left * empty).
+ *   left empty).
  */
-private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+private[datasources] class DirectParquetOutputCommitter(
+    outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {
   val LOG = Log.getLog(classOf[ParquetOutputCommitter])
 
@@ -53,7 +54,11 @@ private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: T
   override def setupTask(taskContext: TaskAttemptContext): Unit = {}
 
   override def commitJob(jobContext: JobContext) {
-    val configuration = ContextUtil.getConfiguration(jobContext)
+    val configuration = {
+      // scalastyle:off jobcontext
+      ContextUtil.getConfiguration(jobContext)
+      // scalastyle:on jobcontext
+    }
     val fileSystem = outputPath.getFileSystem(configuration)
 
     if (configuration.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {

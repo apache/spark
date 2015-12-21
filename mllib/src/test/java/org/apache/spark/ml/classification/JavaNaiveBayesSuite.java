@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
@@ -75,21 +76,20 @@ public class JavaNaiveBayesSuite implements Serializable {
 
   @Test
   public void testNaiveBayes() {
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(0.0, Vectors.dense(1.0, 0.0, 0.0)),
       RowFactory.create(0.0, Vectors.dense(2.0, 0.0, 0.0)),
       RowFactory.create(1.0, Vectors.dense(0.0, 1.0, 0.0)),
       RowFactory.create(1.0, Vectors.dense(0.0, 2.0, 0.0)),
       RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 1.0)),
-      RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 2.0))
-    ));
+      RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 2.0)));
 
     StructType schema = new StructType(new StructField[]{
       new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
       new StructField("features", new VectorUDT(), false, Metadata.empty())
     });
 
-    DataFrame dataset = jsql.createDataFrame(jrdd, schema);
+    DataFrame dataset = jsql.createDataFrame(data, schema);
     NaiveBayes nb = new NaiveBayes().setSmoothing(0.5).setModelType("multinomial");
     NaiveBayesModel model = nb.fit(dataset);
 

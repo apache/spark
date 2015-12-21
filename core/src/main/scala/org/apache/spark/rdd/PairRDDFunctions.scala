@@ -65,9 +65,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note that V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
    *
-   * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
-   * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
-   * - `mergeCombiners`, to combine two C's into a single one.
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
+   *  - `mergeCombiners`, to combine two C's into a single one.
    *
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
@@ -274,7 +274,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * ::Experimental::
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *
@@ -289,7 +288,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param seed seed for the random number generator
    * @return RDD containing the sampled subset
    */
-  @Experimental
   def sampleByKeyExact(
       withReplacement: Boolean,
       fractions: Map[K, Double],
@@ -384,19 +382,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * :: Experimental ::
    * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
-  @Experimental
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = self.withScope {
     self.map(_._1).countByValueApprox(timeout, confidence)
   }
 
   /**
-   * :: Experimental ::
-   *
    * Return approximate number of distinct values for each key in this RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
@@ -413,7 +407,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *           If `sp` equals 0, the sparse representation is skipped.
    * @param partitioner Partitioner to use for the resulting RDD.
    */
-  @Experimental
   def countApproxDistinctByKey(
       p: Int,
       sp: Int,
@@ -996,8 +989,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
-    job.getConfiguration.set("mapred.output.dir", path)
-    saveAsNewAPIHadoopDataset(job.getConfiguration)
+    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    jobConfiguration.set("mapred.output.dir", path)
+    saveAsNewAPIHadoopDataset(jobConfiguration)
   }
 
   /**
@@ -1017,6 +1011,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
+   *
+   * Note that, we should make sure our tasks are idempotent when speculation is enabled, i.e. do
+   * not use output committer that writes data directly.
+   * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
+   * result of using direct output committer with speculation enabled.
    */
   def saveAsHadoopFile(
       path: String,
@@ -1029,10 +1028,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val hadoopConf = conf
     hadoopConf.setOutputKeyClass(keyClass)
     hadoopConf.setOutputValueClass(valueClass)
-    // Doesn't work in Scala 2.9 due to what may be a generics bug
-    // TODO: Should we uncomment this for Scala 2.10?
-    // conf.setOutputFormat(outputFormatClass)
-    hadoopConf.set("mapred.output.format.class", outputFormatClass.getName)
+    conf.setOutputFormat(outputFormatClass)
     for (c <- codec) {
       hadoopConf.setCompressMapOutput(true)
       hadoopConf.set("mapred.output.compress", "true")
@@ -1046,6 +1042,19 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
     }
 
+    // When speculation is on and output committer class name contains "Direct", we should warn
+    // users that they may loss data if they are using a direct output committer.
+    val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
+    val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
+    }
+
     FileOutputFormat.setOutputPath(hadoopConf,
       SparkHadoopWriter.createPathFromString(path, hadoopConf))
     saveAsHadoopDataset(hadoopConf)
@@ -1056,6 +1065,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Configuration object for that storage system. The Conf should set an OutputFormat and any
    * output paths required (e.g. a table name to write to) in the same way as it would be
    * configured for a Hadoop MapReduce job.
+   *
+   * Note that, we should make sure our tasks are idempotent when speculation is enabled, i.e. do
+   * not use output committer that writes data directly.
+   * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
+   * result of using direct output committer with speculation enabled.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
@@ -1064,7 +1078,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
-    val wrappedConf = new SerializableConfiguration(job.getConfiguration)
+    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val wrappedConf = new SerializableConfiguration(jobConfiguration)
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
@@ -1113,6 +1128,20 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
+
+    // When speculation is on and output committer class name contains "Direct", we should warn
+    // users that they may loss data if they are using a direct output committer.
+    val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
+    val outputCommitterClass = jobCommitter.getClass.getSimpleName
+    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
+      val warningMessage =
+        s"$outputCommitterClass may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
+    }
+
     jobCommitter.setupJob(jobTaskContext)
     self.context.runJob(self, writeShard)
     jobCommitter.commitJob(jobTaskContext)
@@ -1127,7 +1156,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val wrappedConf = new SerializableConfiguration(hadoopConf)
     val outputFormatInstance = hadoopConf.getOutputFormat
     val keyClass = hadoopConf.getOutputKeyClass
     val valueClass = hadoopConf.getOutputValueClass
@@ -1155,7 +1183,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     writer.preSetup()
 
     val writeToFile = (context: TaskContext, iter: Iterator[(K, V)]) => {
-      val config = wrappedConf.value
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt

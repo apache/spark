@@ -31,11 +31,13 @@ import org.apache.spark.sql.sources._
  * and cannot be used anymore.
  */
 private[orc] object OrcFilters extends Logging {
-  def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
-    expr.reduceOption(And).flatMap { conjunction =>
-      val builder = SearchArgumentFactory.newBuilder()
-      buildSearchArgument(conjunction, builder).map(_.build())
-    }
+  def createFilter(filters: Array[Filter]): Option[SearchArgument] = {
+    for {
+      // Combines all filters with `And`s to produce a single conjunction predicate
+      conjunction <- filters.reduceOption(And)
+      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
+      builder <- buildSearchArgument(conjunction, SearchArgumentFactory.newBuilder())
+    } yield builder.build()
   }
 
   private def buildSearchArgument(expression: Filter, builder: Builder): Option[Builder] = {
@@ -72,21 +74,19 @@ private[orc] object OrcFilters extends Logging {
 
     expression match {
       case And(left, right) =>
-        val tryLeft = buildSearchArgument(left, newBuilder)
-        val tryRight = buildSearchArgument(right, newBuilder)
-
-        val conjunction = for {
-          _ <- tryLeft
-          _ <- tryRight
+        // At here, it is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        // Pushing one side of AND down is only safe to do at the top level.
+        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
+        for {
+          _ <- buildSearchArgument(left, newBuilder)
+          _ <- buildSearchArgument(right, newBuilder)
           lhs <- buildSearchArgument(left, builder.startAnd())
           rhs <- buildSearchArgument(right, lhs)
         } yield rhs.end()
-
-        // For filter `left AND right`, we can still push down `left` even if `right` is not
-        // convertible, and vice versa.
-        conjunction
-          .orElse(tryLeft.flatMap(_ => buildSearchArgument(left, builder)))
-          .orElse(tryRight.flatMap(_ => buildSearchArgument(right, builder)))
 
       case Or(left, right) =>
         for {
@@ -102,46 +102,32 @@ private[orc] object OrcFilters extends Logging {
           negate <- buildSearchArgument(child, builder.startNot())
         } yield negate.end()
 
-      case EqualTo(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.equals(attribute, _))
+      case EqualTo(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().equals(attribute, value).end())
 
-      case EqualNullSafe(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.nullSafeEquals(attribute, _))
+      case EqualNullSafe(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().nullSafeEquals(attribute, value).end())
 
-      case LessThan(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.lessThan(attribute, _))
+      case LessThan(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().lessThan(attribute, value).end())
 
-      case LessThanOrEqual(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.lessThanEquals(attribute, _))
+      case LessThanOrEqual(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startAnd().lessThanEquals(attribute, value).end())
 
-      case GreaterThan(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.startNot().lessThanEquals(attribute, _).end())
+      case GreaterThan(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startNot().lessThanEquals(attribute, value).end())
 
-      case GreaterThanOrEqual(attribute, value) =>
-        Option(value)
-          .filter(isSearchableLiteral)
-          .map(builder.startNot().lessThan(attribute, _).end())
+      case GreaterThanOrEqual(attribute, value) if isSearchableLiteral(value) =>
+        Some(builder.startNot().lessThan(attribute, value).end())
 
       case IsNull(attribute) =>
-        Some(builder.isNull(attribute))
+        Some(builder.startAnd().isNull(attribute).end())
 
       case IsNotNull(attribute) =>
         Some(builder.startNot().isNull(attribute).end())
 
-      case In(attribute, values) =>
-        Option(values)
-          .filter(_.forall(isSearchableLiteral))
-          .map(builder.in(attribute, _))
+      case In(attribute, values) if values.forall(isSearchableLiteral) =>
+        Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
     }

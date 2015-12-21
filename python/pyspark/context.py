@@ -19,8 +19,10 @@ from __future__ import print_function
 
 import os
 import shutil
+import signal
 import sys
-from threading import Lock
+import threading
+from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from pyspark import accumulators
@@ -64,7 +66,7 @@ class SparkContext(object):
     _jvm = None
     _next_accum_id = 0
     _active_spark_context = None
-    _lock = Lock()
+    _lock = RLock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
 
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
@@ -217,6 +219,15 @@ class SparkContext(object):
         else:
             self.profiler_collector = None
 
+        # create a signal handler which would be invoked on receiving SIGINT
+        def signal_handler(signal, frame):
+            self.cancelAllJobs()
+            raise KeyboardInterrupt()
+
+        # see http://stackoverflow.com/questions/23206787/
+        if isinstance(threading.current_thread(), threading._MainThread):
+            signal.signal(signal.SIGINT, signal_handler)
+
     def _initialize_context(self, jconf):
         """
         Initialize SparkContext in function to allow subclass specific initialization
@@ -255,7 +266,7 @@ class SparkContext(object):
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise Exception(
             "It appears that you are attempting to reference SparkContext from a broadcast "
-            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
         )
 
@@ -272,6 +283,18 @@ class SparkContext(object):
         Specifically stop the context on exit of the with block.
         """
         self.stop()
+
+    @classmethod
+    def getOrCreate(cls, conf=None):
+        """
+        Get or instantiate a SparkContext and register it as a singleton object.
+
+        :param conf: SparkConf (optional)
+        """
+        with SparkContext._lock:
+            if SparkContext._active_spark_context is None:
+                SparkContext(conf=conf or SparkConf())
+            return SparkContext._active_spark_context
 
     def setLogLevel(self, logLevel):
         """

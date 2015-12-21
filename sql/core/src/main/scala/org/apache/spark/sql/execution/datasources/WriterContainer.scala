@@ -47,7 +47,8 @@ private[sql] abstract class BaseWriterContainer(
 
   protected val dataSchema = relation.dataSchema
 
-  protected val serializableConf = new SerializableConfiguration(job.getConfiguration)
+  protected val serializableConf =
+    new SerializableConfiguration(SparkHadoopUtil.get.getConfigurationFromJobContext(job))
 
   // This UUID is used to avoid output file name collision between different appending write jobs.
   // These jobs may belong to different SparkContext instances. Concrete data source implementations
@@ -89,7 +90,8 @@ private[sql] abstract class BaseWriterContainer(
     // This UUID is sent to executor side together with the serialized `Configuration` object within
     // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
     // unique task output files.
-    job.getConfiguration.set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
+    SparkHadoopUtil.get.getConfigurationFromJobContext(job).
+      set("spark.sql.sources.writeJobUUID", uniqueWriteJobId.toString)
 
     // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
     // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
@@ -119,6 +121,24 @@ private[sql] abstract class BaseWriterContainer(
       // FileOutputCommitter writes to a temporary location returned by `getWorkPath`.
       case f: MapReduceFileOutputCommitter => f.getWorkPath.toString
       case _ => outputPath
+    }
+  }
+
+  protected def newOutputWriter(path: String): OutputWriter = {
+    try {
+      outputWriterFactory.newInstance(path, dataSchema, taskAttemptContext)
+    } catch {
+      case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
+        if (outputCommitter.isInstanceOf[parquet.DirectParquetOutputCommitter]) {
+          // Spark-11382: DirectParquetOutputCommitter is not idempotent, meaning on retry
+          // attempts, the task will fail because the output file is created from a prior attempt.
+          // This often means the most visible error to the user is misleading. Augment the error
+          // to tell the user to look for the actual error.
+          throw new SparkException("The output file already exists but this could be due to a " +
+            "failure from an earlier attempt. Look through the earlier logs or stage page for " +
+            "the first error.\n  File exists error: " + e)
+        }
+        throw e
     }
   }
 
@@ -182,7 +202,9 @@ private[sql] abstract class BaseWriterContainer(
   private def setupIDs(jobId: Int, splitId: Int, attemptId: Int): Unit = {
     this.jobId = SparkHadoopWriter.createJobID(new Date, jobId)
     this.taskId = new TaskID(this.jobId, true, splitId)
+    // scalastyle:off jobcontext
     this.taskAttemptId = new TaskAttemptID(taskId, attemptId)
+    // scalastyle:on jobcontext
   }
 
   private def setupConf(): Unit = {
@@ -194,8 +216,7 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def commitTask(): Unit = {
-    SparkHadoopMapRedUtil.commitTask(
-      outputCommitter, taskAttemptContext, jobId.getId, taskId.getId, taskAttemptId.getId)
+    SparkHadoopMapRedUtil.commitTask(outputCommitter, taskAttemptContext, jobId.getId, taskId.getId)
   }
 
   def abortTask(): Unit = {
@@ -231,7 +252,7 @@ private[sql] class DefaultWriterContainer(
     executorSideSetup(taskContext)
     val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
     configuration.set("spark.sql.sources.output.path", outputPath)
-    val writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
+    val writer = newOutputWriter(getWorkPath)
     writer.initConverter(dataSchema)
 
     var writerClosed = false
@@ -341,8 +362,7 @@ private[sql] class DynamicPartitionWriterContainer(
               StructType.fromAttributes(partitionColumns),
               StructType.fromAttributes(dataColumns),
               SparkEnv.get.blockManager,
-              SparkEnv.get.shuffleMemoryManager,
-              SparkEnv.get.shuffleMemoryManager.pageSizeBytes)
+              TaskContext.get().taskMemoryManager().pageSizeBytes)
             sorter.insertKV(currentKey, getOutputRow(inputRow))
           }
         } else {
@@ -401,7 +421,7 @@ private[sql] class DynamicPartitionWriterContainer(
       val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
       configuration.set(
         "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
-      val newWriter = outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
+      val newWriter = super.newOutputWriter(path.toString)
       newWriter.initConverter(dataSchema)
       newWriter
     }

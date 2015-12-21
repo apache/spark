@@ -75,7 +75,7 @@ object DeveloperApiExample {
         prediction
       }.sum
     assert(sumPredictions == 0.0,
-      "MyLogisticRegression predicted something other than 0, even though all weights are 0!")
+      "MyLogisticRegression predicted something other than 0, even though all coefficients are 0!")
 
     sc.stop()
   }
@@ -124,12 +124,12 @@ private class MyLogisticRegression(override val uid: String)
     // Extract columns from data using helper method.
     val oldDataset = extractLabeledPoints(dataset)
 
-    // Do learning to estimate the weight vector.
+    // Do learning to estimate the coefficients vector.
     val numFeatures = oldDataset.take(1)(0).features.size
-    val weights = Vectors.zeros(numFeatures) // Learning would happen here.
+    val coefficients = Vectors.zeros(numFeatures) // Learning would happen here.
 
     // Create a model, and return it.
-    new MyLogisticRegressionModel(uid, weights).setParent(this)
+    new MyLogisticRegressionModel(uid, coefficients).setParent(this)
   }
 
   override def copy(extra: ParamMap): MyLogisticRegression = defaultCopy(extra)
@@ -142,7 +142,7 @@ private class MyLogisticRegression(override val uid: String)
  */
 private class MyLogisticRegressionModel(
     override val uid: String,
-    val weights: Vector)
+    val coefficients: Vector)
   extends ClassificationModel[Vector, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
 
@@ -163,7 +163,7 @@ private class MyLogisticRegressionModel(
    *          confidence for that label.
    */
   override protected def predictRaw(features: Vector): Vector = {
-    val margin = BLAS.dot(features, weights)
+    val margin = BLAS.dot(features, coefficients)
     // There are 2 classes (binary classification), so we return a length-2 vector,
     // where index i corresponds to class i (i = 0, 1).
     Vectors.dense(-margin, margin)
@@ -172,6 +172,9 @@ private class MyLogisticRegressionModel(
   /** Number of classes the label can take.  2 indicates binary classification. */
   override val numClasses: Int = 2
 
+  /** Number of features the model was trained on. */
+  override val numFeatures: Int = coefficients.size
+
   /**
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
@@ -179,7 +182,7 @@ private class MyLogisticRegressionModel(
    * This is used for the default implementation of [[transform()]].
    */
   override def copy(extra: ParamMap): MyLogisticRegressionModel = {
-    copyValues(new MyLogisticRegressionModel(uid, weights), extra).setParent(parent)
+    copyValues(new MyLogisticRegressionModel(uid, coefficients), extra).setParent(parent)
   }
 }
 // scalastyle:on println

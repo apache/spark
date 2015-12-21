@@ -68,11 +68,18 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue("i", dataType, ordinal.toString)
-    s"""
-      boolean ${ev.isNull} = i.isNullAt($ordinal);
-      $javaType ${ev.primitive} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-    """
+    val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+    if (nullable) {
+      s"""
+        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        $javaType ${ev.value} = $value;
+      """
+    }
   }
 }
 
@@ -92,7 +99,7 @@ object BindReferences extends Logging {
             sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
           }
         } else {
-          BoundReference(ordinal, a.dataType, a.nullable)
+          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.

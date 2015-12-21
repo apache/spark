@@ -42,30 +42,38 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
    * data to 'out', in order to enable zero-copy transfer.
    */
   @Override
-  public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) {
+  public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) throws Exception {
     Object body = null;
     long bodyLength = 0;
+    boolean isBodyInFrame = false;
 
-    // Only ChunkFetchSuccesses have data besides the header.
-    // The body is used in order to enable zero-copy transfer for the payload.
-    if (in instanceof ChunkFetchSuccess) {
-      ChunkFetchSuccess resp = (ChunkFetchSuccess) in;
+    // If the message has a body, take it out to enable zero-copy transfer for the payload.
+    if (in.body() != null) {
       try {
-        bodyLength = resp.buffer.size();
-        body = resp.buffer.convertToNetty();
+        bodyLength = in.body().size();
+        body = in.body().convertToNetty();
+        isBodyInFrame = in.isBodyInFrame();
       } catch (Exception e) {
-        // Re-encode this message as BlockFetchFailure.
-        logger.error(String.format("Error opening block %s for client %s",
-          resp.streamChunkId, ctx.channel().remoteAddress()), e);
-        encode(ctx, new ChunkFetchFailure(resp.streamChunkId, e.getMessage()), out);
+        if (in instanceof AbstractResponseMessage) {
+          AbstractResponseMessage resp = (AbstractResponseMessage) in;
+          // Re-encode this message as a failure response.
+          String error = e.getMessage() != null ? e.getMessage() : "null";
+          logger.error(String.format("Error processing %s for client %s",
+            in, ctx.channel().remoteAddress()), e);
+          encode(ctx, resp.createFailureResponse(error), out);
+        } else {
+          throw e;
+        }
         return;
       }
     }
 
     Message.Type msgType = in.type();
-    // All messages have the frame length, message type, and message itself.
+    // All messages have the frame length, message type, and message itself. The frame length
+    // may optionally include the length of the body data, depending on what message is being
+    // sent.
     int headerLength = 8 + msgType.encodedLength() + in.encodedLength();
-    long frameLength = headerLength + bodyLength;
+    long frameLength = headerLength + (isBodyInFrame ? bodyLength : 0);
     ByteBuf header = ctx.alloc().heapBuffer(headerLength);
     header.writeLong(frameLength);
     msgType.encode(header);

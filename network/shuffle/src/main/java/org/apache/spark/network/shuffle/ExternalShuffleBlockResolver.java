@@ -50,9 +50,6 @@ import org.apache.spark.network.util.TransportConf;
  * of Executors. Each Executor must register its own configuration about where it stores its files
  * (local dirs) and how (shuffle manager). The logic for retrieval of individual files is replicated
  * from Spark's FileShuffleBlockResolver and IndexShuffleBlockResolver.
- *
- * Executors with shuffle file consolidation are not currently supported, as the index is stored in
- * the Executor's memory, unlike the IndexShuffleBlockResolver.
  */
 public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
@@ -117,10 +114,14 @@ public class ExternalShuffleBlockResolver {
             "recover state for existing applications", registeredExecutorFile, e);
           if (registeredExecutorFile.isDirectory()) {
             for (File f : registeredExecutorFile.listFiles()) {
-              f.delete();
+              if (!f.delete()) {
+                logger.warn("error deleting {}", f.getPath());
+              }
             }
           }
-          registeredExecutorFile.delete();
+          if (!registeredExecutorFile.delete()) {
+            logger.warn("error deleting {}", registeredExecutorFile.getPath());
+          }
           options.createIfMissing(true);
           try {
             tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
@@ -182,11 +183,10 @@ public class ExternalShuffleBlockResolver {
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
 
-    if ("org.apache.spark.shuffle.hash.HashShuffleManager".equals(executor.shuffleManager)) {
-      return getHashBasedShuffleBlockData(executor, blockId);
-    } else if ("org.apache.spark.shuffle.sort.SortShuffleManager".equals(executor.shuffleManager)
-      || "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager".equals(executor.shuffleManager)) {
+    if ("sort".equals(executor.shuffleManager) || "tungsten-sort".equals(executor.shuffleManager)) {
       return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
+    } else if ("hash".equals(executor.shuffleManager)) {
+      return getHashBasedShuffleBlockData(executor, blockId);
     } else {
       throw new UnsupportedOperationException(
         "Unsupported shuffle manager: " + executor.shuffleManager);
@@ -254,7 +254,6 @@ public class ExternalShuffleBlockResolver {
    * Hash-based shuffle data is simply stored as one file per block.
    * This logic is from FileShuffleBlockResolver.
    */
-  // TODO: Support consolidated hash shuffle files
   private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
     File shuffleFile = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
     return new FileSegmentManagedBuffer(conf, shuffleFile, 0, shuffleFile.length());
@@ -419,7 +418,7 @@ public class ExternalShuffleBlockResolver {
 
   public static class StoreVersion {
 
-    final static byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
+    static final byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
 
     public final int major;
     public final int minor;

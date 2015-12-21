@@ -66,7 +66,7 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
 
     ev.isNull = "false"
     s"""
-      final ${ctx.javaType(dataType)} ${ev.primitive} = $partitionMaskTerm + $countTerm;
+      final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
       $countTerm++;
     """
   }

@@ -59,7 +59,17 @@ private[spark] object JettyUtils extends Logging {
 
   def createServlet[T <% AnyRef](
       servletParams: ServletParams[T],
-      securityMgr: SecurityManager): HttpServlet = {
+      securityMgr: SecurityManager,
+      conf: SparkConf): HttpServlet = {
+
+    // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
+    // (see http://tools.ietf.org/html/rfc7034). By default allow framing only from the
+    // same origin, but allow framing for a specific named URI.
+    // Example: spark.ui.allowFramingFrom = https://example.com/
+    val allowFramingFrom = conf.getOption("spark.ui.allowFramingFrom")
+    val xFrameOptionsValue =
+      allowFramingFrom.map(uri => s"ALLOW-FROM $uri").getOrElse("SAMEORIGIN")
+
     new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
         try {
@@ -68,6 +78,7 @@ private[spark] object JettyUtils extends Logging {
             response.setStatus(HttpServletResponse.SC_OK)
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            response.setHeader("X-Frame-Options", xFrameOptionsValue)
             // scalastyle:off println
             response.getWriter.println(servletParams.extractFn(result))
             // scalastyle:on println
@@ -97,8 +108,9 @@ private[spark] object JettyUtils extends Logging {
       path: String,
       servletParams: ServletParams[T],
       securityMgr: SecurityManager,
+      conf: SparkConf,
       basePath: String = ""): ServletContextHandler = {
-    createServletHandler(path, createServlet(servletParams, securityMgr), basePath)
+    createServletHandler(path, createServlet(servletParams, securityMgr, conf), basePath)
   }
 
   /** Create a context handler that responds to a request with the given path prefix */

@@ -40,7 +40,7 @@ public class JavaDataFrameSuite {
 
   DataFrame df;
 
-  private void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(DataFrame actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -52,7 +52,7 @@ public class JavaDataFrameSuite {
     hc = TestHive$.MODULE$;
     sc = new JavaSparkContext(hc.sparkContext());
 
-    List<String> jsonObjects = new ArrayList<String>(10);
+    List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
@@ -71,7 +71,7 @@ public class JavaDataFrameSuite {
   @Test
   public void saveTableAndQueryIt() {
     checkAnswer(
-      df.select(functions.avg("key").over(
+      df.select(avg("key").over(
         Window.partitionBy("value").orderBy("key").rowsBetween(-1, 1))),
       hc.sql("SELECT avg(key) " +
         "OVER (PARTITION BY value " +
@@ -95,7 +95,7 @@ public class JavaDataFrameSuite {
           registeredUDAF.apply(col("value")),
           callUDF("mydoublesum", col("value")));
 
-    List<Row> expectedResult = new ArrayList<Row>();
+    List<Row> expectedResult = new ArrayList<>();
     expectedResult.add(RowFactory.create(4950.0, 9900.0, 9900.0, 9900.0));
     checkAnswer(
       aggregatedDF,

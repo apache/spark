@@ -23,8 +23,8 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.{SQLConf, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -33,17 +33,17 @@ import org.apache.spark.sql.types.StructType
  * Before consuming the iterator, open function must be called.
  * After consuming the iterator, close function must be called.
  */
-abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging {
-
-  protected val codegenEnabled: Boolean = conf.codegenEnabled
-
-  protected val unsafeEnabled: Boolean = conf.unsafeEnabled
-
-  lazy val schema: StructType = StructType.fromAttributes(output)
+abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Logging {
 
   private[this] lazy val isTesting: Boolean = sys.props.contains("spark.testing")
 
-  def output: Seq[Attribute]
+  /**
+   * Called before open(). Prepare can be used to reserve memory needed. It must NOT consume
+   * any input data.
+   *
+   * Implementations of this must also call the `prepare()` function of its children.
+   */
+  def prepare(): Unit = children.foreach(_.prepare())
 
   /**
    * Initializes the iterator state. Must be called before calling `next()`.
@@ -69,10 +69,27 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
    */
   def close(): Unit
 
+  /** Specifies whether this operator outputs UnsafeRows */
+  def outputsUnsafeRows: Boolean = false
+
+  /** Specifies whether this operator is capable of processing UnsafeRows */
+  def canProcessUnsafeRows: Boolean = false
+
+  /**
+   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
+   * that are not UnsafeRows).
+   */
+  def canProcessSafeRows: Boolean = true
+
+  /**
+   * Returns the content through the [[Iterator]] interface.
+   */
+  final def asIterator: Iterator[InternalRow] = new LocalNodeIterator(this)
+
   /**
    * Returns the content of the iterator from the beginning to the end in the form of a Scala Seq.
    */
-  def collect(): Seq[Row] = {
+  final def collect(): Seq[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(StructType.fromAttributes(output))
     val result = new scala.collection.mutable.ArrayBuffer[Row]
     open()
@@ -90,24 +107,35 @@ abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] with Logging
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(
-      s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled) {
-      try {
-        GenerateMutableProjection.generate(expressions, inputSchema)
-      } catch {
-        case NonFatal(e) =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate mutable projection, fallback to interpreted", e)
-            () => new InterpretedMutableProjection(expressions, inputSchema)
-          }
-      }
-    } else {
-      () => new InterpretedMutableProjection(expressions, inputSchema)
+      s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
+    try {
+      GenerateMutableProjection.generate(expressions, inputSchema)
+    } catch {
+      case NonFatal(e) =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate mutable projection, fallback to interpreted", e)
+          () => new InterpretedMutableProjection(expressions, inputSchema)
+        }
     }
   }
 
+  protected def newPredicate(
+      expression: Expression,
+      inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+    try {
+      GeneratePredicate.generate(expression, inputSchema)
+    } catch {
+      case NonFatal(e) =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate predicate, fallback to interpreted", e)
+          InterpretedPredicate.create(expression, inputSchema)
+        }
+    }
+  }
 }
 
 
@@ -135,7 +163,7 @@ abstract class BinaryLocalNode(conf: SQLConf) extends LocalNode(conf) {
 /**
  * An thin wrapper around a [[LocalNode]] that provides an `Iterator` interface.
  */
-private[local] class LocalNodeIterator(localNode: LocalNode) extends Iterator[InternalRow] {
+private class LocalNodeIterator(localNode: LocalNode) extends Iterator[InternalRow] {
   private var nextRow: InternalRow = _
 
   override def hasNext: Boolean = {

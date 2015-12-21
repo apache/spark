@@ -237,4 +237,40 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
   }
 
+  test("tasks are not re-scheduled while executor loss reason is pending") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorAdded(execId: String, host: String) {}
+    }
+
+    val e0Offers = Seq(new WorkerOffer("executor0", "host0", 1))
+    val e1Offers = Seq(new WorkerOffer("executor1", "host0", 1))
+    val attempt1 = FakeTask.createTaskSet(1)
+
+    // submit attempt 1, offer resources, task gets scheduled
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(e0Offers).flatten
+    assert(1 === taskDescriptions.length)
+
+    // mark executor0 as dead but pending fail reason
+    taskScheduler.executorLost("executor0", LossReasonPending)
+
+    // offer some more resources on a different executor, nothing should change
+    val taskDescriptions2 = taskScheduler.resourceOffers(e1Offers).flatten
+    assert(0 === taskDescriptions2.length)
+
+    // provide the actual loss reason for executor0
+    taskScheduler.executorLost("executor0", SlaveLost("oops"))
+
+    // executor0's tasks should have failed now that the loss reason is known, so offering more
+    // resources should make them be scheduled on the new executor.
+    val taskDescriptions3 = taskScheduler.resourceOffers(e1Offers).flatten
+    assert(1 === taskDescriptions3.length)
+    assert("executor1" === taskDescriptions3(0).executorId)
+  }
+
 }

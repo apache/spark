@@ -91,6 +91,17 @@ def _func_op(name, doc=''):
     return _
 
 
+def _bin_func_op(name, reverse=False, doc="binary function"):
+    def _(self, other):
+        sc = SparkContext._active_spark_context
+        fn = getattr(sc._jvm.functions, name)
+        jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
+        njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
+        return Column(njc)
+    _.__doc__ = doc
+    return _
+
+
 def _bin_op(name, doc="binary operator"):
     """ Create a method for given binary operator
     """
@@ -151,6 +162,8 @@ class Column(object):
     __rdiv__ = _reverse_op("divide")
     __rtruediv__ = _reverse_op("divide")
     __rmod__ = _reverse_op("mod")
+    __pow__ = _bin_func_op("pow")
+    __rpow__ = _bin_func_op("pow", reverse=True)
 
     # logistic operators
     __eq__ = _bin_op("equalTo")
@@ -333,9 +346,10 @@ class Column(object):
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
-            sc = SparkContext._active_spark_context
-            ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
-            jdt = ssql_ctx.parseDataType(dataType.json())
+            from pyspark.sql import SQLContext
+            sc = SparkContext.getOrCreate()
+            ctx = SQLContext.getOrCreate(sc)
+            jdt = ctx._ssql_ctx.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
         else:
             raise TypeError("unexpected type: %s" % type(dataType))

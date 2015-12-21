@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{DataInput, DataOutput}
+import java.io.{PrintWriter, File, DataInput, DataOutput}
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
+import org.apache.hadoop.hive.ql.udf.UDAFPercentile
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDFOPAnd, GenericUDTFExplode, GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-
 import org.apache.spark.util.Utils
+
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
 
@@ -43,7 +45,7 @@ case class ListStringCaseClass(l: Seq[String])
 /**
  * A test suite for Hive custom UDFs.
  */
-class HiveUDFSuite extends QueryTest with TestHiveSingleton {
+class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   import hiveContext.{udf, sql}
   import hiveContext.implicits._
@@ -91,47 +93,39 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("Max/Min on named_struct") {
-    def testOrderInStruct(): Unit = {
-      checkAnswer(sql(
-        """
-          |SELECT max(named_struct(
-          |           "key", key,
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_498")))
-      checkAnswer(sql(
-        """
-          |SELECT min(named_struct(
-          |           "key", key,
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_0")))
+    checkAnswer(sql(
+      """
+        |SELECT max(named_struct(
+        |           "key", key,
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_498")))
+    checkAnswer(sql(
+      """
+        |SELECT min(named_struct(
+        |           "key", key,
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_0")))
 
-      // nested struct cases
-      checkAnswer(sql(
-        """
-          |SELECT max(named_struct(
-          |           "key", named_struct(
-                              "key", key,
-                              "value", value),
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_498")))
-      checkAnswer(sql(
-        """
-          |SELECT min(named_struct(
-          |           "key", named_struct(
-                             "key", key,
-                             "value", value),
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_0")))
-    }
-    val codegenDefault = hiveContext.getConf(SQLConf.CODEGEN_ENABLED)
-    hiveContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-    testOrderInStruct()
-    hiveContext.setConf(SQLConf.CODEGEN_ENABLED, false)
-    testOrderInStruct()
-    hiveContext.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
+    // nested struct cases
+    checkAnswer(sql(
+      """
+        |SELECT max(named_struct(
+        |           "key", named_struct(
+                            "key", key,
+                            "value", value),
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_498")))
+    checkAnswer(sql(
+      """
+        |SELECT min(named_struct(
+        |           "key", named_struct(
+                           "key", key,
+                           "value", value),
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_0")))
   }
 
-  test("SPARK-6409 UDAFAverage test") {
+  test("SPARK-6409 UDAF Average test") {
     sql(s"CREATE TEMPORARY FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
     checkAnswer(
       sql("SELECT test_avg(1), test_avg(substr(value,5)) FROM src"),
@@ -298,6 +292,150 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
 
     hiveContext.reset()
+  }
+
+  test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
+    Seq((1, 2)).toDF("a", "b").registerTempTable("testUDF")
+
+    {
+      // HiveSimpleUDF
+      sql(s"CREATE TEMPORARY FUNCTION testUDFTwoListList AS '${classOf[UDFTwoListList].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDFTwoListList() FROM testUDF")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
+    }
+
+    {
+      // HiveGenericUDF
+      sql(s"CREATE TEMPORARY FUNCTION testUDFAnd AS '${classOf[GenericUDFOPAnd].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDFAnd() FROM testUDF")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFAnd")
+    }
+
+    {
+      // Hive UDAF
+      sql(s"CREATE TEMPORARY FUNCTION testUDAFPercentile AS '${classOf[UDAFPercentile].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDAFPercentile(a) FROM testUDF GROUP BY b")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFPercentile")
+    }
+
+    {
+      // AbstractGenericUDAFResolver
+      sql(s"CREATE TEMPORARY FUNCTION testUDAFAverage AS '${classOf[GenericUDAFAverage].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDAFAverage() FROM testUDF GROUP BY b")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFAverage")
+    }
+
+    {
+      // Hive UDTF
+      sql(s"CREATE TEMPORARY FUNCTION testUDTFExplode AS '${classOf[GenericUDTFExplode].getName}'")
+      val message = intercept[AnalysisException] {
+        sql("SELECT testUDTFExplode() FROM testUDF")
+      }.getMessage
+      assert(message.contains("No handler for Hive udf"))
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTFExplode")
+    }
+
+    sqlContext.dropTempTable("testUDF")
+  }
+
+  test("SPARK-11522 select input_file_name from non-parquet table"){
+
+    withTempDir { tempDir =>
+
+      // EXTERNAL OpenCSVSerde table pointing to LOCATION
+
+      val file1 = new File(tempDir + "/data1")
+      val writer1 = new PrintWriter(file1)
+      writer1.write("1,2")
+      writer1.close()
+
+      val file2 = new File(tempDir + "/data2")
+      val writer2 = new PrintWriter(file2)
+      writer2.write("1,2")
+      writer2.close()
+
+      sql(
+        s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
+        ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        WITH SERDEPROPERTIES (
+          \"separatorChar\" = \",\",
+          \"quoteChar\"     = \"\\\"\",
+          \"escapeChar\"    = \"\\\\\")
+        LOCATION '$tempDir'
+      """)
+
+      val answer1 =
+        sql("SELECT input_file_name() FROM csv_table").head().getString(0)
+      assert(answer1.contains("data1") || answer1.contains("data2"))
+
+      val count1 = sql("SELECT input_file_name() FROM csv_table").distinct().count()
+      assert(count1 == 2)
+      sql("DROP TABLE csv_table")
+
+      // EXTERNAL pointing to LOCATION
+
+      sql(
+        s"""CREATE EXTERNAL TABLE external_t5 (c1 int, c2 int)
+        ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+        LOCATION '$tempDir'
+      """)
+
+      val answer2 =
+        sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
+      assert(answer1.contains("data1") || answer1.contains("data2"))
+
+      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count
+      assert(count2 == 2)
+      sql("DROP TABLE external_t5")
+    }
+
+    withTempDir { tempDir =>
+
+      // External parquet pointing to LOCATION
+
+      val parquetLocation = tempDir + "/external_parquet"
+      sql("SELECT 1, 2").write.parquet(parquetLocation)
+
+      sql(
+        s"""CREATE EXTERNAL TABLE external_parquet(c1 int, c2 int)
+        STORED AS PARQUET
+        LOCATION '$parquetLocation'
+      """)
+
+      val answer3 =
+        sql("SELECT input_file_name() as file FROM external_parquet").head().getString(0)
+      assert(answer3.contains("external_parquet"))
+
+      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count
+      assert(count3 == 1)
+      sql("DROP TABLE external_parquet")
+    }
+
+    // Non-External parquet pointing to /tmp/...
+
+    sql("CREATE TABLE parquet_tmp(c1 int, c2 int) " +
+      " STORED AS parquet " +
+      " AS SELECT 1, 2")
+
+    val answer4 =
+      sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)
+    assert(answer4.contains("parquet_tmp"))
+
+    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
+    assert(count4 == 1)
+    sql("DROP TABLE parquet_tmp")
   }
 }
 

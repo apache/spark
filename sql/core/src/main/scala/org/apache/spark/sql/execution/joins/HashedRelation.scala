@@ -21,15 +21,16 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.shuffle.ShuffleMemoryManager
+import org.apache.spark.memory.{TaskMemoryManager, StaticMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.local.LocalNode
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
-import org.apache.spark.unsafe.memory.{MemoryLocation, ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
-import org.apache.spark.util.Utils
+import org.apache.spark.unsafe.memory.MemoryLocation
+import org.apache.spark.util.{SizeEstimator, KnownSizeEstimation, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.{SparkConf, SparkEnv}
 
@@ -113,6 +114,10 @@ final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalR
 
 private[execution] object HashedRelation {
 
+  def apply(localNode: LocalNode, keyGenerator: Projection): HashedRelation = {
+    apply(localNode.asIterator, SQLMetrics.nullLongMetric, keyGenerator)
+  }
+
   def apply(
       input: Iterator[InternalRow],
       numInputRows: LongSQLMetric,
@@ -184,7 +189,9 @@ private[execution] object HashedRelation {
  */
 private[joins] final class UnsafeHashedRelation(
     private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
-  extends HashedRelation with Externalizable {
+  extends HashedRelation
+  with KnownSizeEstimation
+  with Externalizable {
 
   private[joins] def this() = this(null)  // Needed for serialization
 
@@ -207,6 +214,14 @@ private[joins] final class UnsafeHashedRelation(
       binaryMap.getTotalMemoryConsumption
     } else {
       0
+    }
+  }
+
+  override def estimatedSize: Long = {
+    if (binaryMap != null) {
+      binaryMap.getTotalMemoryConsumption
+    } else {
+      SizeEstimator.estimate(hashTable)
     }
   }
 
@@ -315,21 +330,24 @@ private[joins] final class UnsafeHashedRelation(
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     val nKeys = in.readInt()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
-    val taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
+    // TODO(josh): This needs to be revisited before we merge this patch; making this change now
+    // so that tests compile:
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
 
-    val pageSizeBytes = Option(SparkEnv.get).map(_.shuffleMemoryManager.pageSizeBytes)
+    val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
 
-    // Dummy shuffle memory manager which always grants all memory allocation requests.
-    // We use this because it doesn't make sense count shared broadcast variables' memory usage
-    // towards individual tasks' quotas. In the future, we should devise a better way of handling
-    // this.
-    val shuffleMemoryManager =
-      ShuffleMemoryManager.create(maxMemory = Long.MaxValue, pageSizeBytes = pageSizeBytes)
+    // TODO(josh): We won't need this dummy memory manager after future refactorings; revisit
+    // during code review
 
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
-      shuffleMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
 

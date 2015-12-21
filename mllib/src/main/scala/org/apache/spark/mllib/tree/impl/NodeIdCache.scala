@@ -108,21 +108,21 @@ private[spark] class NodeIdCache(
 
     prevNodeIdsForInstances = nodeIdsForInstances
     nodeIdsForInstances = data.zip(nodeIdsForInstances).map {
-      dataPoint => {
+      case (point, node) => {
         var treeId = 0
         while (treeId < nodeIdUpdaters.length) {
-          val nodeIdUpdater = nodeIdUpdaters(treeId).getOrElse(dataPoint._2(treeId), null)
+          val nodeIdUpdater = nodeIdUpdaters(treeId).getOrElse(node(treeId), null)
           if (nodeIdUpdater != null) {
             val newNodeIndex = nodeIdUpdater.updateNodeIndex(
-              binnedFeatures = dataPoint._1.datum.binnedFeatures,
+              binnedFeatures = point.datum.binnedFeatures,
               bins = bins)
-            dataPoint._2(treeId) = newNodeIndex
+            node(treeId) = newNodeIndex
           }
 
           treeId += 1
         }
 
-        dataPoint._2
+        node
       }
     }
 
@@ -138,7 +138,7 @@ private[spark] class NodeIdCache(
       while (checkpointQueue.size > 1 && canDelete) {
         // We can delete the oldest checkpoint iff
         // the next checkpoint actually exists in the file system.
-        if (checkpointQueue.get(1).get.getCheckpointFile != None) {
+        if (checkpointQueue.get(1).get.getCheckpointFile.isDefined) {
           val old = checkpointQueue.dequeue()
 
           // Since the old checkpoint is not deleted by Spark,
@@ -159,12 +159,16 @@ private[spark] class NodeIdCache(
    * Call this after training is finished to delete any remaining checkpoints.
    */
   def deleteAllCheckpoints(): Unit = {
-    while (checkpointQueue.size > 0) {
+    while (checkpointQueue.nonEmpty) {
       val old = checkpointQueue.dequeue()
-      if (old.getCheckpointFile != None) {
+      for (checkpointFile <- old.getCheckpointFile) {
         val fs = FileSystem.get(old.sparkContext.hadoopConfiguration)
-        fs.delete(new Path(old.getCheckpointFile.get), true)
+        fs.delete(new Path(checkpointFile), true)
       }
+    }
+    if (prevNodeIdsForInstances != null) {
+      // Unpersist the previous one if one exists.
+      prevNodeIdsForInstances.unpersist()
     }
   }
 }

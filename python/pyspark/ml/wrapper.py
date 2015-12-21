@@ -119,6 +119,7 @@ class JavaEstimator(Estimator, JavaWrapper):
     def _fit_java(self, dataset):
         """
         Fits a Java model to the input dataset.
+
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
@@ -173,6 +174,7 @@ class JavaModel(Model, JavaTransformer):
         extra params. This implementation first calls Params.copy and
         then make a copy of the companion Java model with extra params.
         So both the Python wrapper and the Java model get copied.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """

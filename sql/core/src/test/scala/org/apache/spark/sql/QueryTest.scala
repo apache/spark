@@ -23,7 +23,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.Queryable
 
 abstract class QueryTest extends PlanTest {
 
@@ -50,6 +51,54 @@ abstract class QueryTest extends PlanTest {
       } else {
         assert(!outputs.contains(key), s"Failed for $df ($key existed in the result)")
       }
+    }
+  }
+
+  /**
+   * Evaluates a dataset to make sure that the result of calling collect matches the given
+   * expected answer.
+   *  - Special handling is done based on whether the query plan should be expected to return
+   *    the results in sorted order.
+   *  - This function also checks to make sure that the schema for serializing the expected answer
+   *    matches that produced by the dataset (i.e. does manual construction of object match
+   *    the constructed encoder for cases like joins, etc).  Note that this means that it will fail
+   *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
+   *    which performs a subset of the checks done by this function.
+   */
+  protected def checkAnswer[T](
+      ds: Dataset[T],
+      expectedAnswer: T*): Unit = {
+    checkAnswer(
+      ds.toDF(),
+      sqlContext.createDataset(expectedAnswer)(ds.unresolvedTEncoder).toDF().collect().toSeq)
+
+    checkDecoding(ds, expectedAnswer: _*)
+  }
+
+  protected def checkDecoding[T](
+      ds: => Dataset[T],
+      expectedAnswer: T*): Unit = {
+    val decoded = try ds.collect().toSet catch {
+      case e: Exception =>
+        fail(
+          s"""
+             |Exception collecting dataset as objects
+             |${ds.resolvedTEncoder}
+             |${ds.resolvedTEncoder.fromRowExpression.treeString}
+             |${ds.queryExecution}
+           """.stripMargin, e)
+    }
+
+    if (decoded != expectedAnswer.toSet) {
+      val expected = expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted
+      val actual = decoded.toSet.toSeq.map((a: Any) => a.toString).sorted
+
+      val comparision = sideBySide("expected" +: expected, "spark" +: actual).mkString("\n")
+      fail(
+        s"""Decoded objects do not match expected objects:
+            |$comparision
+            |${ds.resolvedTEncoder.fromRowExpression.treeString}
+         """.stripMargin)
     }
   }
 
@@ -89,9 +138,35 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
-   * Asserts that a given [[DataFrame]] will be executed using the given number of cached results.
+   * Runs the plan and makes sure the answer is within absTol of the expected result.
+   * @param dataFrame the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param absTol the absolute tolerance between actual and expected answers.
    */
-  def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
+  protected def checkAggregatesWithTol(dataFrame: DataFrame,
+      expectedAnswer: Seq[Row],
+      absTol: Double): Unit = {
+    // TODO: catch exceptions in data frame execution
+    val actualAnswer = dataFrame.collect()
+    require(actualAnswer.length == expectedAnswer.length,
+      s"actual num rows ${actualAnswer.length} != expected num of rows ${expectedAnswer.length}")
+
+    actualAnswer.zip(expectedAnswer).foreach {
+      case (actualRow, expectedRow) =>
+        QueryTest.checkAggregatesWithTol(actualRow, expectedRow, absTol)
+    }
+  }
+
+  protected def checkAggregatesWithTol(dataFrame: DataFrame,
+      expectedAnswer: Row,
+      absTol: Double): Unit = {
+    checkAggregatesWithTol(dataFrame, Seq(expectedAnswer), absTol)
+  }
+
+  /**
+   * Asserts that a given [[Queryable]] will be executed using the given number of cached results.
+   */
+  def assertCached(query: Queryable, numCachedTables: Int = 1): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
       case cached: InMemoryRelation => cached
@@ -115,19 +190,26 @@ object QueryTest {
    */
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+
+    // We need to call prepareRow recursively to handle schemas with struct types.
+    def prepareRow(row: Row): Row = {
+      Row.fromSeq(row.toSeq.map {
+        case null => null
+        case d: java.math.BigDecimal => BigDecimal(d)
+        // Convert array to Seq for easy equality check.
+        case b: Array[_] => b.toSeq
+        case r: Row => prepareRow(r)
+        case o => o
+      })
+    }
+
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.
       // For BigDecimal type, the Scala type has a better definition of equality test (similar to
       // Java's java.math.BigDecimal.compareTo).
       // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
       // equality test.
-      val converted: Seq[Row] = answer.map { s =>
-        Row.fromSeq(s.toSeq.map {
-          case d: java.math.BigDecimal => BigDecimal(d)
-          case b: Array[Byte] => b.toSeq
-          case o => o
-        })
-      }
+      val converted: Seq[Row] = answer.map(prepareRow)
       if (!isSorted) converted.sortBy(_.toString()) else converted
     }
     val sparkAnswer = try df.collect().toSeq catch {
@@ -159,6 +241,28 @@ object QueryTest {
     }
 
     return None
+  }
+
+  /**
+   * Runs the plan and makes sure the answer is within absTol of the expected result.
+   * @param actualAnswer the actual result in a [[Row]].
+   * @param expectedAnswer the expected result in a[[Row]].
+   * @param absTol the absolute tolerance between actual and expected answers.
+   */
+  protected def checkAggregatesWithTol(actualAnswer: Row, expectedAnswer: Row, absTol: Double) = {
+    require(actualAnswer.length == expectedAnswer.length,
+      s"actual answer length ${actualAnswer.length} != " +
+        s"expected answer length ${expectedAnswer.length}")
+
+    // TODO: support other numeric types besides Double
+    // TODO: support struct types?
+    actualAnswer.toSeq.zip(expectedAnswer.toSeq).foreach {
+      case (actual: Double, expected: Double) =>
+        assert(math.abs(actual - expected) < absTol,
+          s"actual answer $actual not within $absTol of correct answer $expected")
+      case (actual, expected) =>
+        assert(actual == expected, s"$actual did not equal $expected")
+    }
   }
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): String = {
