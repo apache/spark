@@ -334,7 +334,7 @@ writeLines(mockLinesMapType, mapTypeJsonPath)
 
 test_that("Collect DataFrame with complex types", {
   # ArrayType
-
+  df <- read.json(sqlContext, complexTypeJsonPath)
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -489,7 +489,7 @@ test_that("insertInto() on a registered table", {
   unlink(parquetPath2)
 })
 
-test_that("table()/read.table() returns a new DataFrame", {
+test_that("table()/sqlTableToDF() returns a new DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
   tabledf <- suppressWarnings(table(sqlContext, "table1"))
