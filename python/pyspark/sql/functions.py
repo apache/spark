@@ -1053,7 +1053,7 @@ _string_functions = {
     'lower': 'Converts a string column to lower case.',
     'upper': 'Converts a string column to upper case.',
     'reverse': 'Reverses the string column and returns it as a new string column.',
-    'ltrim': 'Trim the spaces from right end for the specified string value.',
+    'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
 }
