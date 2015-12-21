@@ -30,7 +30,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.types.{StructType, ArrayType}
+import org.apache.spark.sql.types.{Decimal, StructType, ArrayType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -98,6 +98,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+
+  encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
