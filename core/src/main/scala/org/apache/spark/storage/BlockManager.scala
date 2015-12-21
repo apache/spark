@@ -579,11 +579,12 @@ private[spark] class BlockManager(
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
-    // Since block managers can share an identical host, we put these preferred
-    // locations first.
+    /**
+     * Return a list of locations for the given block, prioritizing the local machine since
+     * multiple block managers can share the same host.
+     */
     val locs = Random.shuffle(master.getLocations(blockId))
-    val preferredLocs = locs.filter(loc => blockManagerId.host == loc.host)
-    val otherLocs = locs.filter(loc => blockManagerId.host != loc.host)
+    val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
     preferredLocs ++ otherLocs
   }
 
