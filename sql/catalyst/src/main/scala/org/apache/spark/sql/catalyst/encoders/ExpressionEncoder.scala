@@ -285,7 +285,6 @@ case class ExpressionEncoder[T](
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     SimpleAnalyzer.checkAnalysis(analyzedPlan)
-    checkNullability(schema)
     val optimizedPlan = SimplifyCasts(analyzedPlan)
 
     // In order to construct instances of inner classes (for example those declared in a REPL cell),
@@ -304,18 +303,6 @@ case class ExpressionEncoder[T](
 
         n.copy(outerPointer = Some(Literal.fromObject(outer)))
     })
-  }
-
-  private def checkNullability(output: Seq[Attribute]): Unit = {
-    val logicalPlanSchema = StructType.fromAttributes(output)
-
-    // Checks for schema nullability
-    if (this.schema != logicalPlanSchema && this.schema.sameType(logicalPlanSchema)) {
-      throw new AnalysisException(
-        s"""Dataset nullability doesn't conform to the underlying logical plan:
-            >${sideBySide(logicalPlanSchema.treeString, this.schema.treeString).mkString("\n")}
-         """.stripMargin('>'))
-    }
   }
 
   /**

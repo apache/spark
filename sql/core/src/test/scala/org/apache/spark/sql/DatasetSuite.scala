@@ -517,33 +517,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e.getMessage.contains("cannot resolve 'c' given input columns a, b"), e.getMessage)
   }
 
-  test("analysis time nullability check") {
-    val rowRDD = sqlContext.sparkContext.parallelize(Seq(
-      Row(Row("hello", 1: Integer)),
-      Row(Row("world", null))
-    ))
-
-    val schema = StructType(Seq(
-      StructField("f", StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", IntegerType, nullable = false)
-      )), nullable = false)
-    ))
-
-    val message = intercept[AnalysisException] {
-      sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct].collect()
-    }.message
-
-    assert(message.contains(
-      """Dataset nullability doesn't conform to the underlying logical plan:
-        | root                                      root
-        |! |-- f: struct (nullable = false)          |-- f: struct (nullable = true)
-        |  |    |-- a: string (nullable = true)      |    |-- a: string (nullable = true)
-        |  |    |-- b: integer (nullable = false)    |    |-- b: integer (nullable = false)
-      """.stripMargin
-    ))
-  }
-
   test("runtime nullability check") {
     val schema = StructType(Seq(
       StructField("f", StructType(Seq(

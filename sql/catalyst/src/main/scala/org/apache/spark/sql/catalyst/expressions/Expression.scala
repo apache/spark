@@ -49,7 +49,6 @@ import org.apache.spark.sql.types._
  *
  */
 abstract class Expression extends TreeNode[Expression] {
-  protected def nullabilitySuffix: String = if (nullable) "<?>" else "<!>"
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
