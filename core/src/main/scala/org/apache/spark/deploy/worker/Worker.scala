@@ -17,27 +17,24 @@
 
 package org.apache.spark.deploy.worker
 
-import java.io.File
-import java.io.IOException
+import java.io.{File, IOException}
 import java.text.SimpleDateFormat
-import java.util.{UUID, Date}
-import java.util.concurrent._
-import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture, _}
+import java.util.{Date, UUID}
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
+import scala.util.{Failure, Random, Success}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
+import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState, ExternalShuffleService}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.spark.util.{SignalLogger, ThreadUtils, Utils}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -686,6 +683,7 @@ private[deploy] object Worker extends Logging {
   val ENDPOINT_NAME = "Worker"
 
   def main(argStrings: Array[String]) {
+    log.info(s"Started worker with process name: ${Utils.getProcessName()}")
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
