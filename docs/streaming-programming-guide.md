@@ -1484,7 +1484,66 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/ma
 <div data-lang="java" markdown="1">
 {% highlight java %}
 
-TODO
+class JavaWordBlacklist {
+
+  private static volatile Broadcast<List<String>> instance = null;
+
+  public static Broadcast<List<String>> getInstance(JavaSparkContext jsc) {
+    if (instance == null) {
+      synchronized (WordBlacklist.class) {
+        if (instance == null) {
+          List<String> wordBlacklist = Arrays.asList("a", "b", "c");
+          instance = jsc.broadcast(wordBlacklist);
+        }
+      }
+    }
+    return instance;
+  }
+}
+
+class JavaDroppedWordsCounter {
+
+  private static volatile Accumulator<Integer> instance = null;
+
+  public static Accumulator<Integer> getInstance(JavaSparkContext jsc) {
+    if (instance == null) {
+      synchronized (DroppedWordsCounter.class) {
+        if (instance == null) {
+          instance = jsc.accumulator(0, "WordsInBlacklistCounter");
+        }
+      }
+    }
+    return instance;
+  }
+}
+
+wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() {
+  @Override
+  public Void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
+    // Get or register the blacklist Broadcast
+    final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
+    // Get or register the droppedWordsCounter Accumulator
+    final Accumulator<Integer> droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
+    // Use blacklist to drop words and use droppedWordsCounter to count them
+    String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
+      @Override
+      public Boolean call(Tuple2<String, Integer> wordCount) throws Exception {
+        if (blacklist.value().contains(wordCount._1())) {
+          droppedWordsCounter.add(wordCount._2());
+          return false;
+        } else {
+          return true;
+        }
+      }
+    }).collect().toString();
+    String output = "Counts at time " + time + " " + counts;
+    System.out.println(output);
+    System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
+    System.out.println("Appending to " + outputFile.getAbsolutePath());
+    Files.append(output + "\n", outputFile, Charset.defaultCharset());
+    return null;
+  }
+}
 
 {% endhighlight %}
 
@@ -1493,7 +1552,38 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/ma
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
-TODO
+def getWordBlacklist(sparkContext):
+    if ('wordBlacklist' not in globals()):
+        globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()['wordBlacklist']
+
+def getDroppedWordsCounter(sparkContext):
+    if ('droppedWordsCounter' not in globals()):
+        globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
+    return globals()['droppedWordsCounter']
+
+def echo(time, rdd):
+    # Get or register the blacklist Broadcast
+    blacklist = getWordBlacklist(rdd.context)
+    # Get or register the droppedWordsCounter Accumulator
+    droppedWordsCounter = getDroppedWordsCounter(rdd.context)
+
+    # Use blacklist to drop words and use droppedWordsCounter to count them
+    def filterFunc(wordCount):
+        if wordCount[0] in blacklist.value:
+            droppedWordsCounter.add(wordCount[1])
+            False
+        else:
+            True
+
+    counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
+    print(counts)
+    print("Dropped %d word(s) totally" % droppedWordsCounter.value)
+    print("Appending to " + os.path.abspath(outputPath))
+    with open(outputPath, 'a') as f:
+        f.write(counts + "\n")
+
+wordCounts.foreachRDD(echo)
 
 {% endhighlight %}
 

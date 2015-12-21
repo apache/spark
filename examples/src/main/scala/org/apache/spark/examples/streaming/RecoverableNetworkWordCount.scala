@@ -124,7 +124,7 @@ object RecoverableNetworkWordCount {
       // Use blacklist to drop words and use droppedWordsCounter to count them
       val counts = rdd.filter { case (word, count) =>
         if (blacklist.value.contains(word)) {
-          droppedWordsCounter += 1
+          droppedWordsCounter += count
           false
         } else {
           true
