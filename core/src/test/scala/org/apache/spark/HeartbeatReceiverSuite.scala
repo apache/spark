@@ -221,7 +221,7 @@ class HeartbeatReceiverSuite
     } else {
       assert(!response.reregisterBlockManager)
       // Additionally verify that the scheduler callback is called with the correct parameters
-      verify(scheduler).executorHeartbeatReceived(
+      verify(scheduler, atLeast(1)).executorHeartbeatReceived(
         Matchers.eq(executorId), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
     }
   }
