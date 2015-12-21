@@ -288,6 +288,9 @@ private[sql] class JDBCRDD(
     case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
     case IsNull(attr) => s"$attr IS NULL"
     case IsNotNull(attr) => s"$attr IS NOT NULL"
+    case StringStartsWith(attr, value) => s"$attr LIKE '${escapeSql(value)}%'"
+    case StringContains(attr, value) => s"$attr LIKE '%${escapeSql(value)}%'"
+    case StringEndsWith(attr, value) => s"$attr LIKE '%${escapeSql(value)}'"
     case _ => null
   }
 
