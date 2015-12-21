@@ -51,8 +51,8 @@ class SlackAPIOperator(BaseOperator):
         sc = SlackClient(self.token)
         rc = json.loads(sc.api_call(self.method, **self.api_params).decode('utf-8'))
         if not rc['ok']:
-            raise AirflowException("Slack API call failed: ({})".format(rc['error']))
             logging.error("Slack API call failed ({})".format(rc['error']))
+            raise AirflowException("Slack API call failed: ({})".format(rc['error']))
 
 
 class SlackAPIPostOperator(SlackAPIOperator):
