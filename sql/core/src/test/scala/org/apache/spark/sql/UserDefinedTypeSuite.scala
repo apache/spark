@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.ConcurrentMap
+
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 
 import scala.beans.{BeanInfo, BeanProperty}
 import scala.reflect.runtime.universe.TypeTag
+
+import com.google.common.collect.MapMaker
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
@@ -94,6 +98,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
   }
 
+  private val outers: ConcurrentMap[String, AnyRef] = new MapMaker().weakValues().makeMap()
+  outers.put(getClass.getName, this)
+
   test("user type with ScalaReflection") {
     val points = Seq(
       MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
@@ -109,6 +116,10 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     points.zip(decodedPoints).foreach { case (p, p2) =>
       assert(p.label == p2(0) && p.features == p2(1))
     }
+
+    val boundEncoder = pointEncoder.resolve(attributeSeq, outers).bind(attributeSeq)
+    val point = MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0)))
+    assert(boundEncoder.fromRow(boundEncoder.toRow(point)) === point)
   }
 
   test("UDTs and UDFs") {

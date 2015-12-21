@@ -81,6 +81,9 @@ object Cast {
                 toField.nullable)
         }
 
+    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt1.userClass == udt2.userClass =>
+      true
+
     case _ => false
   }
 
@@ -473,6 +476,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
+    case udt: UserDefinedType[_]
+      if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
+      (c, evPrim, evNull) => s"$evPrim = $c;"
   }
 
   // Since we need to cast child expressions recursively inside ComplexTypes, such as Map's
