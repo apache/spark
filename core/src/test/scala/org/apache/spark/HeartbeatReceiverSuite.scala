@@ -29,6 +29,7 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.mockito.Matchers
 import org.mockito.Matchers._
+import org.mockito.internal.verification.VerificationModeFactory
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv, RpcEndpointRef}
@@ -221,7 +222,7 @@ class HeartbeatReceiverSuite
     } else {
       assert(!response.reregisterBlockManager)
       // Additionally verify that the scheduler callback is called with the correct parameters
-      verify(scheduler, atLeast(1)).executorHeartbeatReceived(
+      verify(scheduler, VerificationModeFactory.atLeast(1)).executorHeartbeatReceived(
         Matchers.eq(executorId), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
     }
   }
