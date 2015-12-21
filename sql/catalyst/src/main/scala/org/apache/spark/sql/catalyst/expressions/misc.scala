@@ -30,6 +30,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * A function that calculates an MD5 128-bit checksum and returns it as a hex string
  * For input of type [[BinaryType]]
  */
+@ExpressionDescription(
+  usage = "_FUNC_(input) - Returns an MD5 128-bit checksum as a hex string of the input",
+  extended = "> SELECT _FUNC_('SparkSql');\n '49df15ea9f84f6fcf94f2823bf3f861e'")
 case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
@@ -53,6 +56,11 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
  * asking for an unsupported SHA function, the return value is NULL. If either argument is NULL or
  * the hash length is not one of the permitted values, the return value is NULL.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(input) - Returns a checksum of SHA-2 family as a hex string of the input. " +
+    "SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256",
+  extended = "> SELECT _FUNC_('SparkSql', 0);\n " +
+    "'80b5f950af5941071ff9b9f124597e0d265cc6e966780546dbaa3859b4cd7036'")
 case class Sha2(left: Expression, right: Expression)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
@@ -118,6 +126,9 @@ case class Sha2(left: Expression, right: Expression)
  * A function that calculates a sha1 hash value and returns it as a hex string
  * For input of type [[BinaryType]] or [[StringType]]
  */
+@ExpressionDescription(
+  usage = "_FUNC_(input) - Returns a sha1 hash value as a hex string of the input",
+  extended = "> SELECT _FUNC_('SparkSql');\n 'f5c94d5add191e2451293e82cbd3db03ad90104b'")
 case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
@@ -138,6 +149,9 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
  * A function that computes a cyclic redundancy check value and returns it as a bigint
  * For input of type [[BinaryType]]
  */
+@ExpressionDescription(
+  usage = "_FUNC_(input) - Returns a cyclic redundancy check value as a bigint of the input",
+  extended = "> SELECT _FUNC_('SparkSql');\n '3802403096'")
 case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = LongType
