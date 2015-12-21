@@ -27,7 +27,8 @@ import org.apache.spark.sql.types._
  * Given an array or map, returns its size.
  */
 @ExpressionDescription(
-usage = "_FUNC_(column) - Returns the length of the array or map stored in the column")
+  usage = "_FUNC_(column) - Returns the length of the array or map stored in the column",
+  extended = "> SELECT _FUNC_(array(\"b\", \"d\", \"c\", \"a\"));\n 4")
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
@@ -47,8 +48,10 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * the array elements and returns it.
  */
 @ExpressionDescription(
-usage = "_FUNC_(array, ascendingOrder) - Sorts the input array for the given column in " +
-  "ascending / descending order, according to the natural ordering of the array elements")
+  usage = "_FUNC_(array, ascendingOrder) - Sorts the input array for the given column in " +
+    "ascending / descending order, according to the natural ordering of the array elements",
+  extended = "> SELECT _FUNC_(array(\"b\", \"d\", \"c\", \"a\"), false);\n " +
+    "[\"d\",\"c\",\"b\",\"a\"]")
 case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -131,7 +134,8 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
  * Checks if the array (left) has the element (right)
  */
 @ExpressionDescription(
-usage = "_FUNC_(array, value) - Returns true if the array contains the value")
+  usage = "_FUNC_(array, value) - Returns true if the array contains the value",
+  extended = "> SELECT _FUNC_(array(2, 9, 8), 9);\n true")
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
