@@ -156,7 +156,7 @@ private[ui] class ExecutorsPage(
       </td>
       <td style={
         if (info.activeTasks > 0) {
-          "background:hsla(120, 100%, 25%, " + activeTasksAlpha + ");color:white"
+          "background:hsla(240, 100%, 50%, " + activeTasksAlpha + ");color:white"
         } else {
           ""
         }
@@ -169,8 +169,8 @@ private[ui] class ExecutorsPage(
         }
       }>{info.failedTasks}</td>
       <td style={
-        if (info.completedTasks > 0) {
-          "background:hsla(240, 100%, 50%, " + completedTasksAlpha + ");color:white"
+        if (info.completedTasks > 0 && (info.activeTasks > 0 || info.failedTasks > 0)) {
+          "background:hsla(120, 100%, 25%, " + completedTasksAlpha + ");color:white"
         } else {
           ""
         }
