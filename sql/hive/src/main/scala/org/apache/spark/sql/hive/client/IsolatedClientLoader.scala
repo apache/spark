@@ -26,15 +26,23 @@ import scala.language.reflectiveCalls
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.{UserInput, HiveContext}
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
+
+/**
+ * Use to encapsulate the user input parameters from spark-sql CLI.
+ */
+private[hive] case class UserInput (isSilent: Boolean, isVerbose: Boolean)
+
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
+  var userInput: Option[UserInput] = null
   /**
    * Creates isolated Hive client loaders by downloading the requested version from maven.
    */
@@ -233,9 +241,12 @@ private[hive] class IsolatedClientLoader(
   }
 
   /** The isolated client interface to Hive. */
-  private[hive] def createClient(userInput: Option[UserInput] = None): ClientInterface = {
+  private[hive] def createClient(): ClientInterface = {
     if (!isolationOn) {
-      return new ClientWrapper(version, config, baseClassLoader, this, userInput)
+      val ss = baseClassLoader.loadClass("org.apache.hadoop.hive.ql.session.SessionState")
+        .getMethod("get").invoke(null).asInstanceOf[SessionState]
+      IsolatedClientLoader.userInput = Some(UserInput(ss.getIsSilent, ss.getIsVerbose))
+      return new ClientWrapper(version, config, baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -246,7 +257,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[ClientWrapper].getName)
         .getConstructors.head
-        .newInstance(version, config, classLoader, this, userInput)
+        .newInstance(version, config, classLoader, this)
         .asInstanceOf[ClientInterface]
     } catch {
       case e: InvocationTargetException =>

@@ -56,10 +56,6 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkContext}
 
-/**
- * Use to encapsulate the user input parameters from spark-sql CLI.
- */
-private[hive] case class UserInput (isSilent: Boolean, isVerbose: Boolean)
 
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
@@ -97,19 +93,13 @@ class HiveContext private[hive](
     listener: SQLListener,
     @transient private val execHive: ClientWrapper,
     @transient private val metaHive: ClientInterface,
-    isRootContext: Boolean,
-    userInput: Option[UserInput] = None)
+    isRootContext: Boolean)
   extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
   self =>
 
   def this(sc: SparkContext) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null, true, None)
+    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null, true)
   }
-
-  def this(sc: SparkContext, userInput: Option[UserInput]) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null, true, userInput)
-  }
-
   def this(sc: JavaSparkContext) = this(sc.sc)
 
   import org.apache.spark.sql.hive.HiveContext._
@@ -225,7 +215,7 @@ class HiveContext private[hive](
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
-    loader.createClient(userInput).asInstanceOf[ClientWrapper]
+    loader.createClient().asInstanceOf[ClientWrapper]
   }
 
   /**
@@ -334,7 +324,7 @@ class HiveContext private[hive](
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
-    isolatedLoader.createClient(userInput)
+    isolatedLoader.createClient()
   }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
@@ -665,6 +655,7 @@ class HiveContext private[hive](
     super.addJar(path)
   }
 }
+
 
 private[hive] object HiveContext {
   /** The version of hive used internally by Spark SQL. */
