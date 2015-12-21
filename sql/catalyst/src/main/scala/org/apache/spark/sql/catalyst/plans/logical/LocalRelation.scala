@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analysis}
@@ -45,7 +46,7 @@ object LocalRelation {
   def fromProduct[T <: Product : ExpressionEncoder](
       output: Seq[Attribute],
       data: Seq[T]): LocalRelation = {
-    val encoder = implicitly[ExpressionEncoder[T]]
+    val encoder = encoderFor[T]
     val schema = StructType.fromAttributes(output)
     new LocalRelation(output, data.map(encoder.toRow(_).copy().asInstanceOf[UnsafeRow]))
   }
