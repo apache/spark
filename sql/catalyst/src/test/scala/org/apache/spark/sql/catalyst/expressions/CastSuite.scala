@@ -20,12 +20,42 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Timestamp, Date}
 import java.util.{TimeZone, Calendar}
 
+import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+@SQLUserDefinedType(udt = classOf[ExampleUDT])
+class ExampleClass extends Serializable
+
+@SQLUserDefinedType(udt = classOf[Example2UDT])
+class ExampleClass2 extends Serializable
+
+class ExampleUDT extends UserDefinedType[ExampleClass] {
+  override def sqlType: DataType = DoubleType
+  override def pyUDT: String = "pyspark.sql.test.ExampleUDT"
+  override def serialize(obj: Any): Double = {
+    0.0
+  }
+  override def deserialize(datum: Any): ExampleClass = new ExampleClass
+  override def userClass: Class[ExampleClass] = classOf[ExampleClass]
+  private[spark] override def asNullable: ExampleUDT = this
+}
+
+class Example2UDT extends UserDefinedType[ExampleClass2] {
+  override def sqlType: DataType = DoubleType
+  override def pyUDT: String = "pyspark.sql.test.Example2UDT"
+  override def serialize(obj: Any): Double = {
+    0.0
+  }
+  override def deserialize(datum: Any): ExampleClass2 = new ExampleClass2
+  override def userClass: Class[ExampleClass2] = classOf[ExampleClass2]
+  private[spark] override def asNullable: Example2UDT = this
+}
 
 /**
  * Test suite for data type casting expression [[Cast]].
@@ -789,5 +819,26 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast("abc", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
+  }
+
+  test("cast between UserDefinedTypes") {
+    assert(Cast.canCast(new ExampleUDT, new ExampleUDT) == true)
+    assert(Cast.canCast(new ExampleUDT, new Example2UDT) == false)
+
+    val udt = new ExampleClass
+
+    val castExpression = Cast(Literal.create(udt, new ExampleUDT), new ExampleUDT)
+    checkEvaluationWithoutCodegen(castExpression, udt)
+    val castExpression2 = Cast(Literal.create(0.0, new ExampleUDT), new ExampleUDT)
+    checkEvaluationWithGeneratedMutableProjection(castExpression2, 0.0)
+
+    val castExpression3 = Cast(Literal.create(udt, new ExampleUDT), new Example2UDT)
+    intercept[TestFailedException] {
+      checkEvaluationWithoutCodegen(castExpression3, udt)
+    }
+    val castExpression4 = Cast(Literal.create(0.0, new ExampleUDT), new Example2UDT)
+    intercept[TestFailedException] {
+      checkEvaluationWithGeneratedMutableProjection(castExpression4, 0.0)
+    }
   }
 }
