@@ -168,6 +168,35 @@ private[sql] object JDBCRDD extends Logging {
   }
 
   /**
+   * Converts value to SQL expression.
+   */
+  private def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case dateValue: Date => "'" + dateValue + "'"
+    case _ => value
+  }
+
+  private def escapeSql(value: String): String =
+    if (value == null) null else StringUtils.replace(value, "'", "''")
+
+  /**
+   * Turns a single Filter into a String representing a SQL expression.
+   * Returns null for an unhandled filter.
+   */
+  private def compileFilter(f: Filter): String = f match {
+    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
+    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
+    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
+    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
+    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
+    case IsNull(attr) => s"$attr IS NULL"
+    case IsNotNull(attr) => s"$attr IS NOT NULL"
+    case _ => null
+  }
+
+  /**
    * Given a driver string and an url, return a function that loads the
    * specified driver string then returns a connection to the JDBC url.
    * getConnector is run on the driver code, while the function it returns
@@ -262,40 +291,12 @@ private[sql] class JDBCRDD(
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
-  /**
-   * Converts value to SQL expression.
-   */
-  private def compileValue(value: Any): Any = value match {
-    case stringValue: String => s"'${escapeSql(stringValue)}'"
-    case timestampValue: Timestamp => "'" + timestampValue + "'"
-    case dateValue: Date => "'" + dateValue + "'"
-    case _ => value
-  }
-
-  private def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
-
-  /**
-   * Turns a single Filter into a String representing a SQL expression.
-   * Returns null for an unhandled filter.
-   */
-  private def compileFilter(f: Filter): String = f match {
-    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
-    case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
-    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
-    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
-    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
-    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
-    case IsNull(attr) => s"$attr IS NULL"
-    case IsNotNull(attr) => s"$attr IS NOT NULL"
-    case _ => null
-  }
 
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String = {
-    val filterStrings = filters map compileFilter filter (_ != null)
+    val filterStrings = filters map JDBCRDD.compileFilter filter (_ != null)
     if (filterStrings.size > 0) {
       val sb = new StringBuilder("WHERE ")
       filterStrings.foreach(x => sb.append(x).append(" AND "))
