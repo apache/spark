@@ -228,7 +228,7 @@ object JdbcUtils extends Logging {
   }
   
   /**
-   * Compute the table string for this RDD.
+   * Compute the table name string for this RDD.
    */
   def tableString(table: String, url: String): String = {
     val dialect = JdbcDialects.get(url)
