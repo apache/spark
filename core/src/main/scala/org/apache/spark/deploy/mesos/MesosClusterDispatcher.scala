@@ -50,11 +50,7 @@ private[mesos] class MesosClusterDispatcher(
   extends Logging {
 
   private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)
-  private val recoveryMode = conf.getOption("spark.mesos.deploy.recoverMode").map { mode =>
-    logWarning("spark.mesos.deploy.recoverMode is deprecated. Please configure " +
-      "spark.deploy.recoveryMode instead.")
-    mode.toUpperCase()
-  }.getOrElse(conf.get("spark.deploy.recoveryMode", "NONE").toUpperCase())
+  private val recoveryMode = conf.get("spark.deploy.recoveryMode", "NONE").toUpperCase()
   logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)
 
   private val engineFactory = recoveryMode match {
