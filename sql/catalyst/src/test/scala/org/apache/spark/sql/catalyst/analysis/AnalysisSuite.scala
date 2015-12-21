@@ -276,10 +276,9 @@ class AnalysisSuite extends AnalysisTest {
   }
 
   test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
-    val caseBranches = Seq((Literal(1) > Literal(0)),
-      CreateStruct(Seq(Cast(Floor(Literal(10)), IntegerType))),
-      CreateStruct(Seq(Literal(10))))
-    val plan = OneRowRelation.select(Alias(CaseWhen(caseBranches), "val")())
+    val relation = LocalRelation('a.struct(StructField("x", IntegerType, true))
+      ,'b.struct(StructField("x", IntegerType, false)))
+    val plan = relation.select(CaseWhen(Seq(Literal(true), 'a, 'b)).as("val"))
     assertAnalysisSuccess(plan)
   }
 }
