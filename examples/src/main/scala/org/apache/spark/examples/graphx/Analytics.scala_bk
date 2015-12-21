@@ -25,16 +25,6 @@ import org.apache.spark.graphx._
 import org.apache.spark.graphx.lib._
 import org.apache.spark.graphx.PartitionStrategy._
 
-// han sampler import begin
-import java.io._
-import org.apache.spark.storage._
-import java.lang.System
-import java.util.Date
-import java.util.concurrent._
-import java.text._
-import scala.util.Properties
-// han sampler import end
-
 /**
  * Driver program for running graph algorithms.
  */
@@ -62,39 +52,12 @@ object Analytics extends Logging {
     val options = mutable.Map(optionsList: _*)
 
     val conf = new SparkConf()
- // han register kryo classes begin
-   /* 
-    val intArrayClass = classOf[Array[Int]]
-    val doubleArrayClass = classOf[Array[Double]]
-    val EdgePartitionClass = Class.forName("org.apache.spark.graphx.impl.EdgePartition$mcI$sp")
-    val NonePartitionClass = Class.forName("scala.None$")
-    val ManifestFactory_anon_9Class = Class.forName("scala.reflect.ManifestFactory$$anon$9")
-    val GraphXPrimitiveKeyOpenHashMap_mcJI_spClass = Class.forName("org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$mcJI$sp")
-    val ManifestFactory_anon_10Class = Class.forName("scala.reflect.ManifestFactory$$anon$10")
-    val GraphXPrimitiveKeyOpenHashMap_anonfun_1Class = Class.forName("org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$$anonfun$1")
-    val OpenHashSet_LongHasherClass = Class.forName("org.apache.spark.util.collection.OpenHashSet$LongHasher")
-    val GraphXPrimitiveKeyOpenHashMap_anonfun_2Class = Class.forName("org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$$anonfun$2")
-    val ShippableVertexPartitionClass = Class.forName("org.apache.spark.graphx.impl.ShippableVertexPartition")
-    val RoutingTablePartitionClass = Class.forName("org.apache.spark.graphx.impl.RoutingTablePartition")
-    val Tuple3ArrayClass = classOf[Array[scala.Tuple3[Any, Any, Any]]]
-    val ManifestFactory_anon_12Class = Class.forName("scala.reflect.ManifestFactory$$anon$12")
-
-
-    conf.registerKryoClasses(Array(intArrayClass, doubleArrayClass, EdgePartitionClass, NonePartitionClass, ManifestFactory_anon_9Class, GraphXPrimitiveKeyOpenHashMap_mcJI_spClass, ManifestFactory_anon_10Class, GraphXPrimitiveKeyOpenHashMap_anonfun_1Class, OpenHashSet_LongHasherClass, GraphXPrimitiveKeyOpenHashMap_anonfun_2Class, ShippableVertexPartitionClass, RoutingTablePartitionClass, Tuple3ArrayClass, ManifestFactory_anon_12Class))
-    */
-    // han register kryo classes end
-
     GraphXUtils.registerKryoClasses(conf)
 
     val numEPart = options.remove("numEPart").map(_.toInt).getOrElse {
       println("Set the number of edge partitions using --numEPart.")
       sys.exit(1)
     }
-
-    // han
-    var storageLevel: StorageLevel = options.remove("storageLevel")
-      .map(StorageLevel.fromString(_)).getOrElse(null)
-
     val partitionStrategy: Option[PartitionStrategy] = options.remove("partStrategy")
       .map(PartitionStrategy.fromString(_))
     val edgeStorageLevel = options.remove("edgeStorageLevel")
@@ -105,11 +68,7 @@ object Analytics extends Logging {
     taskType match {
       case "pagerank" =>
         val tol = options.remove("tol").map(_.toFloat).getOrElse(0.001F)
-
-        // han
-        //        val outFname = options.remove("output").getOrElse("")
-        var outFname = options.remove("output").getOrElse("")
-
+        val outFname = options.remove("output").getOrElse("")
         val numIterOpt = options.remove("numIter").map(_.toInt)
 
         options.foreach {
@@ -122,88 +81,19 @@ object Analytics extends Logging {
 
         val sc = new SparkContext(conf.setAppName("PageRank(" + fname + ")"))
 
-        // han
-        if (!outFname.isEmpty) {
-          outFname += sc.applicationId
-        }
-
-        // han sampler 1 begin
-        val SAMPLING_PERIOD: Long = 10
-        val TIMESTAMP_PERIOD: Long = 1000
-
-        var dateFormat: DateFormat = new SimpleDateFormat("hh:mm:ss")
-
-        val dirname_application = Properties.envOrElse("SPARK_HOME", "/home/mayuresh/spark-1.5.1") + "/logs/" + sc.applicationId
-
-        val dir_application = new File(dirname_application)
-        if (!dir_application.exists())
-          dir_application.mkdirs()
-
-        val ex = new ScheduledThreadPoolExecutor(1)
-        val task = new Runnable {
-          var i: Long = 0
-          override def run {
-
-            //        sc.getExecutorStorageStatus.filter(s => s.blockManagerId.host.contains("slave1"))
-            sc.getExecutorStorageStatus.foreach {
-              es =>
-                val filename: String = dirname_application + "/sparkOutput_driver_" + sc.applicationId + "_" + es.blockManagerId + ".txt"
-                val file = new File(filename)
-                val writer = new FileWriter(file, true)
-                if (!file.exists()) {
-                  file.createNewFile()
-                  writer.write(sc.applicationId + "_" + es.blockManagerId + "\n")
-                  writer.flush()
-                  writer.close()
-                }
-                var s = es.memUsed.toString()
-
-                s += "\t" + es.maxMem.toString()
-                s += "\t" + es.offHeapUsed.toString()
-
-                //println(s)
-                if (i % TIMESTAMP_PERIOD == 0) {
-                  i = 0
-                  var time: String = dateFormat.format(new Date())
-                  s += "\t" + time
-                }
-
-                writer.write(s + "\n")
-                writer.flush()
-                writer.close()
-            }
-            i = i + SAMPLING_PERIOD
-          }
-        }
-        val f = ex.scheduleAtFixedRate(task, 0, SAMPLING_PERIOD, TimeUnit.MILLISECONDS)
-        // han sampler 1 end 
-
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
           numEdgePartitions = numEPart,
-
-          // han
-          //          edgeStorageLevel = edgeStorageLevel,
-          //          vertexStorageLevel = vertexStorageLevel)
-          edgeStorageLevel = storageLevel,
-          vertexStorageLevel = storageLevel)
-          .cache()
-
+          edgeStorageLevel = edgeStorageLevel,
+          vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
         println("GRAPHX: Number of vertices " + graph.vertices.count)
         println("GRAPHX: Number of edges " + graph.edges.count)
 
-        // han
-        //        val pr = (numIterOpt match {
-        //          case Some(numIter) => PageRank.run(graph, numIter)
-        //          case None => PageRank.runUntilConvergence(graph, tol)
-        //        }).vertices
-        //                          .cache()
         val pr = (numIterOpt match {
-          case Some(numIter) => PageRank.run_storageLevel(graph = graph, numIter = numIter, storageLevel = storageLevel)
-          case None => PageRank.runUntilConvergence_storageLevel(graph = graph, tol = tol, storageLevel = storageLevel)
-        }).vertices
-          .persist(storageLevel)
+          case Some(numIter) => PageRank.run(graph, numIter)
+          case None => PageRank.runUntilConvergence(graph, tol)
+        }).vertices.cache()
 
         println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_ + _))
 
@@ -213,10 +103,6 @@ object Analytics extends Logging {
         }
 
         sc.stop()
-
-        // han sampler 2 begin
-        f.cancel(true)
-      // han sampler 2 end
 
       case "cc" =>
         options.foreach {

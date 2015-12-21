@@ -19,6 +19,8 @@ package org.apache.spark.unsafe;
 
 import java.lang.reflect.Field;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 import sun.misc.Unsafe;
 
 public final class Platform {
@@ -32,6 +34,10 @@ public final class Platform {
   public static final int LONG_ARRAY_OFFSET;
 
   public static final int DOUBLE_ARRAY_OFFSET;
+
+  // mayuresh: hacky way to find offheap usage
+  private static ConcurrentHashMap<Long, Long> ADDRESS_SIZE_MAP = new ConcurrentHashMap<Long, Long>();
+  public static volatile long TOTAL_BYTES = 0L;
 
   public static int getInt(Object object, long offset) {
     return _UNSAFE.getInt(object, offset);
@@ -98,36 +104,28 @@ public final class Platform {
   }
 
   public static long allocateMemory(long size) {
-    return _UNSAFE.allocateMemory(size);
+    long address = _UNSAFE.allocateMemory(size);
+    // mayuresh: hacky way of tracking offheap usage
+    TOTAL_BYTES += size;
+    ADDRESS_SIZE_MAP.put(address, size);
+    return address;
   }
 
   public static void freeMemory(long address) {
+    // mayuresh: hacky way of tracking offheap usage
+    TOTAL_BYTES -= ADDRESS_SIZE_MAP.get(address);
+    ADDRESS_SIZE_MAP.remove(address);
     _UNSAFE.freeMemory(address);
   }
 
   public static void copyMemory(
     Object src, long srcOffset, Object dst, long dstOffset, long length) {
-    // Check if dstOffset is before or after srcOffset to determine if we should copy
-    // forward or backwards. This is necessary in case src and dst overlap.
-    if (dstOffset < srcOffset) {
-      while (length > 0) {
-        long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
-        _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
-        length -= size;
-        srcOffset += size;
-        dstOffset += size;
-      }
-    } else {
-      srcOffset += length;
-      dstOffset += length;
-      while (length > 0) {
-        long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
-        srcOffset -= size;
-        dstOffset -= size;
-        _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
-        length -= size;
-      }
-
+    while (length > 0) {
+      long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
+      _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
+      length -= size;
+      srcOffset += size;
+      dstOffset += size;
     }
   }
 

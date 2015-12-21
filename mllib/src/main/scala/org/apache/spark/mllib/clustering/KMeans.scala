@@ -20,14 +20,18 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
+import org.apache.spark.annotation.{ Experimental, Since }
+import org.apache.spark.mllib.linalg.{ Vector, Vectors }
+import org.apache.spark.mllib.linalg.BLAS.{ axpy, scal }
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
+
+// han import begin
+import scala.collection.mutable.MutableList
+// han import end
 
 /**
  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
@@ -69,6 +73,13 @@ class KMeans private (
     this
   }
 
+  // han
+  private var storageLevel: StorageLevel = null
+  def setStorageLevel(storageLevel: StorageLevel): this.type = {
+    this.storageLevel = storageLevel
+    this
+  }
+
   /**
    * Maximum number of iterations to run.
    */
@@ -107,7 +118,7 @@ class KMeans private (
    * Number of runs of the algorithm to execute in parallel.
    */
   @Since("1.4.0")
-  @deprecated("Support for runs is deprecated. This param will have no effect in 1.7.0.", "1.6.0")
+  @Experimental
   def getRuns: Int = runs
 
   /**
@@ -117,7 +128,7 @@ class KMeans private (
    * return the best clustering found over any run. Default: 1.
    */
   @Since("0.8.0")
-  @deprecated("Support for runs is deprecated. This param will have no effect in 1.7.0.", "1.6.0")
+  @Experimental
   def setRuns(runs: Int): this.type = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
@@ -206,11 +217,17 @@ class KMeans private (
 
     // Compute squared norms and cache them.
     val norms = data.map(Vectors.norm(_, 2.0))
-    norms.persist()
-    val zippedData = data.zip(norms).map { case (v, norm) =>
-      new VectorWithNorm(v, norm)
+    // han
+    //    norms.persist()
+    norms.persist(storageLevel)
+
+    val zippedData = data.zip(norms).map {
+      case (v, norm) =>
+        new VectorWithNorm(v, norm)
     }
     val model = runAlgorithm(zippedData)
+
+    // han
     norms.unpersist()
 
     // Warn at the end of the run as well, for increased visibility.
@@ -261,6 +278,13 @@ class KMeans private (
     var iteration = 0
 
     val iterationStartTime = System.nanoTime()
+    
+    // han
+    println("Iteration 1 starts:\n" + iterationStartTime)
+
+    // han
+    var iDurs: MutableList[(Int, Double)] = new MutableList[(Int, Double)]
+    var iterationEndTime_last: Long = iterationStartTime
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
@@ -323,23 +347,45 @@ class KMeans private (
         }
         costs(run) = costAccums(i).value
       }
-
       activeRuns = activeRuns.filter(active(_))
+
+      // han
+      val iterationEndTime = System.nanoTime()
+      var iDuration: Double = (iterationEndTime - iterationEndTime_last) / 1000000000.0
+      iDurs += ((iteration, iDuration))
+      println("Iteration " + iteration + ": " + iDuration)
+      iterationEndTime_last = iterationEndTime
+      
       iteration += 1
     }
+    
+    // han
+    println("Iterations complete:\n" + System.nanoTime())
+
 
     val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
     logInfo(s"Iterations took " + "%.3f".format(iterationTimeInSeconds) + " seconds.")
 
     if (iteration == maxIterations) {
       logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
+      // han
+      println(s"KMeans reached the max number of iterations: $maxIterations.")
     } else {
       logInfo(s"KMeans converged in $iteration iterations.")
+      // han
+      println(s"KMeans converged in $iteration iterations.")
     }
 
     val (minCost, bestRun) = costs.zipWithIndex.min
 
     logInfo(s"The cost for the best run is $minCost.")
+
+    // han
+    println("Iterations:")
+    iDurs.foreach {
+      id =>
+        println("Iteration " + id._1 + ": " + id._2)
+    }
 
     new KMeansModel(centers(bestRun).map(_.vector))
   }
@@ -347,8 +393,7 @@ class KMeans private (
   /**
    * Initialize `runs` sets of cluster centers at random.
    */
-  private def initRandom(data: RDD[VectorWithNorm])
-  : Array[Array[VectorWithNorm]] = {
+  private def initRandom(data: RDD[VectorWithNorm]): Array[Array[VectorWithNorm]] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
     val sample = data.takeSample(true, runs * k, new XORShiftRandom(this.seed).nextInt()).toSeq
     Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).map { v =>
@@ -365,8 +410,7 @@ class KMeans private (
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  private def initKMeansParallel(data: RDD[VectorWithNorm])
-  : Array[Array[VectorWithNorm]] = {
+  private def initKMeansParallel(data: RDD[VectorWithNorm]): Array[Array[VectorWithNorm]] = {
     // Initialize empty centers and point costs.
     val centers = Array.tabulate(runs)(r => ArrayBuffer.empty[VectorWithNorm])
     var costs = data.map(_ => Array.fill(runs)(Double.PositiveInfinity))
@@ -393,11 +437,21 @@ class KMeans private (
     while (step < initializationSteps) {
       val bcNewCenters = data.context.broadcast(newCenters)
       val preCosts = costs
-      costs = data.zip(preCosts).map { case (point, cost) =>
+
+      // han
+      //      costs = data.zip(preCosts).map {
+      //        case (point, cost) =>
+      //          Array.tabulate(runs) { r =>
+      //            math.min(KMeans.pointCost(bcNewCenters.value(r), point), cost(r))
+      //          }
+      //      }.persist(StorageLevel.MEMORY_AND_DISK)
+      costs = data.zip(preCosts).map {
+        case (point, cost) =>
           Array.tabulate(runs) { r =>
             math.min(KMeans.pointCost(bcNewCenters.value(r), point), cost(r))
           }
-        }.persist(StorageLevel.MEMORY_AND_DISK)
+      }.persist(storageLevel)
+
       val sumCosts = costs
         .aggregate(new Array[Double](runs))(
           seqOp = (s, v) => {
@@ -417,26 +471,31 @@ class KMeans private (
               r += 1
             }
             s0
-          }
-        )
+          })
+
+      // han
       preCosts.unpersist(blocking = false)
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointsWithCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
-        pointsWithCosts.flatMap { case (p, c) =>
-          val rs = (0 until runs).filter { r =>
-            rand.nextDouble() < 2.0 * c(r) * k / sumCosts(r)
-          }
-          if (rs.length > 0) Some(p, rs) else None
+        pointsWithCosts.flatMap {
+          case (p, c) =>
+            val rs = (0 until runs).filter { r =>
+              rand.nextDouble() < 2.0 * c(r) * k / sumCosts(r)
+            }
+            if (rs.length > 0) Some(p, rs) else None
         }
       }.collect()
       mergeNewCenters()
-      chosen.foreach { case (p, rs) =>
-        rs.foreach(newCenters(_) += p.toDense)
+      chosen.foreach {
+        case (p, rs) =>
+          rs.foreach(newCenters(_) += p.toDense)
       }
       step += 1
     }
 
     mergeNewCenters()
+
+    // han
     costs.unpersist(blocking = false)
 
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
@@ -457,7 +516,6 @@ class KMeans private (
     finalCenters.toArray
   }
 }
-
 
 /**
  * Top-level methods for calling K-means clustering.
@@ -483,12 +541,12 @@ object KMeans {
    */
   @Since("1.3.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String,
-      seed: Long): KMeansModel = {
+    data: RDD[Vector],
+    k: Int,
+    maxIterations: Int,
+    runs: Int,
+    initializationMode: String,
+    seed: Long): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
@@ -508,11 +566,11 @@ object KMeans {
    */
   @Since("0.8.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
+    data: RDD[Vector],
+    k: Int,
+    maxIterations: Int,
+    runs: Int,
+    initializationMode: String): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
@@ -525,9 +583,9 @@ object KMeans {
    */
   @Since("0.8.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int): KMeansModel = {
+    data: RDD[Vector],
+    k: Int,
+    maxIterations: Int): KMeansModel = {
     train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
   }
 
@@ -536,10 +594,10 @@ object KMeans {
    */
   @Since("0.8.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int): KMeansModel = {
+    data: RDD[Vector],
+    k: Int,
+    maxIterations: Int,
+    runs: Int): KMeansModel = {
     train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
   }
 
@@ -547,8 +605,8 @@ object KMeans {
    * Returns the index of the closest center to the given point, as well as the squared distance.
    */
   private[mllib] def findClosest(
-      centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): (Int, Double) = {
+    centers: TraversableOnce[VectorWithNorm],
+    point: VectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
     var bestIndex = 0
     var i = 0
@@ -573,8 +631,8 @@ object KMeans {
    * Returns the K-means cost of a given point against the given cluster centers.
    */
   private[mllib] def pointCost(
-      centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): Double =
+    centers: TraversableOnce[VectorWithNorm],
+    point: VectorWithNorm): Double =
     findClosest(centers, point)._2
 
   /**
@@ -582,8 +640,8 @@ object KMeans {
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
   private[clustering] def fastSquaredDistance(
-      v1: VectorWithNorm,
-      v2: VectorWithNorm): Double = {
+    v1: VectorWithNorm,
+    v2: VectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
@@ -601,8 +659,7 @@ object KMeans {
  *
  * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
  */
-private[clustering]
-class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
+private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
 
