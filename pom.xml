@@ -1954,7 +1954,7 @@
         <plugin>
           <groupId>org.antlr</groupId>
           <artifactId>antlr3-maven-plugin</artifactId>
-          <version>3.4</version>
+          <version>3.5.2</version>
         </plugin>
         <!-- Surefire runs all Java tests -->
         <plugin>

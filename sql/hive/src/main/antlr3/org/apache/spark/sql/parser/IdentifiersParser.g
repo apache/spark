@@ -297,7 +297,7 @@ intervalLiteral
     :
     KW_INTERVAL StringLiteral qualifiers=intervalQualifiers ->
     {
-      adaptor.create(qualifiers.tree.token.getType(), $StringLiteral.text)
+      adaptor.create($qualifiers.tree.token.getType(), $StringLiteral.text)
     }
     ;
 

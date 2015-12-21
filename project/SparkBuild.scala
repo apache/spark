@@ -415,7 +415,7 @@ object Hive {
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
     fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
-  )
+  ) ++ sbtantlr.SbtAntlrPlugin.antlrSettings
 
 }
 

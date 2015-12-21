@@ -227,7 +227,7 @@ private[hive] object HiveQl extends Logging {
      */
     def withChildren(newChildren: Seq[ASTNode]): ASTNode = {
       (1 to n.getChildCount).foreach(_ => n.deleteChild(0))
-      n.addChildren(newChildren.asJava)
+      newChildren.foreach(n.addChild(_))
       n
     }
 

@@ -2110,7 +2110,7 @@ unionType
 @after { popMsg(state); }
     : KW_UNIONTYPE LESSTHAN colTypeList GREATERTHAN -> ^(TOK_UNIONTYPE colTypeList)
     ;
-
+    
 setOperator
 @init { pushMsg("set operator", state); }
 @after { popMsg(state); }
@@ -2232,7 +2232,7 @@ selectStatement[boolean topLevel]
 setOpSelectStatement[CommonTree t, boolean topLevel]
    :
    (u=setOperator b=simpleSelectStatement
-   -> {$setOpSelectStatement.tree != null && u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
+   -> {$setOpSelectStatement.tree != null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
@@ -2245,9 +2245,9 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
              ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
           )
        )
-   -> {$setOpSelectStatement.tree != null && u.tree.getType()!=SparkSqlParser.TOK_UNIONDISTINCT}?
+   -> {$setOpSelectStatement.tree != null && $u.tree.getType()!=SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_UNIONALL {$setOpSelectStatement.tree} $b)
-   -> {$setOpSelectStatement.tree == null && u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
+   -> {$setOpSelectStatement.tree == null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
