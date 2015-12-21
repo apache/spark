@@ -47,7 +47,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * the array elements and returns it.
  */
 @ExpressionDescription(
-usage = "_FUNC_(array, order) - Sorts the input array for the given column in " +
+usage = "_FUNC_(array, ascendingOrder) - Sorts the input array for the given column in " +
   "ascending / descending order, according to the natural ordering of the array elements")
 case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
