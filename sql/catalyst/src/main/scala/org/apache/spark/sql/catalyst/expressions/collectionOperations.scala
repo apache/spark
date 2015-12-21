@@ -26,6 +26,8 @@ import org.apache.spark.sql.types._
 /**
  * Given an array or map, returns its size.
  */
+@ExpressionDescription(
+usage = "_FUNC_(column) - Returns the length of the array or map stored in the column")
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
@@ -44,6 +46,9 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * Sorts the input array in ascending / descending order according to the natural ordering of
  * the array elements and returns it.
  */
+@ExpressionDescription(
+usage = "_FUNC_(array, order) - Sorts the input array for the given column in " +
+  "ascending / descending order, according to the natural ordering of the array elements")
 case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -125,6 +130,8 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 /**
  * Checks if the array (left) has the element (right)
  */
+@ExpressionDescription(
+usage = "_FUNC_(array, value) - Returns true if the array contains the value")
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
