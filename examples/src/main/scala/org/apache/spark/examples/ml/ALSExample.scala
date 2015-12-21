@@ -27,42 +27,44 @@ import org.apache.spark.sql.Row
 
 object ALSExample {
 
+  // $example on$
+  case class Rating(userId: Int, movieId: Int, rating: Float, timestamp: Long)
+  object Rating {
+    def parseString(str: String): Rating = {
+      val fields = str.split("::")
+      assert(fields.size == 4)
+      Rating(fields(0).toInt, fields(1).toInt, fields(2).toFloat, fields(3).toLong)
+    }
+  }
+  // $example off$
+
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("ALSExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
 
     // $example on$
-    val data = sqlContext.createDataFrame(Seq(
-      (1, 1, 5.0),
-      (1, 2, 1.0),
-      (1, 4, 1.0),
-      (2, 1, 5.0),
-      (2, 2, 1.0),
-      (2, 3, 5.0),
-      (3, 2, 5.0),
-      (3, 3, 1.0),
-      (3, 4, 5.0),
-      (4, 1, 1.0),
-      (4, 3, 1.0),
-      (4, 4, 5.0)
-    )).toDF("user", "item", "rating")
+    val ratings = sc.textFile("data/mllib/als/sample_movielens_ratings.txt")
+      .map(Rating.parseString)
+      .toDF()
+    val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2))
 
     // Build the recommendation model using ALS
     val als = new ALS()
       .setMaxIter(5)
       .setRegParam(0.01)
-      .setUserCol("user")
-      .setItemCol("item")
+      .setUserCol("userId")
+      .setItemCol("movieId")
       .setRatingCol("rating")
-    val model = als.fit(data)
+    val model = als.fit(training)
 
     // Evaluate the model by computing the RMSE on the same dataset
-    val predictions = model.transform(data)
+    val predictions = model.transform(test)
     val mse = predictions
       .select("rating", "prediction")
-      .map { case Row(rating: Double, prediction: Float) =>
-        val err = rating - prediction.toDouble
+      .map { case Row(rating: Float, prediction: Float) =>
+        val err = rating.toDouble - prediction.toDouble
         err * err
       }.mean()
     val rmse = math.sqrt(mse)
