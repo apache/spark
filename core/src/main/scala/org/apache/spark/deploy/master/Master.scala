@@ -979,7 +979,11 @@ private[deploy] class Master(
 
     futureUI.onSuccess { case Some(ui) =>
       appIdToUI.put(app.id, ui)
-      self.send(AttachCompletedRebuildUI(app.id))
+      // `self` can be null if we are already in the process of shutting down
+      // This happens frequently in tests where `local-cluster` is used
+      if (self != null) {
+        self.send(AttachCompletedRebuildUI(app.id))
+      }
       // Application UI is successfully rebuilt, so link the Master UI to it
       // NOTE - app.appUIUrlAtHistoryServer is volatile
       app.appUIUrlAtHistoryServer = Some(ui.basePath)
