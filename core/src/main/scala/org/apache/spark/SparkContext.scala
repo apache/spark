@@ -2066,7 +2066,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Set the directory under which RDDs are going to be checkpointed. The directory must
    * be a HDFS path if running on a cluster.
    */
-  def setCheckpointDir(dir
+  def setCheckpointDir(directory: String) {
+
     // If we are running on a cluster, log a warning if the directory is local.
     // Otherwise, the driver may attempt to reconstruct the checkpointed RDD from
     // its own local file system, which is incorrect because the checkpoint files
