@@ -1301,18 +1301,21 @@ private[ui] class TaskPagedTable(
           val headerLink =
             s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}" +
               s"&task.pageSize=${pageSize}"
-          val js = Unparsed(s"window.location.href='${headerLink}'")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-          <th class={cssClass} onclick={js} style="cursor: pointer;">
-            {header}
-            <span>&nbsp;{Unparsed(arrow)}</span>
+          <th class={cssClass}>
+            <a href={headerLink}>
+              {header}
+              <span>&nbsp;{Unparsed(arrow)}</span>
+            </a>
           </th>
         } else {
           val headerLink =
             s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.pageSize=${pageSize}"
           val js = Unparsed(s"window.location.href='${headerLink}'")
-          <th class={cssClass} onclick={js} style="cursor: pointer;">
-            {header}
+          <th class={cssClass}>
+            <a href={headerLink}>
+              {header}
+            </a>
           </th>
         }
       }
