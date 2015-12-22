@@ -23,7 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-
+@ExpressionDescription(
+  usage = "_FUNC_(expr, trueValue, falseValue) - Returns trueValue if expr evaluates to true, " +
+    "falseValue otherwise",
+  extended = "> SELECT _FUNC_(1==2, 'yes', 'no');\n'no'")
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends Expression {
 
@@ -244,6 +247,10 @@ object CaseKeyWhen {
  * A function that returns the least value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(seq) - Returns the least value of all parameters, skipping null values. " +
+    "Returns null iff all parameters are null",
+  extended = "> SELECT _FUNC_(1,null,3);\n1")
 case class Least(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -303,6 +310,10 @@ case class Least(children: Seq[Expression]) extends Expression {
  * A function that returns the greatest value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(seq) - Returns the greatest value of all parameters, skipping null values. " +
+    "Returns null iff all parameters are null",
+  extended = "> SELECT _FUNC_(1,null,3);\n3")
 case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)

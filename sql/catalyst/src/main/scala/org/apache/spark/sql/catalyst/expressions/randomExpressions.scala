@@ -55,6 +55,10 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
+@ExpressionDescription(
+  usage = "_FUNC_(seed) - Returns a random column with i.i.d. uniformly distributed values in " +
+    "[0, 1)",
+  extended = "> SELECT _FUNC_(3);\n0.11641995793557336")
 case class Rand(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -78,6 +82,9 @@ case class Rand(seed: Long) extends RDG {
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
+@ExpressionDescription(
+  usage = "_FUNC_(seed) - Returns a random column with i.i.d. gaussian random distribution",
+  extended = "> SELECT _FUNC_(3);\n-0.9218141224069855")
 case class Randn(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
