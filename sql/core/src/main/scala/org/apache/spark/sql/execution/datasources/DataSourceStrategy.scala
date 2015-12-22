@@ -77,7 +77,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val pushedFilters = filters.filter(_.references.intersect(partitionColumns).isEmpty)
 
       // Predicates with both partition keys and attributes
-      val combineFilters = filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
+      val partitionAndNormalColumnFilters = filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
 
       val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
@@ -89,26 +89,32 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       }
 
       // need to add projections from combineFilters in
-      val combineFilter = combineFilters.reduceLeftOption(expressions.And)
-      val combinedProjects = combineFilter.map(_.references.toSet.union(projects.toSet).toSeq)
-        .getOrElse(projects)
+      val partitionAndNormalColumnAttrs = AttributeSet(partitionAndNormalColumnFilters)
+      val partitionAndNormalColumnProjs = if (partitionAndNormalColumnAttrs.isEmpty) {
+        projects
+      } else {
+        (partitionAndNormalColumnAttrs ++ projects).toSeq
+      }
+
       val scan = buildPartitionedTableScan(
         l,
-        combinedProjects,
+        partitionAndNormalColumnProjs,
         pushedFilters,
         t.partitionSpec.partitionColumns,
         selectedPartitions)
 
       // Add a Projection to guarantee the original projection:
-      // this is because "combinedProjects" may be different from the
-      // original "projects", in elements or their ordering
-      combineFilter.map(cf => if (projects.isEmpty || combinedProjects.size < 2) {
-        // If the original projection is empty or the scan's projection
-        // has 0 or one element, then no need for an extra Project
-        execution.Filter(cf, scan)
-      } else {
-        execution.Project(projects, execution.Filter(cf, scan))
-      }).getOrElse(scan) :: Nil
+      // this is because "partitionAndNormalColumnAttrs" may be different from the original "projects",
+      // in elements or their ordering
+
+      partitionAndNormalColumnFilters.reduceLeftOption(expressions.And).map(cf =>
+        if (projects.isEmpty || projects == partitionAndNormalColumnProjs) {
+          // if the original projection is empty, no need for the additional Project either
+          execution.Filter(cf, scan)
+        } else {
+          execution.Project(projects, execution.Filter(cf, scan))
+        }
+      ).getOrElse(scan) :: Nil
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _)) =>
