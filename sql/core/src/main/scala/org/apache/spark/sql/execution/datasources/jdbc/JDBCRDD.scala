@@ -122,30 +122,35 @@ private[sql] object JDBCRDD extends Logging {
     val dialect = JdbcDialects.get(url)
     val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
     try {
-      val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
+      val statement = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0")
       try {
-        val rsmd = rs.getMetaData
-        val ncols = rsmd.getColumnCount
-        val fields = new Array[StructField](ncols)
-        var i = 0
-        while (i < ncols) {
-          val columnName = rsmd.getColumnLabel(i + 1)
-          val dataType = rsmd.getColumnType(i + 1)
-          val typeName = rsmd.getColumnTypeName(i + 1)
-          val fieldSize = rsmd.getPrecision(i + 1)
-          val fieldScale = rsmd.getScale(i + 1)
-          val isSigned = rsmd.isSigned(i + 1)
-          val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-          val metadata = new MetadataBuilder().putString("name", columnName)
-          val columnType =
-            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-          fields(i) = StructField(columnName, columnType, nullable, metadata.build())
-          i = i + 1
+        val rs = statement.executeQuery()
+        try {
+          val rsmd = rs.getMetaData
+          val ncols = rsmd.getColumnCount
+          val fields = new Array[StructField](ncols)
+          var i = 0
+          while (i < ncols) {
+            val columnName = rsmd.getColumnLabel(i + 1)
+            val dataType = rsmd.getColumnType(i + 1)
+            val typeName = rsmd.getColumnTypeName(i + 1)
+            val fieldSize = rsmd.getPrecision(i + 1)
+            val fieldScale = rsmd.getScale(i + 1)
+            val isSigned = rsmd.isSigned(i + 1)
+            val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+            val metadata = new MetadataBuilder().putString("name", columnName)
+            val columnType =
+              dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+                getCatalystType(dataType, fieldSize, fieldScale, isSigned))
+            fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+            i = i + 1
+          }
+          return new StructType(fields)
+        } finally {
+          rs.close()
         }
-        return new StructType(fields)
       } finally {
-        rs.close()
+        statement.close()
       }
     } finally {
       conn.close()
