@@ -84,16 +84,6 @@ class Dataset[T] private[sql](
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
-  logTrace(
-    s"""
-       |# unresolvedTEncoder.fromRowExpression
-       |${unresolvedTEncoder.fromRowExpression.treeString}
-       |# resolvedTEncoder.fromRowExpression
-       |${resolvedTEncoder.fromRowExpression.treeString}
-       |# boundTEncoder.fromRowExpression
-       |${boundTEncoder.fromRowExpression.treeString}
-     """.stripMargin)
-
   private implicit def classTag = resolvedTEncoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
