@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 
 
 /**
@@ -30,6 +30,8 @@ private[sql] case class LocalTableScan(
     rows: Seq[InternalRow]) extends LeafNode {
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
+
+  override def producedAttributes: AttributeSet = outputSet
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 

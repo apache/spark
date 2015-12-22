@@ -307,7 +307,7 @@ case class MapPartitions[T, U](
     uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -326,7 +326,7 @@ case class AppendColumns[T, U](
     uEncoder: ExpressionEncoder[U],
     newColumns: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
-  override def missingInput: AttributeSet = super.missingInput -- newColumns
+  override def producedAttributes: AttributeSet = AttributeSet(newColumns)
 
   // We are using an unsafe combiner.
   override def canProcessSafeRows: Boolean = false
@@ -359,7 +359,7 @@ case class MapGroups[K, T, U](
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(groupingAttributes) :: Nil
@@ -399,7 +399,7 @@ case class CoGroup[Key, Left, Right, Result](
     rightGroup: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
