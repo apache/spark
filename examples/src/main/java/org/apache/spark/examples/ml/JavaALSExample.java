@@ -22,7 +22,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
-import java.util.Arrays;
+import java.io.Serializable;
 
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -31,53 +31,92 @@ import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.recommendation.ALSModel;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 // $example off$
 
 public class JavaALSExample {
+
+  // $example on$
+  public static class Rating implements Serializable {
+    private int userId;
+    private int movieId;
+    private float rating;
+    private long timestamp;
+
+    public int getUserId() {
+      return userId;
+    }
+
+    public void setUserId(int userId) {
+      this.userId = userId;
+    }
+
+    public int getMovieId() {
+      return movieId;
+    }
+
+    public void setMovieId(int movieId) {
+      this.movieId = movieId;
+    }
+
+    public float getRating() {
+      return rating;
+    }
+
+    public void setRating(float rating) {
+      this.rating = rating;
+    }
+
+    public long getTimestamp() {
+      return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+      this.timestamp = timestamp;
+    }
+
+    public static Rating parseRating(String str) {
+      String[] fields = str.split("::");
+      assert(fields.length == 4);
+      Rating rating = new Rating();
+      rating.setUserId(Integer.parseInt(fields[0]));
+      rating.setMovieId(Integer.parseInt(fields[1]));
+      rating.setRating(Float.parseFloat(fields[2]));
+      rating.setTimestamp(Long.parseLong(fields[3]));
+      return rating;
+    }
+  }
+  // $example off$
+
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("JavaALSExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
 
     // $example on$
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-      RowFactory.create(1, 1, 5.0),
-      RowFactory.create(1, 2, 1.0),
-      RowFactory.create(1, 4, 1.0),
-      RowFactory.create(2, 1, 5.0),
-      RowFactory.create(2, 2, 1.0),
-      RowFactory.create(2, 3, 5.0),
-      RowFactory.create(3, 2, 5.0),
-      RowFactory.create(3, 3, 1.0),
-      RowFactory.create(3, 4, 5.0),
-      RowFactory.create(4, 1, 1.0),
-      RowFactory.create(4, 3, 1.0),
-      RowFactory.create(4, 4, 5.0)
-    ));
-    StructType schema = new StructType(new StructField[]{
-      new StructField("user", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("item", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("rating", DataTypes.FloatType, false, Metadata.empty())
-    });
-    DataFrame data = sqlContext.createDataFrame(jrdd, schema);
+    JavaRDD<Rating> ratingRDD = jsc.textFile("data/mllib/als/sample_movielens_ratings.txt")
+      .map(new Function<String, Rating>() {
+        public Rating call(String str) {
+          return Rating.parseRating(str);
+        }
+      });
+    DataFrame ratings = sqlContext.createDataFrame(ratingRDD, Rating.class);
+    DataFrame[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
+    DataFrame training = splits[0];
+    DataFrame test = splits[1];
 
-    // Build the recommendation model using ALS
+    // Build the recommendation model using ALS on the training data
     ALS als = new ALS()
-        .setMaxIter(5)
-        .setRegParam(0.01)
-        .setUserCol("user")
-        .setItemCol("item")
-        .setRatingCol("rating");
-    ALSModel model = als.fit(data);
+      .setMaxIter(5)
+      .setRegParam(0.01)
+      .setUserCol("userId")
+      .setItemCol("movieId")
+      .setRatingCol("rating");
+    ALSModel model = als.fit(training);
 
-    // Evaluate the model by computing the RMSE on the same dataset
-    DataFrame predictions = model.transform(data);
-    double mse = JavaDoubleRDD.fromRDD(predictions.javaRDD()
+    // Evaluate the model by computing the RMSE on the test data
+    DataFrame predictions = model.transform(test);
+    double mse = JavaDoubleRDD.fromRDD(predictions
+      .select("rating", "prediction").javaRDD()
       .map(new Function<Row, Object>() {
         public Double call(Row row) {
           // Difference between rating and prediction

@@ -50,7 +50,7 @@ object ALSExample {
       .toDF()
     val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2))
 
-    // Build the recommendation model using ALS
+    // Build the recommendation model using ALS on the training data
     val als = new ALS()
       .setMaxIter(5)
       .setRegParam(0.01)
@@ -59,7 +59,7 @@ object ALSExample {
       .setRatingCol("rating")
     val model = als.fit(training)
 
-    // Evaluate the model by computing the RMSE on the same dataset
+    // Evaluate the model by computing the RMSE on the test data
     val predictions = model.transform(test)
     val mse = predictions
       .select("rating", "prediction")
