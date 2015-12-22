@@ -817,6 +817,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   }
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     // Chooses a random port between 10000 and 19999
     listeningPort = 10000 + Random.nextInt(10000)
     diagnosisBuffer.clear()
@@ -838,7 +839,11 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   }
 
   override protected def afterAll(): Unit = {
-    stopThriftServer()
-    logInfo("HiveThriftServer2 stopped")
+    try {
+      stopThriftServer()
+      logInfo("HiveThriftServer2 stopped")
+    } finally {
+      super.afterAll()
+    }
   }
 }
