@@ -41,22 +41,23 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, ResetSystemProperties}
 
-class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
+class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
+  with ResetSystemProperties {
 
-  var oldProperties: Properties = null
+  var oldSystemProperties: Properties = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    oldProperties = SerializationUtils.clone(System.getProperties)
+    oldSystemProperties = SerializationUtils.clone(System.getProperties)
     System.setProperty("SPARK_YARN_MODE", "true")
   }
 
   override def afterAll(): Unit = {
     try {
-      System.setProperties(oldProperties)
-      oldProperties = null
+      System.setProperties(oldSystemProperties)
+      oldSystemProperties = null
     } finally {
       super.afterAll()
     }

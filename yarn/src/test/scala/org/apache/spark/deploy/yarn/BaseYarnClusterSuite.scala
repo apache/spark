@@ -60,13 +60,13 @@ abstract class BaseYarnClusterSuite
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
 
-  var oldProperties: Properties = null
+  var oldSystemProperties: Properties = null
 
   def newYarnConfig(): YarnConfiguration
 
   override def beforeAll() {
     super.beforeAll()
-    oldProperties = SerializationUtils.clone(System.getProperties)
+    oldSystemProperties = SerializationUtils.clone(System.getProperties)
 
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
@@ -119,9 +119,12 @@ abstract class BaseYarnClusterSuite
   }
 
   override def afterAll() {
-    yarnCluster.stop()
-    System.setProperties(oldProperties)
-    super.afterAll()
+    try {
+      yarnCluster.stop()
+    } finally {
+      System.setProperties(oldSystemProperties)
+      super.afterAll()
+    }
   }
 
   protected def runSpark(
