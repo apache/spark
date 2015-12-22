@@ -20,12 +20,6 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class ReflectData(
@@ -143,24 +137,5 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
           Map(10 -> 100L, 20 -> 200L),
           Map(10 -> 100L, 20 -> 200L, 30 -> null),
           Row(null, "abc"))))
-  }
-
-  test("null as array") {
-    val data = Seq(
-      (Array[Int](2, 1, 3), Array("b", "c", "a")),
-      (Array[Int](), Array[String]()),
-      (null, null)
-    )
-
-    val schema = ScalaReflection.schemaFor[Tuple2[Array[Int], Array[String]]]
-      .dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-    val arrayDataEncoder = encoderFor[Tuple2[Array[Int], Array[String]]]
-    val unsafeRows = data.map(arrayDataEncoder.toRow(_).copy())
-    val df = DataFrame(sqlContext, LocalRelation(attributeSeq, unsafeRows))
-    assert(df.collect() === Seq(
-      Row(Seq(2, 1, 3), Seq("b", "c", "a")),
-      Row(Seq[Int](), Seq[String]()),
-      Row(null, null)))
   }
 }
