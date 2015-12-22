@@ -90,7 +90,9 @@ private[sql] case class JDBCRelation(
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
-  // Check if JDBCRDD#compileFilter can accept input filters
+  /**
+   * Check if [[JDBCRDD.compileFilter]] can accept input filters.
+   */
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     filters.filterNot(canCompileFilter)
   }
