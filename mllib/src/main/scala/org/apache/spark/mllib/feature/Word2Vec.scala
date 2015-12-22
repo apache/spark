@@ -80,12 +80,9 @@ class Word2Vec extends Serializable with Logging {
   private var maxSentenceLength = 1000
 
   /**
-   * sets the maxSentenceLength, maxSentenceLength is used as the threshold for cutting sentence
-   * into chunks when it is too long. (default: 1000)
-   * @param maxSentenceLength the maxSentenceLength allowed.
-   *                          recommend to set it large enough to respect reasonable long sentences
-   *                          while not overflow memory
-   * @return this object
+   * Sets the maximum length of each sentence in the input data.
+   * Any sentence longer than this threshold will be divided into chunks of
+   * up to `maxSentenceLength` size (default: 1000)
    */
   @Since("1.6.1")
   def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
