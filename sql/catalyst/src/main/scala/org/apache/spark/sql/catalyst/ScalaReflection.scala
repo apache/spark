@@ -380,7 +380,7 @@ object ScalaReflection extends ScalaReflection {
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
     extractorFor(inputObject, tpe, walkedTypePath) match {
-      case expressions.If(IsNull(_), expressions.Literal(null, _), s: CreateNamedStruct) => s
+      case expressions.If(_, _, s: CreateNamedStruct) if tpe <:< localTypeOf[Product] => s
       case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
     }
   }
@@ -466,13 +466,13 @@ object ScalaReflection extends ScalaReflection {
 
         case t if t <:< localTypeOf[Product] =>
           val params = getConstructorParameters(t)
-          val nullOutput = expressions.Literal.create(null, silentSchemaFor(t).dataType)
           val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
             val clsName = getClassNameFromType(fieldType)
             val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
             expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType, newPath) :: Nil
           })
+          val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
           expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
         case t if t <:< localTypeOf[Array[_]] =>
