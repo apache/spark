@@ -2073,8 +2073,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // its own local file system, which is incorrect because the checkpoint files
     // are actually on the executor machines.
     if (!isLocal && Utils.nonLocalPaths(directory).isEmpty) {
-      logWarning(s"Spark is not running in local mode, therefore the checkpoint directory " +
-        "must not be on the local filesystem. Directory '$directory' " +
+      logWarning("Spark is not running in local mode, therefore the checkpoint directory " +
+        s"must not be on the local filesystem. Directory '$directory' " +
         "appears to be on the local filesystem.")
     }
 
