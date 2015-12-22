@@ -91,7 +91,9 @@ trait CaseWhenLike extends Expression {
 
   // both then and else expressions should be considered.
   def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
-  def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
+  def valueTypesEqual: Boolean = valueTypes.size <= 1 || valueTypes.sliding(2, 1).forall {
+    case Seq(dt1, dt2) => dt1.sameType(dt2)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (valueTypesEqual) {
