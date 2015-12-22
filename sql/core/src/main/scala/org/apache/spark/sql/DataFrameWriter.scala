@@ -312,7 +312,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * This is equivalent to:
    * {{{
    *   format("json").save(path)
-   * }}}$table
+   * }}}
    *
    * @since 1.4.0
    */
