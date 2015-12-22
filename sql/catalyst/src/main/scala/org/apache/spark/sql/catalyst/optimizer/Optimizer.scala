@@ -33,8 +33,8 @@ import org.apache.spark.sql.types._
   * Optimizers can override this.
   */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
-  def batches: Seq[Batch] =
-  // SubQueries are only needed for analysis and can be removed before execution.
+  def batches: Seq[Batch] = {
+    // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
     Batch("Aggregate", FixedPoint(100),
@@ -68,14 +68,16 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
+  }
 }
 
 /**
   * Non-abstract representation of the standard Spark optimizing strategies
+  *
+  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
+  * specific rules go to the subclasses
   */
-object DefaultOptimizer extends Optimizer {
-  override def batches: Seq[Batch] = super.batches
-}
+object DefaultOptimizer extends Optimizer
 
 /**
  * Pushes operations down into a Sample.
