@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
@@ -37,7 +38,7 @@ object SparseNaiveBayes {
       input: String = null,
       minPartitions: Int = 0,
       numFeatures: Int = -1,
-      lambda: Double = 1.0)
+      lambda: Double = 1.0) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -100,3 +101,4 @@ object SparseNaiveBayes {
     sc.stop()
   }
 }
+// scalastyle:on println

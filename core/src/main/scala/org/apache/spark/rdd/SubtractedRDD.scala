@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -63,27 +63,29 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    Seq(rdd1, rdd2).map { rdd =>
+    def rddDependency[T1: ClassTag, T2: ClassTag](rdd: RDD[_ <: Product2[T1, T2]])
+      : Dependency[_] = {
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency(rdd, part, serializer)
+        new ShuffleDependency[T1, T2, Any](rdd, part, serializer)
       }
     }
+    Seq(rddDependency[K, V](rdd1), rddDependency[K, W](rdd2))
   }
 
   override def getPartitions: Array[Partition] = {
     val array = new Array[Partition](part.numPartitions)
-    for (i <- 0 until array.size) {
+    for (i <- 0 until array.length) {
       // Each CoGroupPartition will depend on rdd1 and rdd2
       array(i) = new CoGroupPartition(i, Seq(rdd1, rdd2).zipWithIndex.map { case (rdd, j) =>
         dependencies(j) match {
           case s: ShuffleDependency[_, _, _] =>
-            new ShuffleCoGroupSplitDep(s.shuffleHandle)
+            None
           case _ =>
-            new NarrowCoGroupSplitDep(rdd, i, rdd.partitions(i))
+            Some(new NarrowCoGroupSplitDep(rdd, i, rdd.partitions(i)))
         }
       }.toArray)
     }
@@ -105,21 +107,27 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         seq
       }
     }
-    def integrate(dep: CoGroupSplitDep, op: Product2[K, V] => Unit) = dep match {
-      case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
-        rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
+    def integrate(depNum: Int, op: Product2[K, V] => Unit): Unit = {
+      dependencies(depNum) match {
+        case oneToOneDependency: OneToOneDependency[_] =>
+          val dependencyPartition = partition.narrowDeps(depNum).get.split
+          oneToOneDependency.rdd.iterator(dependencyPartition, context)
+            .asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
 
-      case ShuffleCoGroupSplitDep(handle) =>
-        val iter = SparkEnv.get.shuffleManager
-          .getReader(handle, partition.index, partition.index + 1, context)
-          .read()
-        iter.foreach(op)
+        case shuffleDependency: ShuffleDependency[_, _, _] =>
+          val iter = SparkEnv.get.shuffleManager
+            .getReader(
+              shuffleDependency.shuffleHandle, partition.index, partition.index + 1, context)
+            .read()
+          iter.foreach(op)
+      }
     }
+
     // the first dep is rdd1; add all values to the map
-    integrate(partition.deps(0), t => getSeq(t._1) += t._2)
+    integrate(0, t => getSeq(t._1) += t._2)
     // the second dep is rdd2; remove all of its keys
-    integrate(partition.deps(1), t => map.remove(t._1))
-    map.iterator.map { t =>  t._2.iterator.map { (t._1, _) } }.flatten
+    integrate(1, t => map.remove(t._1))
+    map.asScala.iterator.map(t => t._2.iterator.map((t._1, _))).flatten
   }
 
   override def clearDependencies() {

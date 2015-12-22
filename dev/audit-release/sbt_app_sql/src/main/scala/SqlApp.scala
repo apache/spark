@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.collection.mutable.{ListBuffer, Queue}
@@ -36,8 +37,10 @@ object SparkSqlExample {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
+    import sqlContext.implicits._
     import sqlContext._
-    val people = sc.makeRDD(1 to 100, 10).map(x => Person(s"Name$x", x))
+
+    val people = sc.makeRDD(1 to 100, 10).map(x => Person(s"Name$x", x)).toDF()
     people.registerTempTable("people")
     val teenagers = sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
     val teenagerNames = teenagers.map(t => "Name: " + t(0)).collect()
@@ -55,3 +58,4 @@ object SparkSqlExample {
     sc.stop()
   }
 }
+// scalastyle:on println

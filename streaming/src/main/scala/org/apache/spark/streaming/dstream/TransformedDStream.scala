@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.dstream
 
+import scala.reflect.ClassTag
+
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Duration, Time}
-import scala.reflect.ClassTag
 
 private[streaming]
 class TransformedDStream[U: ClassTag] (
@@ -32,12 +34,34 @@ class TransformedDStream[U: ClassTag] (
   require(parents.map(_.slideDuration).distinct.size == 1,
     "Some of the DStreams have different slide durations")
 
-  override def dependencies = parents.toList
+  override def dependencies: List[DStream[_]] = parents.toList
 
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
-    Some(transformFunc(parentRDDs, validTime))
+    val parentRDDs = parents.map { parent => parent.getOrCompute(validTime).getOrElse(
+      // Guard out against parent DStream that return None instead of Some(rdd) to avoid NPE
+      throw new SparkException(s"Couldn't generate RDD from parent at time $validTime"))
+    }
+    val transformedRDD = transformFunc(parentRDDs, validTime)
+    if (transformedRDD == null) {
+      throw new SparkException("Transform function must not return null. " +
+        "Return SparkContext.emptyRDD() instead to represent no element " +
+        "as the result of transformation.")
+    }
+    Some(transformedRDD)
+  }
+
+  /**
+   * Wrap a body of code such that the call site and operation scope
+   * information are passed to the RDDs created in this body properly.
+   * This has been overriden to make sure that `displayInnerRDDOps` is always `true`, that is,
+   * the inner scopes and callsites of RDDs generated in `DStream.transform` are always
+   * displayed in the UI.
+   */
+  override protected[streaming] def createRDDWithLocalProperties[U](
+      time: Time,
+      displayInnerRDDOps: Boolean)(body: => U): U = {
+    super.createRDDWithLocalProperties(time, displayInnerRDDOps = true)(body)
   }
 }

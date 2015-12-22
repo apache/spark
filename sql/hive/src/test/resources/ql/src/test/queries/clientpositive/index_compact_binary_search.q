@@ -1,6 +1,6 @@
 SET hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 SET hive.default.fileformat=TextFile;
-
+set hive.stats.dbclass=fs;
 CREATE INDEX src_index ON TABLE src(key) as 'COMPACT' WITH DEFERRED REBUILD;
 ALTER INDEX src_index ON src REBUILD;
 

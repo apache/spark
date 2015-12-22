@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext
@@ -22,7 +24,7 @@ from pyspark import SparkContext
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print >> sys.stderr, "Usage: sort <file>"
+        print("Usage: sort <file>", file=sys.stderr)
         exit(-1)
     sc = SparkContext(appName="PythonSort")
     lines = sc.textFile(sys.argv[1], 1)
@@ -33,6 +35,6 @@ if __name__ == "__main__":
     # In reality, we wouldn't want to collect all the data to the driver node.
     output = sortedCount.collect()
     for (num, unitcount) in output:
-        print num
+        print(num)
 
     sc.stop()

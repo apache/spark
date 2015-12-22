@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
@@ -42,7 +43,7 @@ private[spark] class BroadcastManager(
           conf.get("spark.broadcast.factory", "org.apache.spark.broadcast.TorrentBroadcastFactory")
 
         broadcastFactory =
-          Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
+          Utils.classForName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
 
         // Initialize appropriate BroadcastFactory and BroadcastObject
         broadcastFactory.initialize(isDriver, conf, securityManager)
@@ -58,7 +59,7 @@ private[spark] class BroadcastManager(
 
   private val nextBroadcastId = new AtomicLong(0)
 
-  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean) = {
+  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
   }
 

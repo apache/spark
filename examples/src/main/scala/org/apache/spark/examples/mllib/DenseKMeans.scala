@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
@@ -44,7 +45,7 @@ object DenseKMeans {
       input: String = null,
       k: Int = -1,
       numIterations: Int = 10,
-      initializationMode: InitializationMode = Parallel)
+      initializationMode: InitializationMode = Parallel) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -56,7 +57,7 @@ object DenseKMeans {
         .text(s"number of clusters, required")
         .action((x, c) => c.copy(k = x))
       opt[Int]("numIterations")
-        .text(s"number of iterations, default; ${defaultParams.numIterations}")
+        .text(s"number of iterations, default: ${defaultParams.numIterations}")
         .action((x, c) => c.copy(numIterations = x))
       opt[String]("initMode")
         .text(s"initialization mode (${InitializationMode.values.mkString(",")}), " +
@@ -107,3 +108,4 @@ object DenseKMeans {
     sc.stop()
   }
 }
+// scalastyle:on println

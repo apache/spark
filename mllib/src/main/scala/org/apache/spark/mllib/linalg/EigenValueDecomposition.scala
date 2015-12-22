@@ -21,13 +21,9 @@ import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 import com.github.fommil.netlib.ARPACK
 import org.netlib.util.{intW, doubleW}
 
-import org.apache.spark.annotation.Experimental
-
 /**
- * :: Experimental ::
  * Compute eigen-decomposition.
  */
-@Experimental
 private[mllib] object EigenValueDecomposition {
   /**
    * Compute the leading k eigenvalues and eigenvectors on a symmetric square matrix using ARPACK.
@@ -46,7 +42,7 @@ private[mllib] object EigenValueDecomposition {
    *       for more details). The maximum number of Arnoldi update iterations is set to 300 in this
    *       function.
    */
-  private[mllib] def symmetricEigs(
+  def symmetricEigs(
       mul: BDV[Double] => BDV[Double],
       n: Int,
       k: Int,
@@ -78,6 +74,9 @@ private[mllib] object EigenValueDecomposition {
     iparam(2) = maxIterations
     // Mode 1: A*x = lambda*x, A symmetric
     iparam(6) = 1
+
+    require(n * ncv.toLong <= Integer.MAX_VALUE && ncv * (ncv.toLong + 8) <= Integer.MAX_VALUE,
+      s"k = $k and/or n = $n are too large to compute an eigendecomposition")
 
     var ido = new intW(0)
     var info = new intW(0)
@@ -114,7 +113,7 @@ private[mllib] object EigenValueDecomposition {
       info.`val` match {
         case 1 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
             " Maximum number of iterations taken. (Refer ARPACK user guide for details)")
-        case 2 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
+        case 3 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
             " No shifts could be applied. Try to increase NCV. " +
             "(Refer ARPACK user guide for details)")
         case _ => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +

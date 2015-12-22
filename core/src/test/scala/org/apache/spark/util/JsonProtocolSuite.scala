@@ -19,20 +19,26 @@ package org.apache.spark.util
 
 import java.util.Properties
 
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.shuffle.MetadataFetchFailedException
+
 import scala.collection.Map
 
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
-class JsonProtocolSuite extends FunSuite {
+class JsonProtocolSuite extends SparkFunSuite {
+
+  val jobSubmissionTime = 1421191042750L
+  val jobCompletionTime = 1421191296660L
+
+  val executorAddedTime = 1421458410000L
+  val executorRemovedTime = 1421458922000L
 
   test("SparkListenerEvent") {
     val stageSubmitted =
@@ -43,12 +49,20 @@ class JsonProtocolSuite extends FunSuite {
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true))
-    val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
-    val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
+    val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
+      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
+    val jobStart = {
+      val stageIds = Seq[Int](1, 2, 3, 4)
+      val stageInfos = stageIds.map(x =>
+        makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
+      SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
+    }
+    val jobEnd = SparkListenerJobEnd(20, jobCompletionTime, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
       "JVM Information" -> Seq(("GC speed", "9999 objects/s"), ("Java home", "Land of coffee")),
       "Spark Properties" -> Seq(("Job throughput", "80000 jobs/s, regardless of job type")),
@@ -60,8 +74,18 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"))
+    val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
+      42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
+    val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
+    val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
+    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", Seq(
+      (1L, 2, 3, makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800,
+        hasHadoopInput = true, hasOutput = true))))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -69,6 +93,7 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(taskGettingResult, taskGettingResultJsonString)
     testEvent(taskEnd, taskEndJsonString)
     testEvent(taskEndWithHadoopInput, taskEndWithHadoopInputJsonString)
+    testEvent(taskEndWithOutput, taskEndWithOutputJsonString)
     testEvent(jobStart, jobStartJsonString)
     testEvent(jobEnd, jobEndJsonString)
     testEvent(environmentUpdate, environmentUpdateJsonString)
@@ -76,15 +101,22 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
     testEvent(applicationStart, applicationStartJsonString)
+    testEvent(applicationStartWithLogs, applicationStartJsonWithLogUrlsString)
     testEvent(applicationEnd, applicationEndJsonString)
+    testEvent(executorAdded, executorAddedJsonString)
+    testEvent(executorRemoved, executorRemovedJsonString)
+    testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
   }
 
   test("Dependent Classes") {
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
-    testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
+    testTaskMetrics(makeTaskMetrics(
+      33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -107,15 +139,20 @@ class JsonProtocolSuite extends FunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19)
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "Some exception")
+    val fetchMetadataFailed = new MetadataFetchFailedException(17,
+      19, "metadata Fetch failed exception").toTaskEndReason
+    val exceptionFailure = new ExceptionFailure(exception, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
     testTaskEndReason(fetchFailed)
+    testTaskEndReason(fetchMetadataFailed)
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
-    testTaskEndReason(ExecutorLostFailure)
+    testTaskEndReason(TaskCommitDenied(2, 3, 4))
+    testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -126,7 +163,19 @@ class JsonProtocolSuite extends FunSuite {
     testBlockId(StreamBlockId(1, 2L))
   }
 
-  test("StageInfo backward compatibility") {
+  /* ============================== *
+   |  Backward compatibility tests  |
+   * ============================== */
+
+  test("ExceptionFailure backward compatibility") {
+    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null,
+      None, None)
+    val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
+      .removeField({ _._1 == "Full Stack Trace" })
+    assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
+  test("StageInfo backward compatibility (details, accumulables)") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
     val newJson = JsonProtocol.stageInfoToJson(info)
 
@@ -146,12 +195,50 @@ class JsonProtocolSuite extends FunSuite {
 
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = false)
     assert(metrics.inputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Input Metrics" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.inputMetrics.isEmpty)
+  }
+
+  test("Input/Output records backwards compatibility") {
+    // records read were added after 1.2
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = true, hasOutput = true, hasRecords = false)
+    assert(metrics.inputMetrics.nonEmpty)
+    assert(metrics.outputMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
+                         .removeField { case (field, _) => field == "Records Written" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.inputMetrics.get.recordsRead == 0)
+    assert(newMetrics.outputMetrics.get.recordsWritten == 0)
+  }
+
+  test("Shuffle Read/Write records backwards compatibility") {
+    // records read were added after 1.2
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = false, hasOutput = false, hasRecords = false)
+    assert(metrics.shuffleReadMetrics.nonEmpty)
+    assert(metrics.shuffleWriteMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Total Records Read" }
+                         .removeField { case (field, _) => field == "Shuffle Records Written" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
+    assert(newMetrics.shuffleWriteMetrics.get.shuffleRecordsWritten == 0)
+  }
+
+  test("OutputMetrics backward compatibility") {
+    // OutputMetrics were added after 1.1
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
+    assert(metrics.outputMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Output Metrics" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.outputMetrics.isEmpty)
   }
 
   test("BlockManager events backward compatibility") {
@@ -176,12 +263,121 @@ class JsonProtocolSuite extends FunSuite {
       deserializedBmRemoved)
   }
 
+  test("FetchFailed backwards compatibility") {
+    // FetchFailed in Spark 1.1.0 does not have an "Message" property.
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "ignored")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
+      .removeField({ _._1 == "Message" })
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "Unknown reason")
+    assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
+  test("ShuffleReadMetrics: Local bytes read and time taken backwards compatibility") {
+    // Metrics about local shuffle bytes read and local read time were added in 1.3.1.
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = false, hasOutput = false, hasRecords = false)
+    assert(metrics.shuffleReadMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Local Bytes Read" }
+      .removeField { case (field, _) => field == "Local Read Time" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
+  }
+
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
-    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
+    // SparkListenerApplicationStart pre-Spark 1.4 does not have "appAttemptId".
+    // SparkListenerApplicationStart pre-Spark 1.5 does not have "driverLogs
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user", None, None)
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
+      .removeField({ _._1 == "App Attempt ID" })
+      .removeField({ _._1 == "Driver Logs"})
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
+  }
+
+  test("ExecutorLostFailure backward compatibility") {
+    // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
+    val executorLostFailure = ExecutorLostFailure("100", true, Some("Induced failure"))
+    val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
+      .removeField({ _._1 == "Executor ID" })
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", true, Some("Induced failure"))
+    assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
+  test("SparkListenerJobStart backward compatibility") {
+    // Prior to Spark 1.2.0, SparkListenerJobStart did not have a "Stage Infos" property.
+    val stageIds = Seq[Int](1, 2, 3, 4)
+    val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400, x * 500))
+    val dummyStageInfos =
+      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
+    val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
+    val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
+    val expectedJobStart =
+      SparkListenerJobStart(10, jobSubmissionTime, dummyStageInfos, properties)
+    assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
+  }
+
+  test("SparkListenerJobStart and SparkListenerJobEnd backward compatibility") {
+    // Prior to Spark 1.3.0, SparkListenerJobStart did not have a "Submission Time" property.
+    // Also, SparkListenerJobEnd did not have a "Completion Time" property.
+    val stageIds = Seq[Int](1, 2, 3, 4)
+    val stageInfos = stageIds.map(x => makeStageInfo(x * 10, x * 20, x * 30, x * 40, x * 50))
+    val jobStart = SparkListenerJobStart(11, jobSubmissionTime, stageInfos, properties)
+    val oldStartEvent = JsonProtocol.jobStartToJson(jobStart)
+      .removeField({ _._1 == "Submission Time"})
+    val expectedJobStart = SparkListenerJobStart(11, -1, stageInfos, properties)
+    assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldStartEvent))
+
+    val jobEnd = SparkListenerJobEnd(11, jobCompletionTime, JobSucceeded)
+    val oldEndEvent = JsonProtocol.jobEndToJson(jobEnd)
+      .removeField({ _._1 == "Completion Time"})
+    val expectedJobEnd = SparkListenerJobEnd(11, -1, JobSucceeded)
+    assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
+  }
+
+  test("RDDInfo backward compatibility (scope, parent IDs, callsite)") {
+    // "Scope" and "Parent IDs" were introduced in Spark 1.4.0
+    // "Callsite" was introduced in Spark 1.6.0
+    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8),
+      "callsite", Some(new RDDOperationScope("fable")))
+    val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
+      .removeField({ _._1 == "Parent IDs"})
+      .removeField({ _._1 == "Scope"})
+      .removeField({ _._1 == "Callsite"})
+    val expectedRddInfo = new RDDInfo(
+      1, "one", 100, StorageLevel.NONE, Seq.empty, "", scope = None)
+    assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
+  }
+
+  test("StageInfo backward compatibility (parent IDs)") {
+    // Prior to Spark 1.4.0, StageInfo did not have the "Parent IDs" property
+    val stageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq(1, 2, 3), "details")
+    val oldStageInfo = JsonProtocol.stageInfoToJson(stageInfo).removeField({ _._1 == "Parent IDs"})
+    val expectedStageInfo = new StageInfo(1, 1, "me-stage", 1, Seq.empty, Seq.empty, "details")
+    assertEquals(expectedStageInfo, JsonProtocol.stageInfoFromJson(oldStageInfo))
+  }
+
+  // `TaskCommitDenied` was added in 1.3.0 but JSON de/serialization logic was added in 1.5.1
+  test("TaskCommitDenied backward compatibility") {
+    val denied = TaskCommitDenied(1, 2, 3)
+    val oldDenied = JsonProtocol.taskEndReasonToJson(denied)
+      .removeField({ _._1 == "Job ID" })
+      .removeField({ _._1 == "Partition ID" })
+      .removeField({ _._1 == "Attempt Number" })
+    val expectedDenied = TaskCommitDenied(-1, -1, -1)
+    assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
+  }
+
+  test("AccumulableInfo backward compatibility") {
+    // "Internal" property of AccumulableInfo were added after 1.5.1.
+    val accumulableInfo = makeAccumulableInfo(1)
+    val oldJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
+      .removeField({ _._1 == "Internal" })
+    val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
+    assert(false === oldInfo.internal)
   }
 
   /** -------------------------- *
@@ -217,7 +413,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def testBlockManagerId(id: BlockManagerId) {
     val newId = JsonProtocol.blockManagerIdFromJson(JsonProtocol.blockManagerIdToJson(id))
-    assertEquals(id, newId)
+    assert(id === newId)
   }
 
   private def testTaskInfo(info: TaskInfo) {
@@ -240,6 +436,10 @@ class JsonProtocolSuite extends FunSuite {
     assert(blockId === newBlockId)
   }
 
+  private def testExecutorInfo(info: ExecutorInfo) {
+    val newInfo = JsonProtocol.executorInfoFromJson(JsonProtocol.executorInfoToJson(info))
+    assertEquals(info, newInfo)
+  }
 
   /** -------------------------------- *
    | Util methods for comparing events |
@@ -266,28 +466,29 @@ class JsonProtocolSuite extends FunSuite {
       case (e1: SparkListenerJobStart, e2: SparkListenerJobStart) =>
         assert(e1.jobId === e2.jobId)
         assert(e1.properties === e2.properties)
-        assertSeqEquals(e1.stageIds, e2.stageIds, (i1: Int, i2: Int) => assert(i1 === i2))
+        assert(e1.stageIds === e2.stageIds)
       case (e1: SparkListenerJobEnd, e2: SparkListenerJobEnd) =>
         assert(e1.jobId === e2.jobId)
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
-      case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
-        assert(e1.maxMem === e2.maxMem)
-        assert(e1.time === e2.time)
-        assertEquals(e1.blockManagerId, e2.blockManagerId)
-      case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
-        assert(e1.time === e2.time)
-        assertEquals(e1.blockManagerId, e2.blockManagerId)
-      case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
-        assert(e1.rddId == e2.rddId)
-      case (e1: SparkListenerApplicationStart, e2: SparkListenerApplicationStart) =>
-        assert(e1.appName == e2.appName)
-        assert(e1.time == e2.time)
-        assert(e1.sparkUser == e2.sparkUser)
-      case (e1: SparkListenerApplicationEnd, e2: SparkListenerApplicationEnd) =>
-        assert(e1.time == e2.time)
-      case (SparkListenerShutdown, SparkListenerShutdown) =>
+      case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
+        assert(e1.executorId === e1.executorId)
+        assertEquals(e1.executorInfo, e2.executorInfo)
+      case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
+        assert(e1.executorId === e1.executorId)
+      case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
+        assert(e1.execId === e2.execId)
+        assertSeqEquals[(Long, Int, Int, TaskMetrics)](e1.taskMetrics, e2.taskMetrics, (a, b) => {
+          val (taskId1, stageId1, stageAttemptId1, metrics1) = a
+          val (taskId2, stageId2, stageAttemptId2, metrics2) = b
+          assert(taskId1 === taskId2)
+          assert(stageId1 === stageId2)
+          assert(stageAttemptId1 === stageAttemptId2)
+          assertEquals(metrics1, metrics2)
+        })
+      case (e1, e2) =>
+        assert(e1 === e2)
       case _ => fail("Events don't match in types!")
     }
   }
@@ -326,7 +527,7 @@ class JsonProtocolSuite extends FunSuite {
   private def assertEquals(info1: TaskInfo, info2: TaskInfo) {
     assert(info1.taskId === info2.taskId)
     assert(info1.index === info2.index)
-    assert(info1.attempt === info2.attempt)
+    assert(info1.attemptNumber === info2.attemptNumber)
     assert(info1.launchTime === info2.launchTime)
     assert(info1.executorId === info2.executorId)
     assert(info1.host === info2.host)
@@ -336,6 +537,11 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
     assert(info1.accumulables === info2.accumulables)
+  }
+
+  private def assertEquals(info1: ExecutorInfo, info2: ExecutorInfo) {
+    assert(info1.executorHost == info2.executorHost)
+    assert(info1.totalCores == info2.totalCores)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
@@ -356,7 +562,6 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def assertEquals(metrics1: ShuffleReadMetrics, metrics2: ShuffleReadMetrics) {
-    assert(metrics1.shuffleFinishTime === metrics2.shuffleFinishTime)
     assert(metrics1.remoteBlocksFetched === metrics2.remoteBlocksFetched)
     assert(metrics1.localBlocksFetched === metrics2.localBlocksFetched)
     assert(metrics1.fetchWaitTime === metrics2.fetchWaitTime)
@@ -371,12 +576,6 @@ class JsonProtocolSuite extends FunSuite {
   private def assertEquals(metrics1: InputMetrics, metrics2: InputMetrics) {
     assert(metrics1.readMethod === metrics2.readMethod)
     assert(metrics1.bytesRead === metrics2.bytesRead)
-  }
-
-  private def assertEquals(bm1: BlockManagerId, bm2: BlockManagerId) {
-    assert(bm1.executorId === bm2.executorId)
-    assert(bm1.host === bm2.host)
-    assert(bm1.port === bm2.port)
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {
@@ -396,15 +595,26 @@ class JsonProtocolSuite extends FunSuite {
         assert(r1.shuffleId === r2.shuffleId)
         assert(r1.mapId === r2.mapId)
         assert(r1.reduceId === r2.reduceId)
-        assertEquals(r1.bmAddress, r2.bmAddress)
+        assert(r1.bmAddress === r2.bmAddress)
+        assert(r1.message === r2.message)
       case (r1: ExceptionFailure, r2: ExceptionFailure) =>
         assert(r1.className === r2.className)
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
+        assert(r1.fullStackTrace === r2.fullStackTrace)
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
-      case (ExecutorLostFailure, ExecutorLostFailure) =>
+      case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
+          TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
+        assert(jobId1 === jobId2)
+        assert(partitionId1 === partitionId2)
+        assert(attemptNumber1 === attemptNumber2)
+      case (ExecutorLostFailure(execId1, exit1CausedByApp, reason1),
+          ExecutorLostFailure(execId2, exit2CausedByApp, reason2)) =>
+        assert(execId1 === execId2)
+        assert(exit1CausedByApp === exit2CausedByApp)
+        assert(reason1 === reason2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }
@@ -510,7 +720,7 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK)
+    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7), a.toString)
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
@@ -519,7 +729,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, "details")
+    val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details")
     val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
     stageInfo.accumulables(acc1.id) = acc1
     stageInfo.accumulables(acc2.id) = acc2
@@ -530,15 +740,15 @@ class JsonProtocolSuite extends FunSuite {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
     val (acc1, acc2, acc3) =
-      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3))
+      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true))
     taskInfo.accumulables += acc1
     taskInfo.accumulables += acc2
     taskInfo.accumulables += acc3
     taskInfo
   }
 
-  private def makeAccumulableInfo(id: Int): AccumulableInfo =
-    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id)
+  private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
+    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id, internal)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -551,33 +761,45 @@ class JsonProtocolSuite extends FunSuite {
       d: Long,
       e: Int,
       f: Int,
-      hasHadoopInput: Boolean) = {
+      hasHadoopInput: Boolean,
+      hasOutput: Boolean,
+      hasRecords: Boolean = true) = {
     val t = new TaskMetrics
-    val sw = new ShuffleWriteMetrics
-    t.hostname = "localhost"
-    t.executorDeserializeTime = a
-    t.executorRunTime = b
-    t.resultSize = c
-    t.jvmGCTime = d
-    t.resultSerializationTime = a + b
-    t.memoryBytesSpilled = a + c
+    t.setHostname("localhost")
+    t.setExecutorDeserializeTime(a)
+    t.setExecutorRunTime(b)
+    t.setResultSize(c)
+    t.setJvmGCTime(d)
+    t.setResultSerializationTime(a + b)
+    t.incMemoryBytesSpilled(a + c)
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.bytesRead = d + e + f
-      t.inputMetrics = Some(inputMetrics)
+      inputMetrics.incBytesRead(d + e + f)
+      inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
+      t.setInputMetrics(Some(inputMetrics))
     } else {
       val sr = new ShuffleReadMetrics
-      sr.shuffleFinishTime = b + c
-      sr.remoteBytesRead = b + d
-      sr.localBlocksFetched = e
-      sr.fetchWaitTime = a + d
-      sr.remoteBlocksFetched = f
+      sr.incRemoteBytesRead(b + d)
+      sr.incLocalBlocksFetched(e)
+      sr.incFetchWaitTime(a + d)
+      sr.incRemoteBlocksFetched(f)
+      sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
+      sr.incLocalBytesRead(a + f)
       t.setShuffleReadMetrics(Some(sr))
     }
-    sw.shuffleBytesWritten = a + b + c
-    sw.shuffleWriteTime = b + c + d
-    t.shuffleWriteMetrics = Some(sw)
+    if (hasOutput) {
+      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
+      outputMetrics.setBytesWritten(a + b + c)
+      outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c)/100 else -1)
+      t.outputMetrics = Some(outputMetrics)
+    } else {
+      val sw = new ShuffleWriteMetrics
+      sw.incShuffleBytesWritten(a + b + c)
+      sw.incShuffleWriteTime(b + c + d)
+      sw.setShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
+      t.shuffleWriteMetrics = Some(sw)
+    }
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
       (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
@@ -600,19 +822,22 @@ class JsonProtocolSuite extends FunSuite {
       |    "Stage Name": "greetings",
       |    "Number of Tasks": 200,
       |    "RDD Info": [],
+      |    "ParentIDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  },
@@ -638,33 +863,38 @@ class JsonProtocolSuite extends FunSuite {
       |      {
       |        "RDD ID": 101,
       |        "Name": "mayor",
+      |        "Callsite": "101",
+      |        "Parent IDs": [1, 4, 7],
       |        "Storage Level": {
       |          "Use Disk": true,
       |          "Use Memory": true,
-      |          "Use Tachyon": false,
+      |          "Use ExternalBlockStore": false,
       |          "Deserialized": true,
       |          "Replication": 1
       |        },
       |        "Number of Partitions": 201,
       |        "Number of Cached Partitions": 301,
       |        "Memory Size": 401,
-      |        "Tachyon Size": 0,
+      |        "ExternalBlockStore Size": 0,
       |        "Disk Size": 501
       |      }
       |    ],
+      |    "ParentIDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  }
@@ -694,19 +924,22 @@ class JsonProtocolSuite extends FunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -734,19 +967,22 @@ class JsonProtocolSuite extends FunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -780,19 +1016,22 @@ class JsonProtocolSuite extends FunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -806,15 +1045,17 @@ class JsonProtocolSuite extends FunSuite {
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
       |    "Shuffle Read Metrics": {
-      |      "Shuffle Finish Time": 900,
       |      "Remote Blocks Fetched": 800,
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
-      |      "Remote Bytes Read": 1000
+      |      "Remote Bytes Read": 1000,
+      |      "Local Bytes Read": 1100,
+      |      "Total Records Read" : 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
-      |      "Shuffle Write Time": 1500
+      |      "Shuffle Write Time": 1500,
+      |      "Shuffle Records Written": 12
       |    },
       |    "Updated Blocks": [
       |      {
@@ -823,12 +1064,12 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -864,19 +1105,22 @@ class JsonProtocolSuite extends FunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -891,11 +1135,13 @@ class JsonProtocolSuite extends FunSuite {
       |    "Disk Bytes Spilled": 0,
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
-      |      "Shuffle Write Time": 1500
+      |      "Shuffle Write Time": 1500,
+      |      "Shuffle Records Written": 12
       |    },
       |    "Input Metrics": {
       |      "Data Read Method": "Hadoop",
-      |      "Bytes Read": 2100
+      |      "Bytes Read": 2100,
+      |      "Records Read": 21
       |    },
       |    "Updated Blocks": [
       |      {
@@ -904,12 +1150,98 @@ class JsonProtocolSuite extends FunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use Tachyon": false,
+      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "Tachyon Size": 0,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 0
+      |        }
+      |      }
+      |    ]
+      |  }
+      |}
+    """
+
+  private val taskEndWithOutputJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerTaskEnd",
+      |  "Stage ID": 1,
+      |  "Stage Attempt ID": 0,
+      |  "Task Type": "ResultTask",
+      |  "Task End Reason": {
+      |    "Reason": "Success"
+      |  },
+      |  "Task Info": {
+      |    "Task ID": 123,
+      |    "Index": 234,
+      |    "Attempt": 67,
+      |    "Launch Time": 345,
+      |    "Executor ID": "executor",
+      |    "Host": "your kind sir",
+      |    "Locality": "NODE_LOCAL",
+      |    "Speculative": false,
+      |    "Getting Result Time": 0,
+      |    "Finish Time": 0,
+      |    "Failed": false,
+      |    "Accumulables": [
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1",
+      |        "Internal": false
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2",
+      |        "Internal": false
+      |      },
+      |      {
+      |        "ID": 3,
+      |        "Name": "Accumulable3",
+      |        "Update": "delta3",
+      |        "Value": "val3",
+      |        "Internal": true
+      |      }
+      |    ]
+      |  },
+      |  "Task Metrics": {
+      |    "Host Name": "localhost",
+      |    "Executor Deserialize Time": 300,
+      |    "Executor Run Time": 400,
+      |    "Result Size": 500,
+      |    "JVM GC Time": 600,
+      |    "Result Serialization Time": 700,
+      |    "Memory Bytes Spilled": 800,
+      |    "Disk Bytes Spilled": 0,
+      |    "Input Metrics": {
+      |      "Data Read Method": "Hadoop",
+      |      "Bytes Read": 2100,
+      |      "Records Read": 21
+      |    },
+      |    "Output Metrics": {
+      |      "Data Write Method": "Hadoop",
+      |      "Bytes Written": 1200,
+      |      "Records Written": 12
+      |    },
+      |    "Updated Blocks": [
+      |      {
+      |        "Block ID": "rdd_0_0",
+      |        "Status": {
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": false,
+      |            "Replication": 2
+      |          },
+      |          "Memory Size": 0,
+      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -923,6 +1255,293 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerJobStart",
       |  "Job ID": 10,
+      |  "Submission Time": 1421191042750,
+      |  "Stage Infos": [
+      |    {
+      |      "Stage ID": 1,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 200,
+      |      "RDD Info": [
+      |        {
+      |          "RDD ID": 1,
+      |          "Name": "mayor",
+      |          "Callsite": "1",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 200,
+      |          "Number of Cached Partitions": 300,
+      |          "Memory Size": 400,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 500
+      |        }
+      |      ],
+      |      "Parent IDs" : [100, 200, 300],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false
+      |        }
+      |      ]
+      |    },
+      |    {
+      |      "Stage ID": 2,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 400,
+      |      "RDD Info": [
+      |        {
+      |          "RDD ID": 2,
+      |          "Name": "mayor",
+      |          "Callsite": "2",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 400,
+      |          "Number of Cached Partitions": 600,
+      |          "Memory Size": 800,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 1000
+      |        },
+      |        {
+      |          "RDD ID": 3,
+      |          "Name": "mayor",
+      |          "Callsite": "3",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 401,
+      |          "Number of Cached Partitions": 601,
+      |          "Memory Size": 801,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 1001
+      |        }
+      |      ],
+      |      "ParentIDs" : [100, 200, 300],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false
+      |        }
+      |      ]
+      |    },
+      |    {
+      |      "Stage ID": 3,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 600,
+      |      "RDD Info": [
+      |        {
+      |          "RDD ID": 3,
+      |          "Name": "mayor",
+      |          "Callsite": "3",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 600,
+      |          "Number of Cached Partitions": 900,
+      |          "Memory Size": 1200,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 1500
+      |        },
+      |        {
+      |          "RDD ID": 4,
+      |          "Name": "mayor",
+      |          "Callsite": "4",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 601,
+      |          "Number of Cached Partitions": 901,
+      |          "Memory Size": 1201,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 1501
+      |        },
+      |        {
+      |          "RDD ID": 5,
+      |          "Name": "mayor",
+      |          "Callsite": "5",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 602,
+      |          "Number of Cached Partitions": 902,
+      |          "Memory Size": 1202,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 1502
+      |        }
+      |      ],
+      |      "ParentIDs" : [100, 200, 300],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false
+      |        }
+      |      ]
+      |    },
+      |    {
+      |      "Stage ID": 4,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 800,
+      |      "RDD Info": [
+      |        {
+      |          "RDD ID": 4,
+      |          "Name": "mayor",
+      |          "Callsite": "4",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 800,
+      |          "Number of Cached Partitions": 1200,
+      |          "Memory Size": 1600,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 2000
+      |        },
+      |        {
+      |          "RDD ID": 5,
+      |          "Name": "mayor",
+      |          "Callsite": "5",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 801,
+      |          "Number of Cached Partitions": 1201,
+      |          "Memory Size": 1601,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 2001
+      |        },
+      |        {
+      |          "RDD ID": 6,
+      |          "Name": "mayor",
+      |          "Callsite": "6",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 802,
+      |          "Number of Cached Partitions": 1202,
+      |          "Memory Size": 1602,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 2002
+      |        },
+      |        {
+      |          "RDD ID": 7,
+      |          "Name": "mayor",
+      |          "Callsite": "7",
+      |          "Parent IDs": [1, 4, 7],
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use ExternalBlockStore": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 803,
+      |          "Number of Cached Partitions": 1203,
+      |          "Memory Size": 1603,
+      |          "ExternalBlockStore Size": 0,
+      |          "Disk Size": 2003
+      |        }
+      |      ],
+      |      "ParentIDs" : [100, 200, 300],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2",
+      |          "Internal": false
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1",
+      |          "Internal": false
+      |        }
+      |      ]
+      |    }
+      |  ],
       |  "Stage IDs": [
       |    1,
       |    2,
@@ -943,6 +1562,7 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerJobEnd",
       |  "Job ID": 20,
+      |  "Completion Time": 1421191296660,
       |  "Job Result": {
       |    "Result": "JobSucceeded"
       |  }
@@ -1010,8 +1630,26 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerApplicationStart",
       |  "App Name": "The winner of all",
+      |  "App ID": "appId",
       |  "Timestamp": 42,
-      |  "User": "Garfield"
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt"
+      |}
+    """
+
+  private val applicationStartJsonWithLogUrlsString =
+    """
+      |{
+      |  "Event": "SparkListenerApplicationStart",
+      |  "App Name": "The winner of all",
+      |  "App ID": "appId",
+      |  "Timestamp": 42,
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt",
+      |  "Driver Logs" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |  }
       |}
     """
 
@@ -1022,4 +1660,82 @@ class JsonProtocolSuite extends FunSuite {
       |  "Timestamp": 42
       |}
     """
+
+  private val executorAddedJsonString =
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorAdded",
+      |  "Timestamp": ${executorAddedTime},
+      |  "Executor ID": "exec1",
+      |  "Executor Info": {
+      |    "Host": "Hostee.awesome.com",
+      |    "Total Cores": 11,
+      |    "Log Urls" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |    }
+      |  }
+      |}
+    """
+
+  private val executorRemovedJsonString =
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorRemoved",
+      |  "Timestamp": ${executorRemovedTime},
+      |  "Executor ID": "exec2",
+      |  "Removed Reason": "test reason"
+      |}
+    """
+
+  private val executorMetricsUpdateJsonString =
+  s"""
+     |{
+     |  "Event": "SparkListenerExecutorMetricsUpdate",
+     |  "Executor ID": "exec3",
+     |  "Metrics Updated": [
+     |  {
+     |    "Task ID": 1,
+     |    "Stage ID": 2,
+     |    "Stage Attempt ID": 3,
+     |    "Task Metrics": {
+     |    "Host Name": "localhost",
+     |    "Executor Deserialize Time": 300,
+     |    "Executor Run Time": 400,
+     |    "Result Size": 500,
+     |    "JVM GC Time": 600,
+     |    "Result Serialization Time": 700,
+     |    "Memory Bytes Spilled": 800,
+     |    "Disk Bytes Spilled": 0,
+     |    "Input Metrics": {
+     |      "Data Read Method": "Hadoop",
+     |      "Bytes Read": 2100,
+     |      "Records Read": 21
+     |    },
+     |    "Output Metrics": {
+     |      "Data Write Method": "Hadoop",
+     |      "Bytes Written": 1200,
+     |      "Records Written": 12
+     |    },
+     |    "Updated Blocks": [
+     |      {
+     |        "Block ID": "rdd_0_0",
+     |        "Status": {
+     |          "Storage Level": {
+     |            "Use Disk": true,
+     |            "Use Memory": true,
+     |            "Use ExternalBlockStore": false,
+     |            "Deserialized": false,
+     |            "Replication": 2
+     |          },
+     |          "Memory Size": 0,
+     |          "ExternalBlockStore Size": 0,
+     |          "Disk Size": 0
+     |        }
+     |      }
+     |    ]
+     |  }
+     |  }]
+     |}
+   """.stripMargin
 }

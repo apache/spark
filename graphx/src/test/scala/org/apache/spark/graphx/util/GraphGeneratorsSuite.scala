@@ -17,11 +17,10 @@
 
 package org.apache.spark.graphx.util
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.LocalSparkContext
 
-class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
+class GraphGeneratorsSuite extends SparkFunSuite with LocalSparkContext {
 
   test("GraphGenerators.generateRandomEdges") {
     val src = 5
@@ -64,8 +63,11 @@ class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
     val sigma = 1.3
     val maxVal = 100
 
-    val dstId = GraphGenerators.sampleLogNormal(mu, sigma, maxVal)
-    assert(dstId < maxVal)
+    val trials = 1000
+    for (i <- 1 to trials) {
+      val dstId = GraphGenerators.sampleLogNormal(mu, sigma, maxVal)
+      assert(dstId < maxVal)
+    }
 
     val dstId_round1 = GraphGenerators.sampleLogNormal(mu, sigma, maxVal, 12345)
     val dstId_round2 = GraphGenerators.sampleLogNormal(mu, sigma, maxVal, 12345)
@@ -104,6 +106,16 @@ class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
       assert(!graph_round1_edges.zip(graph_round3_edges).forall { case (e1, e2) =>
         e1.srcId == e2.srcId && e1.dstId == e2.dstId && e1.attr == e2.attr
       })
+    }
+  }
+
+  test("SPARK-5064 GraphGenerators.rmatGraph numEdges upper bound") {
+    withSpark { sc =>
+      val g1 = GraphGenerators.rmatGraph(sc, 4, 4)
+      assert(g1.edges.count() === 4)
+      intercept[IllegalArgumentException] {
+        val g2 = GraphGenerators.rmatGraph(sc, 4, 8)
+      }
     }
   }
 

@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+
+import org.apache.spark.util.Utils
 
 /** Prints out environmental information, sleeps, and then exits. Made to
   * test driver submission in the standalone scheduler. */
@@ -30,13 +33,13 @@ object DriverSubmissionTest {
     val numSecondsToSleep = args(0).toInt
 
     val env = System.getenv()
-    val properties = System.getProperties()
+    val properties = Utils.getSystemProperties
 
     println("Environment variables containing SPARK_TEST:")
-    env.filter{case (k, v) => k.contains("SPARK_TEST")}.foreach(println)
+    env.asScala.filter { case (k, _) => k.contains("SPARK_TEST")}.foreach(println)
 
     println("System properties containing spark.test:")
-    properties.filter{case (k, v) => k.toString.contains("spark.test")}.foreach(println)
+    properties.filter { case (k, _) => k.toString.contains("spark.test") }.foreach(println)
 
     for (i <- 1 until numSecondsToSleep) {
       println(s"Alive for $i out of $numSecondsToSleep seconds")
@@ -44,3 +47,4 @@ object DriverSubmissionTest {
     }
   }
 }
+// scalastyle:on println

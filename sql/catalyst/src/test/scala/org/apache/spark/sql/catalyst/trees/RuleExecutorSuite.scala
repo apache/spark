@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral, Literal}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 
-class RuleExecutorSuite extends FunSuite {
+class RuleExecutorSuite extends SparkFunSuite {
   object DecrementLiterals extends Rule[Expression] {
     def apply(e: Expression): Expression = e transform {
       case IntegerLiteral(i) if i > 0 => Literal(i - 1)
@@ -34,7 +33,7 @@ class RuleExecutorSuite extends FunSuite {
       val batches = Batch("once", Once, DecrementLiterals) :: Nil
     }
 
-    assert(ApplyOnce(Literal(10)) === Literal(9))
+    assert(ApplyOnce.execute(Literal(10)) === Literal(9))
   }
 
   test("to fixed point") {
@@ -42,7 +41,7 @@ class RuleExecutorSuite extends FunSuite {
       val batches = Batch("fixedPoint", FixedPoint(100), DecrementLiterals) :: Nil
     }
 
-    assert(ToFixedPoint(Literal(10)) === Literal(0))
+    assert(ToFixedPoint.execute(Literal(10)) === Literal(0))
   }
 
   test("to maxIterations") {
@@ -50,6 +49,6 @@ class RuleExecutorSuite extends FunSuite {
       val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
     }
 
-    assert(ToFixedPoint(Literal(100)) === Literal(90))
+    assert(ToFixedPoint.execute(Literal(100)) === Literal(90))
   }
 }

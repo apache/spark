@@ -25,13 +25,17 @@ import org.apache.spark.scheduler._
 /**
  * :: DeveloperApi ::
  * A SparkListener that maintains executor storage status.
+ *
+ * This class is thread-safe (unlike JobProgressListener)
  */
 @DeveloperApi
 class StorageStatusListener extends SparkListener {
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
-  def storageStatusList = executorIdToStorageStatus.values.toSeq
+  def storageStatusList: Seq[StorageStatus] = synchronized {
+    executorIdToStorageStatus.values.toSeq
+  }
 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
@@ -55,19 +59,18 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     val metrics = taskEnd.taskMetrics
     if (info != null && metrics != null) {
-      val execId = formatExecutorId(info.executorId)
       val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
       if (updatedBlocks.length > 0) {
-        updateStorageStatus(execId, updatedBlocks)
+        updateStorageStatus(info.executorId, updatedBlocks)
       }
     }
   }
 
-  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
+  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD): Unit = synchronized {
     updateStorageStatus(unpersistRDD.rddId)
   }
 
@@ -88,13 +91,4 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  /**
-   * In the local mode, there is a discrepancy between the executor ID according to the
-   * task ("localhost") and that according to SparkEnv ("<driver>"). In the UI, this
-   * results in duplicate rows for the same executor. Thus, in this mode, we aggregate
-   * these two rows and use the executor ID of "<driver>" to be consistent.
-   */
-  def formatExecutorId(execId: String): String = {
-    if (execId == "localhost") "<driver>" else execId
-  }
 }

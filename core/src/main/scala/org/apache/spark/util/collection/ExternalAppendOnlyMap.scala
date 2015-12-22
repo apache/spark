@@ -26,10 +26,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.{Logging, SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
 import org.apache.spark.executor.ShuffleWriteMetrics
 
@@ -48,16 +50,6 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  * However, if the spill threshold is too low, we spill frequently and incur unnecessary disk
  * writes. This may lead to a performance regression compared to the normal case of using the
  * non-spilling AppendOnlyMap.
- *
- * Two parameters control the memory threshold:
- *
- *   `spark.shuffle.memoryFraction` specifies the collective amount of memory used for storing
- *   these maps as a fraction of the executor's total memory. Since each concurrently running
- *   task maintains one map, the actual threshold for each map is this quantity divided by the
- *   number of running tasks.
- *
- *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
- *   this threshold, in case map size estimation is not sufficiently accurate.
  */
 @DeveloperApi
 class ExternalAppendOnlyMap[K, V, C](
@@ -65,24 +57,34 @@ class ExternalAppendOnlyMap[K, V, C](
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
     serializer: Serializer = SparkEnv.get.serializer,
-    blockManager: BlockManager = SparkEnv.get.blockManager)
-  extends Iterable[(K, C)] with Serializable with Logging {
+    blockManager: BlockManager = SparkEnv.get.blockManager,
+    context: TaskContext = TaskContext.get())
+  extends Iterable[(K, C)]
+  with Serializable
+  with Logging
+  with Spillable[SizeTracker] {
+
+  if (context == null) {
+    throw new IllegalStateException(
+      "Spillable collections should not be instantiated outside of tasks")
+  }
+
+  // Backwards-compatibility constructor for binary compatibility
+  def this(
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      serializer: Serializer,
+      blockManager: BlockManager) {
+    this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
+  }
+
+  override protected[this] def taskMemoryManager: TaskMemoryManager = context.taskMemoryManager()
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
-  private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
-
-  // Number of pairs inserted since last spill; note that we count them even if a value is merged
-  // with a previous key in case we're doing something like groupBy where the result grows
-  private var elementsRead = 0L
-
-  // Number of in-memory pairs inserted before tracking the map's shuffle memory usage
-  private val trackMemoryThreshold = 1000
-
-  // How much of the shared memory pool this collection has claimed
-  private var myMemoryThreshold = 0L
 
   /**
    * Size of object batches when reading/writing from serializers.
@@ -95,20 +97,29 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   private val serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000)
 
-  // How many times we have spilled so far
-  private var spillCount = 0
-
   // Number of bytes spilled in total
-  private var _memoryBytesSpilled = 0L
   private var _diskBytesSpilled = 0L
+  def diskBytesSpilled: Long = _diskBytesSpilled
 
-  private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+  // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
+  private val fileBufferSize =
+    sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
 
+  // Peak size of the in-memory map observed so far, in bytes
+  private var _peakMemoryUsedBytes: Long = 0L
+  def peakMemoryUsedBytes: Long = _peakMemoryUsedBytes
+
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
+
+  /**
+   * Number of files this map has spilled so far.
+   * Exposed for testing.
+   */
+  private[collection] def numSpills: Int = spilledMaps.size
 
   /**
    * Insert the given key and value into the map.
@@ -127,6 +138,10 @@ class ExternalAppendOnlyMap[K, V, C](
    * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
    */
   def insertAll(entries: Iterator[Product2[K, V]]): Unit = {
+    if (currentMap == null) {
+      throw new IllegalStateException(
+        "Cannot insert new elements into a map after calling iterator")
+    }
     // An update function for the map that we reuse across entries to avoid allocating
     // a new closure each time
     var curEntry: Product2[K, V] = null
@@ -136,22 +151,15 @@ class ExternalAppendOnlyMap[K, V, C](
 
     while (entries.hasNext) {
       curEntry = entries.next()
-      if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
-          currentMap.estimateSize() >= myMemoryThreshold)
-      {
-        // Claim up to double our current memory from the shuffle memory pool
-        val currentMemory = currentMap.estimateSize()
-        val amountToRequest = 2 * currentMemory - myMemoryThreshold
-        val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
-        myMemoryThreshold += granted
-        if (myMemoryThreshold <= currentMemory) {
-          // We were granted too little memory to grow further (either tryToAcquire returned 0,
-          // or we already had more memory than myMemoryThreshold); spill the current collection
-          spill(currentMemory)  // Will also release memory back to ShuffleMemoryManager
-        }
+      val estimatedSize = currentMap.estimateSize()
+      if (estimatedSize > _peakMemoryUsedBytes) {
+        _peakMemoryUsedBytes = estimatedSize
+      }
+      if (maybeSpill(currentMap, estimatedSize)) {
+        currentMap = new SizeTrackingAppendOnlyMap[K, C]
       }
       currentMap.changeValue(curEntry._1, update)
-      elementsRead += 1
+      addElementsRead()
     }
   }
 
@@ -171,22 +179,17 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
-  private def spill(mapSize: Long): Unit = {
-    spillCount += 1
-    val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
-      .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
-    val (blockId, file) = diskBlockManager.createTempBlock()
+  override protected[this] def spill(collection: SizeTracker): Unit = {
+    val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
-    var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
-      curWriteMetrics)
+    var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
 
     // Flush the disk writer's contents to disk, and update relevant variables
-    def flush() = {
+    def flush(): Unit = {
       val w = writer
       writer = null
       w.commitAndClose()
@@ -200,14 +203,13 @@ class ExternalAppendOnlyMap[K, V, C](
       val it = currentMap.destructiveSortedIterator(keyComparator)
       while (it.hasNext) {
         val kv = it.next()
-        writer.write(kv)
+        writer.write(kv._1, kv._2)
         objectsWritten += 1
 
         if (objectsWritten == serializerBatchSize) {
           flush()
           curWriteMetrics = new ShuffleWriteMetrics()
-          writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
-            curWriteMetrics)
+          writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
         }
       }
       if (objectsWritten > 0) {
@@ -226,35 +228,35 @@ class ExternalAppendOnlyMap[K, V, C](
           writer.revertPartialWritesAndClose()
         }
         if (file.exists()) {
-          file.delete()
+          if (!file.delete()) {
+            logWarning(s"Error deleting ${file}")
+          }
         }
       }
     }
 
-    currentMap = new SizeTrackingAppendOnlyMap[K, C]
     spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
-
-    // Release our memory back to the shuffle pool so that other threads can grab it
-    shuffleMemoryManager.release(myMemoryThreshold)
-    myMemoryThreshold = 0L
-
-    elementsRead = 0
-    _memoryBytesSpilled += mapSize
   }
 
-  def memoryBytesSpilled: Long = _memoryBytesSpilled
-  def diskBytesSpilled: Long = _diskBytesSpilled
-
   /**
-   * Return an iterator that merges the in-memory map with the spilled maps.
+   * Return a destructive iterator that merges the in-memory map with the spilled maps.
    * If no spill has occurred, simply return the in-memory map's iterator.
    */
   override def iterator: Iterator[(K, C)] = {
+    if (currentMap == null) {
+      throw new IllegalStateException(
+        "ExternalAppendOnlyMap.iterator is destructive and should only be called once.")
+    }
     if (spilledMaps.isEmpty) {
-      currentMap.iterator
+      CompletionIterator[(K, C), Iterator[(K, C)]](currentMap.iterator, freeCurrentMap())
     } else {
       new ExternalIterator()
     }
+  }
+
+  private def freeCurrentMap(): Unit = {
+    currentMap = null // So that the memory can be garbage-collected
+    releaseMemory()
   }
 
   /**
@@ -268,7 +270,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = currentMap.destructiveSortedIterator(keyComparator)
+    private val sortedMap = CompletionIterator[(K, C), Iterator[(K, C)]](
+      currentMap.destructiveSortedIterator(keyComparator), freeCurrentMap())
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -391,7 +394,7 @@ class ExternalAppendOnlyMap[K, V, C](
         val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
-      def isEmpty = pairs.length == 0
+      def isEmpty: Boolean = pairs.length == 0
 
       // Invalid if there are no more pairs in this stream
       def minKeyHash: Int = {
@@ -471,7 +474,9 @@ class ExternalAppendOnlyMap[K, V, C](
      */
     private def readNextItem(): (K, C) = {
       try {
-        val item = deserializeStream.readObject().asInstanceOf[(K, C)]
+        val k = deserializeStream.readKey().asInstanceOf[K]
+        val c = deserializeStream.readValue().asInstanceOf[C]
+        val item = (k, c)
         objectsRead += 1
         if (objectsRead == serializerBatchSize) {
           objectsRead = 0
@@ -504,15 +509,25 @@ class ExternalAppendOnlyMap[K, V, C](
       item
     }
 
-    // TODO: Ensure this gets called even if the iterator isn't drained.
     private def cleanup() {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
       val ds = deserializeStream
-      deserializeStream = null
-      fileStream = null
-      ds.close()
-      file.delete()
+      if (ds != null) {
+        ds.close()
+        deserializeStream = null
+      }
+      if (fileStream != null) {
+        fileStream.close()
+        fileStream = null
+      }
+      if (file.exists()) {
+        if (!file.delete()) {
+          logWarning(s"Error deleting ${file}")
+        }
+      }
     }
+
+    context.addTaskCompletionListener(context => cleanup())
   }
 
   /** Convenience function to hash the given (K, C) pair by the key. */

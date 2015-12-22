@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 
+// scalastyle:off classforname
 package org.apache.spark.tools
 
 import java.io.File
 import java.util.jar.JarFile
 
 import scala.collection.mutable
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.reflect.runtime.{universe => unv}
+import scala.util.Try
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -70,7 +72,9 @@ object GenerateMIMAIgnore {
         val classSymbol = mirror.classSymbol(Class.forName(className, false, classLoader))
         val moduleSymbol = mirror.staticModule(className)
         val directlyPrivateSpark =
-          isPackagePrivate(classSymbol) || isPackagePrivateModule(moduleSymbol)
+          isPackagePrivate(classSymbol) ||
+          isPackagePrivateModule(moduleSymbol) ||
+          classSymbol.isPrivate
         val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
         val experimental = isExperimental(classSymbol) || isExperimental(moduleSymbol)
         /* Inner classes defined within a private[spark] class or object are effectively
@@ -91,7 +95,9 @@ object GenerateMIMAIgnore {
         ignoredMembers ++= getAnnotatedOrPackagePrivateMembers(classSymbol)
 
       } catch {
+        // scalastyle:off println
         case _: Throwable => println("Error instrumenting class:" + className)
+        // scalastyle:on println
       }
     }
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
@@ -107,7 +113,9 @@ object GenerateMIMAIgnore {
         .filter(_.contains("$$")).map(classSymbol.fullName + "." + _)
     } catch {
       case t: Throwable =>
+        // scalastyle:off println
         println("[WARN] Unable to detect inner functions for class:" + classSymbol.fullName)
+        // scalastyle:on println
         Seq.empty[String]
     }
   }
@@ -121,13 +129,20 @@ object GenerateMIMAIgnore {
   }
 
   def main(args: Array[String]) {
+    import scala.tools.nsc.io.File
     val (privateClasses, privateMembers) = privateWithin("org.apache.spark")
-    scala.tools.nsc.io.File(".generated-mima-class-excludes").
-      writeAll(privateClasses.mkString("\n"))
+    val previousContents = Try(File(".generated-mima-class-excludes").lines()).
+      getOrElse(Iterator.empty).mkString("\n")
+    File(".generated-mima-class-excludes")
+      .writeAll(previousContents + privateClasses.mkString("\n"))
+    // scalastyle:off println
     println("Created : .generated-mima-class-excludes in current directory.")
-    scala.tools.nsc.io.File(".generated-mima-member-excludes").
-      writeAll(privateMembers.mkString("\n"))
+    val previousMembersContents = Try(File(".generated-mima-member-excludes").lines)
+      .getOrElse(Iterator.empty).mkString("\n")
+    File(".generated-mima-member-excludes").writeAll(previousMembersContents +
+      privateMembers.mkString("\n"))
     println("Created : .generated-mima-member-excludes in current directory.")
+    // scalastyle:on println
   }
 
 
@@ -148,7 +163,7 @@ object GenerateMIMAIgnore {
     val path = packageName.replace('.', '/')
     val resources = classLoader.getResources(path)
 
-    val jars = resources.filter(x => x.getProtocol == "jar")
+    val jars = resources.asScala.filter(_.getProtocol == "jar")
       .map(_.getFile.split(":")(1).split("!")(0)).toSeq
 
     jars.flatMap(getClassesFromJar(_, path))
@@ -162,15 +177,18 @@ object GenerateMIMAIgnore {
   private def getClassesFromJar(jarPath: String, packageName: String) = {
     import scala.collection.mutable
     val jar = new JarFile(new File(jarPath))
-    val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
+    val enums = jar.entries().asScala.map(_.getName).filter(_.startsWith(packageName))
     val classes = mutable.HashSet[Class[_]]()
     for (entry <- enums if entry.endsWith(".class")) {
       try {
         classes += Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
       } catch {
+        // scalastyle:off println
         case _: Throwable => println("Unable to load:" + entry)
+        // scalastyle:on println
       }
     }
     classes
   }
 }
+// scalastyle:on classforname

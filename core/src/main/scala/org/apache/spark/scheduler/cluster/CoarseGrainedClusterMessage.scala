@@ -20,6 +20,8 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.ExecutorLossReason
 import org.apache.spark.util.{SerializableBuffer, Utils}
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
@@ -34,15 +36,22 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
     extends CoarseGrainedClusterMessage
 
-  case object RegisteredExecutor extends CoarseGrainedClusterMessage
+  sealed trait RegisterExecutorResponse
+
+  case class RegisteredExecutor(hostname: String) extends CoarseGrainedClusterMessage
+    with RegisterExecutorResponse
 
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
+    with RegisterExecutorResponse
 
   // Executors to driver
-  case class RegisterExecutor(executorId: String, hostPort: String, cores: Int)
-    extends CoarseGrainedClusterMessage {
-    Utils.checkHostPort(hostPort, "Expected host port")
-  }
+  case class RegisterExecutor(
+      executorId: String,
+      executorRef: RpcEndpointRef,
+      hostPort: String,
+      cores: Int,
+      logUrls: Map[String, String])
+    extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
@@ -64,9 +73,36 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case object StopExecutors extends CoarseGrainedClusterMessage
 
-  case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
-
-  case class AddWebUIFilter(filterName:String, filterParams: String, proxyBase :String)
+  case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
     extends CoarseGrainedClusterMessage
+
+  case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
+
+  // Exchanged between the driver and the AM in Yarn client mode
+  case class AddWebUIFilter(
+      filterName: String, filterParams: Map[String, String], proxyBase: String)
+    extends CoarseGrainedClusterMessage
+
+  // Messages exchanged between the driver and the cluster manager for executor allocation
+  // In Yarn mode, these are exchanged between the driver and the AM
+
+  case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
+
+  // Request executors by specifying the new total number of executors desired
+  // This includes executors already pending or running
+  case class RequestExecutors(
+      requestedTotal: Int,
+      localityAwareTasks: Int,
+      hostToLocalTaskCount: Map[String, Int])
+    extends CoarseGrainedClusterMessage
+
+  // Check if an executor was force-killed but for a reason unrelated to the running tasks.
+  // This could be the case if the executor is preempted, for instance.
+  case class GetExecutorLossReason(executorId: String) extends CoarseGrainedClusterMessage
+
+  case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
+
+  // Used internally by executors to shut themselves down.
+  case object Shutdown extends CoarseGrainedClusterMessage
 
 }

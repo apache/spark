@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.examples.streaming.StreamingExamples
 // scalastyle:off
 /** Analyses a streaming dataset of web page views. This class demonstrates several types of
@@ -50,7 +49,7 @@ object PageViewStream {
     val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
 
-    // Create a NetworkInputDStream on target host:port and convert each line to a PageView
+    // Create a ReceiverInputDStream on target host:port and convert each line to a PageView
     val pageViews = ssc.socketTextStream(host, port)
                        .flatMap(_.split("\n"))
                        .map(PageView.fromString(_))
@@ -87,8 +86,10 @@ object PageViewStream {
                                    .map("Unique active users: " + _)
 
     // An external dataset we want to join to this stream
-    val userList = ssc.sparkContext.parallelize(
-       Map(1 -> "Patrick Wendell", 2->"Reynold Xin", 3->"Matei Zaharia").toSeq)
+    val userList = ssc.sparkContext.parallelize(Seq(
+      1 -> "Patrick Wendell",
+      2 -> "Reynold Xin",
+      3 -> "Matei Zaharia"))
 
     metric match {
       case "pageCounts" => pageCounts.print()
@@ -106,5 +107,7 @@ object PageViewStream {
     }
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }
+// scalastyle:on println

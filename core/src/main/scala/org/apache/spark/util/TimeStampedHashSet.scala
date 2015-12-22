@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConversions
+import scala.collection.JavaConverters._
 import scala.collection.mutable.Set
 
 private[spark] class TimeStampedHashSet[A] extends Set[A] {
@@ -31,7 +31,7 @@ private[spark] class TimeStampedHashSet[A] extends Set[A] {
 
   def iterator: Iterator[A] = {
     val jIterator = internalMap.entrySet().iterator()
-    JavaConversions.asScalaIterator(jIterator).map(_.getKey)
+    jIterator.asScala.map(_.getKey)
   }
 
   override def + (elem: A): Set[A] = {

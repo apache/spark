@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -36,6 +37,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 object MultivariateSummarizer {
 
   case class Params(input: String = "data/mllib/sample_linear_regression_data.txt")
+    extends AbstractParams[Params]
 
   def main(args: Array[String]) {
 
@@ -96,3 +98,4 @@ object MultivariateSummarizer {
     sc.stop()
   }
 }
+// scalastyle:on println

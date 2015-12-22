@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
 
 /**
@@ -38,16 +38,14 @@ import org.apache.spark.mllib.linalg.Vector
  *    .setNumIterations(10)
  *    .setInitialWeights(Vectors.dense(...))
  *    .trainOn(DStream)
- *
  */
-@Experimental
-class StreamingLinearRegressionWithSGD (
+@Since("1.1.0")
+class StreamingLinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
-    private var miniBatchFraction: Double,
-    private var initialWeights: Vector)
-  extends StreamingLinearAlgorithm[
-    LinearRegressionModel, LinearRegressionWithSGD] with Serializable {
+    private var miniBatchFraction: Double)
+  extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD]
+  with Serializable {
 
   /**
    * Construct a StreamingLinearRegression object with default parameters:
@@ -55,34 +53,56 @@ class StreamingLinearRegressionWithSGD (
    * Initial weights must be set before using trainOn or predictOn
    * (see `StreamingLinearAlgorithm`)
    */
-  def this() = this(0.1, 50, 1.0, null)
+  @Since("1.1.0")
+  def this() = this(0.1, 50, 1.0)
 
+  @Since("1.1.0")
   val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
 
-  var model = algorithm.createModel(initialWeights, 0.0)
+  protected var model: Option[LinearRegressionModel] = None
 
-  /** Set the step size for gradient descent. Default: 0.1. */
+  /**
+   * Set the step size for gradient descent. Default: 0.1.
+   */
+  @Since("1.1.0")
   def setStepSize(stepSize: Double): this.type = {
     this.algorithm.optimizer.setStepSize(stepSize)
     this
   }
 
-  /** Set the number of iterations of gradient descent to run per update. Default: 50. */
+  /**
+   * Set the number of iterations of gradient descent to run per update. Default: 50.
+   */
+  @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
     this.algorithm.optimizer.setNumIterations(numIterations)
     this
   }
 
-  /** Set the fraction of each batch to use for updates. Default: 1.0. */
+  /**
+   * Set the fraction of each batch to use for updates. Default: 1.0.
+   */
+  @Since("1.1.0")
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     this.algorithm.optimizer.setMiniBatchFraction(miniBatchFraction)
     this
   }
 
-  /** Set the initial weights. Default: [0.0, 0.0]. */
+  /**
+   * Set the initial weights.
+   */
+  @Since("1.1.0")
   def setInitialWeights(initialWeights: Vector): this.type = {
-    this.model = algorithm.createModel(initialWeights, 0.0)
+    this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this
   }
 
+  /**
+   * Set the convergence tolerance. Default: 0.001.
+   */
+  @Since("1.5.0")
+  def setConvergenceTol(tolerance: Double): this.type = {
+    this.algorithm.optimizer.setConvergenceTol(tolerance)
+    this
+  }
 }

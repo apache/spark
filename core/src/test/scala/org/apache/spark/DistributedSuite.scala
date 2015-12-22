@@ -17,29 +17,19 @@
 
 package org.apache.spark
 
-import org.scalatest.BeforeAndAfter
-import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.network.ConnectionManagerId
-import org.apache.spark.storage.{BlockManagerWorker, GetBlock, RDDBlockId, StorageLevel}
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
 
 
-class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
-  with LocalSparkContext {
+class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
-  val clusterUrl = "local-cluster[2,1,512]"
-
-  after {
-    System.clearProperty("spark.reducer.maxMbInFlight")
-    System.clearProperty("spark.storage.memoryFraction")
-  }
+  val clusterUrl = "local-cluster[2,1,1024]"
 
   test("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
@@ -50,7 +40,7 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     val numSlaves = 3
     val numPartitions = 10
 
-    sc = new SparkContext("local-cluster[%s,1,512]".format(numSlaves), "test")
+    sc = new SparkContext("local-cluster[%s,1,1024]".format(numSlaves), "test")
     val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {
@@ -60,16 +50,16 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("local-cluster format") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
+    sc = new SparkContext("local-cluster[2 , 1 , 1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[2, 1, 512]", "test")
+    sc = new SparkContext("local-cluster[2, 1, 1024]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
-    sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
+    sc = new SparkContext("local-cluster[ 2, 1, 1024 ]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     resetSparkContext()
   }
@@ -86,15 +76,14 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("groupByKey where map output sizes exceed maxMbInFlight") {
-    System.setProperty("spark.reducer.maxMbInFlight", "1")
-    sc = new SparkContext(clusterUrl, "test")
+    val conf = new SparkConf().set("spark.reducer.maxSizeInFlight", "1m")
+    sc = new SparkContext(clusterUrl, "test", conf)
     // This data should be around 20 MB, so even with 4 mappers and 2 reducers, each map output
     // file should be about 2.5 MB
     val pairs = sc.parallelize(1 to 2000, 4).map(x => (x % 16, new Array[Byte](10000)))
     val groups = pairs.groupByKey(2).map(x => (x._1, x._2.size)).collect()
     assert(groups.length === 16)
     assert(groups.map(_._2).sum === 2000)
-    // Note that spark.reducer.maxMbInFlight will be cleared in the test suite's after{} block
   }
 
   test("accumulators") {
@@ -118,7 +107,9 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     sc = new SparkContext(clusterUrl, "test")
     val accum = sc.accumulator(0)
     val thrown = intercept[SparkException] {
+      // scalastyle:off println
       sc.parallelize(1 to 10, 10).foreach(x => println(x / 0))
+      // scalastyle:on println
     }
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("failed 4 times"))
@@ -136,7 +127,6 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
         sc.parallelize(1 to 10, 2).foreach { x => if (x == 1) System.exit(42) }
       }
       assert(thrown.getClass === classOf[SparkException])
-      System.out.println(thrown.getMessage)
       assert(thrown.getMessage.contains("failed 4 times"))
     }
   }
@@ -202,37 +192,46 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
-    blockManager.master.getLocations(blockId).foreach(id => {
-      val bytes = BlockManagerWorker.syncGetBlock(
-        GetBlock(blockId), ConnectionManagerId(id.host, id.port))
-      val deserialized = blockManager.dataDeserialize(blockId, bytes).asInstanceOf[Iterator[Int]].toList
+    val blockTransfer = SparkEnv.get.blockTransferService
+    blockManager.master.getLocations(blockId).foreach { cmId =>
+      val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
+        blockId.toString)
+      val deserialized = blockManager.dataDeserialize(blockId, bytes.nioByteBuffer())
+        .asInstanceOf[Iterator[Int]].toList
       assert(deserialized === (1 to 100).toList)
-    })
+    }
   }
 
   test("compute without caching when no partitions fit in memory") {
-    System.setProperty("spark.storage.memoryFraction", "0.0001")
-    sc = new SparkContext(clusterUrl, "test")
-    // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
-    // to only 50 KB (0.0001 of 512 MB), so no partitions should fit in memory
-    val data = sc.parallelize(1 to 4000000, 2).persist(StorageLevel.MEMORY_ONLY_SER)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
-    System.clearProperty("spark.storage.memoryFraction")
+    val size = 10000
+    val conf = new SparkConf()
+      .set("spark.storage.unrollMemoryThreshold", "1024")
+      .set("spark.testing.memory", (size / 2).toString)
+    sc = new SparkContext(clusterUrl, "test", conf)
+    val data = sc.parallelize(1 to size, 2).persist(StorageLevel.MEMORY_ONLY)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    // ensure only a subset of partitions were cached
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    assert(rddBlocks.size === 0, s"expected no RDD blocks, found ${rddBlocks.size}")
   }
 
   test("compute when only some partitions fit in memory") {
-    System.setProperty("spark.storage.memoryFraction", "0.01")
-    sc = new SparkContext(clusterUrl, "test")
-    // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
-    // to only 5 MB (0.01 of 512 MB), so not all of it will fit in memory; we use 20 partitions
-    // to make sure that *some* of them do fit though
-    val data = sc.parallelize(1 to 4000000, 20).persist(StorageLevel.MEMORY_ONLY_SER)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
-    System.clearProperty("spark.storage.memoryFraction")
+    val size = 10000
+    val numPartitions = 10
+    val conf = new SparkConf()
+      .set("spark.storage.unrollMemoryThreshold", "1024")
+      .set("spark.testing.memory", (size * numPartitions).toString)
+    sc = new SparkContext(clusterUrl, "test", conf)
+    val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    // ensure only a subset of partitions were cached
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    assert(rddBlocks.size > 0, "no RDD blocks found")
+    assert(rddBlocks.size < numPartitions, s"too many RDD blocks found, expected <$numPartitions")
   }
 
   test("passing environment variables to cluster") {
@@ -287,7 +286,7 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     DistributedSuite.amMaster = true
     // Using more than two nodes so we don't have a symmetric communication pattern and might
     // cache a partially correct list of peers.
-    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    sc = new SparkContext("local-cluster[3,1,1024]", "test")
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, false, false, false), 4)
       data.persist(StorageLevel.MEMORY_ONLY_2)
@@ -305,7 +304,7 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("unpersist RDDs") {
     DistributedSuite.amMaster = true
-    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    sc = new SparkContext("local-cluster[3,1,1024]", "test")
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count

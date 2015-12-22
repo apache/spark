@@ -17,15 +17,17 @@
 
 package org.apache.spark.shuffle.hash
 
+import java.io.IOException
+
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._
-import org.apache.spark.storage.BlockObjectWriter
+import org.apache.spark.storage.DiskBlockObjectWriter
 
 private[spark] class HashShuffleWriter[K, V](
-    shuffleBlockManager: FileShuffleBlockManager,
+    shuffleBlockResolver: FileShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, _],
     mapId: Int,
     context: TaskContext)
@@ -45,26 +47,25 @@ private[spark] class HashShuffleWriter[K, V](
 
   private val blockManager = SparkEnv.get.blockManager
   private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
-  private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser,
+  private val shuffle = shuffleBlockResolver.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser,
     writeMetrics)
 
   /** Write a bunch of records to this task's output */
-  override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
+  override def write(records: Iterator[Product2[K, V]]): Unit = {
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         dep.aggregator.get.combineValuesByKey(records, context)
       } else {
         records
       }
-    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
-      throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
+      require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
       records
     }
 
     for (elem <- iter) {
       val bucketId = dep.partitioner.getPartition(elem._1)
-      shuffle.writers(bucketId).write(elem)
+      shuffle.writers(bucketId).write(elem._1, elem._2)
     }
   }
 
@@ -103,13 +104,34 @@ private[spark] class HashShuffleWriter[K, V](
 
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
-    val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
+    val sizes: Array[Long] = shuffle.writers.map { writer: DiskBlockObjectWriter =>
       writer.commitAndClose()
-      val size = writer.fileSegment().length
-      MapOutputTracker.compressSize(size)
+      writer.fileSegment().length
     }
-
-    new MapStatus(blockManager.blockManagerId, compressedSizes)
+    // rename all shuffle files to final paths
+    // Note: there is only one ShuffleBlockResolver in executor
+    shuffleBlockResolver.synchronized {
+      shuffle.writers.zipWithIndex.foreach { case (writer, i) =>
+        val output = blockManager.diskBlockManager.getFile(writer.blockId)
+        if (sizes(i) > 0) {
+          if (output.exists()) {
+            // Use length of existing file and delete our own temporary one
+            sizes(i) = output.length()
+            writer.file.delete()
+          } else {
+            // Commit by renaming our temporary file to something the fetcher expects
+            if (!writer.file.renameTo(output)) {
+              throw new IOException(s"fail to rename ${writer.file} to $output")
+            }
+          }
+        } else {
+          if (output.exists()) {
+            output.delete()
+          }
+        }
+      }
+    }
+    MapStatus(blockManager.shuffleServerId, sizes)
   }
 
   private def revertWrites(): Unit = {

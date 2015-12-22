@@ -17,12 +17,21 @@
 
 package org.apache.spark.scheduler
 
+import java.io.File
+import java.net.URL
 import java.nio.ByteBuffer
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import scala.concurrent.duration._
+import scala.language.postfixOps
+import scala.util.control.NonFatal
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
+
+import org.apache.spark._
 import org.apache.spark.storage.TaskResultBlockId
+import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /**
  * Removes the TaskResult from the BlockManager before delegating to a normal TaskResultGetter.
@@ -34,14 +43,25 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
   extends TaskResultGetter(sparkEnv, scheduler) {
   var removedResult = false
 
+  @volatile var removeBlockSuccessfully = false
+
   override def enqueueSuccessfulTask(
     taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
     if (!removedResult) {
       // Only remove the result once, since we'd like to test the case where the task eventually
       // succeeds.
       serializer.get().deserialize[TaskResult[_]](serializedData) match {
-        case IndirectTaskResult(blockId) =>
+        case IndirectTaskResult(blockId, size) =>
           sparkEnv.blockManager.master.removeBlock(blockId)
+          // removeBlock is asynchronous. Need to wait it's removed successfully
+          try {
+            eventually(timeout(3 seconds), interval(200 milliseconds)) {
+              assert(!sparkEnv.blockManager.master.contains(blockId))
+            }
+            removeBlockSuccessfully = true
+          } catch {
+            case NonFatal(e) => removeBlockSuccessfully = false
+          }
         case directResult: DirectTaskResult[_] =>
           taskSetManager.abort("Internal error: expect only indirect results")
       }
@@ -55,27 +75,20 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
 /**
  * Tests related to handling task results (both direct and indirect).
  */
-class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll
-  with LocalSparkContext {
+class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
-  override def beforeAll {
-    // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
-    // as we can make it) so the tests don't take too long.
-    System.setProperty("spark.akka.frameSize", "1")
-  }
-
-  override def afterAll {
-    System.clearProperty("spark.akka.frameSize")
-  }
+  // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
+  // as we can make it) so the tests don't take too long.
+  def conf: SparkConf = new SparkConf().set("spark.akka.frameSize", "1")
 
   test("handling results smaller than Akka frame size") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test", conf)
     val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
     assert(result === 2)
   }
 
   test("handling results larger than Akka frame size") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test", conf)
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
@@ -89,7 +102,7 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
   test("task retried if result missing from block manager") {
     // Set the maximum number of task failures to > 0, so that the task set isn't aborted
     // after the result is missing.
-    sc = new SparkContext("local[1,2]", "test")
+    sc = new SparkContext("local[1,2]", "test", conf)
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
     val scheduler: TaskSchedulerImpl = sc.taskScheduler match {
@@ -99,14 +112,75 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
         assert(false, "Expect local cluster to use TaskSchedulerImpl")
         throw new ClassCastException
     }
-    scheduler.taskResultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)
+    val resultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)
+    scheduler.taskResultGetter = resultGetter
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
+    assert(resultGetter.removeBlockSuccessfully)
     assert(result === 1.to(akkaFrameSize).toArray)
 
     // Make sure two tasks were run (one failed one, and a second retried one).
     assert(scheduler.nextTaskId.get() === 2)
+  }
+
+  /**
+   * Make sure we are using the context classloader when deserializing failed TaskResults instead
+   * of the Spark classloader.
+
+   * This test compiles a jar containing an exception and tests that when it is thrown on the
+   * executor, enqueueFailedTask can correctly deserialize the failure and identify the thrown
+   * exception as the cause.
+
+   * Before this fix, enqueueFailedTask would throw a ClassNotFoundException when deserializing
+   * the exception, resulting in an UnknownReason for the TaskEndResult.
+   */
+  test("failed task deserialized with the correct classloader (SPARK-11195)") {
+    // compile a small jar containing an exception that will be thrown on an executor.
+    val tempDir = Utils.createTempDir()
+    val srcDir = new File(tempDir, "repro/")
+    srcDir.mkdirs()
+    val excSource = new JavaSourceFromString(new File(srcDir, "MyException").getAbsolutePath,
+      """package repro;
+        |
+        |public class MyException extends Exception {
+        |}
+      """.stripMargin)
+    val excFile = TestUtils.createCompiledClass("MyException", srcDir, excSource, Seq.empty)
+    val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
+    TestUtils.createJar(Seq(excFile), jarFile, directoryPrefix = Some("repro"))
+
+    // ensure we reset the classloader after the test completes
+    val originalClassLoader = Thread.currentThread.getContextClassLoader
+    try {
+      // load the exception from the jar
+      val loader = new MutableURLClassLoader(new Array[URL](0), originalClassLoader)
+      loader.addURL(jarFile.toURI.toURL)
+      Thread.currentThread().setContextClassLoader(loader)
+      val excClass: Class[_] = Utils.classForName("repro.MyException")
+
+      // NOTE: we must run the cluster with "local" so that the executor can load the compiled
+      // jar.
+      sc = new SparkContext("local", "test", conf)
+      val rdd = sc.parallelize(Seq(1), 1).map { _ =>
+        val exc = excClass.newInstance().asInstanceOf[Exception]
+        throw exc
+      }
+
+      // the driver should not have any problems resolving the exception class and determining
+      // why the task failed.
+      val exceptionMessage = intercept[SparkException] {
+        rdd.collect()
+      }.getMessage
+
+      val expectedFailure = """(?s).*Lost task.*: repro.MyException.*""".r
+      val unknownFailure = """(?s).*Lost task.*: UnknownReason.*""".r
+
+      assert(expectedFailure.findFirstMatchIn(exceptionMessage).isDefined)
+      assert(unknownFailure.findFirstMatchIn(exceptionMessage).isEmpty)
+    } finally {
+      Thread.currentThread.setContextClassLoader(originalClassLoader)
+    }
   }
 }
 

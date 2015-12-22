@@ -15,19 +15,37 @@
 # limitations under the License.
 #
 
-from pyspark import SparkContext
-from pyspark.mllib._common import \
-    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
-    _serialize_double_matrix, _deserialize_double_matrix, \
-    _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    _serialize_tuple, RatingDeserializer
+import array
+from collections import namedtuple
+
+from pyspark import SparkContext, since
 from pyspark.rdd import RDD
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
+from pyspark.mllib.util import JavaLoader, JavaSaveable
+from pyspark.sql import DataFrame
 
-__all__ = ['MatrixFactorizationModel', 'ALS']
+__all__ = ['MatrixFactorizationModel', 'ALS', 'Rating']
 
 
-class MatrixFactorizationModel(object):
+class Rating(namedtuple("Rating", ["user", "product", "rating"])):
+    """
+    Represents a (user, product, rating) tuple.
+
+    >>> r = Rating(1, 2, 5.0)
+    >>> (r.user, r.product, r.rating)
+    (1, 2, 5.0)
+    >>> (r[0], r[1], r[2])
+    (1, 2, 5.0)
+
+    .. versionadded:: 1.2.0
+    """
+
+    def __reduce__(self):
+        return Rating, (int(self.user), int(self.product), float(self.rating))
+
+
+@inherit_doc
+class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """A matrix factorisation model trained by regularized alternating
     least-squares.
@@ -36,53 +54,220 @@ class MatrixFactorizationModel(object):
     >>> r2 = (1, 2, 2.0)
     >>> r3 = (2, 1, 2.0)
     >>> ratings = sc.parallelize([r1, r2, r3])
-    >>> model = ALS.trainImplicit(ratings, 1)
-    >>> model.predict(2,2) is not None
-    True
+    >>> model = ALS.trainImplicit(ratings, 1, seed=10)
+    >>> model.predict(2, 2)
+    0.4...
+
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
-    >>> model.predictAll(testset).count() == 2
-    True
+    >>> model = ALS.train(ratings, 2, seed=0)
+    >>> model.predictAll(testset).collect()
+    [Rating(user=1, product=1, rating=1.0...), Rating(user=1, product=2, rating=1.9...)]
+
+    >>> model = ALS.train(ratings, 4, seed=10)
+    >>> model.userFeatures().collect()
+    [(1, array('d', [...])), (2, array('d', [...]))]
+
+    >>> model.recommendUsers(1, 2)
+    [Rating(user=2, product=1, rating=1.9...), Rating(user=1, product=1, rating=1.0...)]
+    >>> model.recommendProducts(1, 2)
+    [Rating(user=1, product=2, rating=1.9...), Rating(user=1, product=1, rating=1.0...)]
+    >>> model.rank
+    4
+
+    >>> first_user = model.userFeatures().take(1)[0]
+    >>> latents = first_user[1]
+    >>> len(latents)
+    4
+
+    >>> model.productFeatures().collect()
+    [(1, array('d', [...])), (2, array('d', [...]))]
+
+    >>> first_product = model.productFeatures().take(1)[0]
+    >>> latents = first_product[1]
+    >>> len(latents)
+    4
+
+    >>> products_for_users = model.recommendProductsForUsers(1).collect()
+    >>> len(products_for_users)
+    2
+    >>> products_for_users[0]
+    (1, (Rating(user=1, product=2, rating=...),))
+
+    >>> users_for_products = model.recommendUsersForProducts(1).collect()
+    >>> len(users_for_products)
+    2
+    >>> users_for_products[0]
+    (1, (Rating(user=2, product=1, rating=...),))
+
+    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
+    >>> model.predict(2, 2)
+    3.73...
+
+    >>> df = sqlContext.createDataFrame([Rating(1, 1, 1.0), Rating(1, 2, 2.0), Rating(2, 1, 2.0)])
+    >>> model = ALS.train(df, 1, nonnegative=True, seed=10)
+    >>> model.predict(2, 2)
+    3.73...
+
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
+    >>> model.predict(2, 2)
+    0.4...
+
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = MatrixFactorizationModel.load(sc, path)
+    >>> sameModel.predict(2, 2)
+    0.4...
+    >>> sameModel.predictAll(testset).collect()
+    [Rating(...
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
+
+    .. versionadded:: 0.9.0
     """
-
-    def __init__(self, sc, java_model):
-        self._context = sc
-        self._java_model = java_model
-
-    def __del__(self):
-        self._context._gateway.detach(self._java_model)
-
+    @since("0.9.0")
     def predict(self, user, product):
-        return self._java_model.predict(user, product)
+        """
+        Predicts rating for the given user and product.
+        """
+        return self._java_model.predict(int(user), int(product))
 
-    def predictAll(self, usersProducts):
-        usersProductsJRDD = _get_unmangled_rdd(usersProducts, _serialize_tuple)
-        return RDD(self._java_model.predict(usersProductsJRDD._jrdd),
-                   self._context, RatingDeserializer())
+    @since("0.9.0")
+    def predictAll(self, user_product):
+        """
+        Returns a list of predicted ratings for input user and product pairs.
+        """
+        assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
+        first = user_product.first()
+        assert len(first) == 2, "user_product should be RDD of (user, product)"
+        user_product = user_product.map(lambda u_p: (int(u_p[0]), int(u_p[1])))
+        return self.call("predict", user_product)
+
+    @since("1.2.0")
+    def userFeatures(self):
+        """
+        Returns a paired RDD, where the first element is the user and the
+        second is an array of features corresponding to that user.
+        """
+        return self.call("getUserFeatures").mapValues(lambda v: array.array('d', v))
+
+    @since("1.2.0")
+    def productFeatures(self):
+        """
+        Returns a paired RDD, where the first element is the product and the
+        second is an array of features corresponding to that product.
+        """
+        return self.call("getProductFeatures").mapValues(lambda v: array.array('d', v))
+
+    @since("1.4.0")
+    def recommendUsers(self, product, num):
+        """
+        Recommends the top "num" number of users for a given product and returns a list
+        of Rating objects sorted by the predicted rating in descending order.
+        """
+        return list(self.call("recommendUsers", product, num))
+
+    @since("1.4.0")
+    def recommendProducts(self, user, num):
+        """
+        Recommends the top "num" number of products for a given user and returns a list
+        of Rating objects sorted by the predicted rating in descending order.
+        """
+        return list(self.call("recommendProducts", user, num))
+
+    def recommendProductsForUsers(self, num):
+        """
+        Recommends top "num" products for all users. The number returned may be less than this.
+        """
+        return self.call("wrappedRecommendProductsForUsers", num)
+
+    def recommendUsersForProducts(self, num):
+        """
+        Recommends top "num" users for all products. The number returned may be less than this.
+        """
+        return self.call("wrappedRecommendUsersForProducts", num)
+
+    @property
+    @since("1.4.0")
+    def rank(self):
+        """Rank for the features in this model"""
+        return self.call("rank")
+
+    @classmethod
+    @since("1.3.1")
+    def load(cls, sc, path):
+        """Load a model from the given path"""
+        model = cls._load_java(sc, path)
+        wrapper = sc._jvm.MatrixFactorizationModelWrapper(model)
+        return MatrixFactorizationModel(wrapper)
 
 
 class ALS(object):
+    """Alternating Least Squares matrix factorization
+
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
-    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
-        sc = ratings.context
-        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
-        mod = sc._jvm.PythonMLLibAPI().trainALSModel(
-            ratingBytes._jrdd, rank, iterations, lambda_, blocks)
-        return MatrixFactorizationModel(sc, mod)
+    def _prepare(cls, ratings):
+        if isinstance(ratings, RDD):
+            pass
+        elif isinstance(ratings, DataFrame):
+            ratings = ratings.rdd
+        else:
+            raise TypeError("Ratings should be represented by either an RDD or a DataFrame, "
+                            "but got %s." % type(ratings))
+        first = ratings.first()
+        if isinstance(first, Rating):
+            pass
+        elif isinstance(first, (tuple, list)):
+            ratings = ratings.map(lambda x: Rating(*x))
+        else:
+            raise TypeError("Expect a Rating or a tuple/list, but got %s." % type(first))
+        return ratings
 
     @classmethod
-    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
-        sc = ratings.context
-        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
-        mod = sc._jvm.PythonMLLibAPI().trainImplicitALSModel(
-            ratingBytes._jrdd, rank, iterations, lambda_, blocks, alpha)
-        return MatrixFactorizationModel(sc, mod)
+    @since("0.9.0")
+    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
+              seed=None):
+        """
+        Train a matrix factorization model given an RDD of ratings given by users to some products,
+        in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
+        product of two lower-rank matrices of a given rank (number of features). To solve for these
+        features, we run a given number of iterations of ALS. This is done using a level of
+        parallelism given by `blocks`.
+        """
+        model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
+                              lambda_, blocks, nonnegative, seed)
+        return MatrixFactorizationModel(model)
+
+    @classmethod
+    @since("0.9.0")
+    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
+                      nonnegative=False, seed=None):
+        """
+        Train a matrix factorization model given an RDD of 'implicit preferences' given by users
+        to some products, in the form of (userID, productID, preference) pairs. We approximate the
+        ratings matrix as the product of two lower-rank matrices of a given rank (number of
+        features).  To solve for these features, we run a given number of iterations of ALS.
+        This is done using a level of parallelism given by `blocks`.
+        """
+        model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
+                              iterations, lambda_, blocks, alpha, nonnegative, seed)
+        return MatrixFactorizationModel(model)
 
 
 def _test():
     import doctest
-    globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    import pyspark.mllib.recommendation
+    from pyspark.sql import SQLContext
+    globs = pyspark.mllib.recommendation.__dict__.copy()
+    sc = SparkContext('local[4]', 'PythonTest')
+    globs['sc'] = sc
+    globs['sqlContext'] = SQLContext(sc)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

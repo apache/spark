@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, FileOutputStream, RandomAccessFile}
+import java.io.{IOException, File, FileOutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
 private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
   extends BlockStore(blockManager) with Logging {
 
-  val minMemoryMapBytes = blockManager.conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)
+  val minMemoryMapBytes = blockManager.conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
   override def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
@@ -45,10 +45,13 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val channel = new FileOutputStream(file).getChannel
-    while (bytes.remaining > 0) {
-      channel.write(bytes)
+    Utils.tryWithSafeFinally {
+      while (bytes.remaining > 0) {
+        channel.write(bytes)
+      }
+    } {
+      channel.close()
     }
-    channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
@@ -73,7 +76,23 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
-    blockManager.dataSerializeStream(blockId, outputStream, values)
+    try {
+      Utils.tryWithSafeFinally {
+        blockManager.dataSerializeStream(blockId, outputStream, values)
+      } {
+        // Close outputStream here because it should be closed before file is deleted.
+        outputStream.close()
+      }
+    } catch {
+      case e: Throwable =>
+        if (file.exists()) {
+          if (!file.delete()) {
+            logWarning(s"Error deleting ${file}")
+          }
+        }
+        throw e
+    }
+
     val length = file.length
 
     val timeTaken = System.currentTimeMillis - startTime
@@ -91,18 +110,23 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
 
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
     val channel = new RandomAccessFile(file, "r").getChannel
-
-    try {
+    Utils.tryWithSafeFinally {
       // For small files, directly read rather than memory map
       if (length < minMemoryMapBytes) {
         val buf = ByteBuffer.allocate(length.toInt)
-        channel.read(buf, offset)
+        channel.position(offset)
+        while (buf.remaining() != 0) {
+          if (channel.read(buf) == -1) {
+            throw new IOException("Reached EOF before filling buffer\n" +
+              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
+          }
+        }
         buf.flip()
         Some(buf)
       } else {
         Some(channel.map(MapMode.READ_ONLY, offset, length))
       }
-    } finally {
+    } {
       channel.close()
     }
   }
@@ -120,23 +144,14 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
 
-  /**
-   * A version of getValues that allows a custom serializer. This is used as part of the
-   * shuffle short-circuit code.
-   */
-  def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    // TODO: Should bypass getBytes and use a stream based implementation, so that
-    // we won't use a lot of memory during e.g. external sort merge.
-    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
-  }
-
   override def remove(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
-    // If consolidation mode is used With HashShuffleMananger, the physical filename for the block
-    // is different from blockId.name. So the file returns here will not be exist, thus we avoid to
-    // delete the whole consolidated file by mistake.
     if (file.exists()) {
-      file.delete()
+      val ret = file.delete()
+      if (!ret) {
+        logWarning(s"Error deleting ${file.getPath()}")
+      }
+      ret
     } else {
       false
     }

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -27,18 +30,25 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
+  expressions.foreach(_.foreach {
+    case n: Nondeterministic => n.setInitialValues()
+    case _ =>
+  })
+
   // null check is required for when Kryo invokes the no-arg constructor.
   protected val exprArray = if (expressions != null) expressions.toArray else null
 
-  def apply(input: Row): Row = {
+  def apply(input: InternalRow): InternalRow = {
     val outputArray = new Array[Any](exprArray.length)
     var i = 0
     while (i < exprArray.length) {
       outputArray(i) = exprArray(i).eval(input)
       i += 1
     }
-    new GenericRow(outputArray)
+    new GenericInternalRow(outputArray)
   }
+
+  override def toString(): String = s"Row => [${exprArray.mkString(",")}]"
 }
 
 /**
@@ -51,19 +61,32 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
+  private[this] val buffer = new Array[Any](expressions.size)
+
+  expressions.foreach(_.foreach {
+    case n: Nondeterministic => n.setInitialValues()
+    case _ =>
+  })
+
   private[this] val exprArray = expressions.toArray
-  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.size)
-  def currentValue: Row = mutableRow
+  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.length)
+  def currentValue: InternalRow = mutableRow
 
   override def target(row: MutableRow): MutableProjection = {
     mutableRow = row
     this
   }
 
-  override def apply(input: Row): Row = {
+  override def apply(input: InternalRow): InternalRow = {
     var i = 0
     while (i < exprArray.length) {
-      mutableRow(i) = exprArray(i).eval(input)
+      // Store the result into buffer first, to make the projection atomic (needed by aggregation)
+      buffer(i) = exprArray(i).eval(input)
+      i += 1
+    }
+    i = 0
+    while (i < exprArray.length) {
+      mutableRow(i) = buffer(i)
       i += 1
     }
     mutableRow
@@ -71,423 +94,89 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
 }
 
 /**
- * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
- * be instantiated once per thread and reused.
+ * A projection that returns UnsafeRow.
  */
-class JoinedRow extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+abstract class UnsafeProjection extends Projection {
+  override def apply(row: InternalRow): UnsafeRow
+}
 
-  def this(left: Row, right: Row) = {
-    this()
-    row1 = left
-    row2 = right
+object UnsafeProjection {
+
+  /**
+   * Returns an UnsafeProjection for given StructType.
+   */
+  def create(schema: StructType): UnsafeProjection = create(schema.fields.map(_.dataType))
+
+  /**
+   * Returns an UnsafeProjection for given Array of DataTypes.
+   */
+  def create(fields: Array[DataType]): UnsafeProjection = {
+    create(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
   }
 
-  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
-    row1 = r1
-    row2 = r2
-    this
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions (bounded).
+   */
+  def create(exprs: Seq[Expression]): UnsafeProjection = {
+    val unsafeExprs = exprs.map(_ transform {
+      case CreateStruct(children) => CreateStructUnsafe(children)
+      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+    })
+    GenerateUnsafeProjection.generate(unsafeExprs)
   }
 
-  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
-    row1 = newLeft
-    this
+  def create(expr: Expression): UnsafeProjection = create(Seq(expr))
+
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions, which will be bound to
+   * `inputSchema`.
+   */
+  def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
+    create(exprs.map(BindReferences.bindReference(_, inputSchema)))
   }
 
-  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
-    row2 = newRight
-    this
-  }
-
-  def iterator = row1.iterator ++ row2.iterator
-
-  def length = row1.length + row2.length
-
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
-
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
-
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
-
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
-
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
-
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
-
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
-
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
-
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
-
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
-
-  def copy() = {
-    val totalSize = row1.size + row2.size
-    val copiedValues = new Array[Any](totalSize)
-    var i = 0
-    while(i < totalSize) {
-      copiedValues(i) = apply(i)
-      i += 1
-    }
-    new GenericRow(copiedValues)
-  }
-
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
+  /**
+    * Same as other create()'s but allowing enabling/disabling subexpression elimination.
+    * TODO: refactor the plumbing and clean this up.
+    */
+  def create(
+      exprs: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+    val e = exprs.map(BindReferences.bindReference(_, inputSchema))
+      .map(_ transform {
+        case CreateStruct(children) => CreateStructUnsafe(children)
+        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+    })
+    GenerateUnsafeProjection.generate(e, subexpressionEliminationEnabled)
   }
 }
 
 /**
- * JIT HACK: Replace with macros
- * The `JoinedRow` class is used in many performance critical situation.  Unfortunately, since there
- * are multiple different types of `Rows` that could be stored as `row1` and `row2` most of the
- * calls in the critical path are polymorphic.  By creating special versions of this class that are
- * used in only a single location of the code, we increase the chance that only a single type of
- * Row will be referenced, increasing the opportunity for the JIT to play tricks.  This sounds
- * crazy but in benchmarks it had noticeable effects.
+ * A projection that could turn UnsafeRow into GenericInternalRow
  */
-class JoinedRow2 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
+object FromUnsafeProjection {
 
-  def this(left: Row, right: Row) = {
-    this()
-    row1 = left
-    row2 = right
+  /**
+   * Returns an Projection for given StructType.
+   */
+  def apply(schema: StructType): Projection = {
+    apply(schema.fields.map(_.dataType))
   }
 
-  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
-    row1 = r1
-    row2 = r2
-    this
+  /**
+   * Returns an UnsafeProjection for given Array of DataTypes.
+   */
+  def apply(fields: Seq[DataType]): Projection = {
+    create(fields.zipWithIndex.map(x => {
+      new BoundReference(x._2, x._1, true)
+    }))
   }
 
-  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
-    row1 = newLeft
-    this
-  }
-
-  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
-    row2 = newRight
-    this
-  }
-
-  def iterator = row1.iterator ++ row2.iterator
-
-  def length = row1.length + row2.length
-
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
-
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
-
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
-
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
-
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
-
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
-
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
-
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
-
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
-
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
-
-  def copy() = {
-    val totalSize = row1.size + row2.size
-    val copiedValues = new Array[Any](totalSize)
-    var i = 0
-    while(i < totalSize) {
-      copiedValues(i) = apply(i)
-      i += 1
-    }
-    new GenericRow(copiedValues)
-  }
-
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
-  }
-}
-
-/**
- * JIT HACK: Replace with macros
- */
-class JoinedRow3 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
-
-  def this(left: Row, right: Row) = {
-    this()
-    row1 = left
-    row2 = right
-  }
-
-  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
-    row1 = r1
-    row2 = r2
-    this
-  }
-
-  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
-    row1 = newLeft
-    this
-  }
-
-  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
-    row2 = newRight
-    this
-  }
-
-  def iterator = row1.iterator ++ row2.iterator
-
-  def length = row1.length + row2.length
-
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
-
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
-
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
-
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
-
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
-
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
-
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
-
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
-
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
-
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
-
-  def copy() = {
-    val totalSize = row1.size + row2.size
-    val copiedValues = new Array[Any](totalSize)
-    var i = 0
-    while(i < totalSize) {
-      copiedValues(i) = apply(i)
-      i += 1
-    }
-    new GenericRow(copiedValues)
-  }
-
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
-  }
-}
-
-/**
- * JIT HACK: Replace with macros
- */
-class JoinedRow4 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
-
-  def this(left: Row, right: Row) = {
-    this()
-    row1 = left
-    row2 = right
-  }
-
-  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
-    row1 = r1
-    row2 = r2
-    this
-  }
-
-  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
-    row1 = newLeft
-    this
-  }
-
-  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
-    row2 = newRight
-    this
-  }
-
-  def iterator = row1.iterator ++ row2.iterator
-
-  def length = row1.length + row2.length
-
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
-
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
-
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
-
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
-
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
-
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
-
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
-
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
-
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
-
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
-
-  def copy() = {
-    val totalSize = row1.size + row2.size
-    val copiedValues = new Array[Any](totalSize)
-    var i = 0
-    while(i < totalSize) {
-      copiedValues(i) = apply(i)
-      i += 1
-    }
-    new GenericRow(copiedValues)
-  }
-
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
-  }
-}
-
-/**
- * JIT HACK: Replace with macros
- */
-class JoinedRow5 extends Row {
-  private[this] var row1: Row = _
-  private[this] var row2: Row = _
-
-  def this(left: Row, right: Row) = {
-    this()
-    row1 = left
-    row2 = right
-  }
-
-  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: Row, r2: Row): Row = {
-    row1 = r1
-    row2 = r2
-    this
-  }
-
-  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: Row): Row = {
-    row1 = newLeft
-    this
-  }
-
-  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: Row): Row = {
-    row2 = newRight
-    this
-  }
-
-  def iterator = row1.iterator ++ row2.iterator
-
-  def length = row1.length + row2.length
-
-  def apply(i: Int) =
-    if (i < row1.size) row1(i) else row2(i - row1.size)
-
-  def isNullAt(i: Int) =
-    if (i < row1.size) row1.isNullAt(i) else row2.isNullAt(i - row1.size)
-
-  def getInt(i: Int): Int =
-    if (i < row1.size) row1.getInt(i) else row2.getInt(i - row1.size)
-
-  def getLong(i: Int): Long =
-    if (i < row1.size) row1.getLong(i) else row2.getLong(i - row1.size)
-
-  def getDouble(i: Int): Double =
-    if (i < row1.size) row1.getDouble(i) else row2.getDouble(i - row1.size)
-
-  def getBoolean(i: Int): Boolean =
-    if (i < row1.size) row1.getBoolean(i) else row2.getBoolean(i - row1.size)
-
-  def getShort(i: Int): Short =
-    if (i < row1.size) row1.getShort(i) else row2.getShort(i - row1.size)
-
-  def getByte(i: Int): Byte =
-    if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
-
-  def getFloat(i: Int): Float =
-    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
-
-  def getString(i: Int): String =
-    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
-
-  def copy() = {
-    val totalSize = row1.size + row2.size
-    val copiedValues = new Array[Any](totalSize)
-    var i = 0
-    while(i < totalSize) {
-      copiedValues(i) = apply(i)
-      i += 1
-    }
-    new GenericRow(copiedValues)
-  }
-
-  override def toString() = {
-    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
-    s"[${row.mkString(",")}]"
+  /**
+   * Returns an Projection for given sequence of Expressions (bounded).
+   */
+  private def create(exprs: Seq[Expression]): Projection = {
+    GenerateSafeProjection.generate(exprs)
   }
 }

@@ -17,6 +17,7 @@
 ^
 abs
 acos
+add_months
 and
 array
 array_contains
@@ -29,9 +30,11 @@ base64
 between
 bin
 case
+cbrt
 ceil
 ceiling
 coalesce
+collect_list
 collect_set
 compute_stats
 concat
@@ -45,7 +48,12 @@ covar_pop
 covar_samp
 create_union
 cume_dist
+current_database
+current_date
+current_timestamp
+current_user
 date_add
+date_format
 date_sub
 datediff
 day
@@ -63,6 +71,7 @@ ewah_bitmap_empty
 ewah_bitmap_or
 exp
 explode
+factorial
 field
 find_in_set
 first_value
@@ -71,6 +80,7 @@ format_number
 from_unixtime
 from_utc_timestamp
 get_json_object
+greatest
 hash
 hex
 histogram_numeric
@@ -79,6 +89,7 @@ if
 in
 in_file
 index
+initcap
 inline
 instr
 isnotnull
@@ -86,10 +97,13 @@ isnull
 java_method
 json_tuple
 lag
+last_day
 last_value
 lcase
 lead
+least
 length
+levenshtein
 like
 ln
 locate
@@ -107,11 +121,15 @@ max
 min
 minute
 month
+months_between
 named_struct
 negative
+next_day
 ngrams
 noop
+noopstreaming
 noopwithmap
+noopwithmapstreaming
 not
 ntile
 nvl
@@ -123,6 +141,7 @@ percentile
 percentile_approx
 pi
 pmod
+posexplode
 positive
 pow
 power
@@ -144,10 +163,14 @@ rpad
 rtrim
 second
 sentences
+shiftleft
+shiftright
+shiftrightunsigned
 sign
 sin
 size
 sort_array
+soundex
 space
 split
 sqrt
@@ -167,6 +190,7 @@ to_unix_timestamp
 to_utc_timestamp
 translate
 trim
+trunc
 ucase
 unbase64
 unhex

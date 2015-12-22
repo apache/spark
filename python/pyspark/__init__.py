@@ -20,44 +20,22 @@ PySpark is the Python API for Spark.
 
 Public classes:
 
-  - L{SparkContext<pyspark.context.SparkContext>}
+  - :class:`SparkContext`:
       Main entry point for Spark functionality.
-  - L{RDD<pyspark.rdd.RDD>}
+  - :class:`RDD`:
       A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
-  - L{Broadcast<pyspark.broadcast.Broadcast>}
+  - :class:`Broadcast`:
       A broadcast variable that gets reused across tasks.
-  - L{Accumulator<pyspark.accumulators.Accumulator>}
+  - :class:`Accumulator`:
       An "add-only" shared variable that tasks can only add values to.
-  - L{SparkConf<pyspark.conf.SparkConf>}
+  - :class:`SparkConf`:
       For configuring Spark.
-  - L{SparkFiles<pyspark.files.SparkFiles>}
+  - :class:`SparkFiles`:
       Access files shipped with jobs.
-  - L{StorageLevel<pyspark.storagelevel.StorageLevel>}
+  - :class:`StorageLevel`:
       Finer-grained cache persistence levels.
 
-Spark SQL:
-  - L{SQLContext<pyspark.sql.SQLContext>}
-      Main entry point for SQL functionality.
-  - L{SchemaRDD<pyspark.sql.SchemaRDD>}
-      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-      addition to normal RDD operations, SchemaRDDs also support SQL.
-  - L{Row<pyspark.sql.Row>}
-      A Row of data returned by a Spark SQL query.
-
-Hive:
-  - L{HiveContext<pyspark.context.HiveContext>}
-      Main entry point for accessing data stored in Apache Hive..
 """
-
-# The following block allows us to import python's random instead of mllib.random for scripts in
-# mllib that depend on top level pyspark packages, which transitively depend on python's random.
-# Since Python's import logic looks for modules in the current package first, we eliminate
-# mllib.random as a candidate for C{import random} by removing the first search path, the script's
-# location, in order to force the loader to look in Python's top-level modules for C{random}.
-import sys
-s = sys.path.pop(0)
-import random
-sys.path.insert(0, s)
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
@@ -67,6 +45,24 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
+from pyspark.status import *
+from pyspark.profiler import Profiler, BasicProfiler
+
+
+def since(version):
+    """
+    A decorator that annotates a function to append the version of Spark the function was added.
+    """
+    import re
+    indent_p = re.compile(r'\n( +)')
+
+    def deco(f):
+        indents = indent_p.findall(f.__doc__)
+        indent = ' ' * (min(len(m) for m in indents) if indents else 0)
+        f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
+        return f
+    return deco
+
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
@@ -74,4 +70,5 @@ from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
+    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler",
 ]

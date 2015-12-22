@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
@@ -55,7 +56,7 @@ object BinaryClassification {
       stepSize: Double = 1.0,
       algorithm: Algorithm = LR,
       regType: RegType = L2,
-      regParam: Double = 0.1)
+      regParam: Double = 0.01) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -153,3 +154,4 @@ object BinaryClassification {
     sc.stop()
   }
 }
+// scalastyle:on println

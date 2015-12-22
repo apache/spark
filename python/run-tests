@@ -18,74 +18,7 @@
 #
 
 
-# Figure out where the Spark framework is installed
-FWDIR="$(cd `dirname $0`; cd ../; pwd)"
+FWDIR="$(cd "`dirname $0`"/..; pwd)"
+cd "$FWDIR"
 
-# CD into the python directory to find things on the right path
-cd "$FWDIR/python"
-
-FAILED=0
-
-rm -f unit-tests.log
-
-# Remove the metastore and warehouse directory created by the HiveContext tests in Spark SQL
-rm -rf metastore warehouse
-
-function run_test() {
-    echo "Running test: $1"
-    SPARK_TESTING=1 $FWDIR/bin/pyspark $1 2>&1 | tee -a unit-tests.log
-    FAILED=$((PIPESTATUS[0]||$FAILED))
-
-    # Fail and exit on the first test failure.
-    if [[ $FAILED != 0 ]]; then
-        cat unit-tests.log | grep -v "^[0-9][0-9]*" # filter all lines starting with a number.
-        echo -en "\033[31m"  # Red
-        echo "Had test failures; see logs."
-        echo -en "\033[0m"  # No color
-        exit -1
-    fi
-}
-
-echo "Running PySpark tests. Output is in python/unit-tests.log."
-
-# Try to test with Python 2.6, since that's the minimum version that we support:
-if [ $(which python2.6) ]; then
-    export PYSPARK_PYTHON="python2.6"
-fi
-
-echo "Testing with Python version:"
-$PYSPARK_PYTHON --version
-
-run_test "pyspark/rdd.py"
-run_test "pyspark/context.py"
-run_test "pyspark/conf.py"
-run_test "pyspark/sql.py"
-# These tests are included in the module-level docs, and so must
-# be handled on a higher level rather than within the python file.
-export PYSPARK_DOC_TEST=1
-run_test "pyspark/broadcast.py"
-run_test "pyspark/accumulators.py"
-run_test "pyspark/serializers.py"
-unset PYSPARK_DOC_TEST
-run_test "pyspark/shuffle.py"
-run_test "pyspark/tests.py"
-run_test "pyspark/mllib/_common.py"
-run_test "pyspark/mllib/classification.py"
-run_test "pyspark/mllib/clustering.py"
-run_test "pyspark/mllib/linalg.py"
-run_test "pyspark/mllib/random.py"
-run_test "pyspark/mllib/recommendation.py"
-run_test "pyspark/mllib/regression.py"
-run_test "pyspark/mllib/stat.py"
-run_test "pyspark/mllib/tests.py"
-run_test "pyspark/mllib/tree.py"
-run_test "pyspark/mllib/util.py"
-
-if [[ $FAILED == 0 ]]; then
-    echo -en "\033[32m"  # Green
-    echo "Tests passed."
-    echo -en "\033[0m"  # No color
-fi
-
-# TODO: in the long-run, it would be nice to use a test runner like `nose`.
-# The doctest fixtures are the current barrier to doing this.
+exec python -u ./python/run-tests.py "$@"

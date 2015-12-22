@@ -38,7 +38,7 @@ import org.apache.spark.graphx._
  */
 object TriangleCount {
 
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[Int, ED] = {
     // Remove redundant edges
     val g = graph.groupEdges((a, b) => a).cache()
 
@@ -49,7 +49,7 @@ object TriangleCount {
         var i = 0
         while (i < nbrs.size) {
           // prevent self cycle
-          if(nbrs(i) != vid) {
+          if (nbrs(i) != vid) {
             set.add(nbrs(i))
           }
           i += 1
@@ -61,26 +61,27 @@ object TriangleCount {
       (vid, _, optSet) => optSet.getOrElse(null)
     }
     // Edge function computes intersection of smaller vertex with larger vertex
-    def edgeFunc(et: EdgeTriplet[VertexSet, ED]): Iterator[(VertexId, Int)] = {
-      assert(et.srcAttr != null)
-      assert(et.dstAttr != null)
-      val (smallSet, largeSet) = if (et.srcAttr.size < et.dstAttr.size) {
-        (et.srcAttr, et.dstAttr)
+    def edgeFunc(ctx: EdgeContext[VertexSet, ED, Int]) {
+      assert(ctx.srcAttr != null)
+      assert(ctx.dstAttr != null)
+      val (smallSet, largeSet) = if (ctx.srcAttr.size < ctx.dstAttr.size) {
+        (ctx.srcAttr, ctx.dstAttr)
       } else {
-        (et.dstAttr, et.srcAttr)
+        (ctx.dstAttr, ctx.srcAttr)
       }
       val iter = smallSet.iterator
       var counter: Int = 0
       while (iter.hasNext) {
         val vid = iter.next()
-        if (vid != et.srcId && vid != et.dstId && largeSet.contains(vid)) {
+        if (vid != ctx.srcId && vid != ctx.dstId && largeSet.contains(vid)) {
           counter += 1
         }
       }
-      Iterator((et.srcId, counter), (et.dstId, counter))
+      ctx.sendToSrc(counter)
+      ctx.sendToDst(counter)
     }
     // compute the intersection along edges
-    val counters: VertexRDD[Int] = setGraph.mapReduceTriplets(edgeFunc, _ + _)
+    val counters: VertexRDD[Int] = setGraph.aggregateMessages(edgeFunc, _ + _)
     // Merge counters with the graph and divide by two since each triangle is counted twice
     g.outerJoinVertices(counters) {
       (vid, _, optCounter: Option[Int]) =>

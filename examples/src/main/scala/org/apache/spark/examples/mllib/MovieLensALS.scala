@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scala.collection.mutable
 
-import com.esotericsoftware.kryo.Kryo
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
@@ -27,7 +27,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -40,13 +39,6 @@ import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
  */
 object MovieLensALS {
 
-  class ALSRegistrator extends KryoRegistrator {
-    override def registerClasses(kryo: Kryo) {
-      kryo.register(classOf[Rating])
-      kryo.register(classOf[mutable.BitSet])
-    }
-  }
-
   case class Params(
       input: String = null,
       kryo: Boolean = false,
@@ -55,7 +47,7 @@ object MovieLensALS {
       rank: Int = 10,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false)
+      implicitPrefs: Boolean = false) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -63,7 +55,7 @@ object MovieLensALS {
     val parser = new OptionParser[Params]("MovieLensALS") {
       head("MovieLensALS: an example app for ALS on MovieLens data.")
       opt[Int]("rank")
-        .text(s"rank, default: ${defaultParams.rank}}")
+        .text(s"rank, default: ${defaultParams.rank}")
         .action((x, c) => c.copy(rank = x))
       opt[Int]("numIterations")
         .text(s"number of iterations, default: ${defaultParams.numIterations}")
@@ -108,17 +100,18 @@ object MovieLensALS {
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     if (params.kryo) {
-      conf.set("spark.serializer", classOf[KryoSerializer].getName)
-        .set("spark.kryo.registrator", classOf[ALSRegistrator].getName)
-        .set("spark.kryoserializer.buffer.mb", "8")
+      conf.registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
+        .set("spark.kryoserializer.buffer", "8m")
     }
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
+    val implicitPrefs = params.implicitPrefs
+
     val ratings = sc.textFile(params.input).map { line =>
       val fields = line.split("::")
-      if (params.implicitPrefs) {
+      if (implicitPrefs) {
         /*
          * MovieLens ratings are on a scale of 1-5:
          * 5: Must see
@@ -183,9 +176,12 @@ object MovieLensALS {
   }
 
   /** Compute RMSE (Root Mean Squared Error). */
-  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean) = {
+  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean)
+    : Double = {
 
-    def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
+    def mapPredictedRating(r: Double): Double = {
+      if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
+    }
 
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
     val predictionsAndRatings = predictions.map{ x =>
@@ -194,3 +190,4 @@ object MovieLensALS {
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 }
+// scalastyle:on println

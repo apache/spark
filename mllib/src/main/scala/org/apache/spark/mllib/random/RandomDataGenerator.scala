@@ -17,10 +17,9 @@
 
 package org.apache.spark.mllib.random
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Since, DeveloperApi}
 import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
 
 /**
@@ -28,17 +27,20 @@ import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
  * Trait for random data generators that generate i.i.d. data.
  */
 @DeveloperApi
+@Since("1.1.0")
 trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
 
   /**
    * Returns an i.i.d. sample as a generic type from an underlying distribution.
    */
+  @Since("1.1.0")
   def nextValue(): T
 
   /**
    * Returns a copy of the RandomDataGenerator with a new instance of the rng object used in the
    * class when applicable for non-locking concurrent usage.
    */
+  @Since("1.1.0")
   def copy(): RandomDataGenerator[T]
 }
 
@@ -47,17 +49,21 @@ trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
  * Generates i.i.d. samples from U[0.0, 1.0]
  */
 @DeveloperApi
+@Since("1.1.0")
 class UniformGenerator extends RandomDataGenerator[Double] {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
   private val random = new XORShiftRandom()
 
+  @Since("1.1.0")
   override def nextValue(): Double = {
     random.nextDouble()
   }
 
-  override def setSeed(seed: Long) = random.setSeed(seed)
+  @Since("1.1.0")
+  override def setSeed(seed: Long): Unit = random.setSeed(seed)
 
+  @Since("1.1.0")
   override def copy(): UniformGenerator = new UniformGenerator()
 }
 
@@ -66,17 +72,21 @@ class UniformGenerator extends RandomDataGenerator[Double] {
  * Generates i.i.d. samples from the standard normal distribution.
  */
 @DeveloperApi
+@Since("1.1.0")
 class StandardNormalGenerator extends RandomDataGenerator[Double] {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
   private val random = new XORShiftRandom()
 
+  @Since("1.1.0")
   override def nextValue(): Double = {
       random.nextGaussian()
   }
 
-  override def setSeed(seed: Long) = random.setSeed(seed)
+  @Since("1.1.0")
+  override def setSeed(seed: Long): Unit = random.setSeed(seed)
 
+  @Since("1.1.0")
   override def copy(): StandardNormalGenerator = new StandardNormalGenerator()
 }
 
@@ -87,15 +97,124 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
  * @param mean mean for the Poisson distribution.
  */
 @DeveloperApi
-class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
+@Since("1.1.0")
+class PoissonGenerator @Since("1.1.0") (
+    @Since("1.1.0") val mean: Double) extends RandomDataGenerator[Double] {
 
-  private var rng = new Poisson(mean, new DRand)
+  private val rng = new PoissonDistribution(mean)
 
-  override def nextValue(): Double = rng.nextDouble()
+  @Since("1.1.0")
+  override def nextValue(): Double = rng.sample()
 
+  @Since("1.1.0")
   override def setSeed(seed: Long) {
-    rng = new Poisson(mean, new DRand(seed.toInt))
+    rng.reseedRandomGenerator(seed)
   }
 
+  @Since("1.1.0")
   override def copy(): PoissonGenerator = new PoissonGenerator(mean)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the exponential distribution with the given mean.
+ *
+ * @param mean mean for the exponential distribution.
+ */
+@DeveloperApi
+@Since("1.3.0")
+class ExponentialGenerator @Since("1.3.0") (
+    @Since("1.3.0") val mean: Double) extends RandomDataGenerator[Double] {
+
+  private val rng = new ExponentialDistribution(mean)
+
+  @Since("1.3.0")
+  override def nextValue(): Double = rng.sample()
+
+  @Since("1.3.0")
+  override def setSeed(seed: Long) {
+    rng.reseedRandomGenerator(seed)
+  }
+
+  @Since("1.3.0")
+  override def copy(): ExponentialGenerator = new ExponentialGenerator(mean)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the gamma distribution with the given shape and scale.
+ *
+ * @param shape shape for the gamma distribution.
+ * @param scale scale for the gamma distribution
+ */
+@DeveloperApi
+@Since("1.3.0")
+class GammaGenerator @Since("1.3.0") (
+    @Since("1.3.0") val shape: Double,
+    @Since("1.3.0") val scale: Double) extends RandomDataGenerator[Double] {
+
+  private val rng = new GammaDistribution(shape, scale)
+
+  @Since("1.3.0")
+  override def nextValue(): Double = rng.sample()
+
+  @Since("1.3.0")
+  override def setSeed(seed: Long) {
+    rng.reseedRandomGenerator(seed)
+  }
+
+  @Since("1.3.0")
+  override def copy(): GammaGenerator = new GammaGenerator(shape, scale)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the log normal distribution with the
+ * given mean and standard deviation.
+ *
+ * @param mean mean for the log normal distribution.
+ * @param std standard deviation for the log normal distribution
+ */
+@DeveloperApi
+@Since("1.3.0")
+class LogNormalGenerator @Since("1.3.0") (
+    @Since("1.3.0") val mean: Double,
+    @Since("1.3.0") val std: Double) extends RandomDataGenerator[Double] {
+
+  private val rng = new LogNormalDistribution(mean, std)
+
+  @Since("1.3.0")
+  override def nextValue(): Double = rng.sample()
+
+  @Since("1.3.0")
+  override def setSeed(seed: Long) {
+    rng.reseedRandomGenerator(seed)
+  }
+
+  @Since("1.3.0")
+  override def copy(): LogNormalGenerator = new LogNormalGenerator(mean, std)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the Weibull distribution with the
+ * given shape and scale parameter.
+ *
+ * @param alpha shape parameter for the Weibull distribution.
+ * @param beta scale parameter for the Weibull distribution.
+ */
+@DeveloperApi
+class WeibullGenerator(
+    val alpha: Double,
+    val beta: Double) extends RandomDataGenerator[Double] {
+
+  private val rng = new WeibullDistribution(alpha, beta)
+
+  override def nextValue(): Double = rng.sample()
+
+  override def setSeed(seed: Long): Unit = {
+    rng.reseedRandomGenerator(seed)
+  }
+
+  override def copy(): WeibullGenerator = new WeibullGenerator(alpha, beta)
 }

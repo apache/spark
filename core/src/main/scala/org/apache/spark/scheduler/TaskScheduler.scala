@@ -22,14 +22,17 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
 /**
- * Low-level task scheduler interface, currently implemented exclusively by TaskSchedulerImpl.
- * This interface allows plugging in different task schedulers. Each TaskScheduler schedulers tasks
+ * Low-level task scheduler interface, currently implemented exclusively by
+ * [[org.apache.spark.scheduler.TaskSchedulerImpl]].
+ * This interface allows plugging in different task schedulers. Each TaskScheduler schedules tasks
  * for a single SparkContext. These schedulers get sets of tasks submitted to them from the
  * DAGScheduler for each stage, and are responsible for sending the tasks to the cluster, running
  * them, retrying if there are failures, and mitigating stragglers. They return events to the
  * DAGScheduler.
  */
 private[spark] trait TaskScheduler {
+
+  private val appId = "spark-application-" + System.currentTimeMillis
 
   def rootPool: Pool
 
@@ -39,7 +42,7 @@ private[spark] trait TaskScheduler {
 
   // Invoked after system has successfully initialized (typically in spark context).
   // Yarn uses this to bootstrap allocation of resources based on preferred locations,
-  // wait for slave registerations, etc.
+  // wait for slave registrations, etc.
   def postStartHook() { }
 
   // Disconnect from the cluster.
@@ -66,10 +69,22 @@ private[spark] trait TaskScheduler {
     blockManagerId: BlockManagerId): Boolean
 
   /**
-   * The application ID associated with the job, if any.
+   * Get an application ID associated with the job.
    *
-   * @return The application ID, or None if the backend does not provide an ID.
+   * @return An application ID
    */
-  def applicationId(): Option[String] = None
+  def applicationId(): String = appId
+
+  /**
+   * Process a lost executor
+   */
+  def executorLost(executorId: String, reason: ExecutorLossReason): Unit
+
+  /**
+   * Get an application's attempt ID associated with the job.
+   *
+   * @return An application's Attempt ID
+   */
+  def applicationAttemptId(): Option[String]
 
 }

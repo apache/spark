@@ -17,11 +17,13 @@
 
 package org.apache.spark.mllib.feature
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
-class Word2VecSuite extends FunSuite with LocalSparkContext {
+class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // TODO: add more tests
 
@@ -35,6 +37,22 @@ class Word2VecSuite extends FunSuite with LocalSparkContext {
     assert(syms.length == 2)
     assert(syms(0)._1 == "b")
     assert(syms(1)._1 == "c")
+
+    // Test that model built using Word2Vec, i.e wordVectors and wordIndec
+    // and a Word2VecMap give the same values.
+    val word2VecMap = model.getVectors
+    val newModel = new Word2VecModel(word2VecMap)
+    assert(newModel.getVectors.mapValues(_.toSeq) === word2VecMap.mapValues(_.toSeq))
+  }
+
+  test("Word2Vec throws exception when vocabulary is empty") {
+    intercept[IllegalArgumentException] {
+      val sentence = "a b c"
+      val localDoc = Seq(sentence, sentence)
+      val doc = sc.parallelize(localDoc)
+        .map(line => line.split(" ").toSeq)
+      new Word2Vec().setMinCount(10).fit(doc)
+    }
   }
 
   test("Word2VecModel") {
@@ -51,4 +69,46 @@ class Word2VecSuite extends FunSuite with LocalSparkContext {
     assert(syms(0)._1 == "taiwan")
     assert(syms(1)._1 == "japan")
   }
+
+  test("model load / save") {
+
+    val word2VecMap = Map(
+      ("china", Array(0.50f, 0.50f, 0.50f, 0.50f)),
+      ("japan", Array(0.40f, 0.50f, 0.50f, 0.50f)),
+      ("taiwan", Array(0.60f, 0.50f, 0.50f, 0.50f)),
+      ("korea", Array(0.45f, 0.60f, 0.60f, 0.60f))
+    )
+    val model = new Word2VecModel(word2VecMap)
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    try {
+      model.save(sc, path)
+      val sameModel = Word2VecModel.load(sc, path)
+      assert(sameModel.getVectors.mapValues(_.toSeq) === model.getVectors.mapValues(_.toSeq))
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+
+  }
+
+  test("big model load / save") {
+    // create a model bigger than 32MB since 9000 * 1000 * 4 > 2^25
+    val word2VecMap = Map((0 to 9000).map(i => s"$i" -> Array.fill(1000)(0.1f)): _*)
+    val model = new Word2VecModel(word2VecMap)
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    try {
+      model.save(sc, path)
+      val sameModel = Word2VecModel.load(sc, path)
+      assert(sameModel.getVectors.mapValues(_.toSeq) === model.getVectors.mapValues(_.toSeq))
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+
 }

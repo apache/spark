@@ -19,19 +19,17 @@ package org.apache.spark.rdd
 
 import java.util.concurrent.Semaphore
 
-import scala.concurrent.{Await, TimeoutException}
+import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.language.postfixOps
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.{SparkContext, SparkException, LocalSparkContext}
+import org.apache.spark._
 
-class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll with Timeouts {
+class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Timeouts {
 
   @transient private var sc: SparkContext = _
 
@@ -198,5 +196,34 @@ class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll with Timeouts
     intercept[TimeoutException] {
       Await.result(f, Duration(20, "milliseconds"))
     }
+  }
+
+  private def testAsyncAction[R](action: RDD[Int] => FutureAction[R]): Unit = {
+    val executionContextInvoked = Promise[Unit]
+    val fakeExecutionContext = new ExecutionContext {
+      override def execute(runnable: Runnable): Unit = {
+        executionContextInvoked.success(())
+      }
+      override def reportFailure(t: Throwable): Unit = ()
+    }
+    val starter = Smuggle(new Semaphore(0))
+    starter.drainPermits()
+    val rdd = sc.parallelize(1 to 100, 4).mapPartitions {itr => starter.acquire(1); itr}
+    val f = action(rdd)
+    f.onComplete(_ => ())(fakeExecutionContext)
+    // Here we verify that registering the callback didn't cause a thread to be consumed.
+    assert(!executionContextInvoked.isCompleted)
+    // Now allow the executors to proceed with task processing.
+    starter.release(rdd.partitions.length)
+    // Waiting for the result verifies that the tasks were successfully processed.
+    Await.result(executionContextInvoked.future, atMost = 15.seconds)
+  }
+
+  test("SimpleFutureAction callback must not consume a thread while waiting") {
+    testAsyncAction(_.countAsync())
+  }
+
+  test("ComplexFutureAction callback must not consume a thread while waiting") {
+    testAsyncAction((_.takeAsync(100)))
   }
 }

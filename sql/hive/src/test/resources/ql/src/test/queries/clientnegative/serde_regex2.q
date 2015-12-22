@@ -16,8 +16,8 @@ WITH SERDEPROPERTIES (
 )
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH "../data/files/apache.access.log" INTO TABLE serde_regex;
-LOAD DATA LOCAL INPATH "../data/files/apache.access.2.log" INTO TABLE serde_regex;
+LOAD DATA LOCAL INPATH "../../data/files/apache.access.log" INTO TABLE serde_regex;
+LOAD DATA LOCAL INPATH "../../data/files/apache.access.2.log" INTO TABLE serde_regex;
 
 -- raise an exception 
 SELECT * FROM serde_regex ORDER BY time;

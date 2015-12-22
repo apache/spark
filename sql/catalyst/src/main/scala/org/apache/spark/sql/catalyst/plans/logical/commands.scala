@@ -17,61 +17,37 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference}
-import org.apache.spark.sql.catalyst.types.StringType
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.types.StringType
 
 /**
  * A logical node that represents a non-query command to be executed by the system.  For example,
- * commands can be used by parsers to represent DDL operations.
+ * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
+ * eagerly executed.
  */
-abstract class Command extends LeafNode {
-  self: Product =>
-  def output: Seq[Attribute] = Seq.empty
-}
+trait Command
 
 /**
- * Returned for commands supported by a given parser, but not catalyst.  In general these are DDL
- * commands that are passed directly to another system.
- */
-case class NativeCommand(cmd: String) extends Command {
-  override def output =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
-
-/**
- * Commands of the form "SET (key) (= value)".
- */
-case class SetCommand(key: Option[String], value: Option[String]) extends Command {
-  override def output = Seq(
-    AttributeReference("", StringType, nullable = false)())
-}
-
-/**
- * Returned by a parser when the users only wants to see what query plan would be executed, without
- * actually performing the execution.
- */
-case class ExplainCommand(plan: LogicalPlan, extended: Boolean = false) extends Command {
-  override def output =
-    Seq(AttributeReference("plan", StringType, nullable = false)())
-}
-
-/**
- * Returned for the "CACHE TABLE tableName" and "UNCACHE TABLE tableName" command.
- */
-case class CacheCommand(tableName: String, doCache: Boolean) extends Command
-
-/**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- * @param table The table to be described.
+ * Returned for the "DESCRIBE [EXTENDED] FUNCTION functionName" command.
+ * @param functionName The function to be described.
  * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
  */
-case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override def output = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false)(),
-    AttributeReference("data_type", StringType, nullable = false)(),
-    AttributeReference("comment", StringType, nullable = false)())
+private[sql] case class DescribeFunction(
+    functionName: String,
+    isExtended: Boolean) extends LogicalPlan with Command {
+
+  override def children: Seq[LogicalPlan] = Seq.empty
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("function_desc", StringType, nullable = false)())
+}
+
+/**
+ * Returned for the "SHOW FUNCTIONS" command, which will list all of the
+ * registered function list.
+ */
+private[sql] case class ShowFunctions(
+    db: Option[String], pattern: Option[String]) extends LogicalPlan with Command {
+  override def children: Seq[LogicalPlan] = Seq.empty
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("function", StringType, nullable = false)())
 }

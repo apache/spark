@@ -14,8 +14,7 @@ runs an independent set of executor processes. The cluster managers that Spark r
 facilities for [scheduling across applications](#scheduling-across-applications). Second,
 _within_ each Spark application, multiple "jobs" (Spark actions) may be running concurrently
 if they were submitted by different threads. This is common if your application is serving requests
-over the network; for example, the [Shark](http://shark.cs.berkeley.edu) server works this way. Spark
-includes a [fair scheduler](#scheduling-within-an-application) to schedule resources within each SparkContext.
+over the network. Spark includes a [fair scheduler](#scheduling-within-an-application) to schedule resources within each SparkContext.
 
 # Scheduling Across Applications
 
@@ -33,7 +32,7 @@ Resource allocation can be configured as follows, based on the cluster type:
 * **Standalone mode:** By default, applications submitted to the standalone mode cluster will run in
   FIFO (first-in-first-out) order, and each application will try to use all available nodes. You can limit
   the number of nodes an application uses by setting the `spark.cores.max` configuration property in it,
-  or change the default for applications that don't set this setting through `spark.deploy.defaultCores`. 
+  or change the default for applications that don't set this setting through `spark.deploy.defaultCores`.
   Finally, in addition to controlling cores, each application's `spark.executor.memory` setting controls
   its memory use.
 * **Mesos:** To use static partitioning on Mesos, set the `spark.mesos.coarse` configuration property to `true`,
@@ -48,14 +47,119 @@ application is not running tasks on a machine, other applications may run tasks 
 is useful when you expect large numbers of not overly active applications, such as shell sessions from
 separate users. However, it comes with a risk of less predictable latency, because it may take a while for
 an application to gain back cores on one node when it has work to do. To use this mode, simply use a
-`mesos://` URL without setting `spark.mesos.coarse` to true.
+`mesos://` URL and set `spark.mesos.coarse` to false.
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
-the same RDDs. For example, the [Shark](http://shark.cs.berkeley.edu) JDBC server works this way for SQL
-queries. In future releases, in-memory storage systems such as [Tachyon](http://tachyon-project.org) will
+the same RDDs. In future releases, in-memory storage systems such as [Tachyon](http://tachyon-project.org) will
 provide another approach to share RDDs.
 
+## Dynamic Resource Allocation
+
+Spark provides a mechanism to dynamically adjust the resources your application occupies based
+on the workload. This means that your application may give resources back to the cluster if they
+are no longer used and request them again later when there is demand. This feature is particularly
+useful if multiple applications share resources in your Spark cluster.
+
+This feature is disabled by default and available on all coarse-grained cluster managers, i.e.
+[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html), and
+[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes).
+
+### Configuration and Setup
+
+There are two requirements for using this feature. First, your application must set
+`spark.dynamicAllocation.enabled` to `true`. Second, you must set up an *external shuffle service*
+on each worker node in the same cluster and set `spark.shuffle.service.enabled` to true in your
+application. The purpose of the external shuffle service is to allow executors to be removed
+without deleting shuffle files written by them (more detail described
+[below](job-scheduling.html#graceful-decommission-of-executors)). The way to set up this service
+varies across cluster managers:
+
+In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
+
+In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all
+slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
+through Marathon.
+
+In YARN mode, start the shuffle service on each `NodeManager` as follows:
+
+1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
+pre-packaged distribution.
+2. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
+`$SPARK_HOME/network/yarn/target/scala-<version>` if you are building Spark yourself, and under
+`lib` if you are using a distribution.
+2. Add this jar to the classpath of all `NodeManager`s in your cluster.
+3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
+then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
+`org.apache.spark.network.yarn.YarnShuffleService` and `spark.shuffle.service.enabled` to true.
+4. Restart all `NodeManager`s in your cluster.
+
+All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
+`spark.shuffle.service.*` namespaces. For more detail, see the
+[configurations page](configuration.html#dynamic-allocation).
+
+### Resource Allocation Policy
+
+At a high level, Spark should relinquish executors when they are no longer used and acquire
+executors when they are needed. Since there is no definitive way to predict whether an executor
+that is about to be removed will run a task in the near future, or whether a new executor that is
+about to be added will actually be idle, we need a set of heuristics to determine when to remove
+and request executors.
+
+#### Request Policy
+
+A Spark application with dynamic allocation enabled requests additional executors when it has
+pending tasks waiting to be scheduled. This condition necessarily implies that the existing set
+of executors is insufficient to simultaneously saturate all tasks that have been submitted but
+not yet finished.
+
+Spark requests executors in rounds. The actual request is triggered when there have been pending
+tasks for `spark.dynamicAllocation.schedulerBacklogTimeout` seconds, and then triggered again
+every `spark.dynamicAllocation.sustainedSchedulerBacklogTimeout` seconds thereafter if the queue
+of pending tasks persists. Additionally, the number of executors requested in each round increases
+exponentially from the previous round. For instance, an application will add 1 executor in the
+first round, and then 2, 4, 8 and so on executors in the subsequent rounds.
+
+The motivation for an exponential increase policy is twofold. First, an application should request
+executors cautiously in the beginning in case it turns out that only a few additional executors is
+sufficient. This echoes the justification for TCP slow start. Second, the application should be
+able to ramp up its resource usage in a timely manner in case it turns out that many executors are
+actually needed.
+
+#### Remove Policy
+
+The policy for removing executors is much simpler. A Spark application removes an executor when
+it has been idle for more than `spark.dynamicAllocation.executorIdleTimeout` seconds. Note that,
+under most circumstances, this condition is mutually exclusive with the request condition, in that
+an executor should not be idle if there are still pending tasks to be scheduled.
+
+### Graceful Decommission of Executors
+
+Before dynamic allocation, a Spark executor exits either on failure or when the associated
+application has also exited. In both scenarios, all state associated with the executor is no
+longer needed and can be safely discarded. With dynamic allocation, however, the application
+is still running when an executor is explicitly removed. If the application attempts to access
+state stored in or written by the executor, it will have to perform a recompute the state. Thus,
+Spark needs a mechanism to decommission an executor gracefully by preserving its state before
+removing it.
+
+This requirement is especially important for shuffles. During a shuffle, the Spark executor first
+writes its own map outputs locally to disk, and then acts as the server for those files when other
+executors attempt to fetch them. In the event of stragglers, which are tasks that run for much
+longer than their peers, dynamic allocation may remove an executor before the shuffle completes,
+in which case the shuffle files written by that executor must be recomputed unnecessarily.
+
+The solution for preserving shuffle files is to use an external shuffle service, also introduced
+in Spark 1.2. This service refers to a long-running process that runs on each node of your cluster
+independently of your Spark applications and their executors. If the service is enabled, Spark
+executors will fetch shuffle files from the service instead of from each other. This means any
+shuffle state written by an executor may continue to be served beyond the executor's lifetime.
+
+In addition to writing shuffle files, executors also cache data either on disk or in memory.
+When an executor is removed, however, all cached data will no longer be accessible. There is
+currently not yet a solution for this in Spark 1.2. In future releases, the cached data may be
+preserved through an off-heap storage similar in spirit to how shuffle files are preserved through
+the external shuffle service.
 
 # Scheduling Within an Application
 

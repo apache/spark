@@ -17,49 +17,9 @@
 # limitations under the License.
 #
 
-#
-# Shell script for starting the Spark SQL CLI
-
-# Enter posix mode for bash
-set -o posix
-
-CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
-CLASS_NOT_FOUND_EXIT_STATUS=1
-
-# Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
-
-function usage {
-  echo "Usage: ./bin/spark-sql [options] [cli option]"
-  pattern="usage"
-  pattern+="\|Spark assembly has been built with Hive"
-  pattern+="\|NOTE: SPARK_PREPEND_CLASSES is set"
-  pattern+="\|Spark Command: "
-  pattern+="\|--help"
-  pattern+="\|======="
-
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  echo
-  echo "CLI options:"
-  $FWDIR/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
-}
-
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  usage
-  exit 0
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-source $FWDIR/bin/utils.sh
-SUBMIT_USAGE_FUNCTION=usage
-gatherSparkSubmitOpts "$@"
-
-"$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}"
-exit_status=$?
-
-if [[ exit_status -eq CLASS_NOT_FOUND_EXIT_STATUS ]]; then
-  echo
-  echo "Failed to load Spark SQL CLI main class $CLASS."
-  echo "You need to build Spark with -Phive."
-fi
-
-exit $exit_status
+export _SPARK_CMD_USAGE="Usage: ./bin/spark-sql [options] [cli option]"
+exec "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver "$@"

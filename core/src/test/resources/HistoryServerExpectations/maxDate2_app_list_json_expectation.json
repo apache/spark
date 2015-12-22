@@ -1,0 +1,10 @@
+[ {
+  "id" : "local-1422981759269",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2015-02-03T16:42:38.277GMT",
+    "endTime" : "2015-02-03T16:42:46.912GMT",
+    "sparkUser" : "irashid",
+    "completed" : true
+  } ]
+} ]

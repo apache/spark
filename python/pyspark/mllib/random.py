@@ -19,22 +19,33 @@
 Python package for random data generation.
 """
 
+from functools import wraps
 
-from pyspark.rdd import RDD
-from pyspark.mllib._common import _deserialize_double, _deserialize_double_vector
-from pyspark.serializers import NoOpSerializer
+from pyspark import since
+from pyspark.mllib.common import callMLlibFunc
 
 
 __all__ = ['RandomRDDs', ]
 
 
-class RandomRDDs:
+def toArray(f):
+    @wraps(f)
+    def func(sc, *a, **kw):
+        rdd = f(sc, *a, **kw)
+        return rdd.map(lambda vec: vec.toArray())
+    return func
+
+
+class RandomRDDs(object):
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
+
+    .. versionadded:: 1.1.0
     """
 
     @staticmethod
+    @since("1.1.0")
     def uniformRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the
@@ -44,6 +55,12 @@ class RandomRDDs:
         to U(a, b), use
         C{RandomRDDs.uniformRDD(sc, n, p, seed)\
           .map(lambda v: a + (b - a) * v)}
+
+        :param sc: SparkContext used to create the RDD.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ `U(0.0, 1.0)`.
 
         >>> x = RandomRDDs.uniformRDD(sc, 100).collect()
         >>> len(x)
@@ -56,11 +73,10 @@ class RandomRDDs:
         >>> parts == sc.defaultParallelism
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().uniformRDD(sc._jsc, size, numPartitions, seed)
-        uniform = RDD(jrdd, sc, NoOpSerializer())
-        return uniform.map(lambda bytes: _deserialize_double(bytearray(bytes)))
+        return callMLlibFunc("uniformRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @since("1.1.0")
     def normalRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the standard normal
@@ -71,45 +87,156 @@ class RandomRDDs:
         C{RandomRDDs.normal(sc, n, p, seed)\
           .map(lambda v: mean + sigma * v)}
 
-        >>> x = RandomRDDs.normalRDD(sc, 1000, seed=1L)
+        :param sc: SparkContext used to create the RDD.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ N(0.0, 1.0).
+
+        >>> x = RandomRDDs.normalRDD(sc, 1000, seed=1)
         >>> stats = x.stats()
         >>> stats.count()
-        1000L
+        1000
         >>> abs(stats.mean() - 0.0) < 0.1
         True
         >>> abs(stats.stdev() - 1.0) < 0.1
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().normalRDD(sc._jsc, size, numPartitions, seed)
-        normal = RDD(jrdd, sc, NoOpSerializer())
-        return normal.map(lambda bytes: _deserialize_double(bytearray(bytes)))
+        return callMLlibFunc("normalRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
+    def logNormalRDD(sc, mean, std, size, numPartitions=None, seed=None):
+        """
+        Generates an RDD comprised of i.i.d. samples from the log normal
+        distribution with the input mean and standard distribution.
+
+        :param sc: SparkContext used to create the RDD.
+        :param mean: mean for the log Normal distribution
+        :param std: std for the log Normal distribution
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ log N(mean, std).
+
+        >>> from math import sqrt, exp
+        >>> mean = 0.0
+        >>> std = 1.0
+        >>> expMean = exp(mean + 0.5 * std * std)
+        >>> expStd = sqrt((exp(std * std) - 1.0) * exp(2.0 * mean + std * std))
+        >>> x = RandomRDDs.logNormalRDD(sc, mean, std, 1000, seed=2)
+        >>> stats = x.stats()
+        >>> stats.count()
+        1000
+        >>> abs(stats.mean() - expMean) < 0.5
+        True
+        >>> from math import sqrt
+        >>> abs(stats.stdev() - expStd) < 0.5
+        True
+        """
+        return callMLlibFunc("logNormalRDD", sc._jsc, float(mean), float(std),
+                             size, numPartitions, seed)
+
+    @staticmethod
+    @since("1.1.0")
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the Poisson
         distribution with the input mean.
 
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or lambda, for the Poisson distribution.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ Pois(mean).
+
         >>> mean = 100.0
-        >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=1L)
+        >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=2)
         >>> stats = x.stats()
         >>> stats.count()
-        1000L
+        1000
         >>> abs(stats.mean() - mean) < 0.5
         True
         >>> from math import sqrt
         >>> abs(stats.stdev() - sqrt(mean)) < 0.5
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI().poissonRDD(sc._jsc, mean, size, numPartitions, seed)
-        poisson = RDD(jrdd, sc, NoOpSerializer())
-        return poisson.map(lambda bytes: _deserialize_double(bytearray(bytes)))
+        return callMLlibFunc("poissonRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
+    def exponentialRDD(sc, mean, size, numPartitions=None, seed=None):
+        """
+        Generates an RDD comprised of i.i.d. samples from the Exponential
+        distribution with the input mean.
+
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or 1 / lambda, for the Exponential distribution.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ Exp(mean).
+
+        >>> mean = 2.0
+        >>> x = RandomRDDs.exponentialRDD(sc, mean, 1000, seed=2)
+        >>> stats = x.stats()
+        >>> stats.count()
+        1000
+        >>> abs(stats.mean() - mean) < 0.5
+        True
+        >>> from math import sqrt
+        >>> abs(stats.stdev() - sqrt(mean)) < 0.5
+        True
+        """
+        return callMLlibFunc("exponentialRDD", sc._jsc, float(mean), size, numPartitions, seed)
+
+    @staticmethod
+    @since("1.3.0")
+    def gammaRDD(sc, shape, scale, size, numPartitions=None, seed=None):
+        """
+        Generates an RDD comprised of i.i.d. samples from the Gamma
+        distribution with the input shape and scale.
+
+        :param sc: SparkContext used to create the RDD.
+        :param shape: shape (> 0) parameter for the Gamma distribution
+        :param scale: scale (> 0) parameter for the Gamma distribution
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ Gamma(shape, scale).
+
+        >>> from math import sqrt
+        >>> shape = 1.0
+        >>> scale = 2.0
+        >>> expMean = shape * scale
+        >>> expStd = sqrt(shape * scale * scale)
+        >>> x = RandomRDDs.gammaRDD(sc, shape, scale, 1000, seed=2)
+        >>> stats = x.stats()
+        >>> stats.count()
+        1000
+        >>> abs(stats.mean() - expMean) < 0.5
+        True
+        >>> abs(stats.stdev() - expStd) < 0.5
+        True
+        """
+        return callMLlibFunc("gammaRDD", sc._jsc, float(shape),
+                             float(scale), size, numPartitions, seed)
+
+    @staticmethod
+    @toArray
+    @since("1.1.0")
     def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the uniform distribution U(0.0, 1.0).
+
+        :param sc: SparkContext used to create the RDD.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD.
+        :param seed: Seed for the RNG that generates the seed for the generator in each partition.
+        :return: RDD of Vector with vectors containing i.i.d samples ~ `U(0.0, 1.0)`.
 
         >>> import numpy as np
         >>> mat = np.matrix(RandomRDDs.uniformVectorRDD(sc, 10, 10).collect())
@@ -120,19 +247,25 @@ class RandomRDDs:
         >>> RandomRDDs.uniformVectorRDD(sc, 10, 10, 4).getNumPartitions()
         4
         """
-        jrdd = sc._jvm.PythonMLLibAPI() \
-            .uniformVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        uniform = RDD(jrdd, sc, NoOpSerializer())
-        return uniform.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
+        return callMLlibFunc("uniformVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
 
     @staticmethod
+    @toArray
+    @since("1.1.0")
     def normalVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the standard normal distribution.
 
+        :param sc: SparkContext used to create the RDD.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ `N(0.0, 1.0)`.
+
         >>> import numpy as np
-        >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1L).collect())
+        >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1).collect())
         >>> mat.shape
         (100, 100)
         >>> abs(mat.mean() - 0.0) < 0.1
@@ -140,20 +273,62 @@ class RandomRDDs:
         >>> abs(mat.std() - 1.0) < 0.1
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI() \
-            .normalVectorRDD(sc._jsc, numRows, numCols, numPartitions, seed)
-        normal = RDD(jrdd, sc, NoOpSerializer())
-        return normal.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
+        return callMLlibFunc("normalVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
 
     @staticmethod
+    @toArray
+    @since("1.3.0")
+    def logNormalVectorRDD(sc, mean, std, numRows, numCols, numPartitions=None, seed=None):
+        """
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
+        from the log normal distribution.
+
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean of the log normal distribution
+        :param std: Standard Deviation of the log normal distribution
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ log `N(mean, std)`.
+
+        >>> import numpy as np
+        >>> from math import sqrt, exp
+        >>> mean = 0.0
+        >>> std = 1.0
+        >>> expMean = exp(mean + 0.5 * std * std)
+        >>> expStd = sqrt((exp(std * std) - 1.0) * exp(2.0 * mean + std * std))
+        >>> m = RandomRDDs.logNormalVectorRDD(sc, mean, std, 100, 100, seed=1).collect()
+        >>> mat = np.matrix(m)
+        >>> mat.shape
+        (100, 100)
+        >>> abs(mat.mean() - expMean) < 0.1
+        True
+        >>> abs(mat.std() - expStd) < 0.1
+        True
+        """
+        return callMLlibFunc("logNormalVectorRDD", sc._jsc, float(mean), float(std),
+                             numRows, numCols, numPartitions, seed)
+
+    @staticmethod
+    @toArray
+    @since("1.1.0")
     def poissonVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Poisson distribution with the input mean.
 
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or lambda, for the Poisson distribution.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`)
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ Pois(mean).
+
         >>> import numpy as np
         >>> mean = 100.0
-        >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1L)
+        >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1)
         >>> mat = np.mat(rdd.collect())
         >>> mat.shape
         (100, 100)
@@ -163,10 +338,73 @@ class RandomRDDs:
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        jrdd = sc._jvm.PythonMLLibAPI() \
-            .poissonVectorRDD(sc._jsc, mean, numRows, numCols, numPartitions, seed)
-        poisson = RDD(jrdd, sc, NoOpSerializer())
-        return poisson.map(lambda bytes: _deserialize_double_vector(bytearray(bytes)))
+        return callMLlibFunc("poissonVectorRDD", sc._jsc, float(mean), numRows, numCols,
+                             numPartitions, seed)
+
+    @staticmethod
+    @toArray
+    @since("1.3.0")
+    def exponentialVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
+        """
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
+        from the Exponential distribution with the input mean.
+
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or 1 / lambda, for the Exponential distribution.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`)
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ Exp(mean).
+
+        >>> import numpy as np
+        >>> mean = 0.5
+        >>> rdd = RandomRDDs.exponentialVectorRDD(sc, mean, 100, 100, seed=1)
+        >>> mat = np.mat(rdd.collect())
+        >>> mat.shape
+        (100, 100)
+        >>> abs(mat.mean() - mean) < 0.5
+        True
+        >>> from math import sqrt
+        >>> abs(mat.std() - sqrt(mean)) < 0.5
+        True
+        """
+        return callMLlibFunc("exponentialVectorRDD", sc._jsc, float(mean), numRows, numCols,
+                             numPartitions, seed)
+
+    @staticmethod
+    @toArray
+    @since("1.3.0")
+    def gammaVectorRDD(sc, shape, scale, numRows, numCols, numPartitions=None, seed=None):
+        """
+        Generates an RDD comprised of vectors containing i.i.d. samples drawn
+        from the Gamma distribution.
+
+        :param sc: SparkContext used to create the RDD.
+        :param shape: Shape (> 0) of the Gamma distribution
+        :param scale: Scale (> 0) of the Gamma distribution
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ Gamma(shape, scale).
+
+        >>> import numpy as np
+        >>> from math import sqrt
+        >>> shape = 1.0
+        >>> scale = 2.0
+        >>> expMean = shape * scale
+        >>> expStd = sqrt(shape * scale * scale)
+        >>> mat = np.matrix(RandomRDDs.gammaVectorRDD(sc, shape, scale, 100, 100, seed=1).collect())
+        >>> mat.shape
+        (100, 100)
+        >>> abs(mat.mean() - expMean) < 0.1
+        True
+        >>> abs(mat.std() - expStd) < 0.1
+        True
+        """
+        return callMLlibFunc("gammaVectorRDD", sc._jsc, float(shape), float(scale),
+                             numRows, numCols, numPartitions, seed)
 
 
 def _test():

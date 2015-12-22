@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.SparkContext._
@@ -28,15 +29,30 @@ import org.apache.spark.{SparkConf, SparkContext}
  * URL         neighbor URL
  * ...
  * where URL and their neighbors are separated by space(s).
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.graphx.lib.PageRank
  */
 object SparkPageRank {
+
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of PageRank and is given as an example!
+        |Please use the PageRank implementation found in org.apache.spark.graphx.lib.PageRank
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
     if (args.length < 1) {
       System.err.println("Usage: SparkPageRank <file> <iter>")
       System.exit(1)
     }
+
+    showWarning()
+
     val sparkConf = new SparkConf().setAppName("PageRank")
-    val iters = if (args.length > 0) args(1).toInt else 10
+    val iters = if (args.length > 1) args(1).toInt else 10
     val ctx = new SparkContext(sparkConf)
     val lines = ctx.textFile(args(0), 1)
     val links = lines.map{ s =>
@@ -59,3 +75,4 @@ object SparkPageRank {
     ctx.stop()
   }
 }
+// scalastyle:on println

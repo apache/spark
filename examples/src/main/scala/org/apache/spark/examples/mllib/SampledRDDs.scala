@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.util.MLUtils
@@ -33,6 +34,7 @@ import org.apache.spark.SparkContext._
 object SampledRDDs {
 
   case class Params(input: String = "data/mllib/sample_binary_classification_data.txt")
+    extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -124,3 +126,4 @@ object SampledRDDs {
     sc.stop()
   }
 }
+// scalastyle:on println

@@ -19,13 +19,13 @@ package org.apache.spark
 
 import java.io.File
 
+import org.eclipse.jetty.server.ssl.SslSocketConnector
 import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService}
-
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.bio.SocketConnector
-import org.eclipse.jetty.server.handler.{DefaultHandler, HandlerList, ResourceHandler}
+import org.eclipse.jetty.servlet.{DefaultServlet, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.util.Utils
@@ -42,6 +42,7 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * around a Jetty server.
  */
 private[spark] class HttpServer(
+    conf: SparkConf,
     resourceBase: File,
     securityManager: SecurityManager,
     requestedPort: Int = 0,
@@ -50,6 +51,11 @@ private[spark] class HttpServer(
 
   private var server: Server = null
   private var port: Int = requestedPort
+  private val servlets = {
+    val handler = new ServletContextHandler()
+    handler.setContextPath("/")
+    handler
+  }
 
   def start() {
     if (server != null) {
@@ -57,10 +63,18 @@ private[spark] class HttpServer(
     } else {
       logInfo("Starting HTTP Server")
       val (actualServer, actualPort) =
-        Utils.startServiceOnPort[Server](requestedPort, doStart, serverName)
+        Utils.startServiceOnPort[Server](requestedPort, doStart, conf, serverName)
       server = actualServer
       port = actualPort
     }
+  }
+
+  def addDirectory(contextPath: String, resourceBase: String): Unit = {
+    val holder = new ServletHolder()
+    holder.setInitParameter("resourceBase", resourceBase)
+    holder.setInitParameter("pathInfoOnly", "true")
+    holder.setServlet(new DefaultServlet())
+    servlets.addServlet(holder, contextPath.stripSuffix("/") + "/*")
   }
 
   /**
@@ -71,7 +85,10 @@ private[spark] class HttpServer(
    */
   private def doStart(startPort: Int): (Server, Int) = {
     val server = new Server()
-    val connector = new SocketConnector
+
+    val connector = securityManager.fileServerSSLOptions.createJettySslContextFactory()
+      .map(new SslSocketConnector(_)).getOrElse(new SocketConnector)
+
     connector.setMaxIdleTime(60 * 1000)
     connector.setSoLingerTime(-1)
     connector.setPort(startPort)
@@ -80,21 +97,17 @@ private[spark] class HttpServer(
     val threadPool = new QueuedThreadPool
     threadPool.setDaemon(true)
     server.setThreadPool(threadPool)
-    val resHandler = new ResourceHandler
-    resHandler.setResourceBase(resourceBase.getAbsolutePath)
-
-    val handlerList = new HandlerList
-    handlerList.setHandlers(Array(resHandler, new DefaultHandler))
+    addDirectory("/", resourceBase.getAbsolutePath)
 
     if (securityManager.isAuthenticationEnabled()) {
       logDebug("HttpServer is using security")
       val sh = setupSecurityHandler(securityManager)
       // make sure we go through security handler to get resources
-      sh.setHandler(handlerList)
+      sh.setHandler(servlets)
       server.setHandler(sh)
     } else {
       logDebug("HttpServer is not using security")
-      server.setHandler(handlerList)
+      server.setHandler(servlets)
     }
 
     server.start()
@@ -148,13 +161,14 @@ private[spark] class HttpServer(
   }
 
   /**
-   * Get the URI of this HTTP server (http://host:port)
+   * Get the URI of this HTTP server (http://host:port or https://host:port)
    */
   def uri: String = {
     if (server == null) {
       throw new ServerStateException("Server is not started")
     } else {
-      "http://" + Utils.localIpAddress + ":" + port
+      val scheme = if (securityManager.fileServerSSLOptions.enabled) "https" else "http"
+      s"$scheme://${Utils.localHostNameForURI()}:$port"
     }
   }
 }

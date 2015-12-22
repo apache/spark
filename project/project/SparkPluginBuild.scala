@@ -19,25 +19,10 @@ import sbt._
 import sbt.Keys._
 
 /**
- * This plugin project is there to define new scala style rules for spark. This is
- * a plugin project so that this gets compiled first and is put on the classpath and
- * becomes available for scalastyle sbt plugin.
+ * This plugin project is there because we use our custom fork of sbt-pom-reader plugin. This is
+ * a plugin project so that this gets compiled first and is available on the classpath for SBT build.
  */
 object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(sparkStyle, sbtPomReader)
-  lazy val sparkStyle = Project("spark-style", file("spark-style"), settings = styleSettings)
-  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git")
-
-  // There is actually no need to publish this artifact.
-  def styleSettings = Defaults.defaultSettings ++ Seq (
-    name                 :=  "spark-style",
-    organization         :=  "org.apache.spark",
-    scalaVersion         :=  "2.10.4",
-    scalacOptions        :=  Seq("-unchecked", "-deprecation"),
-    libraryDependencies  ++= Dependencies.scalaStyle
-  )
-
-  object Dependencies {
-    val scalaStyle = Seq("org.scalastyle" %% "scalastyle" % "0.4.0")
-  }
+  lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)
+  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
 }

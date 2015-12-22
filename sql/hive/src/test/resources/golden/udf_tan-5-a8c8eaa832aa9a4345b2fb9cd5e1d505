@@ -1,4 +1,0 @@
-tan(x) - returns the tangent of x (x is in radians)
-Example:
-   > SELECT tan(0) FROM src LIMIT 1;
-  1

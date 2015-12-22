@@ -19,8 +19,7 @@ package org.apache.spark.deploy.master
 
 import scala.collection.mutable
 
-import akka.actor.ActorRef
-
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] class WorkerInfo(
@@ -29,7 +28,7 @@ private[spark] class WorkerInfo(
     val port: Int,
     val cores: Int,
     val memory: Int,
-    val actor: ActorRef,
+    val endpoint: RpcEndpointRef,
     val webUiPort: Int,
     val publicAddress: String)
   extends Serializable {
@@ -37,7 +36,7 @@ private[spark] class WorkerInfo(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
-  @transient var executors: mutable.HashMap[String, ExecutorInfo] = _ // executorId => info
+  @transient var executors: mutable.HashMap[String, ExecutorDesc] = _ // executorId => info
   @transient var drivers: mutable.HashMap[String, DriverInfo] = _ // driverId => info
   @transient var state: WorkerState.Value = _
   @transient var coresUsed: Int = _
@@ -50,7 +49,7 @@ private[spark] class WorkerInfo(
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
-  private def readObject(in: java.io.ObjectInputStream) : Unit = {
+  private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     init()
   }
@@ -69,13 +68,13 @@ private[spark] class WorkerInfo(
     host + ":" + port
   }
 
-  def addExecutor(exec: ExecutorInfo) {
+  def addExecutor(exec: ExecutorDesc) {
     executors(exec.fullId) = exec
     coresUsed += exec.cores
     memoryUsed += exec.memory
   }
 
-  def removeExecutor(exec: ExecutorInfo) {
+  def removeExecutor(exec: ExecutorDesc) {
     if (executors.contains(exec.fullId)) {
       executors -= exec.fullId
       coresUsed -= exec.cores
@@ -103,7 +102,9 @@ private[spark] class WorkerInfo(
     "http://" + this.publicAddress + ":" + this.webUiPort
   }
 
-  def setState(state: WorkerState.Value) = {
+  def setState(state: WorkerState.Value): Unit = {
     this.state = state
   }
+
+  def isAlive(): Boolean = this.state == WorkerState.ALIVE
 }

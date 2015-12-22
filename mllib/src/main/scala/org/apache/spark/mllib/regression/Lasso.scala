@@ -17,9 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.pmml.PMMLExportable
+import org.apache.spark.mllib.regression.impl.GLMRegressionModel
+import org.apache.spark.mllib.util.{Saveable, Loader}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -27,12 +31,14 @@ import org.apache.spark.rdd.RDD
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
+ *
  */
-class LassoModel (
-    override val weights: Vector,
-    override val intercept: Double)
+@Since("0.8.0")
+class LassoModel @Since("1.1.0") (
+    @Since("1.0.0") override val weights: Vector,
+    @Since("0.8.0") override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
-  with RegressionModel with Serializable {
+  with RegressionModel with Serializable with Saveable with PMMLExportable {
 
   override protected def predictPoint(
       dataMatrix: Vector,
@@ -40,16 +46,45 @@ class LassoModel (
       intercept: Double): Double = {
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
+
+  @Since("1.3.0")
+  override def save(sc: SparkContext, path: String): Unit = {
+    GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+@Since("1.3.0")
+object LassoModel extends Loader[LassoModel] {
+
+  @Since("1.3.0")
+  override def load(sc: SparkContext, path: String): LassoModel = {
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    // Hard-code class name string in case it changes in the future
+    val classNameV1_0 = "org.apache.spark.mllib.regression.LassoModel"
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val numFeatures = RegressionModel.getNumFeatures(metadata)
+        val data = GLMRegressionModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0, numFeatures)
+        new LassoModel(data.weights, data.intercept)
+      case _ => throw new Exception(
+        s"LassoModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
+    }
+  }
 }
 
 /**
  * Train a regression model with L1-regularization using Stochastic Gradient Descent.
  * This solves the l1-regularized least squares regression formulation
- *          f(weights) = 1/n ||A weights-y||^2  + regParam ||weights||_1
+ *          f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
+@Since("0.8.0")
 class LassoWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -59,6 +94,7 @@ class LassoWithSGD private (
 
   private val gradient = new LeastSquaresGradient()
   private val updater = new L1Updater()
+  @Since("0.8.0")
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -67,9 +103,10 @@ class LassoWithSGD private (
 
   /**
    * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParam: 1.0, miniBatchFraction: 1.0}.
+   * regParam: 0.01, miniBatchFraction: 1.0}.
    */
-  def this() = this(1.0, 100, 1.0, 1.0)
+  @Since("0.8.0")
+  def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LassoModel(weights, intercept)
@@ -78,7 +115,9 @@ class LassoWithSGD private (
 
 /**
  * Top-level methods for calling Lasso.
+ *
  */
+@Since("0.8.0")
 object LassoWithSGD {
 
   /**
@@ -95,7 +134,9 @@ object LassoWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
+   *
    */
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -118,7 +159,9 @@ object LassoWithSGD {
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
+   *
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -139,7 +182,9 @@ object LassoWithSGD {
    * @param regParam Regularization parameter.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LassoModel which has the weights and offset from training.
+   *
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -157,10 +202,12 @@ object LassoWithSGD {
    *              matrix A as well as the corresponding right hand side label y
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LassoModel which has the weights and offset from training.
+   *
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int): LassoModel = {
-    train(input, numIterations, 1.0, 1.0, 1.0)
+    train(input, numIterations, 1.0, 0.01, 1.0)
   }
 }

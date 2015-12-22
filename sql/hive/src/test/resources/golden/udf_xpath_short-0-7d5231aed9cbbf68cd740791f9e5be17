@@ -1,1 +1,0 @@
-xpath_short(xml, xpath) - Returns a short value that matches the xpath expression

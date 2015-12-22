@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -25,7 +26,8 @@ import breeze.linalg.{Vector, DenseVector}
  * Logistic regression based classification.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to org.apache.spark.mllib.classification.LogisticRegression
+ * please refer to either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
+ * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
  */
 object LocalFileLR {
   val D = 10   // Numer of dimensions
@@ -41,7 +43,8 @@ object LocalFileLR {
   def showWarning() {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
-        |Please use the LogisticRegression method found in org.apache.spark.mllib.classification
+        |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
+        |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
         |for more conventional use.
       """.stripMargin)
   }
@@ -71,3 +74,4 @@ object LocalFileLR {
     println("Final w: " + w)
   }
 }
+// scalastyle:on println

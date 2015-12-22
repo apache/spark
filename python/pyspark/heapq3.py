@@ -627,51 +627,49 @@ def merge(iterables, key=None, reverse=False):
     if key is None:
         for order, it in enumerate(map(iter, iterables)):
             try:
-                next = it.next
-                h_append([next(), order * direction, next])
+                h_append([next(it), order * direction, it])
             except StopIteration:
                 pass
         _heapify(h)
         while len(h) > 1:
             try:
                 while True:
-                    value, order, next = s = h[0]
+                    value, order, it = s = h[0]
                     yield value
-                    s[0] = next()           # raises StopIteration when exhausted
+                    s[0] = next(it)           # raises StopIteration when exhausted
                     _heapreplace(h, s)      # restore heap condition
             except StopIteration:
                 _heappop(h)                 # remove empty iterator
         if h:
             # fast case when only a single iterator remains
-            value, order, next = h[0]
+            value, order, it = h[0]
             yield value
-            for value in next.__self__:
+            for value in it:
                 yield value
         return
 
     for order, it in enumerate(map(iter, iterables)):
         try:
-            next = it.next
-            value = next()
-            h_append([key(value), order * direction, value, next])
+            value = next(it)
+            h_append([key(value), order * direction, value, it])
         except StopIteration:
             pass
     _heapify(h)
     while len(h) > 1:
         try:
             while True:
-                key_value, order, value, next = s = h[0]
+                key_value, order, value, it = s = h[0]
                 yield value
-                value = next()
+                value = next(it)
                 s[0] = key(value)
                 s[2] = value
                 _heapreplace(h, s)
         except StopIteration:
             _heappop(h)
     if h:
-        key_value, order, value, next = h[0]
+        key_value, order, value, it = h[0]
         yield value
-        for value in next.__self__:
+        for value in it:
             yield value
 
 
@@ -885,6 +883,7 @@ except ImportError:
 
 
 if __name__ == "__main__":
-
     import doctest
-    print(doctest.testmod())
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Collaborative Filtering - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering 
+title: Collaborative Filtering - spark.mllib
+displayTitle: Collaborative Filtering - spark.mllib
 ---
 
 * Table of contents
@@ -11,12 +11,12 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering
 
 [Collaborative filtering](http://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering)
 is commonly used for recommender systems.  These techniques aim to fill in the
-missing entries of a user-item association matrix.  MLlib currently supports
+missing entries of a user-item association matrix.  `spark.mllib` currently supports
 model-based collaborative filtering, in which users and products are described
 by a small set of latent factors that can be used to predict missing entries.
-MLlib uses the [alternating least squares
+`spark.mllib` uses the [alternating least squares
 (ALS)](http://dl.acm.org/citation.cfm?id=1608614)
-algorithm to learn these latent factors. The implementation in MLlib has the
+algorithm to learn these latent factors. The implementation in `spark.mllib` has the
 following parameters:
 
 * *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
@@ -34,7 +34,7 @@ The standard approach to matrix factorization based collaborative filtering trea
 the entries in the user-item matrix as *explicit* preferences given by the user to the item.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
-clicks, purchases, likes, shares etc.). The approach used in MLlib to deal with such data is taken
+clicks, purchases, likes, shares etc.). The approach used in `spark.mllib` to deal with such data is taken
 from
 [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
 Essentially instead of trying to model the matrix of ratings directly, this approach treats the data
@@ -64,45 +64,17 @@ We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.rec
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
-{% highlight scala %}
-import org.apache.spark.mllib.recommendation.ALS
-import org.apache.spark.mllib.recommendation.Rating
+Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for details on the API.
 
-// Load and parse the data
-val data = sc.textFile("data/mllib/als/test.data")
-val ratings = data.map(_.split(',') match { case Array(user, item, rate) =>
-    Rating(user.toInt, item.toInt, rate.toDouble)
-  })
-
-// Build the recommendation model using ALS
-val rank = 10
-val numIterations = 20
-val model = ALS.train(ratings, rank, numIterations, 0.01)
-
-// Evaluate the model on rating data
-val usersProducts = ratings.map { case Rating(user, product, rate) =>
-  (user, product)
-}
-val predictions = 
-  model.predict(usersProducts).map { case Rating(user, product, rate) => 
-    ((user, product), rate)
-  }
-val ratesAndPreds = ratings.map { case Rating(user, product, rate) => 
-  ((user, product), rate)
-}.join(predictions)
-val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) => 
-  val err = (r1 - r2)
-  err * err
-}.mean()
-println("Mean Squared Error = " + MSE)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/RecommendationExample.scala %}
 
 If the rating matrix is derived from another source of information (e.g., it is inferred from
 other signals), you can use the `trainImplicit` method to get better results.
 
 {% highlight scala %}
 val alpha = 0.01
-val model = ALS.trainImplicit(ratings, rank, numIterations, alpha)
+val lambda = 0.01
+val model = ALS.trainImplicit(ratings, rank, numIterations, lambda, alpha)
 {% endhighlight %}
 </div>
 
@@ -110,86 +82,12 @@ val model = ALS.trainImplicit(ratings, rank, numIterations, alpha)
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. A standalone application example
-that is equivalent to the provided example in Scala is given bellow:
+calling `.rdd()` on your `JavaRDD` object. A self-contained application example
+that is equivalent to the provided example in Scala is given below:
 
-{% highlight java %}
-import scala.Tuple2;
+Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for details on the API.
 
-import org.apache.spark.api.java.*;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.recommendation.ALS;
-import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
-import org.apache.spark.mllib.recommendation.Rating;
-import org.apache.spark.SparkConf;
-
-public class CollaborativeFiltering {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Collaborative Filtering Example");
-    JavaSparkContext sc = new JavaSparkContext(conf);
-
-    // Load and parse the data
-    String path = "data/mllib/als/test.data";
-    JavaRDD<String> data = sc.textFile(path);
-    JavaRDD<Rating> ratings = data.map(
-      new Function<String, Rating>() {
-        public Rating call(String s) {
-          String[] sarray = s.split(",");
-          return new Rating(Integer.parseInt(sarray[0]), Integer.parseInt(sarray[1]), 
-                            Double.parseDouble(sarray[2]));
-        }
-      }
-    );
-
-    // Build the recommendation model using ALS
-    int rank = 10;
-    int numIterations = 20;
-    MatrixFactorizationModel model = ALS.train(JavaRDD.toRDD(ratings), rank, numIterations, 0.01); 
-
-    // Evaluate the model on rating data
-    JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
-      new Function<Rating, Tuple2<Object, Object>>() {
-        public Tuple2<Object, Object> call(Rating r) {
-          return new Tuple2<Object, Object>(r.user(), r.product());
-        }
-      }
-    );
-    JavaPairRDD<Tuple2<Integer, Integer>, Double> predictions = JavaPairRDD.fromJavaRDD(
-      model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
-        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
-          public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
-            return new Tuple2<Tuple2<Integer, Integer>, Double>(
-              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
-          }
-        }
-    ));
-    JavaRDD<Tuple2<Double, Double>> ratesAndPreds = 
-      JavaPairRDD.fromJavaRDD(ratings.map(
-        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
-          public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
-            return new Tuple2<Tuple2<Integer, Integer>, Double>(
-              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
-          }
-        }
-    )).join(predictions).values();
-    double MSE = JavaDoubleRDD.fromRDD(ratesAndPreds.map(
-      new Function<Tuple2<Double, Double>, Object>() {
-        public Object call(Tuple2<Double, Double> pair) {
-          Double err = pair._1() - pair._2();
-          return err * err;
-        }
-      }
-    ).rdd()).mean();
-    System.out.println("Mean Squared Error = " + MSE);
-  }
-}
-{% endhighlight %}
-
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
-quick-start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
+{% include_example java/org/apache/spark/examples/mllib/JavaRecommendationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -197,39 +95,28 @@ In the following example we load rating data. Each row consists of a user, a pro
 We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
 recommendation by measuring the Mean Squared Error of rating prediction.
 
-{% highlight python %}
-from pyspark.mllib.recommendation import ALS
-from numpy import array
+Refer to the [`ALS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.recommendation.ALS) for more details on the API.
 
-# Load and parse the data
-data = sc.textFile("data/mllib/als/test.data")
-ratings = data.map(lambda line: array([float(x) for x in line.split(',')]))
-
-# Build the recommendation model using Alternating Least Squares
-rank = 10
-numIterations = 20
-model = ALS.train(ratings, rank, numIterations)
-
-# Evaluate the model on training data
-testdata = ratings.map(lambda p: (int(p[0]), int(p[1])))
-predictions = model.predictAll(testdata).map(lambda r: ((r[0], r[1]), r[2]))
-ratesAndPreds = ratings.map(lambda r: ((r[0], r[1]), r[2])).join(predictions)
-MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).reduce(lambda x, y: x + y)/ratesAndPreds.count()
-print("Mean Squared Error = " + str(MSE))
-{% endhighlight %}
+{% include_example python/mllib/recommendation_example.py %}
 
 If the rating matrix is derived from other source of information (i.e., it is inferred from other
 signals), you can use the trainImplicit method to get better results.
 
 {% highlight python %}
 # Build the recommendation model using Alternating Least Squares based on implicit ratings
-model = ALS.trainImplicit(ratings, rank, numIterations, alpha = 0.01)
+model = ALS.trainImplicit(ratings, rank, numIterations, alpha=0.01)
 {% endhighlight %}
 </div>
 
 </div>
 
+In order to run the above application, follow the instructions
+provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+section of the Spark
+Quick Start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
+
 ## Tutorial
 
 The [training exercises](https://databricks-training.s3.amazonaws.com/index.html) from the Spark Summit 2014 include a hands-on tutorial for
-[personalized movie recommendation with MLlib](https://databricks-training.s3.amazonaws.com/movie-recommendation-with-mllib.html).
+[personalized movie recommendation with `spark.mllib`](https://databricks-training.s3.amazonaws.com/movie-recommendation-with-mllib.html).

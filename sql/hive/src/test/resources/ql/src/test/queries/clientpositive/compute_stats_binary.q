@@ -1,7 +1,7 @@
 create table tab_binary(a binary);
 
 -- insert some data
-LOAD DATA LOCAL INPATH "../data/files/binary.txt" INTO TABLE tab_binary;
+LOAD DATA LOCAL INPATH "../../data/files/binary.txt" INTO TABLE tab_binary;
 
 select count(*) from tab_binary;
 

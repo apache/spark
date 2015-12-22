@@ -1,0 +1,128 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#dag-viz-graph a, #dag-viz-graph a:hover {
+  text-decoration: none;
+}
+
+#dag-viz-graph .label {
+  font-weight: normal;
+  text-shadow: none;
+}
+
+#dag-viz-graph svg path {
+  stroke: #444;
+  stroke-width: 1.5px;
+}
+
+#dag-viz-graph svg g.cluster rect {
+  stroke-width: 1px;
+}
+
+#dag-viz-graph div#empty-dag-viz-message {
+  margin: 15px;
+}
+
+/* Job page specific styles */
+
+#dag-viz-graph svg.job marker#marker-arrow path {
+  fill: #333;
+  stroke-width: 0px;
+}
+
+#dag-viz-graph svg.job g.cluster rect {
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.job g.cluster.skipped rect {
+  fill: #D6D6D6;
+  stroke: #B7B7B7;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.job g.cluster.stage rect {
+  fill: #FFFFFF;
+  stroke: #FF99AC;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.job g.cluster.stage.skipped rect {
+  stroke: #ADADAD;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.job g#cross-stage-edges path {
+  fill: none;
+}
+
+#dag-viz-graph svg.job g.cluster text {
+  fill: #333;
+}
+
+#dag-viz-graph svg.job g.cluster.skipped text {
+  fill: #666;
+}
+
+#dag-viz-graph svg.job g.node circle {
+  fill: #444;
+}
+
+#dag-viz-graph svg.job g.node.cached circle {
+  fill: #A3F545;
+  stroke: #52C366;
+  stroke-width: 2px;
+}
+
+/* Stage page specific styles */
+
+#dag-viz-graph svg.stage g.cluster rect {
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.stage g.cluster.stage rect {
+  fill: #FFFFFF;
+  stroke: #FFA6B6;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.stage g.node g.label text tspan {
+  fill: #333;
+}
+
+#dag-viz-graph svg.stage g.cluster text {
+  fill: #333;
+}
+
+#dag-viz-graph svg.stage g.node rect {
+  fill: #C3EBFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
+}
+
+#dag-viz-graph svg.stage g.node.cached rect {
+  fill: #B3F5C5;
+  stroke: #52C366;
+  stroke-width: 2px;
+}
+
+.tooltip-inner {
+  white-space: pre-wrap;
+}

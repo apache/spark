@@ -1,9 +1,9 @@
 
 CREATE TABLE join_1to1_1(key1 int, key2 int, value int);
-LOAD DATA LOCAL INPATH '../data/files/in5.txt' INTO TABLE join_1to1_1;
+LOAD DATA LOCAL INPATH '../../data/files/in5.txt' INTO TABLE join_1to1_1;
 
 CREATE TABLE join_1to1_2(key1 int, key2 int, value int);
-LOAD DATA LOCAL INPATH '../data/files/in6.txt' INTO TABLE join_1to1_2;
+LOAD DATA LOCAL INPATH '../../data/files/in6.txt' INTO TABLE join_1to1_2;
 
 
 set hive.outerjoin.supports.filters=false;

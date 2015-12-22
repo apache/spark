@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.optimization
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV}
@@ -26,7 +27,6 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -61,6 +61,8 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   /**
    * Set the convergence tolerance of iterations for L-BFGS. Default 1E-4.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
+   * This value must be nonnegative. Lower convergence values are less tolerant
+   * and therefore generally cause more iterations to be run.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
     this.convergenceTol = tolerance
@@ -143,7 +145,9 @@ object LBFGS extends Logging {
    *                   one single data example)
    * @param updater - Updater function to actually perform a gradient step in a given direction.
    * @param numCorrections - The number of corrections used in the L-BFGS update.
-   * @param convergenceTol - The convergence tolerance of iterations for L-BFGS
+   * @param convergenceTol - The convergence tolerance of iterations for L-BFGS which is must be
+   *                         nonnegative. Lower values are less tolerant and therefore generally
+   *                         cause more iterations to be run.
    * @param maxNumIterations - Maximal number of iterations that L-BFGS can be run.
    * @param regParam - Regularization parameter
    *
@@ -161,7 +165,7 @@ object LBFGS extends Logging {
       regParam: Double,
       initialWeights: Vector): (Vector, Array[Double]) = {
 
-    val lossHistory = new ArrayBuffer[Double](maxNumIterations)
+    val lossHistory = mutable.ArrayBuilder.make[Double]
 
     val numExamples = data.count()
 
@@ -178,17 +182,19 @@ object LBFGS extends Logging {
      * and regVal is the regularization value computed in the previous iteration as well.
      */
     var state = states.next()
-    while(states.hasNext) {
-      lossHistory.append(state.value)
+    while (states.hasNext) {
+      lossHistory += state.value
       state = states.next()
     }
-    lossHistory.append(state.value)
+    lossHistory += state.value
     val weights = Vectors.fromBreeze(state.x)
 
-    logInfo("LBFGS.runLBFGS finished. Last 10 losses %s".format(
-      lossHistory.takeRight(10).mkString(", ")))
+    val lossHistoryArray = lossHistory.result()
 
-    (weights, lossHistory.toArray)
+    logInfo("LBFGS.runLBFGS finished. Last 10 losses %s".format(
+      lossHistoryArray.takeRight(10).mkString(", ")))
+
+    (weights, lossHistoryArray)
   }
 
   /**

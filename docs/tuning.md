@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Tuning Spark
+displayTitle: Tuning Spark
+title: Tuning
+description: Tuning and performance optimization guide for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -47,33 +49,20 @@ registration requirement, but we recommend trying it in any network-intensive ap
 Spark automatically includes Kryo serializers for the many commonly-used core Scala classes covered
 in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
 
-To register your own custom classes with Kryo, create a public class that extends
-[`org.apache.spark.serializer.KryoRegistrator`](api/scala/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
-`spark.kryo.registrator` config property to point to it, as follows:
+To register your own custom classes with Kryo, use the `registerKryoClasses` method.
 
 {% highlight scala %}
-import com.esotericsoftware.kryo.Kryo
-import org.apache.spark.serializer.KryoRegistrator
-
-class MyRegistrator extends KryoRegistrator {
-  override def registerClasses(kryo: Kryo) {
-    kryo.register(classOf[MyClass1])
-    kryo.register(classOf[MyClass2])
-  }
-}
-
 val conf = new SparkConf().setMaster(...).setAppName(...)
-conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-conf.set("spark.kryo.registrator", "mypackage.MyRegistrator")
+conf.registerKryoClasses(Array(classOf[MyClass1], classOf[MyClass2]))
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
 The [Kryo documentation](https://github.com/EsotericSoftware/kryo) describes more advanced
 registration options, such as adding custom serialization code.
 
-If your objects are large, you may also need to increase the `spark.kryoserializer.buffer.mb`
-config property. The default is 2, but this value needs to be large enough to hold the *largest*
-object you will serialize.
+If your objects are large, you may also need to increase the `spark.kryoserializer.buffer`
+[config](configuration.html#compression-and-serialization). This value needs to be large enough
+to hold the *largest* object you will serialize.
 
 Finally, if you don't register your custom classes, Kryo will still work, but it will have to store
 the full class name with each object, which is wasteful.
@@ -99,17 +88,49 @@ than the "raw" data inside their fields. This is due to several reasons:
   but also pointers (typically 8 bytes each) to the next object in the list.
 * Collections of primitive types often store them as "boxed" objects such as `java.lang.Integer`.
 
-This section will discuss how to determine the memory usage of your objects, and how to improve
-it -- either by changing your data structures, or by storing data in a serialized format.
-We will then cover tuning Spark's cache size and the Java garbage collector.
+This section will start with an overview of memory management in Spark, then discuss specific
+strategies the user can take to make more efficient use of memory in his/her application. In
+particular, we will describe how to determine the memory usage of your objects, and how to
+improve it -- either by changing your data structures, or by storing data in a serialized
+format. We will then cover tuning Spark's cache size and the Java garbage collector.
+
+## Memory Management Overview
+
+Memory usage in Spark largely falls under one of two categories: execution and storage.
+Execution memory refers to that used for computation in shuffles, joins, sorts and aggregations,
+while storage memory refers to that used for caching and propagating internal data across the
+cluster. In Spark, execution and storage share a unified region (M). When no execution memory is
+used, storage can acquire all the available memory and vice versa. Execution may evict storage
+if necessary, but only until total storage memory usage falls under a certain threshold (R).
+In other words, `R` describes a subregion within `M` where cached blocks are never evicted.
+Storage may not evict execution due to complexities in implementation.
+
+This design ensures several desirable properties. First, applications that do not use caching
+can use the entire space for execution, obviating unnecessary disk spills. Second, applications
+that do use caching can reserve a minimum storage space (R) where their data blocks are immune
+to being evicted. Lastly, this approach provides reasonable out-of-the-box performance for a
+variety of workloads without requiring user expertise of how memory is divided internally.
+
+Although there are two relevant configurations, the typical user should not need to adjust them
+as the default values are applicable to most workloads:
+
+* `spark.memory.fraction` expresses the size of `M` as a fraction of the (JVM heap space - 300MB)
+(default 0.75). The rest of the space (25%) is reserved for user data structures, internal
+metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
+large records.
+* `spark.memory.storageFraction` expresses the size of `R` as a fraction of `M` (default 0.5).
+`R` is the storage space within `M` where cached blocks immune to being evicted by execution.
+
 
 ## Determining Memory Consumption
 
-The best way to size the amount of memory consumption your dataset will require is to create an RDD, put it into cache, and look at the SparkContext logs on your driver program. The logs will tell you how much memory each partition is consuming, which you can aggregate to get the total size of the RDD. You will see messages like this:
+The best way to size the amount of memory consumption a dataset will require is to create an RDD, put it
+into cache, and look at the "Storage" page in the web UI. The page will tell you how much memory the RDD
+is occupying.
 
-    INFO BlockManagerMasterActor: Added rdd_0_1 in memory on mbk.local:50311 (size: 717.5 KB, free: 332.3 MB)
-
-This means that partition 1 of RDD 0 consumed 717.5 KB.
+To estimate the memory consumption of a particular object, use `SizeEstimator`'s `estimate` method
+This is useful for experimenting with different data layouts to trim memory usage, as well as
+determining the amount of space a broadcast variable will occupy on each executor heap.
 
 ## Tuning Data Structures
 
@@ -124,7 +145,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 3. Consider using numeric IDs or enumeration objects instead of strings for keys.
 4. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
    four bytes instead of eight. You can add these options in
-   [`spark-env.sh`](configuration.html#environment-variables-in-spark-envsh).
+   [`spark-env.sh`](configuration.html#environment-variables).
 
 ## Serialized RDD Storage
 
@@ -156,22 +177,9 @@ the space allocated to the RDD cache to mitigate this.
 **Measuring the Impact of GC**
 
 The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of
-time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to your
-`SPARK_JAVA_OPTS` environment variable. Next time your Spark job is run, you will see messages printed in the worker's logs
+time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to the Java options.  (See the [configuration guide](configuration.html#Dynamically-Loading-Spark-Properties) for info on passing Java options to Spark jobs.)  Next time your Spark job is run, you will see messages printed in the worker's logs
 each time a garbage collection occurs. Note these logs will be on your cluster's worker nodes (in the `stdout` files in
 their work directories), *not* on your driver program.
-
-**Cache Size Tuning**
-
-One important configuration parameter for GC is the amount of memory that should be used for caching RDDs.
-By default, Spark uses 60% of the configured executor memory (`spark.executor.memory`) to
-cache RDDs. This means that 40% of memory is available for any objects created during task execution.
-
-In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
-memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call
-`conf.set("spark.storage.memoryFraction", "0.5")` on your SparkConf. Combined with the use of serialized caching,
-using a smaller cache should be sufficient to mitigate most of the garbage collection problems.
-In case you are interested in further tuning the Java GC, continue reading below.
 
 **Advanced GC Tuning**
 
@@ -193,9 +201,9 @@ temporary objects created during task execution. Some steps which may be useful 
 * Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times for
   before a task completes, it means that there isn't enough memory available for executing tasks.
 
-* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of memory used for caching.
-  This can be done using the `spark.storage.memoryFraction` property. It is better to cache fewer objects than to slow
-  down task execution!
+* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of
+  memory used for caching by lowering `spark.memory.storageFraction`; it is better to cache fewer
+  objects than to slow down task execution!
 
 * If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
   can set the size of the Eden to be an over-estimate of how much memory each task will need. If the size of Eden
@@ -204,7 +212,7 @@ temporary objects created during task execution. Some steps which may be useful 
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
-  size of the block. So if we wish to have 3 or 4 tasks worth of working space, and the HDFS block size is 64 MB,
+  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 64 MB,
   we can estimate size of Eden to be `4*3*64MB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
@@ -233,7 +241,7 @@ working set of one of your tasks, such as one of the reduce tasks in `groupByKey
 Spark's shuffle operations (`sortByKey`, `groupByKey`, `reduceByKey`, `join`, etc) build a hash table
 within each task to perform the grouping, which can often be large. The simplest fix here is to
 *increase the level of parallelism*, so that each task's input set is smaller. Spark can efficiently
-support tasks as short as 200 ms, because it reuses one worker JVMs across all tasks and it has
+support tasks as short as 200 ms, because it reuses one executor JVM across many tasks and it has
 a low task launching cost, so you can safely increase the level of parallelism to more than the
 number of cores in your clusters.
 
@@ -246,6 +254,39 @@ inside of them (e.g. a static lookup table), consider turning it into a broadcas
 Spark prints the serialized size of each task on the master, so you can look at that to
 decide whether your tasks are too large; in general tasks larger than about 20 KB are probably
 worth optimizing.
+
+## Data Locality
+
+Data locality can have a major impact on the performance of Spark jobs.  If data and the code that
+operates on it are together then computation tends to be fast.  But if code and data are separated,
+one must move to the other.  Typically it is faster to ship serialized code from place to place than
+a chunk of data because code size is much smaller than data.  Spark builds its scheduling around
+this general principle of data locality.
+
+Data locality is how close data is to the code processing it.  There are several levels of
+locality based on the data's current location.  In order from closest to farthest:
+
+- `PROCESS_LOCAL` data is in the same JVM as the running code.  This is the best locality
+  possible
+- `NODE_LOCAL` data is on the same node.  Examples might be in HDFS on the same node, or in
+  another executor on the same node.  This is a little slower than `PROCESS_LOCAL` because the data
+  has to travel between processes
+- `NO_PREF` data is accessed equally quickly from anywhere and has no locality preference
+- `RACK_LOCAL` data is on the same rack of servers.  Data is on a different server on the same rack
+  so needs to be sent over the network, typically through a single switch
+- `ANY` data is elsewhere on the network and not in the same rack
+
+Spark prefers to schedule all tasks at the best locality level, but this is not always possible.  In
+situations where there is no unprocessed data on any idle executor, Spark switches to lower locality
+levels. There are two options: a) wait until a busy CPU frees up to start a task on data on the same
+server, or b) immediately start a new task in a farther away place that requires moving data there.
+
+What Spark typically does is wait a bit in the hopes that a busy CPU frees up.  Once that timeout
+expires, it starts moving the data from far away to the free CPU.  The wait timeout for fallback
+between each level can be configured individually or all together in one parameter; see the
+`spark.locality` parameters on the [configuration page](configuration.html#scheduling) for details.
+You should increase these settings if your tasks are long and see poor locality, but the default
+usually works well.
 
 # Summary
 

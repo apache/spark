@@ -28,11 +28,12 @@ try:
     import jira.client
 except ImportError:
     print "This tool requires the jira-python library"
-    print "Install using 'sudo pip install jira-python'"
+    print "Install using 'sudo pip install jira'"
     sys.exit(-1)
 
 # User facing configs
 GITHUB_API_BASE = os.environ.get("GITHUB_API_BASE", "https://api.github.com/repos/apache/spark")
+JIRA_PROJECT_NAME = os.environ.get("JIRA_PROJECT_NAME", "SPARK")
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "apachespark")
 JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "XXX")
@@ -68,7 +69,7 @@ def get_jira_prs():
 	page_json = get_json(page)
 
 	for pull in page_json:
-	    jiras = re.findall("SPARK-[0-9]{4,5}", pull['title'])
+	    jiras = re.findall(JIRA_PROJECT_NAME + "-[0-9]{4,5}", pull['title'])
 	    for jira in jiras:
 		result = result + [(jira,  pull)]
 

@@ -17,31 +17,25 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
+import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
-
-
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-
-
-object SparkPlan {
-  protected[sql] val currentContext = new ThreadLocal[SQLContext]()
-}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
+import org.apache.spark.sql.types.DataType
 
 /**
- * :: DeveloperApi ::
+ * The base class for physical operators.
  */
-@DeveloperApi
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
-  self: Product =>
 
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need
@@ -49,125 +43,255 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] val sqlContext = SparkPlan.currentContext.get()
+  protected[spark] final val sqlContext = SQLContext.getActive().getOrElse(null)
 
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
-  // the value of codegenEnabled will be set by the desserializer after the constructor has run.
-  val codegenEnabled: Boolean = if (sqlContext != null) {
-    sqlContext.codegenEnabled
+  // the value of subexpressionEliminationEnabled will be set by the desserializer after the
+  // constructor has run.
+  val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
+    sqlContext.conf.subexpressionEliminationEnabled
   } else {
     false
   }
 
+  /**
+   * Whether the "prepare" method is called.
+   */
+  private val prepareCalled = new AtomicBoolean(false)
+
   /** Overridden make copy also propogates sqlContext to copied plan. */
-  override def makeCopy(newArgs: Array[AnyRef]): this.type = {
-    SparkPlan.currentContext.set(sqlContext)
+  override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
+    SQLContext.setActive(sqlContext)
     super.makeCopy(newArgs)
   }
+
+  /**
+   * Return all metadata that describes more details of this SparkPlan.
+   */
+  private[sql] def metadata: Map[String, String] = Map.empty
+
+  /**
+   * Return all metrics containing metrics of this SparkPlan.
+   */
+  private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
+
+  /**
+   * Return a LongSQLMetric according to the name.
+   */
+  private[sql] def longMetric(name: String): LongSQLMetric =
+    metrics(name).asInstanceOf[LongSQLMetric]
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
+
   /** Specifies any partition requirements on the input data for this operator. */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
+  /** Specifies how data is ordered in each partition. */
+  def outputOrdering: Seq[SortOrder] = Nil
+
+  /** Specifies sort order for each partition requirements on the input data for this operator. */
+  def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
+
+  /** Specifies whether this operator outputs UnsafeRows */
+  def outputsUnsafeRows: Boolean = false
+
+  /** Specifies whether this operator is capable of processing UnsafeRows */
+  def canProcessUnsafeRows: Boolean = false
+
   /**
-   * Runs this query returning the result as an RDD.
+   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
+   * that are not UnsafeRows).
    */
-  def execute(): RDD[Row]
+  def canProcessSafeRows: Boolean = true
+
+  /**
+   * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
+   * after adding query plan information to created RDDs for visualization.
+   * Concrete implementations of SparkPlan should override doExecute instead.
+   */
+  final def execute(): RDD[InternalRow] = {
+    if (children.nonEmpty) {
+      val hasUnsafeInputs = children.exists(_.outputsUnsafeRows)
+      val hasSafeInputs = children.exists(!_.outputsUnsafeRows)
+      assert(!(hasSafeInputs && hasUnsafeInputs),
+        "Child operators should output rows in the same format")
+      assert(canProcessSafeRows || canProcessUnsafeRows,
+        "Operator must be able to process at least one row format")
+      assert(!hasSafeInputs || canProcessSafeRows,
+        "Operator will receive safe rows as input but cannot process safe rows")
+      assert(!hasUnsafeInputs || canProcessUnsafeRows,
+        "Operator will receive unsafe rows as input but cannot process unsafe rows")
+    }
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+      prepare()
+      doExecute()
+    }
+  }
+
+  /**
+   * Prepare a SparkPlan for execution. It's idempotent.
+   */
+  final def prepare(): Unit = {
+    if (prepareCalled.compareAndSet(false, true)) {
+      doPrepare()
+      children.foreach(_.prepare())
+    }
+  }
+
+  /**
+   * Overridden by concrete implementations of SparkPlan. It is guaranteed to run before any
+   * `execute` of SparkPlan. This is helpful if we want to set up some state before executing the
+   * query, e.g., `BroadcastHashJoin` uses it to broadcast asynchronously.
+   *
+   * Note: the prepare method has already walked down the tree, so the implementation doesn't need
+   * to call children's prepare methods.
+   */
+  protected def doPrepare(): Unit = {}
+
+  /**
+   * Overridden by concrete implementations of SparkPlan.
+   * Produces the result of the query as an RDD[InternalRow]
+   */
+  protected def doExecute(): RDD[InternalRow]
 
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
-
-  protected def newProjection(
-      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
-    log.debug(
-      s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled) {
-      GenerateProjection(expressions, inputSchema)
-    } else {
-      new InterpretedProjection(expressions, inputSchema)
-    }
+  def executeCollect(): Array[InternalRow] = {
+    execute().map(_.copy()).collect()
   }
+
+  /**
+   * Runs this query returning the result as an array, using external Row format.
+   */
+  def executeCollectPublic(): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    executeCollect().map(converter(_).asInstanceOf[Row])
+  }
+
+  /**
+   * Runs this query returning the first `n` rows as an array.
+   *
+   * This is modeled after RDD.take but never runs any job locally on the driver.
+   */
+  def executeTake(n: Int): Array[InternalRow] = {
+    if (n == 0) {
+      return new Array[InternalRow](0)
+    }
+
+    val childRDD = execute().map(_.copy())
+
+    val buf = new ArrayBuffer[InternalRow]
+    val totalParts = childRDD.partitions.length
+    var partsScanned = 0
+    while (buf.size < n && partsScanned < totalParts) {
+      // The number of partitions to try in this iteration. It is ok for this number to be
+      // greater than totalParts because we actually cap it at totalParts in runJob.
+      var numPartsToTry = 1
+      if (partsScanned > 0) {
+        // If we didn't find any rows after the first iteration, just try all partitions next.
+        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
+        // by 50%.
+        if (buf.size == 0) {
+          numPartsToTry = totalParts - 1
+        } else {
+          numPartsToTry = (1.5 * n * partsScanned / buf.size).toInt
+        }
+      }
+      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
+
+      val left = n - buf.size
+      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+      val sc = sqlContext.sparkContext
+      val res =
+        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
+
+      res.foreach(buf ++= _.take(n - buf.size))
+      partsScanned += numPartsToTry
+    }
+
+    buf.toArray
+  }
+
+  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
 
   protected def newMutableProjection(
-      expressions: Seq[Expression],
-      inputSchema: Seq[Attribute]): () => MutableProjection = {
-    log.debug(
-      s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if(codegenEnabled) {
-      GenerateMutableProjection(expressions, inputSchema)
-    } else {
-      () => new InterpretedMutableProjection(expressions, inputSchema)
+      expressions: Seq[Expression], inputSchema: Seq[Attribute]): () => MutableProjection = {
+    log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
+    try {
+      GenerateMutableProjection.generate(expressions, inputSchema)
+    } catch {
+      case e: Exception =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate mutable projection, fallback to interpreted", e)
+          () => new InterpretedMutableProjection(expressions, inputSchema)
+        }
     }
   }
-
 
   protected def newPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
-    if (codegenEnabled) {
-      GeneratePredicate(expression, inputSchema)
-    } else {
-      InterpretedPredicate(expression, inputSchema)
+      expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+    try {
+      GeneratePredicate.generate(expression, inputSchema)
+    } catch {
+      case e: Exception =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate predicate, fallback to interpreted", e)
+          InterpretedPredicate.create(expression, inputSchema)
+        }
     }
   }
 
-  protected def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
-    if (codegenEnabled) {
-      GenerateOrdering(order, inputSchema)
-    } else {
-      new RowOrdering(order, inputSchema)
+  protected def newOrdering(
+      order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
+    try {
+      GenerateOrdering.generate(order, inputSchema)
+    } catch {
+      case e: Exception =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate ordering, fallback to interpreted", e)
+          new InterpretedOrdering(order, inputSchema)
+        }
     }
   }
-}
 
-/**
- * :: DeveloperApi ::
- * Allows already planned SparkQueries to be linked into logical query plans.
- *
- * Note that in general it is not valid to use this class to link multiple copies of the same
- * physical operator into the same query plan as this violates the uniqueness of expression ids.
- * Special handling exists for ExistingRdd as these are already leaf operators and thus we can just
- * replace the output attributes with new copies of themselves without breaking any attribute
- * linking.
- */
-@DeveloperApi
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQLContext)
-  extends LogicalPlan with MultiInstanceRelation {
-
-  def output = alreadyPlanned.output
-  override def children = Nil
-
-  override final def newInstance(): this.type = {
-    SparkLogicalPlan(
-      alreadyPlanned match {
-        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
-        case _ => sys.error("Multiple instance of the same relation detected.")
-      })(sqlContext).asInstanceOf[this.type]
+  /**
+   * Creates a row ordering for the given schema, in natural ascending order.
+   */
+  protected def newNaturalAscendingOrdering(dataTypes: Seq[DataType]): Ordering[InternalRow] = {
+    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
+      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }
+    newOrdering(order, Seq.empty)
   }
-
-  @transient override lazy val statistics = Statistics(
-    // TODO: Instead of returning a default value here, find a way to return a meaningful size
-    // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.defaultSizeInBytes)
-  )
-
 }
 
-private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
-  self: Product =>
+private[sql] trait LeafNode extends SparkPlan {
+  override def children: Seq[SparkPlan] = Nil
 }
 
-private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
-  self: Product =>
+private[sql] trait UnaryNode extends SparkPlan {
+  def child: SparkPlan
+
+  override def children: Seq[SparkPlan] = child :: Nil
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private[sql] trait BinaryNode extends SparkPlan with trees.BinaryNode[SparkPlan] {
-  self: Product =>
+private[sql] trait BinaryNode extends SparkPlan {
+  def left: SparkPlan
+  def right: SparkPlan
+
+  override def children: Seq[SparkPlan] = Seq(left, right)
 }

@@ -17,15 +17,19 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import java.util.Arrays
+
 import scala.util.Random
 
+import breeze.numerics.abs
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, svd => brzSvd}
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.random.RandomRDDs
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 
-class RowMatrixSuite extends FunSuite with LocalSparkContext {
+class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -47,6 +51,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     (0.0, 1.0, 0.0),
     (math.sqrt(2.0) / 2.0, 0.0, math.sqrt(2.0) / 2.0),
     (math.sqrt(2.0) / 2.0, 0.0, - math.sqrt(2.0) / 2.0))
+  val explainedVariance = BDV(4.0 / 7.0, 3.0 / 7.0, 0.0)
 
   var denseMat: RowMatrix = _
   var sparseMat: RowMatrix = _
@@ -95,6 +100,40 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("similar columns") {
+    val colMags = Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94))
+    val expected = BDM(
+      (0.0, 54.0, 72.0),
+      (0.0, 0.0, 78.0),
+      (0.0, 0.0, 0.0))
+
+    for (i <- 0 until n; j <- 0 until n) {
+      expected(i, j) /= (colMags(i) * colMags(j))
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.columnSimilarities(0.11).toBreeze()
+      for (i <- 0 until n; j <- 0 until n) {
+        if (expected(i, j) > 0) {
+          val actual = expected(i, j)
+          val estimate = G(i, j)
+          assert(math.abs(actual - estimate) / actual < 0.2,
+            s"Similarities not close enough: $actual vs $estimate")
+        }
+      }
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.columnSimilarities()
+      assert(closeToZero(G.toBreeze() - expected))
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.columnSimilaritiesDIMSUM(colMags.toArray, 150.0)
+      assert(closeToZero(G.toBreeze() - expected))
+    }
+  }
+
   test("svd of a full-rank matrix") {
     for (mat <- Seq(denseMat, sparseMat)) {
       for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
@@ -137,6 +176,14 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("validate k in svd") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      intercept[IllegalArgumentException] {
+        mat.computeSVD(-1)
+      }
+    }
+  }
+
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
   }
@@ -157,10 +204,15 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
 
   test("pca") {
     for (mat <- Seq(denseMat, sparseMat); k <- 1 to n) {
-      val pc = denseMat.computePrincipalComponents(k)
+      val (pc, expVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
       assert(pc.numRows === n)
       assert(pc.numCols === k)
       assertColumnEqualUpToSign(pc.toBreeze.asInstanceOf[BDM[Double]], principalComponents, k)
+      assert(
+        closeToZero(BDV(expVariance.toArray) -
+        BDV(Arrays.copyOfRange(explainedVariance.data, 0, k))))
+      // Check that this method returns the same answer
+      assert(pc === mat.computePrincipalComponents(k))
     }
   }
 
@@ -190,12 +242,48 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         assert(summary.numNonzeros === Vectors.dense(3.0, 3.0, 4.0), "nnz mismatch")
         assert(summary.max === Vectors.dense(9.0, 7.0, 8.0), "max mismatch")
         assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
+        assert(summary.normL2 === Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94)),
+          "magnitude mismatch.")
+        assert(summary.normL1 === Vectors.dense(18.0, 12.0, 16.0), "L1 norm mismatch")
       }
+    }
+  }
+
+  test("QR Decomposition") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val result = mat.tallSkinnyQR(true)
+      val expected = breeze.linalg.qr.reduced(mat.toBreeze())
+      val calcQ = result.Q
+      val calcR = result.R
+      assert(closeToZero(abs(expected.q) - abs(calcQ.toBreeze())))
+      assert(closeToZero(abs(expected.r) - abs(calcR.toBreeze.asInstanceOf[BDM[Double]])))
+      assert(closeToZero(calcQ.multiply(calcR).toBreeze - mat.toBreeze()))
+      // Decomposition without computing Q
+      val rOnly = mat.tallSkinnyQR(computeQ = false)
+      assert(rOnly.Q == null)
+      assert(closeToZero(abs(expected.r) - abs(rOnly.R.toBreeze.asInstanceOf[BDM[Double]])))
+    }
+  }
+
+  test("compute covariance") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val result = mat.computeCovariance()
+      val expected = breeze.linalg.cov(mat.toBreeze())
+      assert(closeToZero(abs(expected) - abs(result.toBreeze.asInstanceOf[BDM[Double]])))
+    }
+  }
+
+  test("covariance matrix is symmetric (SPARK-10875)") {
+    val rdd = RandomRDDs.normalVectorRDD(sc, 100, 10, 0, 0)
+    val matrix = new RowMatrix(rdd)
+    val cov = matrix.computeCovariance()
+    for (i <- 0 until cov.numRows; j <- 0 until i) {
+      assert(cov(i, j) === cov(j, i))
     }
   }
 }
 
-class RowMatrixClusterSuite extends FunSuite with LocalClusterSparkContext {
+class RowMatrixClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   var mat: RowMatrix = _
 
