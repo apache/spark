@@ -23,6 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
 import org.apache.spark.sql.DataFrame
+
 /**
  * Evaluator for regression.
  *
@@ -34,10 +35,6 @@ class RegressionMetrics @Since("1.2.0") (
     predictionAndObservations: RDD[(Double, Double)], regThroughOrigin: Boolean)
     extends Logging {
 
-  /**
-   * @param predictionAndObservations an RDD with two double columns:
-   *                                  prediction and observation
-   */
   def this(predictionAndObservations: RDD[(Double, Double)]) =
     this(predictionAndObservations, false)
 
