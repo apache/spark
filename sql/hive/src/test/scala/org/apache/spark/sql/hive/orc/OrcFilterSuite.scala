@@ -31,9 +31,7 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRe
  * A test suite that tests ORC filter API based filter pushdown optimization.
  */
 class OrcFilterSuite extends QueryTest with OrcTest {
-  private def checkFilterPredicate(
-      df: DataFrame,
-      predicate: Predicate): SearchArgument = {
+  private def checkFilterPredicate(df: DataFrame, predicate: Predicate): SearchArgument = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
       .select(output.map(e => Column(e)): _*)
