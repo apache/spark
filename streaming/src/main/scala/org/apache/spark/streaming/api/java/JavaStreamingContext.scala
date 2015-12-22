@@ -695,9 +695,9 @@ object JavaStreamingContext {
    *
    * @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
    */
-  @deprecated("use getOrCreate without JavaStreamingContextFactor", "1.4.0")
+  @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
       checkpointPath: String,
       factory: JavaStreamingContextFactory
@@ -718,7 +718,7 @@ object JavaStreamingContext {
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
    * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
    *                       file system
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
    */
   @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
@@ -744,7 +744,7 @@ object JavaStreamingContext {
    *                       file system
    * @param createOnError  Whether to create a new JavaStreamingContext if there is an
    *                       error in reading checkpoint data.
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
    */
   @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
