@@ -46,7 +46,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaStreamingContextFactory;
 
 /**
- * Use this singleton to get or register `Broadcast`.
+ * Use this singleton to get or register a Broadcast variable.
  */
 class JavaWordBlacklist {
 
@@ -54,7 +54,7 @@ class JavaWordBlacklist {
 
   public static Broadcast<List<String>> getInstance(JavaSparkContext jsc) {
     if (instance == null) {
-      synchronized (WordBlacklist.class) {
+      synchronized (JavaWordBlacklist.class) {
         if (instance == null) {
           List<String> wordBlacklist = Arrays.asList("a", "b", "c");
           instance = jsc.broadcast(wordBlacklist);
@@ -66,7 +66,7 @@ class JavaWordBlacklist {
 }
 
 /**
- * Use this singleton to get or register `Accumulator`.
+ * Use this singleton to get or register an Accumulator.
  */
 class JavaDroppedWordsCounter {
 
@@ -74,7 +74,7 @@ class JavaDroppedWordsCounter {
 
   public static Accumulator<Integer> getInstance(JavaSparkContext jsc) {
     if (instance == null) {
-      synchronized (DroppedWordsCounter.class) {
+      synchronized (JavaDroppedWordsCounter.class) {
         if (instance == null) {
           instance = jsc.accumulator(0, "WordsInBlacklistCounter");
         }

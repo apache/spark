@@ -44,14 +44,14 @@ from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 
 
-# Get or register `Broadcast`
+# Get or register a Broadcast variable
 def getWordBlacklist(sparkContext):
     if ('wordBlacklist' not in globals()):
         globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
     return globals()['wordBlacklist']
 
 
-# Get or register `Accumulator`
+# Get or register an Accumulator
 def getDroppedWordsCounter(sparkContext):
     if ('droppedWordsCounter' not in globals()):
         globals()['droppedWordsCounter'] = sparkContext.accumulator(0)

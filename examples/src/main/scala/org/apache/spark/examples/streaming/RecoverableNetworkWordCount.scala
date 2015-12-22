@@ -30,7 +30,7 @@ import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
 import org.apache.spark.util.IntParam
 
 /**
- * Use this singleton to get or register `Broadcast`.
+ * Use this singleton to get or register a Broadcast variable.
  */
 object WordBlacklist {
 
@@ -50,7 +50,7 @@ object WordBlacklist {
 }
 
 /**
- * Use this singleton to get or register `Accumulator`.
+ * Use this singleton to get or register an Accumulator.
  */
 object DroppedWordsCounter {
 

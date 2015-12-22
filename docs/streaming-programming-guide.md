@@ -1415,9 +1415,9 @@ Note that the connections in the pool should be lazily created on demand and tim
 
 ***
 
-## Accumulator and Broadcast
+## Accumulators and Broadcast Variables
 
-Accumulator and Broadcast cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use Accumulator or Broadcast as well, you'll have to create lazily instantiated singleton instances for Accumulator and Broadcast so that they can be restarted on driver failures. This is shown in the following example.
+[Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use [Accumulators](programming-guide.html#accumulators) or [Broadcast variables](programming-guide.html#broadcast-variables) as well, you'll have to create lazily instantiated singleton instances for [Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) so that they can be re-instantiated after the driver restarts on failure. This is shown in the following example.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1464,17 +1464,13 @@ wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
   // Use blacklist to drop words and use droppedWordsCounter to count them
   val counts = rdd.filter { case (word, count) =>
     if (blacklist.value.contains(word)) {
-      droppedWordsCounter += 1
+      droppedWordsCounter += count
       false
     } else {
       true
     }
-  }.collect().mkString("[", ", ", "]")
+  }.collect()
   val output = "Counts at time " + time + " " + counts
-  println(output)
-  println("Dropped " + droppedWordsCounter.value + " word(s) totally")
-  println("Appending to " + outputFile.getAbsolutePath)
-  Files.append(output + "\n", outputFile, Charset.defaultCharset())
 })
 
 {% endhighlight %}
@@ -1490,7 +1486,7 @@ class JavaWordBlacklist {
 
   public static Broadcast<List<String>> getInstance(JavaSparkContext jsc) {
     if (instance == null) {
-      synchronized (WordBlacklist.class) {
+      synchronized (JavaWordBlacklist.class) {
         if (instance == null) {
           List<String> wordBlacklist = Arrays.asList("a", "b", "c");
           instance = jsc.broadcast(wordBlacklist);
@@ -1507,7 +1503,7 @@ class JavaDroppedWordsCounter {
 
   public static Accumulator<Integer> getInstance(JavaSparkContext jsc) {
     if (instance == null) {
-      synchronized (DroppedWordsCounter.class) {
+      synchronized (JavaDroppedWordsCounter.class) {
         if (instance == null) {
           instance = jsc.accumulator(0, "WordsInBlacklistCounter");
         }
@@ -1537,11 +1533,6 @@ wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() 
       }
     }).collect().toString();
     String output = "Counts at time " + time + " " + counts;
-    System.out.println(output);
-    System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
-    System.out.println("Appending to " + outputFile.getAbsolutePath());
-    Files.append(output + "\n", outputFile, Charset.defaultCharset());
-    return null;
   }
 }
 
@@ -1577,11 +1568,6 @@ def echo(time, rdd):
             True
 
     counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
-    print(counts)
-    print("Dropped %d word(s) totally" % droppedWordsCounter.value)
-    print("Appending to " + os.path.abspath(outputPath))
-    with open(outputPath, 'a') as f:
-        f.write(counts + "\n")
 
 wordCounts.foreachRDD(echo)
 
