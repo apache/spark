@@ -32,6 +32,9 @@ import org.apache.spark.sql.types.{LongType, DataType}
  *
  * Since this expression is stateful, it cannot be a case object.
  */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns monotonically increasing 64-bit integers",
+  extended = "> SELECT _FUNC_();\n 0")
 private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
 
   /**
