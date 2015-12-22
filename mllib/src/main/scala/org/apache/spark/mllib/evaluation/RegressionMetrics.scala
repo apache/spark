@@ -111,7 +111,7 @@ class RegressionMetrics @Since("1.2.0") (
    * Returns R^2^, the unadjusted coefficient of determination.
    * @see [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    * In case of regression through the origin, the definition of R^2^ is to be modified.
-   * @see J. G. Eisenhauer, Regression through the Origin. Teaching Statistics 25, 76–80 (2003)
+   * @see J. G. Eisenhauer, Regression through the Origin. Teaching Statistics 25, 76-80 (2003)
    * [[https://online.stat.psu.edu/~ajw13/stat501/SpecialTopics/Reg_thru_origin.pdf]]
    */
   @Since("1.2.0")
