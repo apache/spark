@@ -102,17 +102,22 @@ private[spark] object SQLConf {
       }, _.toString, doc, isPublic)
 
     def intMemConf(
-                 key: String,
-                 defaultValue: Option[Int] = None,
-                 doc: String = "",
-                 isPublic: Boolean = true): SQLConfEntry[Int] =
+                    key: String,
+                    defaultValue: Option[Int] = None,
+                    doc: String = "",
+                    isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
         try {
-          if ((Utils.byteStringAsBytes(v) <= Int.MaxValue.toLong) &&
-            (Utils.byteStringAsBytes(v) >= Int.MinValue.toLong))
+          if (v.eq("-1")) {
+            v.toInt
+          }
+          else if ((Utils.byteStringAsBytes(v) <= Int.MaxValue.toLong) &&
+            (Utils.byteStringAsBytes(v) >= Int.MinValue.toLong)) {
             Utils.byteStringAsBytes(v).toInt
-          else
-            throw new IllegalArgumentException(s"$v should be int, but out of bounds")
+          }
+          else {
+            throw new IllegalArgumentException(s"$v is out of bounds")
+          }
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be int, but was $v")
