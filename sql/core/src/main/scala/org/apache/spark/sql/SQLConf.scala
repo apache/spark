@@ -107,21 +107,25 @@ private[spark] object SQLConf {
                     doc: String = "",
                     isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
+        var isNegative: Boolean = false
         try {
-          if (v.eq("-1")) {
-            v.toInt
-          }
-          else if ((Utils.byteStringAsBytes(v) <= Int.MaxValue.toLong) &&
+          isNegative = (v.toInt < 0)
+        } catch {
+          case _: Throwable =>
+        }
+        if (!isNegative) {
+          if ((Utils.byteStringAsBytes(v) <= Int.MaxValue.toLong) &&
             (Utils.byteStringAsBytes(v) >= Int.MinValue.toLong)) {
             Utils.byteStringAsBytes(v).toInt
           }
           else {
             throw new IllegalArgumentException(s"$v is out of bounds")
           }
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalArgumentException(s"$key should be int, but was $v")
         }
+        else {
+          v.toInt
+        }
+
       }, _.toString, doc, isPublic)
 
     def longConf(
