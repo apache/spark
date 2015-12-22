@@ -473,14 +473,11 @@ object OptimizeIn extends Rule[LogicalPlan] {
 object CNFNormalization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case or @ Or(left, right) => (left, right) match {
-        // reverse Or with its And child to eliminate (And under Or) occurrence
-        case (And(innerLhs, innerRhs), rhs) =>
-          And(Or(innerLhs, rhs), Or(innerRhs, rhs))
-        case (lhs, And(innerLhs, innerRhs)) =>
-          And(Or(lhs, innerLhs), Or(lhs, innerRhs))
-        case _ => or
-      }
+      // reverse Or with its And child to eliminate (And under Or) occurrence
+      case Or(And(innerLhs, innerRhs), rhs) =>
+        And(Or(innerLhs, rhs), Or(innerRhs, rhs))
+      case Or(lhs, And(innerLhs, innerRhs)) =>
+        And(Or(lhs, innerLhs), Or(lhs, innerRhs))
     }
   }
 }
