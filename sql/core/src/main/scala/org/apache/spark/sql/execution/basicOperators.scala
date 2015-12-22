@@ -310,7 +310,7 @@ case class MapPartitions[T, U](
 
   override def canProcessSafeRows: Boolean = true
   override def canProcessUnsafeRows: Boolean = true
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def outputsUnsafeRows: Boolean = true
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -365,7 +365,7 @@ case class MapGroups[K, T, U](
 
   override def canProcessSafeRows: Boolean = true
   override def canProcessUnsafeRows: Boolean = true
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def outputsUnsafeRows: Boolean = true
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(groupingAttributes) :: Nil
@@ -408,7 +408,7 @@ case class CoGroup[Key, Left, Right, Result](
 
   override def canProcessSafeRows: Boolean = true
   override def canProcessUnsafeRows: Boolean = true
-  override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
+  override def outputsUnsafeRows: Boolean = true
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
