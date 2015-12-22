@@ -43,6 +43,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
+
   test("SPARK-12404: Datatype Helper Serializablity") {
     val ds = sparkContext.parallelize((
           new Timestamp(0),
@@ -316,6 +317,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1").keyAs[String]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
+
     checkAnswer(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
