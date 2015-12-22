@@ -176,6 +176,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.select("key").collect().toSeq)
   }
 
+  test("selectExpr with udtf") {
+    val df = Seq((Map("1" -> 1), 1)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("explode(a)"),
+      Row("1", 1) :: Nil)
+  }
+
   test("filterExpr") {
     val res = testData.collect().filter(_.getInt(0) > 90).toSeq
     checkAnswer(testData.filter("key > 90"), res)
@@ -581,6 +588,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                            ||[1, 2, 3]|[1, 2, 3]|
                            ||[2, 3, 4]|[2, 3, 4]|
                            |+---------+---------+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
+  test("showString: binary") {
+    val df = Seq(
+      ("12".getBytes, "ABC.".getBytes),
+      ("34".getBytes, "12346".getBytes)
+    ).toDF()
+    val expectedAnswer = """+-------+----------------+
+                           ||     _1|              _2|
+                           |+-------+----------------+
+                           ||[31 32]|   [41 42 43 2E]|
+                           ||[33 34]|[31 32 33 34 36]|
+                           |+-------+----------------+
                            |""".stripMargin
     assert(df.showString(10) === expectedAnswer)
   }

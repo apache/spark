@@ -439,9 +439,14 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
    */
   public static <T extends Comparable<T>> void assertOrderInvariantEquals(
     List<List<T>> expected, List<List<T>> actual) {
-    expected.forEach((List<T> list) -> Collections.sort(list));
-    actual.forEach((List<T> list) -> Collections.sort(list));
-    Assert.assertEquals(expected, actual);
+    expected.forEach(list -> Collections.sort(list));
+    List<List<T>> sortedActual = new ArrayList<>();
+    actual.forEach(list -> {
+        List<T> sortedList = new ArrayList<>(list);
+        Collections.sort(sortedList);
+        sortedActual.add(sortedList);
+    });
+    Assert.assertEquals(expected, sortedActual);
   }
 
   @Test

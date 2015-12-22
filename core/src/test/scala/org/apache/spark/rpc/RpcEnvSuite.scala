@@ -484,10 +484,16 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("network events") {
+  /**
+   * Setup an [[RpcEndpoint]] to collect all network events.
+   * @return the [[RpcEndpointRef]] and an `Seq` that contains network events.
+   */
+  private def setupNetworkEndpoint(
+      _env: RpcEnv,
+      name: String): (RpcEndpointRef, Seq[(Any, Any)]) = {
     val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
-    env.setupEndpoint("network-events", new ThreadSafeRpcEndpoint {
-      override val rpcEnv = env
+    val ref = _env.setupEndpoint("network-events-non-client", new ThreadSafeRpcEndpoint {
+      override val rpcEnv = _env
 
       override def receive: PartialFunction[Any, Unit] = {
         case "hello" =>
@@ -507,83 +513,97 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
 
     })
+    (ref, events)
+  }
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
-    // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(
-      "local", env.address, "network-events")
-    val remoteAddress = anotherEnv.address
-    rpcEndpointRef.send("hello")
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      // anotherEnv is connected in client mode, so the remote address may be unknown depending on
-      // the implementation. Account for that when doing checks.
-      if (remoteAddress != null) {
-        assert(events === List(("onConnected", remoteAddress)))
-      } else {
-        assert(events.size === 1)
-        assert(events(0)._1 === "onConnected")
-      }
-    }
+  test("network events in sever RpcEnv when another RpcEnv is in server mode") {
+    val serverEnv1 = createRpcEnv(new SparkConf(), "server1", 0, clientMode = false)
+    val serverEnv2 = createRpcEnv(new SparkConf(), "server2", 0, clientMode = false)
+    val (_, events) = setupNetworkEndpoint(serverEnv1, "network-events")
+    val (serverRef2, _) = setupNetworkEndpoint(serverEnv2, "network-events")
+    try {
+      val serverRefInServer2 =
+        serverEnv1.setupEndpointRef("server2", serverRef2.address, serverRef2.name)
+      // Send a message to set up the connection
+      serverRefInServer2.send("hello")
 
-    anotherEnv.shutdown()
-    anotherEnv.awaitTermination()
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      // Account for anotherEnv not having an address due to running in client mode.
-      if (remoteAddress != null) {
-        assert(events === List(
-          ("onConnected", remoteAddress),
-          ("onNetworkError", remoteAddress),
-          ("onDisconnected", remoteAddress)) ||
-          events === List(
-          ("onConnected", remoteAddress),
-          ("onDisconnected", remoteAddress)))
-      } else {
-        val eventNames = events.map(_._1)
-        assert(eventNames === List("onConnected", "onNetworkError", "onDisconnected") ||
-          eventNames === List("onConnected", "onDisconnected"))
+      eventually(timeout(5 seconds), interval(5 millis)) {
+        assert(events.contains(("onConnected", serverEnv2.address)))
       }
+
+      serverEnv2.shutdown()
+      serverEnv2.awaitTermination()
+
+      eventually(timeout(5 seconds), interval(5 millis)) {
+        assert(events.contains(("onConnected", serverEnv2.address)))
+        assert(events.contains(("onDisconnected", serverEnv2.address)))
+      }
+    } finally {
+      serverEnv1.shutdown()
+      serverEnv2.shutdown()
+      serverEnv1.awaitTermination()
+      serverEnv2.awaitTermination()
     }
   }
 
-  test("network events between non-client-mode RpcEnvs") {
-    val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
-    env.setupEndpoint("network-events-non-client", new ThreadSafeRpcEndpoint {
-      override val rpcEnv = env
+  test("network events in sever RpcEnv when another RpcEnv is in client mode") {
+    val serverEnv = createRpcEnv(new SparkConf(), "server", 0, clientMode = false)
+    val (serverRef, events) = setupNetworkEndpoint(serverEnv, "network-events")
+    val clientEnv = createRpcEnv(new SparkConf(), "client", 0, clientMode = true)
+    try {
+      val serverRefInClient =
+        clientEnv.setupEndpointRef("server", serverRef.address, serverRef.name)
+      // Send a message to set up the connection
+      serverRefInClient.send("hello")
 
-      override def receive: PartialFunction[Any, Unit] = {
-        case "hello" =>
-        case m => events += "receive" -> m
+      eventually(timeout(5 seconds), interval(5 millis)) {
+        // We don't know the exact client address but at least we can verify the message type
+        assert(events.map(_._1).contains("onConnected"))
       }
 
-      override def onConnected(remoteAddress: RpcAddress): Unit = {
-        events += "onConnected" -> remoteAddress
+      clientEnv.shutdown()
+      clientEnv.awaitTermination()
+
+      eventually(timeout(5 seconds), interval(5 millis)) {
+        // We don't know the exact client address but at least we can verify the message type
+        assert(events.map(_._1).contains("onConnected"))
+        assert(events.map(_._1).contains("onDisconnected"))
       }
-
-      override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-        events += "onDisconnected" -> remoteAddress
-      }
-
-      override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
-        events += "onNetworkError" -> remoteAddress
-      }
-
-    })
-
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = false)
-    // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(
-      "local", env.address, "network-events-non-client")
-    val remoteAddress = anotherEnv.address
-    rpcEndpointRef.send("hello")
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(events.contains(("onConnected", remoteAddress)))
+    } finally {
+      clientEnv.shutdown()
+      serverEnv.shutdown()
+      clientEnv.awaitTermination()
+      serverEnv.awaitTermination()
     }
+  }
 
-    anotherEnv.shutdown()
-    anotherEnv.awaitTermination()
-    eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(events.contains(("onConnected", remoteAddress)))
-      assert(events.contains(("onDisconnected", remoteAddress)))
+  test("network events in client RpcEnv when another RpcEnv is in server mode") {
+    val clientEnv = createRpcEnv(new SparkConf(), "client", 0, clientMode = true)
+    val serverEnv = createRpcEnv(new SparkConf(), "server", 0, clientMode = false)
+    val (_, events) = setupNetworkEndpoint(clientEnv, "network-events")
+    val (serverRef, _) = setupNetworkEndpoint(serverEnv, "network-events")
+    try {
+      val serverRefInClient =
+        clientEnv.setupEndpointRef("server", serverRef.address, serverRef.name)
+      // Send a message to set up the connection
+      serverRefInClient.send("hello")
+
+      eventually(timeout(5 seconds), interval(5 millis)) {
+        assert(events.contains(("onConnected", serverEnv.address)))
+      }
+
+      serverEnv.shutdown()
+      serverEnv.awaitTermination()
+
+      eventually(timeout(5 seconds), interval(5 millis)) {
+        assert(events.contains(("onConnected", serverEnv.address)))
+        assert(events.contains(("onDisconnected", serverEnv.address)))
+      }
+    } finally {
+      clientEnv.shutdown()
+      serverEnv.shutdown()
+      clientEnv.awaitTermination()
+      serverEnv.awaitTermination()
     }
   }
 
@@ -771,6 +791,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir, "file")
     Files.write(UUID.randomUUID().toString(), file, UTF_8)
+    val fileWithSpecialChars = new File(tempDir, "file name")
+    Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
     val empty = new File(tempDir, "empty")
     Files.write("", empty, UTF_8);
     val jar = new File(tempDir, "jar")
@@ -787,6 +809,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
 
     val fileUri = env.fileServer.addFile(file)
+    val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
     val emptyUri = env.fileServer.addFile(empty)
     val jarUri = env.fileServer.addJar(jar)
     val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
@@ -805,6 +828,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val files = Seq(
       (file, fileUri),
+      (fileWithSpecialChars, fileWithSpecialCharsUri),
       (empty, emptyUri),
       (jar, jarUri),
       (subFile1, dir1Uri + "/file1"),

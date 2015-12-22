@@ -528,7 +528,8 @@ def main():
     if not changed_files or any(f.endswith(".scala") for f in changed_files):
         run_scala_style_checks()
     if not changed_files or any(f.endswith(".java") for f in changed_files):
-        run_java_style_checks()
+        # run_java_style_checks()
+        pass
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R") for f in changed_files):

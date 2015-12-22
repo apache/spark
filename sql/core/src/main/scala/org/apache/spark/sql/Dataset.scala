@@ -225,7 +225,42 @@ class Dataset[T] private[sql](
    *
    * @since 1.6.0
    */
-  def show(numRows: Int, truncate: Boolean): Unit = toDF().show(numRows, truncate)
+  // scalastyle:off println
+  def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  // scalastyle:on println
+
+  /**
+   * Compose the string representing rows for output
+   * @param _numRows Number of rows to show
+   * @param truncate Whether truncate long strings and align cells right
+   */
+  override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+    val numRows = _numRows.max(0)
+    val takeResult = take(numRows + 1)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
+
+    // For array values, replace Seq and Array with square brackets
+    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: (data.map {
+      case r: Row => r
+      case tuple: Product => Row.fromTuple(tuple)
+      case o => Row(o)
+    } map { row =>
+      row.toSeq.map { cell =>
+        val str = cell match {
+          case null => "null"
+          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
+          case array: Array[_] => array.mkString("[", ", ", "]")
+          case seq: Seq[_] => seq.mkString("[", ", ", "]")
+          case _ => cell.toString
+        }
+        if (truncate && str.length > 20) str.substring(0, 17) + "..." else str
+      }: Seq[String]
+    })
+
+    formatString ( rows, numRows, hasMoreData, truncate )
+  }
 
   /**
     * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
@@ -415,7 +450,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): GroupedDataset[Row, T] = {
-    val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias)
+    val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias(_))
     val withKey = Project(withKeyColumns, logicalPlan)
     val executed = sqlContext.executePlan(withKey)
 

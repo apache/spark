@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
@@ -40,6 +41,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.mapPartitions(_ => Iterator(1)),
       1, 1, 1)
+  }
+
+
+  test("SPARK-12404: Datatype Helper Serializablity") {
+    val ds = sparkContext.parallelize((
+          new Timestamp(0),
+          new Date(0),
+          java.math.BigDecimal.valueOf(1),
+          scala.math.BigDecimal(1)) :: Nil).toDS()
+
+    ds.collect()
   }
 
   test("collect, first, and take should use encoders for serialization") {
@@ -424,6 +436,20 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("toString") {
     val ds = Seq((1, 2)).toDS()
     assert(ds.toString == "[_1: int, _2: int]")
+  }
+
+  test("showString: Kryo encoder") {
+    implicit val kryoEncoder = Encoders.kryo[KryoData]
+    val ds = Seq(KryoData(1), KryoData(2)).toDS()
+
+    val expectedAnswer = """+-----------+
+                           ||      value|
+                           |+-----------+
+                           ||KryoData(1)|
+                           ||KryoData(2)|
+                           |+-----------+
+                           |""".stripMargin
+    assert(ds.showString(10) === expectedAnswer)
   }
 
   test("Kryo encoder") {
