@@ -436,7 +436,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("compile filters") {
     val compileFilter = PrivateMethod[String]('compileFilter)
-    def doCompileFilter(f: Filter) = JDBCRDD invokePrivate compileFilter(f)
+    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f)
     assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
     assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "col1 != 'abc'")
     assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
