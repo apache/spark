@@ -110,8 +110,6 @@ private[sql] case class PhysicalRDD(
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
     s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
-
-  override def producedAttributes: AttributeSet = outputSet
 }
 
 private[sql] object PhysicalRDD {

@@ -31,8 +31,6 @@ private[sql] case class LocalTableScan(
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
 
-  override def producedAttributes: AttributeSet = outputSet
-
   protected override def doExecute(): RDD[InternalRow] = rdd
 
   override def executeCollect(): Array[InternalRow] = {
