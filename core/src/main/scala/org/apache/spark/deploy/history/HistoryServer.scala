@@ -23,14 +23,12 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
-  UIRoot}
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{ShutdownHookManager, SignalLogger, Utils}
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -223,7 +221,7 @@ object HistoryServer extends Logging {
   val UI_PATH_PREFIX = "/history"
 
   def main(argStrings: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
     val securityManager = new SecurityManager(conf)

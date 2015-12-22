@@ -43,6 +43,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
+import org.slf4j.Logger
 import tachyon.TachyonURI
 import tachyon.client.{TachyonFS, TachyonFile}
 
@@ -2220,6 +2221,23 @@ private[spark] object Utils extends Logging {
    */
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
+  }
+
+  /**
+   * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
+   * this is formatted as PID@hostname.
+   */
+  def getProcessName(): String = {
+    ManagementFactory.getRuntimeMXBean().getName()
+  }
+
+  /**
+   * Utility function that should be called early in `main()` for daemons to set up some common
+   * diagnostic state.
+   */
+  def initDaemon(log: Logger): Unit = {
+    log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
+    SignalLogger.register(log)
   }
 }
 
