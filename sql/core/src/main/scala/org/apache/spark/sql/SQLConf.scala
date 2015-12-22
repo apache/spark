@@ -94,7 +94,25 @@ private[spark] object SQLConf {
           isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
         try {
-          Utils.byteStringAsBytes(v).toInt
+          v.toInt
+        } catch {
+          case _: NumberFormatException =>
+            throw new IllegalArgumentException(s"$key should be int, but was $v")
+        }
+      }, _.toString, doc, isPublic)
+
+    def intMemConf(
+                 key: String,
+                 defaultValue: Option[Int] = None,
+                 doc: String = "",
+                 isPublic: Boolean = true): SQLConfEntry[Int] =
+      SQLConfEntry(key, defaultValue, { v =>
+        try {
+          if ((Utils.byteStringAsBytes(v) <= Int.MaxValue.toLong) &&
+            (Utils.byteStringAsBytes(v) >= Int.MinValue.toLong))
+            Utils.byteStringAsBytes(v).toInt
+          else
+            throw new IllegalArgumentException(s"$v should be int, but out of bounds")
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be int, but was $v")
@@ -215,7 +233,7 @@ private[spark] object SQLConf {
       doc = "When true, enable partition pruning for in-memory columnar tables.",
       isPublic = false)
 
-  val AUTO_BROADCASTJOIN_THRESHOLD = intConf("spark.sql.autoBroadcastJoinThreshold",
+  val AUTO_BROADCASTJOIN_THRESHOLD = intMemConf("spark.sql.autoBroadcastJoinThreshold",
     defaultValue = Some(10 * 1024 * 1024),
     doc = "Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
