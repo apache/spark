@@ -326,7 +326,7 @@ object ScalaReflection extends ScalaReflection {
         val cls = getClassFromType(tpe)
 
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
-          val dataType = schemaFor(fieldType).dataType
+          val Schema(dataType, nullable) = schemaFor(fieldType)
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
