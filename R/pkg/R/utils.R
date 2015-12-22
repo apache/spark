@@ -159,6 +159,7 @@ wrapInt <- function(value) {
 # integer-overflows are handled at every step.
 mult31AndAdd <- function(val, addVal) {
   vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  vec[is.na(vec)] <- 0
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
