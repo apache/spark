@@ -2095,7 +2095,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   @deprecated("use defaultMinPartitions", "1.0.0")
-  def defaultMinSplits: Int = math.min(defaultParallelism, 2)
+  def defaultMinSplits: Int = defaultMinPartitions
 
   /**
    * Default min number of partitions for Hadoop RDDs when not given by user
