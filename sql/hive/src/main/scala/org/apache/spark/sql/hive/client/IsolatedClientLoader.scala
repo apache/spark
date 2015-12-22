@@ -39,7 +39,6 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  */
 private[hive] case class UserInput (isSilent: Boolean, isVerbose: Boolean)
 
-
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
   var userInput: Option[UserInput] = null
