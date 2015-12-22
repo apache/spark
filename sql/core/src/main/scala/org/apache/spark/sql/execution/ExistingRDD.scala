@@ -74,9 +74,7 @@ private[sql] case class LogicalRDD(
 
   override def children: Seq[LogicalPlan] = Nil
 
-  override protected final def otherCopyArgs: Seq[AnyRef] = {
-    sqlContext :: Nil
-  }
+  override protected final def otherCopyArgs: Seq[AnyRef] = sqlContext :: Nil
 
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]

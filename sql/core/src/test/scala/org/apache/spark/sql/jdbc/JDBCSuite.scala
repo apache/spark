@@ -18,18 +18,22 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.DriverManager
+import java.sql.{Date, DriverManager, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+class JDBCSuite extends SparkFunSuite
+  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -427,6 +431,22 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(MySQLColumns === Seq("`abc`", "`key`"))
     assert(PostgresColumns === Seq(""""abc"""", """"key""""))
     assert(DerbyColumns === Seq(""""abc"""", """"key""""))
+  }
+
+  test("compile filters") {
+    val compileFilter = PrivateMethod[String]('compileFilter)
+    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f)
+    assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "col1 != 'abc'")
+    assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
+    assert(doCompileFilter(LessThan("col3",
+      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === "col3 < '1995-11-21 00:00:00.0'")
+    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04"))) === "col4 < '1983-08-04'")
+    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === "col0 <= 5")
+    assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
+    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
+    assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
+    assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
   }
 
   test("Dialect unregister") {

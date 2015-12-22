@@ -30,7 +30,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT
 import org.apache.spark.util.{ThreadUtils, SerializableBuffer, AkkaUtils, Utils}
 
 /**
- * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
+ * A scheduler backend that waits for coarse-grained executors to connect.
  * This backend holds onto each executor for the duration of the Spark job rather than relinquishing
  * executors whenever a task is done and asking the scheduler to launch a new executor for
  * each new task. Executors may be launched in a variety of ways, such as Mesos tasks for the
@@ -471,7 +471,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Request that the cluster manager kill the specified executors.
-   * @return whether the kill request is acknowledged.
+   * @return whether the kill request is acknowledged. If list to kill is empty, it will return
+   *         false.
    */
   final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
     killExecutors(executorIds, replace = false, force = false)
@@ -487,7 +488,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones
    * @param force whether to force kill busy executors
-   * @return whether the kill request is acknowledged.
+   * @return whether the kill request is acknowledged. If list to kill is empty, it will return
+   *         false.
    */
   final def killExecutors(
       executorIds: Seq[String],
@@ -516,7 +518,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       numPendingExecutors += knownExecutors.size
     }
 
-    doKillExecutors(executorsToKill)
+    !executorsToKill.isEmpty && doKillExecutors(executorsToKill)
   }
 
   /**
