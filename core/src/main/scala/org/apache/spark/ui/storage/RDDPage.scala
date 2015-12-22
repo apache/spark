@@ -274,19 +274,21 @@ private[ui] class BlockPagedTable(
           val headerLink =
             s"$basePath&block.sort=${URLEncoder.encode(header, "UTF-8")}&block.desc=${!desc}" +
               s"&block.pageSize=${pageSize}"
-          val js = Unparsed(s"window.location.href='${headerLink}'")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-          <th onclick={js} style="cursor: pointer;">
-            {header}
-            <span>&nbsp;{Unparsed(arrow)}</span>
+          <th>
+            <a href={headerLink}>
+              {header}
+              <span>&nbsp;{Unparsed(arrow)}</span>
+            </a>
           </th>
         } else {
           val headerLink =
             s"$basePath&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
               s"&block.pageSize=${pageSize}"
-          val js = Unparsed(s"window.location.href='${headerLink}'")
-          <th onclick={js} style="cursor: pointer;">
-            {header}
+          <th>
+            <a href={headerLink}>
+              {header}
+            </a>
           </th>
         }
       }
