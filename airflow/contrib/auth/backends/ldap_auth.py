@@ -13,6 +13,7 @@ from flask import url_for, redirect
 from airflow import settings
 from airflow import models
 from airflow import configuration
+from airflow.configuration import AirflowConfigException
 
 import logging
 
@@ -69,8 +70,11 @@ class LdapUser(models.User):
 
         # Load and cache superuser and data_profiler settings.
         conn = get_ldap_connection(configuration.get("ldap", "bind_user"), configuration.get("ldap", "bind_password"))
-        self.superuser = group_contains_user(conn, configuration.get("ldap", "basedn"), configuration.get("ldap", "superuser_filter"), configuration.get("ldap", "user_name_attr"), user.username)
-        self.data_profiler = group_contains_user(conn, configuration.get("ldap", "basedn"), configuration.get("ldap", "data_profiler_filter"), configuration.get("ldap", "user_name_attr"), user.username)
+        try:
+            self.superuser = group_contains_user(conn, configuration.get("ldap", "basedn"), configuration.get("ldap", "superuser_filter"), configuration.get("ldap", "user_name_attr"), user.username)
+            self.data_profiler = group_contains_user(conn, configuration.get("ldap", "basedn"), configuration.get("ldap", "data_profiler_filter"), configuration.get("ldap", "user_name_attr"), user.username)
+        except AirflowConfigException:
+            LOG.debug("Missing configuration for superuser/data profiler settings. Skipping.")
 
     @staticmethod
     def try_login(username, password):
