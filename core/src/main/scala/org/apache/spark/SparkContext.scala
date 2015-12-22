@@ -35,7 +35,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path,LocalFileSystem}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
   FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
@@ -2084,7 +2084,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       fs.mkdirs(path)
       fs.getFileStatus(path).getPath.toString
     }
-
   }
 
   def getCheckpointDir: Option[String] = checkpointDir
