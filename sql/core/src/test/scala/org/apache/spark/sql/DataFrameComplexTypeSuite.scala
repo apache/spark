@@ -43,4 +43,12 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
     val df = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
     df.select(array($"a").as("s")).select(f(expr("s[0]"))).collect()
   }
+
+  test("Accessing null element in array field") {
+    val df = sc.parallelize(Seq((Seq("val1",null,"val2"),Seq(Some(1),None,Some(2))))).toDF("s","i")
+    val nullStringRow = df.selectExpr("s[1]").collect()(0)
+    assert(nullStringRow == org.apache.spark.sql.Row(null))
+    val nullIntRow = df.selectExpr("i[1]").collect()(0)
+    assert(nullIntRow == org.apache.spark.sql.Row(null))
+  }
 }
