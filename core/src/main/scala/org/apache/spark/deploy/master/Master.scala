@@ -45,7 +45,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[deploy] class Master(
     override val rpcEnv: RpcEnv,
@@ -1087,7 +1087,7 @@ private[deploy] object Master extends Logging {
   val ENDPOINT_NAME = "Master"
 
   def main(argStrings: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
     val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)
