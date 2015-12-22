@@ -157,10 +157,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("explode alias and star") {
-    val df = Seq((Array("a"), 1)).toDF("a", "b").select(explode($"a").as("a"), $"*")
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
 
     checkAnswer(
-      df,
+      df.select(explode($"a").as("a"), $"*"),
       Row("a", Seq("a"), 1) :: Nil)
   }
 
@@ -177,9 +177,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("selectExpr with udtf") {
-    val df = Seq((Map("1" -> 1), 1)).toDF("a", "b").selectExpr("explode(a)")
+    val df = Seq((Map("1" -> 1), 1)).toDF("a", "b")
     checkAnswer(
-      df,
+      df.selectExpr("explode(a)"),
       Row("1", 1) :: Nil)
   }
 
