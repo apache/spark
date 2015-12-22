@@ -39,6 +39,15 @@ case class UnresolvedRelation(
     tableIdentifier: TableIdentifier,
     alias: Option[String] = None) extends LeafNode {
 
+  def this(seq: Seq[String], alias: Option[String] = None) =
+    this(
+      seq match {
+        case table :: Nil => TableIdentifier(table, None)
+        case table :: database :: Nil => TableIdentifier(table, Some(database))
+      },
+      alias
+    )
+
   /** Returns a `.` separated name for this relation. */
   def tableName: String = tableIdentifier.unquotedString
 
@@ -178,6 +187,12 @@ abstract class Star extends LeafExpression with NamedExpression {
  *              is a list of identifiers that is the path of the expansion.
  */
 case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevaluable {
+
+  @deprecated(since = "1.6.0")
+  def this(table: Option[String]) = this(table.map(_ :: Nil))
+
+  @deprecated(since = "1.6.0")
+  def table: Option[String] = target.toSeq.flatten.reverse.headOption
 
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
 
