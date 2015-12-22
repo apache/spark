@@ -60,8 +60,9 @@ and expect similar performance.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-In the following example, we load rating data, each row consisting of a user, an
-item and a rating.
+In the following example, we load rating data from the
+[MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
+consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
 explicit (`implicitPrefs` is `false`).
 We evaluate the recommendation model by measuring the root-mean-square error of
@@ -81,8 +82,8 @@ val als = new ALS()
   .setMaxIter(5)
   .setRegParam(0.01)
   .setImplicitPrefs(true)
-  .setUserCol("user")
-  .setItemCol("item")
+  .setUserCol("userId")
+  .setItemCol("movieId")
   .setRatingCol("rating")
 {% endhighlight %}
 
@@ -90,8 +91,9 @@ val als = new ALS()
 
 <div data-lang="java" markdown="1">
 
-In the following example, we load rating data, each row consisting of a user, an
-item and a rating.
+In the following example, we load rating data from the
+[MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
+consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
 explicit (`implicitPrefs` is `false`).
 We evaluate the recommendation model by measuring the root-mean-square error of
@@ -111,8 +113,8 @@ ALS als = new ALS()
   .setMaxIter(5)
   .setRegParam(0.01)
   .setImplicitPrefs(true)
-  .setUserCol("user")
-  .setItemCol("item")
+  .setUserCol("userId")
+  .setItemCol("movieId")
   .setRatingCol("rating");
 {% endhighlight %}
 
@@ -120,8 +122,9 @@ ALS als = new ALS()
 
 <div data-lang="python" markdown="1">
 
-In the following example, we load rating data, each row consisting of a user, an
-item and a rating.
+In the following example, we load rating data from the
+[MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
+consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
 explicit (`implicitPrefs` is `False`).
 We evaluate the recommendation model by measuring the root-mean-square error of
@@ -138,7 +141,7 @@ better results:
 
 {% highlight python %}
 als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
-          userCol="user", itemCol="item", ratingCol="rating")
+          userCol="userId", itemCol="movieId", ratingCol="rating")
 {% endhighlight %}
 
 </div>
