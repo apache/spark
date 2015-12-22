@@ -188,7 +188,7 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    val checkFilterPushdown = (df: DataFrame) => {
+    val doFilterPushdown = (df: DataFrame) => {
       val schema = df.schema
       val parentPlan = df.queryExecution.executedPlan
       assert(parentPlan.isInstanceOf[PhysicalRDD])
@@ -196,32 +196,26 @@ class JDBCSuite extends SparkFunSuite
       val rdd = parentPlan.execute().map(row => Row.fromSeq(row.toSeq(schema)))
       sqlContext.createDataFrame(rdd, schema)
     }
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'"))
-      .collect().size == 1)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'"))
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
       .collect().size == 2)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
       .collect().size == 2)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
       .collect().size == 2)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
-      .collect().size == 2)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
       + "AND THEID = 2")).collect().size == 2)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'"))
-      .collect().size == 1)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'"))
-      .collect().size == 1)
-    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'"))
-      .collect().size == 1)
-    assert(checkFilterPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
-    assert(checkFilterPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL"))
-      .collect().size == 0)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
+    assert(doFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
+    assert(doFilterPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(doFilterPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.

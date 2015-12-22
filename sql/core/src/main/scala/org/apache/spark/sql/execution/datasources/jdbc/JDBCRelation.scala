@@ -97,7 +97,7 @@ private[sql] case class JDBCRelation(
 
   private def canCompileFilter(filter: Filter): Boolean = filter match {
     case EqualTo(_, _) | Not(EqualTo(_, _)) => true
-    case LessThan(_, _) | LessThanOrEqual(_, _)  => true
+    case LessThan(_, _) | LessThanOrEqual(_, _) => true
     case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => true
     case IsNull(_) | IsNotNull(_) => true
     case _ => false
