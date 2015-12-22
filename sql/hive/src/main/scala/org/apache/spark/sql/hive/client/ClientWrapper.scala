@@ -64,6 +64,7 @@ private[hive] class ClientWrapper(
     val clientLoader: IsolatedClientLoader)
   extends ClientInterface
   with Logging {
+
   overrideHadoopShims()
 
   // !! HACK ALERT !!
