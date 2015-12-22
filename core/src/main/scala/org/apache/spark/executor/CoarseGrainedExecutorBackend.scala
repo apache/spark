@@ -22,16 +22,15 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable
 import scala.util.{Failure, Success}
-
-import org.apache.spark.TaskState.TaskState
+import org.apache.spark.rpc._
 import org.apache.spark._
+import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.rpc._
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{SignalLogger, ThreadUtils, Utils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -144,7 +143,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       workerUrl: Option[String],
       userClassPath: Seq[URL]) {
 
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
       // Debug code
@@ -201,8 +200,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   }
 
   def main(args: Array[String]) {
-    log.info(s"Started executor with process name: ${Utils.getProcessName()}")
-
     var driverUrl: String = null
     var executorId: String = null
     var hostname: String = null

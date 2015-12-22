@@ -21,6 +21,7 @@ import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslServerBootstrap
@@ -28,7 +29,6 @@ import org.apache.spark.network.server.{TransportServer, TransportServerBootstra
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * Provides a server from which Executors can read shuffle files (rather than reading directly from
@@ -108,7 +108,7 @@ object ExternalShuffleService extends Logging {
   private[spark] def main(
       args: Array[String],
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
-    log.info(s"Started shuffle service with process name: ${Utils.getProcessName()}")
+    Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
     val securityManager = new SecurityManager(sparkConf)
