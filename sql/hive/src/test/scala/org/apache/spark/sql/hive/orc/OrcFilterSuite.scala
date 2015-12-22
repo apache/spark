@@ -199,11 +199,11 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
   test("filter pushdown - combinations with logical operators") {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
-       // Because `ExpressionTree` is not accessible at Hive 1.2.x, this should be checked
-       // in string form in order to check filter creation including logical operators
-       // such as `and`, `or` or `not`. So, this function uses `SearchArgument.toString()`
-       // to produce string expression and then compare it to given string expression below.
-       // This might have to be changed after Hive version is upgraded.
+      // Because `ExpressionTree` is not accessible at Hive 1.2.x, this should be checked
+      // in string form in order to check filter creation including logical operators
+      // such as `and`, `or` or `not`. So, this function uses `SearchArgument.toString()`
+      // to produce string expression and then compare it to given string expression below.
+      // This might have to be changed after Hive version is upgraded.
       checkFilterPredicate(
         '_1.isNotNull,
         """leaf-0 = (IS_NULL _1)
