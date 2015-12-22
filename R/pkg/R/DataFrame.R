@@ -678,8 +678,8 @@ setMethod("saveAsParquetFile",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
+#' path <- "path/to/file.txt"
+#' df <- read.text(sqlContext, path)
 #' write.text(df, "/tmp/sparkr-tmp/")
 #'}
 setMethod("write.text",
