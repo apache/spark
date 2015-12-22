@@ -243,6 +243,7 @@ private[hive] class IsolatedClientLoader(
   /** The isolated client interface to Hive. */
   private[hive] def createClient(): ClientInterface = {
     if (!isolationOn) {
+      // Store the user input parameter from SparkSQL CLI before being wiped out in ClientWrapper.
       val ss = baseClassLoader.loadClass("org.apache.hadoop.hive.ql.session.SessionState")
         .getMethod("get").invoke(null).asInstanceOf[SessionState]
       IsolatedClientLoader.userInput = Some(UserInput(ss.getIsSilent, ss.getIsVerbose))
