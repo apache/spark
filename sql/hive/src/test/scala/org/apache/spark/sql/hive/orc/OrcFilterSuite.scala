@@ -31,7 +31,10 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRe
  * A test suite that tests ORC filter API based filter pushdown optimization.
  */
 class OrcFilterSuite extends QueryTest with OrcTest {
-  private def checkFilterPredicate(df: DataFrame, predicate: Predicate): SearchArgument = {
+  private def checkFilterPredicate(
+      df: DataFrame,
+      predicate: Predicate,
+      checker: (SearchArgument) => Unit): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
       .select(output.map(e => Column(e)): _*)
@@ -51,22 +54,26 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
     val maybeFilter = OrcFilters.createFilter(selectedFilters.toArray)
     assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $selectedFilters")
-    maybeFilter.get
+    checker(maybeFilter.get)
   }
 
   private def checkFilterPredicate
       (predicate: Predicate, filterOperator: PredicateLeaf.Operator)
       (implicit df: DataFrame): Unit = {
-    val filter = checkFilterPredicate(df, predicate)
-    val operator = filter.getLeaves.asScala.head.getOperator
-    assert(operator === filterOperator)
+    def checkComparisonOperator(filter: SearchArgument) = {
+      val operator = filter.getLeaves.asScala.head.getOperator
+      assert(operator === filterOperator)
+    }
+    checkFilterPredicate(df, predicate, checkComparisonOperator)
   }
 
   private def checkFilterPredicate
       (predicate: Predicate, stringExpr: String)
       (implicit df: DataFrame): Unit = {
-    val filter = checkFilterPredicate(df, predicate)
-    assert(filter.toString == stringExpr)
+    def checkComparisonOperator(filter: SearchArgument) = {
+      assert(filter.toString == stringExpr)
+    }
+    checkFilterPredicate(df, predicate, checkComparisonOperator)
   }
 
   test("filter pushdown - boolean") {
