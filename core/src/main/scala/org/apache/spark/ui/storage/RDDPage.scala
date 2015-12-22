@@ -228,6 +228,10 @@ private[ui] class BlockPagedTable(
 
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
+  override def pageSizeFormField: String = "block.pageSize"
+
+  override def pageNumberFormField: String = "block.page"
+
   override val dataSource: BlockDataSource = new BlockDataSource(
     rddPartitions,
     pageSize,
@@ -236,24 +240,16 @@ private[ui] class BlockPagedTable(
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"${basePath}&block.page=$page&block.sort=${encodedSortColumn}&block.desc=${desc}" +
-      s"&block.pageSize=${pageSize}"
+    basePath +
+      s"&$pageNumberFormField=$page" +
+      s"&block.sort=$encodedSortColumn" +
+      s"&block.desc=$desc" +
+      s"&$pageSizeFormField=$pageSize"
   }
 
-  override def goButtonJavascriptFunction: (String, String) = {
-    val jsFuncName = "goToBlockPage"
+  override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    val jsFunc = s"""
-      |currentBlockPageSize = ${pageSize}
-      |function goToBlockPage(page, pageSize) {
-      |  // Set page to 1 if the page size changes
-      |  page = pageSize == currentBlockPageSize ? page : 1;
-      |  var url = "${basePath}&block.sort=${encodedSortColumn}&block.desc=${desc}" +
-      |    "&block.page=" + page + "&block.pageSize=" + pageSize;
-      |  window.location.href = url;
-      |}
-     """.stripMargin
-    (jsFuncName, jsFunc)
+    s"$basePath&block.sort=$encodedSortColumn&block.desc=$desc"
   }
 
   override def headers: Seq[Node] = {

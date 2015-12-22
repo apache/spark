@@ -295,7 +295,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         (_taskTable, _taskTable.table(taskPage))
       } catch {
         case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-          (null, <div class="alert alert-error">{e.getMessage}</div>)
+          val errorMessage =
+            <div class="alert alert-error">
+              <p>Error while rendering stage table:</p>
+              <pre>
+                {Utils.exceptionString(e)}
+              </pre>
+            </div>
+          (null, errorMessage)
       }
 
       val jsForScrollingDownToTaskTable =
@@ -1217,6 +1224,10 @@ private[ui] class TaskPagedTable(
 
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
+  override def pageSizeFormField: String = "task.pageSize"
+
+  override def pageNumberFormField: String = "task.page"
+
   override val dataSource: TaskDataSource = new TaskDataSource(
     data,
     hasAccumulators,
@@ -1232,24 +1243,16 @@ private[ui] class TaskPagedTable(
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"${basePath}&task.page=$page&task.sort=${encodedSortColumn}&task.desc=${desc}" +
-      s"&task.pageSize=${pageSize}"
+    basePath +
+      s"&$pageNumberFormField=$page" +
+      s"&task.sort=$encodedSortColumn" +
+      s"&task.desc=$desc" +
+      s"&$pageSizeFormField=$pageSize"
   }
 
-  override def goButtonJavascriptFunction: (String, String) = {
-    val jsFuncName = "goToTaskPage"
+  override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    val jsFunc = s"""
-      |currentTaskPageSize = ${pageSize}
-      |function goToTaskPage(page, pageSize) {
-      |  // Set page to 1 if the page size changes
-      |  page = pageSize == currentTaskPageSize ? page : 1;
-      |  var url = "${basePath}&task.sort=${encodedSortColumn}&task.desc=${desc}" +
-      |    "&task.page=" + page + "&task.pageSize=" + pageSize;
-      |  window.location.href = url;
-      |}
-     """.stripMargin
-    (jsFuncName, jsFunc)
+    s"$basePath&task.sort=$encodedSortColumn&task.desc=$desc"
   }
 
   def headers: Seq[Node] = {
