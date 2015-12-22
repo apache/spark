@@ -546,6 +546,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
     ))
   }
+
+  test("SPARK-12478: top level null field") {
+    val ds = Seq(NestedStruct(null)).toDS()
+    checkAnswer(ds, NestedStruct(null))
+    checkAnswer(ds.toDF(), Row(null))
+  }
 }
 
 case class ClassData(a: String, b: Int)
