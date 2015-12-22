@@ -41,7 +41,7 @@ private[hive] case class UserInput (isSilent: Boolean, isVerbose: Boolean)
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
-  var userInput: Option[UserInput] = null
+  var userInput: Option[UserInput] = None
   /**
    * Creates isolated Hive client loaders by downloading the requested version from maven.
    */
