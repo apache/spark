@@ -30,7 +30,7 @@ object ALSExample {
   // $example on$
   case class Rating(userId: Int, movieId: Int, rating: Float, timestamp: Long)
   object Rating {
-    def parseString(str: String): Rating = {
+    def parseRating(str: String): Rating = {
       val fields = str.split("::")
       assert(fields.size == 4)
       Rating(fields(0).toInt, fields(1).toInt, fields(2).toFloat, fields(3).toLong)
@@ -46,7 +46,7 @@ object ALSExample {
 
     // $example on$
     val ratings = sc.textFile("data/mllib/als/sample_movielens_ratings.txt")
-      .map(Rating.parseString)
+      .map(Rating.parseRating)
       .toDF()
     val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2))
 
