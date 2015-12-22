@@ -92,7 +92,7 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
      */
     val preds = List(72.12, 99.17, 63.11, 45.08, 58.6, 85.65, 54.09, 81.14, 49.58)
     val predictionAndObservations = sc.parallelize(preds.zip(obs), 2)
-    val metrics = new RegressionMetrics(predictionAndObservations, false)
+    val metrics = new RegressionMetrics(predictionAndObservations, true)
     assert(metrics.explainedVariance ~== 294.88167 absTol eps,
       "explained variance regression score mismatch")
     assert(metrics.meanAbsoluteError ~== 4.5888889 absTol eps, "mean absolute error mismatch")

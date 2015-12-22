@@ -535,7 +535,7 @@ class LinearRegressionSummary private[regression] (
     predictions
       .select(predictionCol, labelCol)
       .map { case Row(pred: Double, label: Double) => (pred, label) },
-    model.getFitIntercept)
+    !model.getFitIntercept)
 
   /**
    * Returns the explained variance regression score.

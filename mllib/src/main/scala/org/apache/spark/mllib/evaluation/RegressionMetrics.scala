@@ -27,24 +27,25 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for regression.
  *
  * @param predictionAndObservations an RDD of (prediction, observation) pairs,
- * @param isUnbiased true if intercept is included in linear regression model
+ * @param regThroughOrigin true if intercept is not included in linear regression model
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("1.2.0") (
-    predictionAndObservations: RDD[(Double, Double)], isUnbiased: Boolean)
+    predictionAndObservations: RDD[(Double, Double)], regThroughOrigin: Boolean)
     extends Logging {
-  /**
-    * @param predictionAndObservations an RDD with two double columns:
-    *                                  prediction and observation
-    */
-  def this(predictionAndObservations: RDD[(Double, Double)]) =
-    this(predictionAndObservations, true)
 
   /**
-    * An auxiliary constructor taking a DataFrame.
-    * @param predictionAndObservations a DataFrame with two double columns:
-    *                                  prediction and observation
-    */
+   * @param predictionAndObservations an RDD with two double columns:
+   *                                  prediction and observation
+   */
+  def this(predictionAndObservations: RDD[(Double, Double)]) =
+    this(predictionAndObservations, false)
+
+  /**
+   * An auxiliary constructor taking a DataFrame.
+   * @param predictionAndObservations a DataFrame with two double columns:
+   *                                  prediction and observation
+   */
   private[mllib] def this(predictionAndObservations: DataFrame) =
     this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
@@ -109,17 +110,16 @@ class RegressionMetrics @Since("1.2.0") (
   /**
    * Returns R^2^, the unadjusted coefficient of determination.
    * @see [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * In case of regression through the origin, the definition of R^2^ is to be modified.
+   * @see J. G. Eisenhauer, Regression through the Origin. Teaching Statistics 25, 76–80 (2003)
+   * [[https://online.stat.psu.edu/~ajw13/stat501/SpecialTopics/Reg_thru_origin.pdf]]
    */
   @Since("1.2.0")
   def r2: Double = {
-    // In case of regression through the origin (biased case), the definition of R^2 is
-    // to be modified. Here is a review paper which explains why:
-    // J. G. Eisenhauer, Regression through the Origin. Teaching Statistics 25, 76–80 (2003)
-    // https://online.stat.psu.edu/~ajw13/stat501/SpecialTopics/Reg_thru_origin.pdf
-    if (isUnbiased) {
-      1 - SSerr / SStot
-    } else {
+    if (regThroughOrigin) {
       1 - SSerr / SSy
+    } else {
+      1 - SSerr / SStot
     }
   }
 }
