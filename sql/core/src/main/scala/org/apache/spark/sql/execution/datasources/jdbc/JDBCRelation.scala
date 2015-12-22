@@ -90,6 +90,19 @@ private[sql] case class JDBCRelation(
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
+  // Check if JDBCRDD#compileFilter can accept input filters
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    filters.filterNot(canCompileFilter)
+  }
+
+  private def canCompileFilter(filter: Filter): Boolean = filter match {
+    case EqualTo(_, _) | Not(EqualTo(_, _)) => true
+    case LessThan(_, _) | LessThanOrEqual(_, _)  => true
+    case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => true
+    case IsNull(_) | IsNotNull(_) => true
+    case _ => false
+  }
+
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(

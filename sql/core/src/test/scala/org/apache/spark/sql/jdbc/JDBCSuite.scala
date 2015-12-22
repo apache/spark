@@ -18,16 +18,21 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, Timestamp}
-import java.util.{Calendar, GregorianCalendar, Properties}
+import java.sql.Date
+import java.sql.DriverManager
+import java.sql.Timestamp
+import java.util.Calendar
+import java.util.GregorianCalendar
+import java.util.Properties
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.ExplainCommand
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.sources._
@@ -183,26 +188,40 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
+    val checkFilterPushdown = (df: DataFrame) => {
+      val schema = df.schema
+      val parentPlan = df.queryExecution.executedPlan
+      assert(parentPlan.isInstanceOf[PhysicalRDD])
+      assert(parentPlan.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
+      val rdd = parentPlan.execute().map(row => Row.fromSeq(row.toSeq(schema)))
+      sqlContext.createDataFrame(rdd, schema)
+    }
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'"))
+      .collect().size == 1)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'"))
       .collect().size == 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
       .collect().size == 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
       .collect().size == 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
+      .collect().size == 2)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
       + "AND THEID = 2")).collect().size == 2)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
-    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
-    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
-    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'"))
+      .collect().size == 1)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'"))
+      .collect().size == 1)
+    assert(checkFilterPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'"))
+      .collect().size == 1)
+    assert(checkFilterPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(checkFilterPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL"))
+      .collect().size == 0)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
