@@ -61,22 +61,6 @@ case class RepeatedData(
     mapFieldNull: scala.collection.Map[Int, java.lang.Long],
     structField: PrimitiveData)
 
-case class Nested(i: Option[Int], s: String)
-
-case class Data(
-    array: Seq[Int],
-    arrayContainsNull: Seq[Option[Int]],
-    map: scala.collection.Map[Int, Long],
-    mapContainsNul: scala.collection.Map[Int, Option[Long]],
-    nested: Nested)
-
-case class ComplexData(
-    arrayField: Seq[Int],
-    arrayFieldContainsNull: Seq[Option[Int]],
-    mapField: scala.collection.Map[Int, Long],
-    mapFieldContainsNull: scala.collection.Map[Int, Option[Long]],
-    dataField: Data)
-
 case class SpecificCollection(l: List[Int])
 
 /** For testing Kryo serialization based encoder. */
@@ -256,34 +240,28 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
-  test("Option in Map and Array") {
-    val data = ComplexData(
-      Seq(1, 2, 3),
-      Seq(Some(1), Some(2), None),
-      Map(1 -> 10L, 2 -> 20L),
-      Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None),
-      Data(
-        Seq(10, 20, 30),
-        Seq(Some(10), Some(20), None),
-        Map(10 -> 100L, 20 -> 200L),
-        Map(10 -> Some(100L), 20 -> Some(200L), 30 -> None),
-        Nested(None, "abc")))
+  test("Option in Array") {
+    val data = (Seq(Some(1), Some(2), None), "Option in array")
 
-    val schema = ScalaReflection.schemaFor[ComplexData].dataType.asInstanceOf[StructType]
+    val schema = ScalaReflection.schemaFor[Tuple2[Seq[Option[Int]], String]]
+      .dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    val complexDataEncoder = encoderFor[ComplexData]
-    val boundEncoder = complexDataEncoder.resolve(attributeSeq, outers).bind(attributeSeq)
-    assert(boundEncoder.fromRow(boundEncoder.toRow(data)) === ComplexData(
-      Seq(1, 2, 3),
-      Seq(Some(1), Some(2), null),
-      Map(1 -> 10L, 2 -> 20L),
-      Map(1 -> Some(10L), 2 -> Some(20L), 3 -> null),
-      Data(
-        Seq(10, 20, 30),
-        Seq(Some(10), Some(20), null),
-        Map(10 -> 100L, 20 -> 200L),
-        Map(10 -> Some(100L), 20 -> Some(200L), 30 -> null),
-        Nested(None, "abc"))))
+    val dataEncoder = encoderFor[Tuple2[Seq[Option[Int]], String]]
+    val boundEncoder = dataEncoder.resolve(attributeSeq, outers).bind(attributeSeq)
+    assert(boundEncoder.fromRow(boundEncoder.toRow(data)) === (
+      Seq(Some(1), Some(2), null), "Option in array"))
+  }
+
+  test("Option in Map") {
+    val data = (Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
+
+    val schema = ScalaReflection.schemaFor[Tuple2[Map[Int, Option[Long]], String]]
+      .dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    val dataEncoder = encoderFor[Tuple2[Map[Int, Option[Long]], String]]
+    val boundEncoder = dataEncoder.resolve(attributeSeq, outers).bind(attributeSeq)
+    assert(boundEncoder.fromRow(boundEncoder.toRow(data)) === (
+      Map(1 -> Some(10L), 2 -> Some(20L), 3 -> null), "Option in map"))
   }
 
   test("nullable of encoder schema") {
