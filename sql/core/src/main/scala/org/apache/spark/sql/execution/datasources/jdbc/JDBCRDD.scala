@@ -382,8 +382,6 @@ private[sql] class JDBCRDD(
     val myWhereClause = getWhereClause(part)
 
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
-    logDebug(s"'${sqlText}' input into JDBC")
-
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     val fetchSize = properties.getProperty("fetchsize", "0").toInt
