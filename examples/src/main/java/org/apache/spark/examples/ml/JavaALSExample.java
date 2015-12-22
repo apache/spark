@@ -93,13 +93,13 @@ public class JavaALSExample {
     SQLContext sqlContext = new SQLContext(jsc);
 
     // $example on$
-    JavaRDD<Rating> ratingRDD = jsc.textFile("data/mllib/als/sample_movielens_ratings.txt")
+    JavaRDD<Rating> ratingsRDD = jsc.textFile("data/mllib/als/sample_movielens_ratings.txt")
       .map(new Function<String, Rating>() {
         public Rating call(String str) {
           return Rating.parseRating(str);
         }
       });
-    DataFrame ratings = sqlContext.createDataFrame(ratingRDD, Rating.class);
+    DataFrame ratings = sqlContext.createDataFrame(ratingsRDD, Rating.class);
     DataFrame[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
     DataFrame training = splits[0];
     DataFrame test = splits[1];

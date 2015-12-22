@@ -23,6 +23,7 @@ from pyspark.sql import SQLContext
 # $example on$
 import math
 from pyspark.ml.recommendation import ALS
+from pyspark.sql import Row
 # $example off$
 
 if __name__ == "__main__":
@@ -30,17 +31,19 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    data = sqlContext.createDataFrame(
-        [(1, 1, 5.0), (1, 2, 1.0), (1, 4, 1.0), (2, 1, 5.0), (2, 2, 1.0), (2, 3, 5.0), (3, 2, 5.0),
-            (3, 3, 1.0), (3, 4, 5.0), (4, 1, 1.0), (4, 3, 1.0), (4, 4, 5.0)],
-        ["user", "item", "rating"])
+    lines = sc.textFile("data/mllib/als/sample_movielens_ratings.txt")
+    parts = lines.map(lambda l: l.split("::"))
+    ratingsRDD = parts.map(lambda p: Row(userId=int(p[0]), movieId=int(p[1]),
+                                         rating=float(p[2]), timestamp=long(p[3])))
+    ratings = sqlContext.createDataFrame(ratingsRDD)
+    (training, test) = ratings.randomSplit([0.8, 0.2])
 
-    # Build the recommendation model using ALS
-    als = ALS(maxIter=5, regParam=0.01, userCol="user", itemCol="item", ratingCol="rating")
-    model = als.fit(data)
+    # Build the recommendation model using ALS on the training data
+    als = ALS(maxIter=5, regParam=0.01, userCol="userId", itemCol="movieId", ratingCol="rating")
+    model = als.fit(training)
 
-    # Evaluate the model by computing the RMSE on the same dataset
-    predictions = model.transform(data)
+    # Evaluate the model by computing the RMSE on the test data
+    predictions = model.transform(test)
     mse = predictions\
         .select('rating', 'prediction')\
         .map(lambda r: (r[0] - r[1])**2)\
