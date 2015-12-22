@@ -269,6 +269,13 @@ private[sql] class JDBCRDD(
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
     case dateValue: Date => "'" + dateValue + "'"
+    case objectValue: Array[Object] => {
+      val str = objectValue.map {
+        case string: String =>  s"'${escapeSql(string)}'"
+        case other => s"${escapeSql(other.toString)}"
+      }
+      str.mkString(",")
+    }
     case _ => value
   }
 
@@ -288,6 +295,12 @@ private[sql] class JDBCRDD(
     case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
     case IsNull(attr) => s"$attr IS NULL"
     case IsNotNull(attr) => s"$attr IS NOT NULL"
+    case In(attr, value) => s"$attr IN (${compileValue(value)})"
+    case Not(In(attr, value)) => s"$attr NOT IN (${compileValue(value)})"
+    case Or(filter1, filter2) =>
+      "(" + compileFilter (filter1) + ") OR ("  + compileFilter (filter2)  + ")"
+    case And(filter1, filter2) =>
+      "(" + compileFilter (filter1) + ") AND ("  + compileFilter (filter2)  + ")"
     case _ => null
   }
 
