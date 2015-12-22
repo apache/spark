@@ -163,8 +163,8 @@ private[sql] object JDBCRDD extends Logging {
    * @return A Catalyst schema corresponding to columns in the given order.
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields map { x => x.metadata.getString("name") -> x }: _*)
-    new StructType(columns map { name => fieldMap(name) })
+    val fieldMap = Map(schema.fields.map(x => x.metadata.getString("name") -> x): _*)
+    new StructType(columns.map(name => fieldMap(name)))
   }
 
   /**
@@ -296,7 +296,7 @@ private[sql] class JDBCRDD(
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String = {
-    val filterStrings = filters map JDBCRDD.compileFilter filter (_ != null)
+    val filterStrings = filters.map(JDBCRDD.compileFilter).filter(_ != null)
     if (filterStrings.size > 0) {
       val sb = new StringBuilder("WHERE ")
       filterStrings.foreach(x => sb.append(x).append(" AND "))

@@ -33,8 +33,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends SparkFunSuite
-  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext
-{
+  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
