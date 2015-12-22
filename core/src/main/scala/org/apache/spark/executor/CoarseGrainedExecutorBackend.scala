@@ -34,6 +34,8 @@ import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.log4j.{FileAppender, LogManager, Logger}
+import scala.collection.JavaConverters._
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -72,9 +74,12 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   def extractLogUrls: Map[String, String] = {
+    val baseUrl = sys.env.get("SPARK_LOG_BASE_URL").get
+    val logFiles = CoarseGrainedExecutorBackend.ALL_LOG4J_FILE_NAMES
     val prefix = "SPARK_LOG_URL_"
     sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
+      .map(e => (e._1.substring(prefix.length).toLowerCase, e._2)) ++
+      logFiles.map(name => (name, s"${baseUrl}${name}")).toMap
   }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -136,6 +141,17 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
+ lazy val ALL_LOG4J_FILE_NAMES = {
+    val allLoggers: List[Logger] =
+      LogManager.getCurrentLoggers().asScala.toList.map(_.asInstanceOf[Logger]) :+
+        LogManager.getRootLogger()
+
+      allLoggers
+        .flatMap(_.getAllAppenders.asScala)
+        .filter(_.isInstanceOf[FileAppender])
+        .map(_.asInstanceOf[FileAppender].getFile)
+        .toSet
+  }
 
   private def run(
       driverUrl: String,
