@@ -53,7 +53,7 @@ class BisectingKMeansModel(JavaModelWrapper):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> bskm = BisectingKMeans()
-    >>> model = bskm.run(sc.parallelize(data))
+    >>> model = bskm.train(sc.parallelize(data), k=4)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([0.0, 0.0]))
     True
     >>> model.k
@@ -62,7 +62,7 @@ class BisectingKMeansModel(JavaModelWrapper):
     0.0
     >>> model.k == len(model.clusterCenters)
     True
-    >>> model = bskm.setK(2).run(sc.parallelize(data))
+    >>> model = bskm.train(sc.parallelize(data), k=2)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
     >>> model.k
@@ -117,75 +117,22 @@ class BisectingKMeans:
     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
     KDD Workshop on Text Mining, 2000.]]
     """
-    def __init__(self):
-        self.k = 4
-        self.maxIterations = 20
-        self.minDivisibleClusterSize = 1.0
-        self.seed = -1888008604  # classOf[BisectingKMeans].getName.##
 
-    def setK(self, k):
-        """
-        Set the number of leaf clusters.
-
-        :param k: the desired number of leaf clusters (default: 4). The actual number could be
-        smaller if there are no divisible leaf clusters.
-        """
-        self.k = k
-        return self
-
-    def getK(self):
-        """Return the desired number of leaf clusters."""
-        return self.k
-
-    def setMaxIterations(self, maxIterations):
-        """
-        Set the maximum number of iterations.
-
-        :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
-        """
-        self.maxIterations = maxIterations
-        return self
-
-    def getMaxIterations(self):
-        """Return the maximum number of iterations."""
-        return self.maxIterations
-
-    def setMinDivisibleClusterSize(self, minDivisibleClusterSize):
-        """
-        Set the minimum divisible cluster size.
-
-        :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum
-        proportion of points (if < 1.0) of a divisible cluster (default: 1)
-        """
-        self.minDivisibleClusterSize = minDivisibleClusterSize
-        return self
-
-    def getMinDivisibleClusterSize(self):
-        """Return the min divisible cluster size."""
-        return minDivisibleClusterSize
-
-    def setSeed(self, seed):
-        """
-        Set the seed.
-
-        :param seed: a random seed (default: -1888008604)
-        """
-        self.seed = seed
-        return self
-
-    def getSeed(self):
-        """Return the random seed used."""
-        return self.seed
-
-    def run(self, rdd):
+    def train(self, rdd, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=-1888008604):
         """
         Runs the bisecting k-means algorithm return the model.
 
         :param rdd: input RDD to be trained on
+        :param k: The desired number of leaf clusters (default: 4). The actual number could be
+            smaller if there are no divisible leaf clusters.
+        :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
+        :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum
+            proportion of points (if < 1.0) of a divisible cluster (default: 1)
+        :param seed: a random seed (default: -1888008604 based on classOf[BisectingKMeans].getName.##)
         """
         java_model = callMLlibFunc(
             "trainBisectingKMeans", rdd.map(_convert_to_vector),
-            self.k, self.maxIterations, self.minDivisibleClusterSize, self.seed)
+            k, maxIterations, minDivisibleClusterSize, seed)
         return BisectingKMeansModel(java_model)
 
 
