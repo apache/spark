@@ -296,7 +296,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       // Create the table if the table didn't exist.
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
-        var tableName = JdbcUtils.tableString(table, url)
+        var tableName = JdbcUtils.parseTableName(table, url)
         val sql = s"CREATE TABLE $tableName ($schema)"
         conn.createStatement.executeUpdate(sql)
       }

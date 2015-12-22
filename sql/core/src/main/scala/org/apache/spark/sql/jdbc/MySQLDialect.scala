@@ -41,6 +41,26 @@ private case object MySQLDialect extends JdbcDialect {
   override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
   }
+  
+  override def parseTableName(tableName: String): String = {
+    val tableName1 = tableName.replace("\"", "").replace("\'", "")
+    if (tableName1.contains(".")) {
+      val tableNameList = tableName1.split('.')
+      tableNameList.foldLeft("") { (leftStr, rightStr) =>
+        if (!"".equals(rightStr.trim())) {
+          if ("".equals(leftStr.trim())) {
+            leftStr + s"`$rightStr`"
+          } else {
+            leftStr + "." + s"`$rightStr`"
+          }
+        } else {
+          leftStr
+        }
+      }
+    } else {
+      s"`$tableName1`"
+    }
+  }
 
   override def getTableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
