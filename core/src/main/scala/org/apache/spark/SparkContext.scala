@@ -2066,24 +2066,24 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Set the directory under which RDDs are going to be checkpointed. The directory must
    * be a HDFS path if running on a cluster.
    */
-  def setCheckpointDir(directory: String) {
-
+  def setCheckpointDir(dir
     // If we are running on a cluster, log a warning if the directory is local.
     // Otherwise, the driver may attempt to reconstruct the checkpointed RDD from
     // its own local file system, which is incorrect because the checkpoint files
     // are actually on the executor machines.
-    val path = new Path(directory, UUID.randomUUID().toString)
-    val fs = path.getFileSystem(hadoopConfiguration)
-    val isDirLocal = fs.isInstanceOf[LocalFileSystem]
-    if (!isLocal && Utils.nonLocalPaths(directory).isEmpty && !isDirLocal) {
-      logWarning("Checkpoint directory must be non-local " +
-        "if Spark is running on a cluster: " + directory)
+    if (!isLocal && Utils.nonLocalPaths(directory).isEmpty) {
+      logWarning(s"Spark is not running in local mode, therefore the checkpoint directory "+
+        "must not be on the local filesystem. Directory '$directory' "+
+        "appears to be on the local filesystem.")
     }
 
     checkpointDir = Option(directory).map { dir =>
+      val path = new Path(dir, UUID.randomUUID().toString)
+      val fs = path.getFileSystem(hadoopConfiguration)
       fs.mkdirs(path)
       fs.getFileStatus(path).getPath.toString
     }
+
   }
 
   def getCheckpointDir: Option[String] = checkpointDir
