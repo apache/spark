@@ -119,13 +119,12 @@ private[spark] class AppClient(
      */
     private def registerWithMaster(nthRetry: Int) {
       registerMasterFutures = tryRegisterAllMasters()
-      registrationRetryTimer = registrationRetryThread.scheduleAtFixedRate(new Runnable {
+      registrationRetryTimer = registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
           Utils.tryOrExit {
             if (registered) {
               registerMasterFutures.foreach(_.cancel(true))
               registerMasterThreadPool.shutdownNow()
-              registrationRetryTimer.cancel(true)
             } else if (nthRetry >= REGISTRATION_RETRIES) {
               markDead("All masters are unresponsive! Giving up.")
             } else {
@@ -134,7 +133,7 @@ private[spark] class AppClient(
             }
           }
         }
-      }, REGISTRATION_TIMEOUT_SECONDS, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+      }, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
     }
 
     /**
