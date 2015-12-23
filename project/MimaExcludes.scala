@@ -37,6 +37,11 @@ object MimaExcludes {
       Seq(
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD")
         ) ++
+      Seq(
+        // SPARK-12481
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+          "org.apache.spark.mapred.SparkHadoopMapRedUtil")
+      ) ++
       // When 1.6 is officially released, update this exclusion list.
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
