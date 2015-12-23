@@ -222,7 +222,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int index = (int) $eval2;
-        if (index >= $eval1.numElements() || index < 0) {
+        if (index >= $eval1.numElements() || index < 0 || $eval1.isNullAt(index)) {
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${ctx.getValue(eval1, dataType, "index")};
