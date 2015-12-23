@@ -23,6 +23,7 @@ import java.nio.channels.ReadableByteChannel
 import scala.concurrent.Future
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.rpc.netty.NettyRpcEnvFactory
 import org.apache.spark.util.{RpcUtils, Utils}
 
 
@@ -32,15 +33,6 @@ import org.apache.spark.util.{RpcUtils, Utils}
  */
 private[spark] object RpcEnv {
 
-  private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
-    val rpcEnvNames = Map(
-      "akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory",
-      "netty" -> "org.apache.spark.rpc.netty.NettyRpcEnvFactory")
-    val rpcEnvName = conf.get("spark.rpc", "netty")
-    val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
-  }
-
   def create(
       name: String,
       host: String,
@@ -48,9 +40,8 @@ private[spark] object RpcEnv {
       conf: SparkConf,
       securityManager: SecurityManager,
       clientMode: Boolean = false): RpcEnv = {
-    // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
     val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
-    getRpcEnvFactory(conf).create(config)
+    new NettyRpcEnvFactory().create(config)
   }
 }
 

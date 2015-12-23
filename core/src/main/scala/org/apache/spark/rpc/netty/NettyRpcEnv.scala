@@ -427,7 +427,7 @@ private[netty] object NettyRpcEnv extends Logging {
 
 }
 
-private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
+private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf

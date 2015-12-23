@@ -252,10 +252,7 @@ object SparkEnv extends Logging {
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
     val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager,
       clientMode = !isDriver)
-    val actorSystem: ActorSystem =
-      if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
-        rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
-      } else {
+    val actorSystem: ActorSystem = {
         val actorSystemPort =
           if (port == 0 || rpcEnv.address == null) {
             port

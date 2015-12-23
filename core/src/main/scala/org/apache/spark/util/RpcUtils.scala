@@ -23,7 +23,7 @@ import scala.language.postfixOps
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
-object RpcUtils {
+private[spark] object RpcUtils {
 
   /**
    * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
