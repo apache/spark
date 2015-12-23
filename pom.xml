@@ -2152,6 +2152,7 @@
                 <exclude>com/google/common/base/Optional*</exclude>
                 <exclude>com/google/common/base/Present*</exclude>
                 <exclude>com/google/common/base/Supplier</exclude>
+                <exclude>com/google/common/base/AbstractIterator</exclude>
               </excludes>
             </relocation>
           </relocations>
