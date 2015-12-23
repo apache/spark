@@ -50,18 +50,15 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
 
   override def equals(other: Any): Boolean = other match {
     case that: DirectTaskResult[_] => {
-      if (!this.valueBytes.equals(that.valueBytes)) return false
-
-      val accumSize = if (accumUpdates != null) accumUpdates.size else 0
-      val thatAccumSize = if (that.accumUpdates != null) that.accumUpdates.size else 0
-      if (accumSize != thatAccumSize) return false
-      if (accumSize > 0) {
-        val b = this.accumUpdates.keys.forall { key =>
-          this.accumUpdates.get(key) == that.accumUpdates.get(key)
+      val accumEquals =
+        if (accumUpdates != null) {
+          accumUpdates.keys.forall { k => accumUpdates.get(k) == that.accumUpdates.get(k) }
+        } else {
+          that.accumUpdates == null
         }
-        if (!b) return false;
-      }
-      this.metrics.equals(that.metrics)
+      valueBytes == that.valueBytes &&
+      metrics == that.metrics &&
+      accumEquals
     }
     case _ => false
   }

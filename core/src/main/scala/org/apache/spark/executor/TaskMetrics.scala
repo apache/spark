@@ -217,13 +217,12 @@ class TaskMetrics extends Serializable {
 
   override def equals(other: Any): Boolean = other match {
     case that: TaskMetrics => {
-      if (this.executorDeserializeTime != that.executorDeserializeTime) return false
-      if (this.executorRunTime != that.executorRunTime) return false
-      if (this.resultSize != that.resultSize) return false
-      if (this.jvmGCTime != that.jvmGCTime) return false
-      if (this.resultSerializationTime != that.resultSerializationTime) return false
-      if (this.hostname == null && that.hostname != null) return false
-      if (this.hostname != null) this.hostname.equals(that.hostname) else true
+      this.executorDeserializeTime == that.executorDeserializeTime &&
+      this.executorRunTime == that.executorRunTime &&
+      this.resultSize == that.resultSize &&
+      this.jvmGCTime == that.jvmGCTime &&
+      this.resultSerializationTime == that.resultSerializationTime &&
+      this.hostname == that.hostname
     }
     case _ => false
   }

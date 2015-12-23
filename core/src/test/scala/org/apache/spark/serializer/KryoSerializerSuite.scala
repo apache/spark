@@ -160,7 +160,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       .newInstance()
     def check[T: ClassTag](t: T) {
       val ret = ser.deserialize[T](ser.serialize(t))
-      assert(ret.equals(t), "Deser " + ret + " orig " + t)
+      assert(ret === t, "Deser " + ret + " orig " + t)
     }
     var metrics = new TaskMetrics
     metrics.setHostname(Utils.localHostName())
