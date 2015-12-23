@@ -231,7 +231,7 @@ case class NewInstance(
       s"new $className($argString)"
     }
 
-    if (propagateNull) {
+    if (propagateNull && argGen.nonEmpty) {
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
       s"""
@@ -241,7 +241,7 @@ case class NewInstance(
         $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
         if ($argsNonNull) {
           ${ev.value} = $constructorCall;
-          ${ev.isNull} = false;
+          ${ev.isNull} = ${ev.value} == null;
         }
        """
     } else {
