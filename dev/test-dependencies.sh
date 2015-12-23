@@ -35,6 +35,16 @@ MVN="build/mvn --force"
 # See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
 OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
 TEMP_VERSION="spark-$(date +%s | tail -c6)"
+
+function reset_version {
+  # Restore the original version number:
+  $MVN -q versions:set -DnewVersion=$OLD_VERSION > /dev/null
+
+  # Delete the temporary POMs that we wrote to the local Maven repo:
+  find "$HOME/.m2/" | grep "$TEMP_VERSION" | xargs rm -rf
+}
+trap reset_version EXIT
+
 $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /dev/null
 
 echo "Performing Maven install"
@@ -58,11 +68,6 @@ $MVN $HADOOP2_MODULE_PROFILES -Phadoop-2.4 dependency:build-classpath -pl assemb
   | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
   | grep -v spark > dev/pr-deps-hadoop24
 
-# Restore the original version number:
-$MVN -q versions:set -DnewVersion=$OLD_VERSION > /dev/null
-
-# Delete the temporary POMs that we wrote to the local Maven repo:
-find "$HOME/.m2/" | grep "$TEMP_VERSION" | xargs rm -rf
 
 if [[ $@ == **replace-manifest** ]]; then
   echo "Replacing manifest and creating new file at dev/spark-deps"
