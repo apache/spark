@@ -401,6 +401,7 @@ build = Module(
     dependencies=[],
     source_file_regexes=[
         ".*pom.xml",
+        "dev/test-dependencies.sh",
     ]
 )
 
