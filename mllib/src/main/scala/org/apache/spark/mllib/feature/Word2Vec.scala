@@ -84,7 +84,7 @@ class Word2Vec extends Serializable with Logging {
    * Any sentence longer than this threshold will be divided into chunks of
    * up to `maxSentenceLength` size (default: 1000)
    */
-  @Since("1.6.1")
+  @Since("2.0.0")
   def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
     this.maxSentenceLength = maxSentenceLength
     this
