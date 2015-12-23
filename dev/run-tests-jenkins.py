@@ -194,7 +194,6 @@ def main():
     pr_tests = [
         "pr_merge_ability",
         "pr_public_classes"
-        # DISABLED (pwendell) "pr_new_dependencies"
     ]
 
     # `bind_message_base` returns a function to generate messages for Github posting
