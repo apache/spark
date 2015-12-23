@@ -456,15 +456,11 @@ case class MapObjects(
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
           $loopNullCheck
 
-          if (${loopVar.isNull}) {
+          ${genFunction.code}
+          if (${genFunction.isNull}) {
             $convertedArray[$loopIndex] = null;
           } else {
-            ${genFunction.code}
-            if (${genFunction.isNull}) {
-              $convertedArray[$loopIndex] = null;
-            } else {
-              $convertedArray[$loopIndex] = ${genFunction.value};
-            }
+            $convertedArray[$loopIndex] = ${genFunction.value};
           }
 
           $loopIndex += 1;

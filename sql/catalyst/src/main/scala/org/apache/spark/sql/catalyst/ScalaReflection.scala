@@ -407,10 +407,13 @@ object ScalaReflection extends ScalaReflection {
       val externalDataType = dataTypeFor(elementType)
       val Schema(catalystType, nullable) = silentSchemaFor(elementType)
       if (isNativeType(externalDataType)) {
-        NewInstance(
-          classOf[GenericArrayData],
-          input :: Nil,
-          dataType = ArrayType(catalystType, nullable))
+        expressions.If(
+          IsNull(input),
+          expressions.Literal.create(null, ArrayType(catalystType, nullable)),
+          NewInstance(
+            classOf[GenericArrayData],
+            input :: Nil,
+            dataType = ArrayType(catalystType, nullable)))
       } else {
         val clsName = getClassNameFromType(elementType)
         val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
