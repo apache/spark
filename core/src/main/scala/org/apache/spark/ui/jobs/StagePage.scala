@@ -1301,9 +1301,11 @@ private[ui] class TaskPagedTable(
     val headerRow: Seq[Node] = {
       taskHeadersAndCssClasses.map { case (header, cssClass) =>
         if (header == sortColumn) {
-          val headerLink =
-            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}" +
-              s"&task.pageSize=${pageSize}"
+          val headerLink = Unparsed(
+            basePath +
+              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.desc=${!desc}" +
+              s"&task.pageSize=$pageSize")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
           <th class={cssClass}>
             <a href={headerLink}>
@@ -1312,9 +1314,10 @@ private[ui] class TaskPagedTable(
             </a>
           </th>
         } else {
-          val headerLink =
-            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.pageSize=${pageSize}"
-          val js = Unparsed(s"window.location.href='${headerLink}'")
+          val headerLink = Unparsed(
+            basePath +
+              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.pageSize=$pageSize")
           <th class={cssClass}>
             <a href={headerLink}>
               {header}

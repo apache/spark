@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import java.net.URLDecoder
 
 import scala.collection.JavaConverters._
-import scala.xml.Node
+import scala.xml.{Node, Unparsed}
 
 import com.google.common.base.Splitter
 
@@ -167,7 +167,7 @@ private[ui] trait PagedTable[T] {
           // The current page should be disabled so that it cannot be clicked.
           <li class="disabled"><a href="#">{p}</a></li>
         } else {
-          <li><a href={pageLink(p)}>{p}</a></li>
+          <li><a href={Unparsed(pageLink(p))}>{p}</a></li>
         }
       }
 
@@ -195,7 +195,7 @@ private[ui] trait PagedTable[T] {
         <div>
           <form id={s"form-$tableId-page"}
                 method="get"
-                action={goButtonFormPath}
+                action={Unparsed(goButtonFormPath)}
                 class="form-inline pull-right"
                 style="margin-bottom: 0px;">
             {hiddenFormFields}
@@ -221,7 +221,7 @@ private[ui] trait PagedTable[T] {
           <ul>
             {if (currentGroup > firstGroup) {
             <li>
-              <a href={pageLink(startPage - groupSize)} aria-label="Previous Group">
+              <a href={Unparsed(pageLink(startPage - groupSize))} aria-label="Previous Group">
                 <span aria-hidden="true">
                   &lt;&lt;
                 </span>
@@ -230,7 +230,7 @@ private[ui] trait PagedTable[T] {
             }}
             {if (page > 1) {
             <li>
-            <a href={pageLink(page - 1)} aria-label="Previous">
+            <a href={Unparsed(pageLink(page - 1))} aria-label="Previous">
               <span aria-hidden="true">
                 &lt;
               </span>
@@ -240,14 +240,14 @@ private[ui] trait PagedTable[T] {
             {pageTags}
             {if (page < totalPages) {
             <li>
-              <a href={pageLink(page + 1)} aria-label="Next">
+              <a href={Unparsed(pageLink(page + 1))} aria-label="Next">
                 <span aria-hidden="true">&gt;</span>
               </a>
             </li>
             }}
             {if (currentGroup < lastGroup) {
             <li>
-              <a href={pageLink(startPage + groupSize)} aria-label="Next Group">
+              <a href={Unparsed(pageLink(startPage + groupSize))} aria-label="Next Group">
                 <span aria-hidden="true">
                   &gt;&gt;
                 </span>

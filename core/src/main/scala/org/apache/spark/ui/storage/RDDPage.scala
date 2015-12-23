@@ -267,9 +267,11 @@ private[ui] class BlockPagedTable(
     val headerRow: Seq[Node] = {
       blockHeaders.map { header =>
         if (header == sortColumn) {
-          val headerLink =
-            s"$basePath&block.sort=${URLEncoder.encode(header, "UTF-8")}&block.desc=${!desc}" +
-              s"&block.pageSize=${pageSize}"
+          val headerLink = Unparsed(
+            basePath +
+              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&block.desc=${!desc}" +
+              s"&block.pageSize=$pageSize")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
           <th>
             <a href={headerLink}>
@@ -278,9 +280,10 @@ private[ui] class BlockPagedTable(
             </a>
           </th>
         } else {
-          val headerLink =
-            s"$basePath&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
-              s"&block.pageSize=${pageSize}"
+          val headerLink = Unparsed(
+            basePath +
+              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&block.pageSize=$pageSize")
           <th>
             <a href={headerLink}>
               {header}
