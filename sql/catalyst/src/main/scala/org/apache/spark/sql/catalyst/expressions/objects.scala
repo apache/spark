@@ -439,6 +439,11 @@ case class MapObjects(
       s"boolean ${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
     }
 
+    val isGenFunctionReturnOption = lambdaFunction.dataType match {
+      case ObjectType(cls) if cls == classOf[Option[_]] => "true"
+      case _ => "false"
+    }
+
     s"""
       ${genInputData.code}
 
@@ -456,11 +461,15 @@ case class MapObjects(
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
           $loopNullCheck
 
-          ${genFunction.code}
-          if (${genFunction.isNull}) {
+          if (${loopVar.isNull} && !${isGenFunctionReturnOption}) {
             $convertedArray[$loopIndex] = null;
           } else {
-            $convertedArray[$loopIndex] = ${genFunction.value};
+            ${genFunction.code}
+            if (${genFunction.isNull}) {
+              $convertedArray[$loopIndex] = null;
+            } else {
+              $convertedArray[$loopIndex] = ${genFunction.value};
+            }
           }
 
           $loopIndex += 1;
