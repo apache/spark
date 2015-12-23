@@ -21,6 +21,7 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.{False, True}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
@@ -471,115 +472,111 @@ object OptimizeIn extends Rule[LogicalPlan] {
  * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
+  import org.apache.spark.sql.catalyst.dsl.expressions._
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case and @ And(left, right) => (left, right) match {
-        // true && r  =>  r
-        case (Literal(true, BooleanType), r) => r
-        // l && true  =>  l
-        case (l, Literal(true, BooleanType)) => l
-        // false && r  =>  false
-        case (Literal(false, BooleanType), _) => Literal(false)
-        // l && false  =>  false
-        case (_, Literal(false, BooleanType)) => Literal(false)
-        // a && a  =>  a
-        case (l, r) if l fastEquals r => l
-        // a && (not(a) || b) => a && b
-        case (l, Or(l1, r)) if (Not(l) == l1) => And(l, r)
-        case (l, Or(r, l1)) if (Not(l) == l1) => And(l, r)
-        case (Or(l, l1), r) if (l1 == Not(r)) => And(l, r)
-        case (Or(l1, l), r) if (l1 == Not(r)) => And(l, r)
-        // (a || b) && (a || c)  =>  a || (b && c)
-        case _ =>
-          // 1. Split left and right to get the disjunctive predicates,
-          //   i.e. lhs = (a, b), rhs = (a, c)
-          // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-          // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-          // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
-          val lhs = splitDisjunctivePredicates(left)
-          val rhs = splitDisjunctivePredicates(right)
-          val common = lhs.filter(e => rhs.exists(e.semanticEquals(_)))
-          if (common.isEmpty) {
-            // No common factors, return the original predicate
-            and
-          } else {
-            val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            if (ldiff.isEmpty || rdiff.isEmpty) {
-              // (a || b || c || ...) && (a || b) => (a || b)
-              common.reduce(Or)
-            } else {
-              // (a || b || c || ...) && (a || b || d || ...) =>
-              // ((c || ...) && (d || ...)) || a || b
-              (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
-            }
-          }
-      }  // end of And(left, right)
+      case True And e => e
+      case e And True => e
+      case False Or e => e
+      case e Or False => e
 
-      case or @ Or(left, right) => (left, right) match {
-        // true || r  =>  true
-        case (Literal(true, BooleanType), _) => Literal(true)
-        // r || true  =>  true
-        case (_, Literal(true, BooleanType)) => Literal(true)
-        // false || r  =>  r
-        case (Literal(false, BooleanType), r) => r
-        // l || false  =>  l
-        case (l, Literal(false, BooleanType)) => l
-        // a || a => a
-        case (l, r) if l fastEquals r => l
-        // (a && b) || (a && c)  =>  a && (b || c)
-        case _ =>
-           // 1. Split left and right to get the conjunctive predicates,
-           //   i.e.  lhs = (a, b), rhs = (a, c)
-           // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-           // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-           // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
-          val lhs = splitConjunctivePredicates(left)
-          val rhs = splitConjunctivePredicates(right)
-          val common = lhs.filter(e => rhs.exists(e.semanticEquals(_)))
-          if (common.isEmpty) {
-            // No common factors, return the original predicate
-            or
-          } else {
-            val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            if (ldiff.isEmpty || rdiff.isEmpty) {
-              // (a && b) || (a && b && c && ...) => a && b
-              common.reduce(And)
-            } else {
-              // (a && b && c && ...) || (a && b && d && ...) =>
-              // ((c && ...) || (d && ...)) && a && b
-              (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
-            }
-          }
-      }  // end of Or(left, right)
+      case False And _ => False
+      case _ And False => False
+      case True Or _ => True
+      case _ Or True => True
 
-      case not @ Not(exp) => exp match {
-        // not(true)  =>  false
-        case Literal(true, BooleanType) => Literal(false)
-        // not(false)  =>  true
-        case Literal(false, BooleanType) => Literal(true)
-        // not(l > r)  =>  l <= r
-        case GreaterThan(l, r) => LessThanOrEqual(l, r)
-        // not(l >= r)  =>  l < r
-        case GreaterThanOrEqual(l, r) => LessThan(l, r)
-        // not(l < r)  =>  l >= r
-        case LessThan(l, r) => GreaterThanOrEqual(l, r)
-        // not(l <= r)  =>  l > r
-        case LessThanOrEqual(l, r) => GreaterThan(l, r)
-        // not(l || r) => not(l) && not(r)
-        case Or(l, r) => And(Not(l), Not(r))
-        // not(l && r) => not(l) or not(r)
-        case And(l, r) => Or(Not(l), Not(r))
-        // not(not(e))  =>  e
-        case Not(e) => e
-        case _ => not
-      }  // end of Not(exp)
+      case a And b if a.semanticEquals(b) => a
+      case a Or b if a.semanticEquals(b) => a
 
-      // if (true) a else b  =>  a
-      // if (false) a else b  =>  b
-      case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
+      case a And (b Or c) if Not(a).semanticEquals(b) => a && c
+      case a And (b Or c) if Not(a).semanticEquals(c) => a && b
+      case (a Or b) And c if a.semanticEquals(Not(c)) => b && c
+      case (a Or b) And c if b.semanticEquals(Not(c)) => a && c
+
+      case a Or (b And c) if Not(a).semanticEquals(b) => a || c
+      case a Or (b And c) if Not(a).semanticEquals(c) => a || b
+      case (a And b) Or c if a.semanticEquals(Not(c)) => b || c
+      case (a And b) Or c if b.semanticEquals(Not(c)) => a || c
+
+      // Common factor elimination for conjunction
+      case and @ (lhs And rhs) =>
+        findCommonDisjunctiveFactors(lhs, rhs) match {
+          // No common factors found, e.g.:
+          //   (a || b) && (c || d)
+          case (Nil, _, _) => and
+          // Common factors found, and `lhs` is a subset of `rhs`, e.g:
+          //   (a || b) && (a || b || c) => a || b
+          //    ~~~~~~      ~~~~~~          ~~~~~~
+          case (common, Nil, _) => common.reduce(Or)
+          // Common factors found, and `rhs` is a subset of `lhs`, e.g:
+          //   (a || b || c) && (a || b) => a || b
+          //    ~~~~~~           ~~~~~~     ~~~~~~
+          case (common, _, Nil) => common.reduce(Or)
+          // Common factors found and neither side contains the other side, e.g:
+          //   (a || b || c) && (a || b || d) => (a || b) && (c || d)
+          //    ~~~~~~           ~~~~~~          ~~~~~~~~
+          case (common, ldiff, rdiff) =>
+            common.reduce(Or) || (ldiff.reduce(Or) && rdiff.reduce(Or))
+        }
+
+      // Common factor elimination for disjunction
+      case or @ (lhs Or rhs) =>
+        findCommonConjunctiveFactors(lhs, rhs) match {
+          // No common factors found, e.g.:
+          //   (a && b) || (c && d)
+          case (Nil, _, _) => or
+          // Common factors found, and `lhs` is a subset of `rhs`, e.g:
+          //   (a && b) || (a && b && c) => a && b
+          //    ~~~~~~      ~~~~~~          ~~~~~~
+          case (common, Nil, _) => common.reduce(And)
+          // Common factors found, and `rhs` is a subset of `lhs`, e.g:
+          //   (a && b && c) || (a && b) => a && b
+          //    ~~~~~~           ~~~~~~     ~~~~~~
+          case (common, _, Nil) => common.reduce(And)
+          // Common factors found and neither side contains the other side, e.g:
+          //   (a && b && c) || (a && b && d) => (a && b) || (c && d)
+          //    ~~~~~~           ~~~~~~          ~~~~~~~~
+          case (common, ldiff, rdiff) =>
+            common.reduce(And) && (ldiff.reduce(And) || rdiff.reduce(And))
+        }
+
+      case Not(True) => False
+      case Not(False) => True
+
+      case Not(a GreaterThan b) => a <= b
+      case Not(a GreaterThanOrEqual b) => a < b
+
+      case Not(a LessThan b) => a >= b
+      case Not(a LessThanOrEqual b) => a > b
+
+      case Not(a Or b) => !a && !b
+      case Not(a And b) => !a || !b
+
+      case Not(Not(e)) => e
+
+      case If(True, trueValue, _) => trueValue
+      case If(False, _, falseValue) => falseValue
     }
+  }
+
+  private def findCommonFactors(
+      seq1: Seq[Expression], seq2: Seq[Expression]
+  ): (Seq[Expression], Seq[Expression], Seq[Expression]) = {
+    val common = seq1.filter(e => seq2.exists(e.semanticEquals))
+    val diff1 = seq1.filterNot(e => common.exists(e.semanticEquals))
+    val diff2 = seq2.filterNot(e => common.exists(e.semanticEquals))
+    (common, diff1, diff2)
+  }
+
+  private def findCommonConjunctiveFactors(
+      p1: Expression, p2: Expression): (Seq[Expression], Seq[Expression], Seq[Expression]) = {
+    findCommonFactors(splitConjunctivePredicates(p1), splitConjunctivePredicates(p2))
+  }
+
+  private def findCommonDisjunctiveFactors(
+      p1: Expression, p2: Expression): (Seq[Expression], Seq[Expression], Seq[Expression]) = {
+    findCommonFactors(splitDisjunctivePredicates(p1), splitDisjunctivePredicates(p2))
   }
 }
 
