@@ -85,5 +85,4 @@ org.apache.spark.sql.sources.DataSourceRegister
 org.apache.spark.scheduler.SparkHistoryListenerFactory
 .*parquet
 LZ4BlockInputStream.java
-spark-deps-hadoop1
-spark-deps-hadoop24
+spark-deps-.*

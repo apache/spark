@@ -73,7 +73,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
     | grep "Building Spark Project Assembly" -A 5 \
     | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
-    | grep -v spark > dev/pr-deps/$HADOOP_PROFILE
+    | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
 done
 
 if [[ $@ == **replace-manifest** ]]; then
@@ -85,7 +85,7 @@ fi
 
 for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   set +e
-  dep_diff="$(diff dev/pr-deps/$HADOOP_PROFILE dev/deps/$HADOOP_PROFILE)"
+  dep_diff="$(diff dev/pr-deps/spark-deps-$HADOOP_PROFILE dev/deps/spark-deps-$HADOOP_PROFILE)"
   set -e
   if [ "$dep_diff" != "" ]; then
     echo "Spark's published dependencies DO NOT MATCH the manifest file (dev/spark-deps)."
