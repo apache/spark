@@ -153,6 +153,15 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         )
       )
 
+    // Push down limit into union
+    case Limit(exp, Union(left, right)) =>
+      Limit(exp,
+        Union(
+          Limit(exp, left),
+          Limit(exp, right)
+        )
+      )
+
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, u @ Union(left, right)) =>
       if (projectList.forall(_.deterministic)) {
