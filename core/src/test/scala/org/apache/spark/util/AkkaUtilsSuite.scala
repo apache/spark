@@ -17,11 +17,9 @@
 
 package org.apache.spark.util
 
-import scala.collection.mutable.ArrayBuffer
-
 import java.util.concurrent.TimeoutException
 
-import akka.actor.ActorNotFound
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.rpc.RpcEnv
@@ -37,7 +35,6 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("remote fetch security bad password") {
     val conf = new SparkConf
-    conf.set("spark.rpc", "akka")
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
 
@@ -52,7 +49,6 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
     val badconf = new SparkConf
-    badconf.set("spark.rpc", "akka")
     badconf.set("spark.authenticate", "true")
     badconf.set("spark.authenticate.secret", "bad")
     val securityManagerBad = new SecurityManager(badconf)
@@ -61,9 +57,9 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, conf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    intercept[akka.actor.ActorNotFound] {
+    intercept[RuntimeException] {
       slaveTracker.trackerEndpoint =
-        slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+        slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
     }
 
     rpcEnv.shutdown()
@@ -94,7 +90,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, badconf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
-      slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
     assert(securityManagerBad.isAuthenticationEnabled() === false)
 
@@ -143,7 +139,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, goodconf, securityManagerGood)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
-      slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
     masterTracker.registerShuffle(10, 1)
     masterTracker.incrementEpoch()
@@ -166,7 +162,6 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("remote fetch security off client") {
     val conf = new SparkConf
-    conf.set("spark.rpc", "akka")
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
 
@@ -183,7 +178,6 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
     val badconf = new SparkConf
-    badconf.set("spark.rpc", "akka")
     badconf.set("spark.authenticate", "false")
     badconf.set("spark.authenticate.secret", "bad")
     val securityManagerBad = new SecurityManager(badconf)
@@ -192,9 +186,9 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, badconf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    intercept[akka.actor.ActorNotFound] {
+    intercept[RuntimeException] {
       slaveTracker.trackerEndpoint =
-        slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+        slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
     }
 
     rpcEnv.shutdown()
@@ -221,7 +215,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val slaveRpcEnv = RpcEnv.create("spark-slaves", hostname, 0, slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
-      slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
     assert(securityManagerBad.isAuthenticationEnabled() === false)
 
@@ -268,7 +262,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
-      slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
     assert(securityManagerBad.isAuthenticationEnabled() === true)
 
@@ -292,7 +286,6 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("remote fetch ssl on and security enabled - bad credentials") {
     val conf = sparkSSLConfig()
-    conf.set("spark.rpc", "akka")
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
     val securityManager = new SecurityManager(conf)
@@ -308,16 +301,15 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
     val slaveConf = sparkSSLConfig()
-    slaveConf.set("spark.rpc", "akka")
     slaveConf.set("spark.authenticate", "true")
     slaveConf.set("spark.authenticate.secret", "bad")
     val securityManagerBad = new SecurityManager(slaveConf)
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    intercept[akka.actor.ActorNotFound] {
+    intercept[RuntimeException] {
       slaveTracker.trackerEndpoint =
-        slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+        slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
     }
 
     rpcEnv.shutdown()
@@ -346,10 +338,10 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
     try {
-      slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
       fail("should receive either ActorNotFound or TimeoutException")
     } catch {
-      case e: ActorNotFound =>
+      case e: RuntimeException =>
       case e: TimeoutException =>
     }
 
