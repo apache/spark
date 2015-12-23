@@ -23,13 +23,55 @@ import java.nio.charset.Charset
 
 import com.google.common.io.Files
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{Accumulator, SparkConf, SparkContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
 import org.apache.spark.util.IntParam
 
 /**
- * Counts words in text encoded with UTF8 received from the network every second.
+ * Use this singleton to get or register a Broadcast variable.
+ */
+object WordBlacklist {
+
+  @volatile private var instance: Broadcast[Seq[String]] = null
+
+  def getInstance(sc: SparkContext): Broadcast[Seq[String]] = {
+    if (instance == null) {
+      synchronized {
+        if (instance == null) {
+          val wordBlacklist = Seq("a", "b", "c")
+          instance = sc.broadcast(wordBlacklist)
+        }
+      }
+    }
+    instance
+  }
+}
+
+/**
+ * Use this singleton to get or register an Accumulator.
+ */
+object DroppedWordsCounter {
+
+  @volatile private var instance: Accumulator[Long] = null
+
+  def getInstance(sc: SparkContext): Accumulator[Long] = {
+    if (instance == null) {
+      synchronized {
+        if (instance == null) {
+          instance = sc.accumulator(0L, "WordsInBlacklistCounter")
+        }
+      }
+    }
+    instance
+  }
+}
+
+/**
+ * Counts words in text encoded with UTF8 received from the network every second. This example also
+ * shows how to use lazily instantiated singleton instances for Accumulator and Broadcast so that
+ * they can be registered on driver failures.
  *
  * Usage: RecoverableNetworkWordCount <hostname> <port> <checkpoint-directory> <output-file>
  *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
@@ -75,10 +117,24 @@ object RecoverableNetworkWordCount {
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
-      val counts = "Counts at time " + time + " " + rdd.collect().mkString("[", ", ", "]")
-      println(counts)
+      // Get or register the blacklist Broadcast
+      val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
+      // Get or register the droppedWordsCounter Accumulator
+      val droppedWordsCounter = DroppedWordsCounter.getInstance(rdd.sparkContext)
+      // Use blacklist to drop words and use droppedWordsCounter to count them
+      val counts = rdd.filter { case (word, count) =>
+        if (blacklist.value.contains(word)) {
+          droppedWordsCounter += count
+          false
+        } else {
+          true
+        }
+      }.collect().mkString("[", ", ", "]")
+      val output = "Counts at time " + time + " " + counts
+      println(output)
+      println("Dropped " + droppedWordsCounter.value + " word(s) totally")
       println("Appending to " + outputFile.getAbsolutePath)
-      Files.append(counts + "\n", outputFile, Charset.defaultCharset())
+      Files.append(output + "\n", outputFile, Charset.defaultCharset())
     })
     ssc
   }
