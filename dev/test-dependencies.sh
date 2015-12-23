@@ -35,7 +35,7 @@ MVN="build/mvn --force"
 # See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
 OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
 TEMP_VERSION="spark-$(date +%s | tail -c6)"
-$MVN -q versions:set -DnewVersion=$TEMP_VERSION > /dev/null
+$MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /dev/null
 
 echo "Performing Maven install"
 $MVN $HADOOP2_MODULE_PROFILES jar:jar install:install \
