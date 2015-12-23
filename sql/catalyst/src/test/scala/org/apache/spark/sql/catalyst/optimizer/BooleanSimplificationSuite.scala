@@ -81,12 +81,6 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(('a < 2 || 'a > 3 || 'b > 5) && 'a < 2, 'a < 2)
 
     checkCondition('a < 2 && ('a < 2 || 'a > 3 || 'b > 5) , 'a < 2)
-
-    checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), 'a < 2 || ('b > 3 && 'c > 5))
-
-    checkCondition(
-      ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5),
-      ('a === 'b || 'b > 3 && 'a > 3 && 'a < 5))
   }
 
   test("a && (!a || b)") {
@@ -114,15 +108,6 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     val actual = Optimize.execute(plan)
     val expected = caseInsensitiveAnalyzer.execute(
       testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
-    comparePlans(actual, expected)
-  }
-
-  test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
-    val plan = caseInsensitiveAnalyzer.execute(
-      testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
-    val actual = Optimize.execute(plan)
-    val expected = caseInsensitiveAnalyzer.execute(
-      testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
   }
 }
