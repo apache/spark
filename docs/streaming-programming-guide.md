@@ -2029,6 +2029,11 @@ If the data is being received by the receivers faster than what can be processed
 you can limit the rate by setting the [configuration parameter](configuration.html#spark-streaming)
 `spark.streaming.receiver.maxRate`.
 
+If using S3 for checkpointing, please remember to enable `spark.streaming.driver.writeAheadLog.closeFileAfterWrite`
+and `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. You can also enable
+`spark.streaming.driver.writeAheadLog.allowBatching` to improve the performance of writing write
+ahead logs in driver. See [Spark Streaming Configuration](configuration.html#spark-streaming) or more details.
+
 ***
 
 ## Monitoring Applications

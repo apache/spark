@@ -1600,6 +1600,33 @@ Apart from these, the following properties are also available, and may be useful
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record in driver. Because S3 doesn't
+    support flushing of data, when using S3 for checkpointing, you should enable it to achieve read
+    after write consistency.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record in receivers. Because S3
+    doesn't support flushing of data, when using S3 for checkpointing, you should enable it to
+    achieve read after write consistency.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.driver.writeAheadLog.allowBatching</code></td>
+  <td>false</td>
+  <td>
+    Whether to batch write ahead logs in driver to write. When using S3 for checkpointing, write
+    operations in driver usually take too long. Enable batching write ahead logs will improve
+    the performance of writing.
+  </td>
+</tr>
 </table>
 
 #### SparkR
