@@ -546,6 +546,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
     ))
   }
+
+  test("SPARK-12478: top level null field") {
+    val ds0 = Seq(NestedStruct(null)).toDS()
+    checkAnswer(ds0, NestedStruct(null))
+    checkAnswer(ds0.toDF(), Row(null))
+
+    val ds1 = Seq(DeepNestedStruct(NestedStruct(null))).toDS()
+    checkAnswer(ds1, DeepNestedStruct(NestedStruct(null)))
+    checkAnswer(ds1.toDF(), Row(Row(null)))
+  }
 }
 
 case class ClassData(a: String, b: Int)
@@ -553,6 +563,7 @@ case class ClassData2(c: String, d: Int)
 case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
+case class DeepNestedStruct(f: NestedStruct)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
