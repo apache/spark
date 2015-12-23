@@ -868,11 +868,15 @@ object PushLimitThroughOuterJoin extends Rule[LogicalPlan] with PredicateHelper 
     case f @ Limit(expr, Join(left, right, joinType, joinCondition)) =>
       joinType match {
         case RightOuter =>
-          Limit(expr, Join(left, Limit(expr, right), joinType, joinCondition))
+          Limit(expr, Join(left, CombineLimits(Limit(expr, right)), joinType, joinCondition))
         case LeftOuter =>
-          Limit(expr, Join(Limit(expr, left), right, joinType, joinCondition))
+          Limit(expr, Join(CombineLimits(Limit(expr, left)), right, joinType, joinCondition))
         case FullOuter =>
-          Limit(expr, Join(Limit(expr, left), Limit(expr, right), joinType, joinCondition))
+          Limit(expr,
+            Join(
+              CombineLimits(Limit(expr, left)),
+              CombineLimits(Limit(expr, right)),
+              joinType, joinCondition))
         case _ => f // DO Nothing for the other join types
       }
   }
