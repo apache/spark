@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
-
 import javax.servlet.Filter
 
 import scala.collection.mutable
@@ -264,10 +263,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertNotFound(appId, None)
   }
 
-  /**
-   * Test that if an attempt ID is is set, it must be used in lookups
-   */
-  test("Naming") {
+  test("Test that if an attempt ID is is set, it must be used in lookups") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(1)
     implicit val cache = new ApplicationCache(operations,
@@ -359,8 +355,11 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * @param expected expected value.
    * @param cache cache
    */
-  def assertMetric(name: String, counter: Counter, expected: Long)(implicit cache: ApplicationCache)
-  : Unit = {
+  def assertMetric(
+      name: String,
+      counter: Counter,
+      expected: Long)
+      (implicit cache: ApplicationCache): Unit = {
     val actual = counter.getCount
     if (actual != expected) {
       // this is here because Scalatest loses stack depth
@@ -377,8 +376,11 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * @param expected expected value
    * @param cache app cache
    */
-  def assertCacheEntryEquals(appId: String, attemptId: Option[String],
-      expected: CacheEntry)(implicit cache: ApplicationCache): Unit = {
+  def assertCacheEntryEquals(
+      appId: String,
+      attemptId: Option[String],
+      expected: CacheEntry)
+      (implicit cache: ApplicationCache): Unit = {
     val actual = cache.lookupCacheEntry(appId, attemptId)
     val errorText = s"Expected get($appId, $attemptId) -> $expected, but got $actual from $cache"
     assert(expected.ui === actual.ui, errorText + " SparkUI reference")
@@ -394,7 +396,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * @param attemptId attempt ID
    * @param cache app cache
    */
-  def assertNotFound(appId: String, attemptId: Option[String])
+  def assertNotFound(
+      appId: String,
+      attemptId: Option[String])
       (implicit cache: ApplicationCache): Unit = {
     val ex = intercept[UncheckedExecutionException] {
       cache.get(appId, attemptId)
@@ -416,7 +420,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
     val attempt1 = Some("01")
 
-    var ids = new ListBuffer[String]()
+    val ids = new ListBuffer[String]()
     // build a list of applications
     val count = 100
     for (i <- 1 to count ) {
@@ -437,9 +441,8 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertMetric("evictionCount", metrics.evictionCount, count - size)
 }
 
-  test("AttemptsAreEvicted") {
+  test("Attempts are Evicted") {
     val operations = new StubCacheOperations()
-    // only two entries are retained, so we expect evictions to occurr on lookups
     implicit val cache: ApplicationCache = new TestApplicationCache(operations,
       retainedApplications = 4, refreshInterval = 2)
     val metrics = cache.metrics

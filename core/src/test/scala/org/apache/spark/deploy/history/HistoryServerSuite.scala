@@ -39,8 +39,8 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.ResetSystemProperties
 import org.apache.spark._
 import org.apache.spark.util.Utils
@@ -57,7 +57,7 @@ import org.apache.spark.util.Utils
  * are considered part of Spark's public api.
  */
 class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils with Eventually with WebBrowser with ResetSystemProperties {
+  with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext with ResetSystemProperties {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
@@ -290,7 +290,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val provider = new FsHistoryProvider(myConf)
     val securityManager = new SecurityManager(myConf)
 
-    val sc = new SparkContext("local", "test", myConf)
+    sc = new SparkContext("local", "test", myConf)
     val logDirUri = logDir.toURI
     val logDirPath = new Path(logDirUri)
     val fs = FileSystem.get(logDirUri, sc.hadoopConfiguration)
@@ -316,153 +316,144 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(myConf, provider, securityManager, 18080)
     server.initialize()
     server.bind()
-    try {
-      val port = server.boundPort
-      val metrics = server.cacheMetrics
+    val port = server.boundPort
+    val metrics = server.cacheMetrics
 
-      // assert that a metric has a value; if not dump the whole metrics instance
-      def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
-        val actual = counter.getCount
-        if (actual != expected) {
-          // this is here because Scalatest loses stack depth
-          fail(s"Wrong $name value - expected $expected but got $actual" +
-              s" in metrics\n$metrics")
-        }
+    // assert that a metric has a value; if not dump the whole metrics instance
+    def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
+      val actual = counter.getCount
+      if (actual != expected) {
+        // this is here because Scalatest loses stack depth
+        fail(s"Wrong $name value - expected $expected but got $actual" +
+            s" in metrics\n$metrics")
       }
-
-      // build a URL for an app or app/attempt plus a page underneath
-      def buildURL(appId: String, suffix: String): URL = {
-        new URL(s"http://localhost:$port/history/$appId$suffix")
-      }
-
-      // build a rest URL for the application and suffix.
-      def applications(appId: String, suffix: String): URL = {
-        new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
-      }
-
-      val historyServerRoot = new URL(s"http://localhost:$port/")
-      val historyServerIncompleted = new URL(historyServerRoot, "?page=1&showIncomplete=true")
-
-      // assert the body of a URL contains a string; return that body
-      def assertUrlContains(url: URL, str: String): String = {
-        val body = HistoryServerSuite.getUrl(url)
-        assert(body.contains(str), s"did not find $str at $url : $body")
-        body
-      }
-
-      // start initial job
-      val d = sc.parallelize(1 to 10)
-      d.count()
-      val stdInterval = interval(100 milliseconds)
-      val appId = eventually(timeout(20 seconds), stdInterval) {
-        val json = getContentAndCode("applications", port)._2.get
-        val apps = parse(json).asInstanceOf[JArray].arr
-        apps should have size 1
-        (apps.head \ "id").extract[String]
-      }
-
-      // which lists as incomplete
-      assertUrlContains(historyServerIncompleted, appId)
-
-      val appIdRoot = buildURL(appId, "")
-      val rootAppPage = HistoryServerSuite.getUrl(appIdRoot)
-      logDebug(s"$appIdRoot ->[${rootAppPage.length}] \n$rootAppPage")
-      // sanity check to make sure filter is chaining calls
-      rootAppPage should not be empty
-
-      def getAppUI: SparkUI = {
-        provider.getAppUI(appId, None).get.ui
-      }
-
-      // selenium isn't that useful on failures...add our own reporting
-      def getNumJobs(suffix: String): Int = {
-        val target = buildURL(appId, suffix)
-        val targetBody = HistoryServerSuite.getUrl(target)
-        try {
-          go to target.toExternalForm
-          findAll(cssSelector("tbody tr")).toIndexedSeq.size
-        } catch {
-          case ex: Exception =>
-            throw new Exception(s"Against $target\n$targetBody", ex)
-        }
-      }
-      // use REST API to get #of jobs
-      def getNumJobsRestful(): Int = {
-        val jobs = applications(appId, "/jobs")
-        val json = HistoryServerSuite.getUrl(jobs)
-        val jsonAst = parse(json)
-        val jobList = jsonAst.asInstanceOf[JArray]
-        jobList.values.size
-      }
-
-      def completedJobs(): Seq[JobUIData] = {
-        getAppUI.jobProgressListener.completedJobs
-      }
-
-      def activeJobs(): Seq[JobUIData] = {
-        getAppUI.jobProgressListener.activeJobs.values.toSeq
-      }
-
-      activeJobs() should have size 0
-      completedJobs() should have size 1
-      getNumJobs("") should be (1)
-      getNumJobs("/jobs") should be (1)
-      getNumJobsRestful() should be (1)
-      assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
-
-      // dump state before the next bit of test, which is where update
-      // checking really gets stressed
-      dumpLogDir("filesystem before executing second job")
-      logDebug(s"History Server: $server")
-
-      // second job needs a delay to ensure timestamps are different
-      Thread.sleep(10)
-
-      logDebug("Starting second job")
-      val d2 = sc.parallelize(1 to 10)
-      d2.count()
-      dumpLogDir("After second job")
-
-      val stdTimeout = timeout(10 seconds)
-      logDebug("waiting for UI to update")
-      eventually(stdTimeout, stdInterval) {
-        assert(2 === getNumJobs(""),
-          s"jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
-        assert(2 === getNumJobs("/jobs"),
-          s"job count under /jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
-        getNumJobsRestful() should be(2)
-      }
-
-      // and again, without any intermediate sleep, so relying on size changes rather than modtime
-      d.count()
-      d.count()
-      eventually(stdTimeout, stdInterval) {
-        assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
-      }
-      val jobcount = getNumJobs("/jobs")
-      assert(!provider.getListing().head.completed)
-
-      // stop the server
-      sc.stop()
-      // check the app is now found as completed
-      eventually(stdTimeout, stdInterval) {
-        assert(provider.getListing().head.completed,
-          s"application never completed, server=$server\n")
-      }
-
-      // verify the root page picks up the application, even without any GETs to the loaded
-      // incomplete UI
-      eventually(stdTimeout, stdInterval) {
-        assertUrlContains(historyServerRoot, appId)
-      }
-      // the root UI must pick this up too
-      HistoryServerSuite.getUrl(historyServerIncompleted) should not contain (appId)
-
-      assert(jobcount === getNumJobs("/jobs"))
-
-    } finally {
-      sc.stop()
     }
+
+    // build a URL for an app or app/attempt plus a page underneath
+    def buildURL(appId: String, suffix: String): URL = {
+      new URL(s"http://localhost:$port/history/$appId$suffix")
+    }
+
+    // build a rest URL for the application and suffix.
+    def applications(appId: String, suffix: String): URL = {
+      new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
+    }
+
+    val historyServerRoot = new URL(s"http://localhost:$port/")
+    val historyServerIncompleted = new URL(historyServerRoot, "?page=1&showIncomplete=true")
+
+    // assert the body of a URL contains a string; return that body
+    def assertUrlContains(url: URL, str: String): String = {
+      val body = HistoryServerSuite.getUrl(url)
+      assert(body.contains(str), s"did not find $str at $url : $body")
+      body
+    }
+
+    // start initial job
+    val d = sc.parallelize(1 to 10)
+    d.count()
+    val stdInterval = interval(100 milliseconds)
+    val appId = eventually(timeout(20 seconds), stdInterval) {
+      val json = getContentAndCode("applications", port)._2.get
+      val apps = parse(json).asInstanceOf[JArray].arr
+      apps should have size 1
+      (apps.head \ "id").extract[String]
+    }
+
+    // which lists as incomplete
+    assertUrlContains(historyServerIncompleted, appId)
+
+    val appIdRoot = buildURL(appId, "")
+    val rootAppPage = HistoryServerSuite.getUrl(appIdRoot)
+    logDebug(s"$appIdRoot ->[${rootAppPage.length}] \n$rootAppPage")
+    // sanity check to make sure filter is chaining calls
+    rootAppPage should not be empty
+
+    def getAppUI: SparkUI = {
+      provider.getAppUI(appId, None).get.ui
+    }
+
+    // selenium isn't that useful on failures...add our own reporting
+    def getNumJobs(suffix: String): Int = {
+      val target = buildURL(appId, suffix)
+      val targetBody = HistoryServerSuite.getUrl(target)
+      try {
+        go to target.toExternalForm
+        findAll(cssSelector("tbody tr")).toIndexedSeq.size
+      } catch {
+        case ex: Exception =>
+          throw new Exception(s"Against $target\n$targetBody", ex)
+      }
+    }
+    // use REST API to get #of jobs
+    def getNumJobsRestful(): Int = {
+      val jobs = applications(appId, "/jobs")
+      val json = HistoryServerSuite.getUrl(jobs)
+      val jsonAst = parse(json)
+      val jobList = jsonAst.asInstanceOf[JArray]
+      jobList.values.size
+    }
+
+    def completedJobs(): Seq[JobUIData] = {
+      getAppUI.jobProgressListener.completedJobs
+    }
+
+    def activeJobs(): Seq[JobUIData] = {
+      getAppUI.jobProgressListener.activeJobs.values.toSeq
+    }
+
+    activeJobs() should have size 0
+    completedJobs() should have size 1
+    getNumJobs("") should be (1)
+    getNumJobs("/jobs") should be (1)
+    getNumJobsRestful() should be (1)
+    assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
+
+    // dump state before the next bit of test, which is where update
+    // checking really gets stressed
+    dumpLogDir("filesystem before executing second job")
+    logDebug(s"History Server: $server")
+
+    val d2 = sc.parallelize(1 to 10)
+    d2.count()
+    dumpLogDir("After second job")
+
+    val stdTimeout = timeout(10 seconds)
+    logDebug("waiting for UI to update")
+    eventually(stdTimeout, stdInterval) {
+      assert(2 === getNumJobs(""),
+        s"jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
+      assert(2 === getNumJobs("/jobs"),
+        s"job count under /jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
+      getNumJobsRestful() should be(2)
+    }
+
+    // and again, without any intermediate sleep, so relying on size changes rather than modtime
+    d.count()
+    d.count()
+    eventually(stdTimeout, stdInterval) {
+      assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
+    }
+    val jobcount = getNumJobs("/jobs")
+    assert(!provider.getListing().head.completed)
+
+    // stop the spark context
+    resetSparkContext()
+    // check the app is now found as completed
+    eventually(stdTimeout, stdInterval) {
+      assert(provider.getListing().head.completed,
+        s"application never completed, server=$server\n")
+    }
+
+    // verify the root page picks up the application, even without any GETs to the loaded
+    // incomplete UI
+    eventually(stdTimeout, stdInterval) {
+      assertUrlContains(historyServerRoot, appId)
+    }
+    // the root UI must pick this up too
+    HistoryServerSuite.getUrl(historyServerIncompleted) should not contain (appId)
+
+    assert(jobcount === getNumJobs("/jobs"))
 
     // no need to retain the test dir now the tests complete
     logDir.deleteOnExit();

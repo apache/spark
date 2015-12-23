@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 
@@ -354,15 +353,6 @@ private[history] final class CacheEntry(
  * @param attemptId attempt ID
  */
 private[history] final case class CacheKey(appId: String, attemptId: Option[String]) {
-
-  override def hashCode(): Int = {
-    appId.hashCode() + attemptId.map(_.hashCode).getOrElse(0)
-  }
-
-  override def equals(obj: Any): Boolean = {
-    val that = obj.asInstanceOf[CacheKey]
-    that.appId == appId && that.attemptId == attemptId
-  }
 
   override def toString: String = {
     appId + attemptId.map { id => s"/$id" }.getOrElse("")
