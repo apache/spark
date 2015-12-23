@@ -150,7 +150,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
         case p @ HiveTableScan(columns, relation, _) =>
           val columnNames = columns.map(_.name)
           val partValues = if (relation.table.isPartitioned) {
-            p.prunePartitions(relation.getHiveQlPartitions()).map(_.getValues)
+            relation.getHiveQlPartitions(p.partitionPruningPred).map(_.getValues.asScala)
           } else {
             Seq.empty
           }
@@ -160,7 +160,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       assert(actualOutputColumns === expectedOutputColumns, "Output columns mismatch")
       assert(actualScannedColumns === expectedScannedColumns, "Scanned columns mismatch")
 
-      val actualPartitions = actualPartValues.map(_.asScala.mkString(",")).sorted
+      val actualPartitions = actualPartValues.map(_.mkString(",")).sorted
       val expectedPartitions = expectedPartValues.map(_.mkString(",")).sorted
 
       assert(actualPartitions === expectedPartitions, "Partitions selected do not match")

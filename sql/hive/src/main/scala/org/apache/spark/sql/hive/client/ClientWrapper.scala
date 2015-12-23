@@ -422,6 +422,7 @@ private[hive] class ClientWrapper(
     val apiPartition = partition.getTPartition
     HivePartition(
       values = Option(apiPartition.getValues).map(_.asScala).getOrElse(Seq.empty),
+      properties = Option(apiPartition.getParameters).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = HiveStorageDescriptor(
         location = apiPartition.getSd.getLocation,
         inputFormat = apiPartition.getSd.getInputFormat,

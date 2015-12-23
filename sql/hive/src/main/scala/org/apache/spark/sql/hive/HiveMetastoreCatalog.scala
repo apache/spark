@@ -17,18 +17,28 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.common.StatsSetupConst._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import java.util
+
 import com.google.common.base.Objects
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path, ContentSummary}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.Warehouse
-import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.metastore.api.{MetaException, FieldSchema}
+import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.exec.{TableScanOperator, Operator, Utilities}
+import org.apache.hadoop.hive.ql.hooks.ReadEntity
 import org.apache.hadoop.hive.ql.metadata._
-import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.optimizer.GenMapRedUtils
+import org.apache.hadoop.hive.ql.parse.ParseContext
+import org.apache.hadoop.hive.ql.plan.{PartitionDesc, OperatorDesc, MapWork, TableDesc}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
@@ -44,6 +54,7 @@ import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
 
@@ -712,8 +723,10 @@ private[hive] case class InsertIntoHiveTable(
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: HiveTable)
-    (@transient private val sqlContext: SQLContext)
+    (@transient private val sqlContext: HiveContext)
   extends LeafNode with MultiInstanceRelation with FileRelation {
+
+  private[hive] var pruningPredicates: Seq[Expression] = Nil
 
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
@@ -766,8 +779,6 @@ private[hive] case class MetastoreRelation
 
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
-      val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
-      val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.  An
@@ -778,9 +789,7 @@ private[hive] case class MetastoreRelation
         // When table is external,`totalSize` is always zero, which will influence join strategy
         // so when `totalSize` is zero, use `rawDataSize` instead
         // if the size is still less than zero, we use default size
-        Option(totalSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(sqlContext.conf.defaultSizeInBytes)))
+        calculateInput().filter(_ > 0).getOrElse(sqlContext.conf.defaultSizeInBytes))
     }
   )
 
@@ -789,17 +798,33 @@ private[hive] case class MetastoreRelation
   lazy val allPartitions = table.getAllPartitions
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
+    getHiveQlPartitions(predicates, bindPredicate(predicates))
+  }
+
+  def bindPredicate(predicates: Seq[Expression]): Option[Expression] = {
+    predicates.reduceLeftOption(org.apache.spark.sql.catalyst.expressions.And).map { pred =>
+      require(
+        pred.dataType == BooleanType,
+        s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
+      BindReferences.bindReference(pred, partitionKeys)
+    }
+  }
+
+  def getHiveQlPartitions(
+      predicates: Seq[Expression],
+      pruner: Option[Expression]): Seq[Partition] = {
     val rawPartitions = if (sqlContext.conf.metastorePartitionPruning) {
       table.getPartitions(predicates)
     } else {
       allPartitions
     }
 
-    rawPartitions.map { p =>
+    prunePartitions(rawPartitions, pruner).map { p =>
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)
       tPartition.setValues(p.values.asJava)
+      tPartition.setParameters(p.properties.asJava)
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)
@@ -821,6 +846,86 @@ private[hive] case class MetastoreRelation
 
       new Partition(hiveQlTable, tPartition)
     }
+  }
+
+  // moved from org.apache.spark.sql.hive.execution.HiveTableScan
+  private[hive] def prunePartitions(partitions: Seq[HivePartition], pruner: Option[Expression]) = {
+    pruner match {
+      case None => partitions
+      case Some(shouldKeep) => partitions.filter { part =>
+        val dataTypes = partitionKeys.map(_.dataType)
+        val castedValues = for ((value, dataType) <- part.values.zip(dataTypes)) yield {
+          castFromString(value, dataType)
+        }
+
+        // Only partitioned values are needed here, since the predicate has already been bound to
+        // partition key attribute references.
+        val row = InternalRow.fromSeq(castedValues)
+        shouldKeep.eval(row).asInstanceOf[Boolean]
+      }
+    }
+  }
+
+  private def calculateInput(): Option[Long] = {
+    var partitions: Seq[Partition] = Nil
+    if (hiveQlTable.isPartitioned) {
+      partitions = getHiveQlPartitions(pruningPredicates)
+    }
+
+    // try with stats in table/partition properties
+    val fromStats = getFromStats(hiveQlTable, partitions, TOTAL_SIZE).orElse(
+                    getFromStats(hiveQlTable, partitions, RAW_DATA_SIZE))
+    if (fromStats.isDefined || !sqlContext.hiveCalculateStatsRuntime) {
+      return fromStats
+    }
+
+    // create dummy mapwork
+    val dummy: MapWork = new MapWork
+    val alias: String = "_dummy"
+    val operator: Operator[_ <: OperatorDesc] = new TableScanOperator
+
+    dummy.getAliasToWork.put(alias, operator)
+    val pathToAliases = dummy.getPathToAliases
+    val pathToPartition = dummy.getPathToPartitionInfo
+    if (hiveQlTable.isPartitioned) {
+      for (partition <- partitions) {
+        val partPath = getDnsPath(partition.getDataLocation, sqlContext.hiveconf).toString
+        pathToAliases.put(partPath, new util.ArrayList(util.Arrays.asList(alias)))
+        pathToPartition.put(partPath, new PartitionDesc(partition, tableDesc))
+      }
+    } else {
+      val tablePath = getDnsPath(hiveQlTable.getDataLocation, sqlContext.hiveconf).toString
+      pathToAliases.put(tablePath, new util.ArrayList(util.Arrays.asList(alias)))
+      pathToPartition.put(tablePath, new PartitionDesc(tableDesc, null))
+    }
+    // calculate summary
+    Some(Utilities.getInputSummary(new Context(sqlContext.hiveconf), dummy, null).getLength)
+  }
+
+  private def getFromStats(table: Table, partitions: Seq[Partition], statKey: String):
+      Option[Long] = {
+    if (table.isPartitioned) {
+      var totalSize: Long = 0
+      for (partition <- partitions) {
+        val partSize = Option(partition.getParameters.get(statKey)).map(_.toLong).filter(_ > 0)
+        if (partSize.isEmpty) {
+          return None;
+        }
+        totalSize += partSize.get
+      }
+      Some(totalSize)
+    } else {
+      Option(table.getParameters.get(statKey)).map(_.toLong).filter(_ > 0)
+    }
+  }
+
+  private[this] def castFromString(value: String, dataType: DataType) = {
+    Cast(Literal(value), dataType).eval(null)
+  }
+
+  private[this] def getDnsPath(path: Path, conf: Configuration): Path = {
+    val fs = path.getFileSystem(conf)
+    return new Path(fs.getUri.getScheme, fs.getUri.getAuthority, path.toUri.getPath)
   }
 
   /** Only compare database and tablename, not alias. */

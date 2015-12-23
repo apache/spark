@@ -24,6 +24,14 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
+import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.spark.sql.catalyst.ParserDialect
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet}
+import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.rules.Rule
+
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
@@ -142,7 +150,7 @@ class HiveContext private[hive](
    * converted to a data source table, using the data source set by spark.sql.sources.default.
    * The table in CTAS statement will be converted when it meets any of the following conditions:
    *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
-   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
+   *     a Storage Handler (STORED BY), and the value of hive.default.fileformat in hive-site.xml
    *     is either TextFile or SequenceFile.
    *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
    *     is specified (no ROW FORMAT SERDE clause).
@@ -190,6 +198,12 @@ class HiveContext private[hive](
    * hive thrift server use background spark sql thread pool to execute sql queries
    */
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
+
+  /*
+   * Calculate table statistics in runtime if needed.
+   */
+  protected[hive] def hiveCalculateStatsRuntime: Boolean =
+    getConf(HIVE_TABLE_CALCULATE_STATS_RUNTIME)
 
   protected[hive] def hiveThriftServerSingleSession: Boolean =
     sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
@@ -442,7 +456,7 @@ class HiveContext private[hive](
     // If users put any Spark SQL setting in the spark conf (e.g. spark-defaults.conf),
     // this setConf will be called in the constructor of the SQLContext.
     // Also, calling hiveconf will create a default session containing a HiveConf, which
-    // will interfer with the creation of executionHive (which is a lazy val). So,
+    // will interfere with the creation of executionHive (which is a lazy val). So,
     // we put hiveconf.set at the end of this method.
     hiveconf.set(key, value)
   }
@@ -563,6 +577,31 @@ class HiveContext private[hive](
       new HiveQLDialect(this)
     } else {
       super.getSQLDialect()
+    }
+  }
+
+  @transient
+  override protected[sql] lazy val optimizer: Optimizer = new Optimizer {
+    override protected val batches =
+      DefaultOptimizer.batches.asInstanceOf[Seq[Batch]] ++
+      Seq(Batch("Hive Table Stats", Once, new HiveTableStats))
+  }
+
+  class HiveTableStats extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
+        // Filter out all predicates that only deal with partition keys, these are given to the
+        // hive table scan operator to be used for partition pruning.
+        val partitionKeyIds = AttributeSet(relation.partitionKeys)
+        val (pruningPredicates, _) = predicates.partition { predicate =>
+          predicate.references.nonEmpty &&
+          predicate.references.subsetOf(partitionKeyIds)
+        }
+        relation.pruningPredicates = pruningPredicates
+        plan
+      case u: UnaryNode => apply(u.child); plan
+      case b: BinaryNode => apply(b.left); apply(b.right); plan
+      case _ => plan
     }
   }
 
@@ -717,7 +756,11 @@ private[hive] object HiveContext {
 
   val HIVE_THRIFT_SERVER_ASYNC = booleanConf("spark.sql.hive.thriftServer.async",
     defaultValue = Some(true),
-    doc = "TODO")
+    doc = "hive thrift server use background spark sql thread pool to execute sql queries.")
+
+  val HIVE_TABLE_CALCULATE_STATS_RUNTIME = booleanConf("spark.sql.hive.calulcate.stats.runtime",
+    defaultValue = Some(false),
+    doc = "Calculate table statistics in runtime if needed.")
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(useInMemoryDerby: Boolean): Map[String, String] = {

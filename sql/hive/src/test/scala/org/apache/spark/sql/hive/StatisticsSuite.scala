@@ -103,7 +103,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
         |SELECT * FROM src
       """.stripMargin).collect()
 
-    assert(queryTotalSize("analyzeTable_part") === hiveContext.conf.defaultSizeInBytes)
+    // stats for partition is populated in insert query
+    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
