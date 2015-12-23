@@ -583,6 +583,12 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+object CNFNormalization extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, _) => f.copy(condition = Predicate.toCNF(condition, Some(10)))
+  }
+}
+
 /**
  * Combines two adjacent [[Filter]] operators into one, merging the
  * conditions into one conjunctive predicate.

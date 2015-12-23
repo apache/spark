@@ -558,6 +558,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
     case _ => JNull
   }
+
+  def size: Int = 1 + children.map(_.size).sum
 }
 
 object TreeNode {

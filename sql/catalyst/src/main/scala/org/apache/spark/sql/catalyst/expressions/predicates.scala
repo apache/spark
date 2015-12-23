@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.{RuleExecutor, Rule}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -47,6 +48,34 @@ trait Predicate extends Expression {
   override def dataType: DataType = BooleanType
 }
 
+object Predicate extends PredicateHelper {
+  def toCNF(predicate: Expression, maybeThreshold: Option[Double] = None): Expression = {
+    val cnf = new CNFExecutor(predicate).execute(predicate)
+    val threshold = maybeThreshold.map(predicate.size * _).getOrElse(Double.MaxValue)
+    if (cnf.size > threshold) predicate else cnf
+  }
+
+  private class CNFNormalization(input: Expression)
+    extends Rule[Expression] {
+
+    override def apply(tree: Expression): Expression = {
+      import org.apache.spark.sql.catalyst.dsl.expressions._
+
+      tree transformDown {
+        case Not(Not(e)) => e
+        case Not(a And b) => !a || !b
+        case Not(a Or b) => !a && !b
+        case a Or (b And c) => (a || b) && (a || c)
+        case (a And b) Or c => (a || c) && (b || c)
+      }
+    }
+  }
+
+  private class CNFExecutor(input: Expression) extends RuleExecutor[Expression] {
+    override protected val batches: Seq[Batch] =
+      Batch("CNFNormalization", FixedPoint.Unlimited, new CNFNormalization(input)) :: Nil
+  }
+}
 
 trait PredicateHelper {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
