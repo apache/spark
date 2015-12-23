@@ -34,7 +34,6 @@ import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemor
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcEnv}
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.serializer.Serializer
@@ -97,9 +96,7 @@ class SparkEnv (
       blockManager.master.stop()
       metricsSystem.stop()
       outputCommitCoordinator.stop()
-      if (!rpcEnv.isInstanceOf[AkkaRpcEnv]) {
-        actorSystem.shutdown()
-      }
+      actorSystem.shutdown()
       rpcEnv.shutdown()
 
       // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
@@ -248,8 +245,8 @@ object SparkEnv extends Logging {
 
     val securityManager = new SecurityManager(conf)
 
-    // Create the ActorSystem for Akka and get the port it binds to.
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+    // Create the ActorSystem for Akka and get the port it binds to.
     val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager,
       clientMode = !isDriver)
     val actorSystem: ActorSystem = {

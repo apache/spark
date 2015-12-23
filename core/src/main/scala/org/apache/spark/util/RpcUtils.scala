@@ -20,7 +20,7 @@ package org.apache.spark.util
 import scala.concurrent.duration.FiniteDuration
 import scala.language.postfixOps
 
-import org.apache.spark.{SparkEnv, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
 private[spark] object RpcUtils {
@@ -29,11 +29,10 @@ private[spark] object RpcUtils {
    * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
    */
   def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
-    val driverActorSystemName = SparkEnv.driverActorSystemName
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
-    rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
+    rpcEnv.setupEndpointRef(RpcAddress(driverHost, driverPort), name)
   }
 
   /** Returns the configured number of times to retry connecting */
@@ -43,6 +42,7 @@ private[spark] object RpcUtils {
 
   /** Returns the configured number of milliseconds to wait on each retry */
   def retryWaitMs(conf: SparkConf): Long = {
+
     conf.getTimeAsMs("spark.rpc.retry.wait", "3s")
   }
 

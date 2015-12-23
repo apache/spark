@@ -24,7 +24,7 @@ import scala.concurrent.Future
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.rpc.netty.NettyRpcEnvFactory
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.RpcUtils
 
 
 /**
@@ -89,12 +89,11 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   }
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
+   * Retrieve the [[RpcEndpointRef]] represented by `address` and `endpointName`.
    * This is a blocking action.
    */
-  def setupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
-    setupEndpointRefByURI(uriOf(systemName, address, endpointName))
+  def setupEndpointRef(address: RpcAddress, endpointName: String): RpcEndpointRef = {
+    setupEndpointRefByURI(RpcEndpointAddress(address, endpointName).toString)
   }
 
   /**
@@ -114,12 +113,6 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * TODO do we need a timeout parameter?
    */
   def awaitTermination(): Unit
-
-  /**
-   * Create a URI used to create a [[RpcEndpointRef]]. Use this one to create the URI instead of
-   * creating it manually because different [[RpcEnv]] may have different formats.
-   */
-  def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
 
   /**
    * [[RpcEndpointRef]] cannot be deserialized without [[RpcEnv]]. So when deserializing any object
