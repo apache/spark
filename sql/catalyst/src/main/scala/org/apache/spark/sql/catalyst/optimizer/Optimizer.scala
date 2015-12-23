@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueri
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -47,6 +47,7 @@ object DefaultOptimizer extends Optimizer {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
+      PushLimitThroughOuterJoin,
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
@@ -853,6 +854,26 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           Join(newLeft, newRight, LeftOuter, newJoinCond)
         case FullOuter => f
+      }
+  }
+}
+
+/**
+  * Push [[Limit]] operators through [[Join]] operators, iff the join type is outer joins.
+  * Adding extra [[Limit]] operators on top of the outer-side child/children.
+  */
+object PushLimitThroughOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Limit(expr, Join(left, right, joinType, joinCondition)) =>
+      joinType match {
+        case RightOuter =>
+          Limit(expr, Join(left, Limit(expr, right), joinType, joinCondition))
+        case LeftOuter =>
+          Limit(expr, Join(Limit(expr, left), right, joinType, joinCondition))
+        case FullOuter =>
+          Limit(expr, Join(Limit(expr, left), Limit(expr, right), joinType, joinCondition))
+        case _ => f // DO Nothing for the other join types
       }
   }
 }
