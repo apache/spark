@@ -24,6 +24,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +36,6 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryLocation;
@@ -122,12 +122,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Whether or not the longArray can grow. We will not insert more elements if it's false.
    */
   private boolean canGrowArray = true;
-
-  /**
-   * A {@link BitSet} used to track location of the map where the key is set.
-   * Size of the bitset should be half of the size of the long array.
-   */
-  @Nullable private BitSet bitset;
 
   private final double loadFactor;
 
@@ -279,6 +273,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
             }
           }
           try {
+            Closeables.close(reader, /* swallowIOException = */ false);
             reader = spillWriters.getFirst().getReader(blockManager);
             recordsInPage = -1;
           } catch (IOException e) {
@@ -325,6 +320,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
         try {
           reader.loadNext();
         } catch (IOException e) {
+          try {
+            reader.close();
+          } catch(IOException e2) {
+            logger.error("Error while closing spill reader", e2);
+          }
           // Scala iterator does not handle exception
           Platform.throwException(e);
         }
@@ -427,7 +427,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
-    assert(bitset != null);
     assert(longArray != null);
 
     if (enablePerfMetrics) {
@@ -440,7 +439,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       if (enablePerfMetrics) {
         numProbes++;
       }
-      if (!bitset.isSet(pos)) {
+      if (longArray.get(pos * 2) == 0) {
         // This is a new key.
         loc.with(pos, hashcode, false);
         return;
@@ -644,10 +643,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert (!isDefined) : "Can only set value once for a key";
       assert (keyLength % 8 == 0);
       assert (valueLength % 8 == 0);
-      assert(bitset != null);
       assert(longArray != null);
 
-      if (numElements == MAX_CAPACITY || !canGrowArray) {
+
+      if (numElements == MAX_CAPACITY
+        // The map could be reused from last spill (because of no enough memory to grow),
+        // then we don't try to grow again if hit the `growthThreshold`.
+        || !canGrowArray && numElements > growthThreshold) {
         return false;
       }
 
@@ -678,7 +680,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
       pageCursor += recordLength;
       numElements++;
-      bitset.set(pos);
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
         currentPage, recordOffset);
       longArray.set(pos * 2, storedKeyAddress);
@@ -729,28 +730,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   private void allocate(int capacity) {
     assert (capacity >= 0);
-    // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    acquireMemory(capacity * 16);
-    longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
-    bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
+    longArray = allocateArray(capacity * 2);
+    longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
-  }
-
-  /**
-   * Free the memory used by longArray.
-   */
-  public void freeArray() {
-    updatePeakMemoryUsed();
-    if (longArray != null) {
-      long used = longArray.memoryBlock().size();
-      longArray = null;
-      releaseMemory(used);
-      bitset = null;
-    }
   }
 
   /**
@@ -760,7 +746,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This method is idempotent and can be called multiple times.
    */
   public void free() {
-    freeArray();
+    updatePeakMemoryUsed();
+    if (longArray != null) {
+      freeArray(longArray);
+      longArray = null;
+    }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
       MemoryBlock dataPage = dataPagesIterator.next();
@@ -795,9 +785,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     for (MemoryBlock dataPage : dataPages) {
       totalDataPagesSize += dataPage.size();
     }
-    return totalDataPagesSize +
-      ((bitset != null) ? bitset.memoryBlock().size() : 0L) +
-      ((longArray != null) ? longArray.memoryBlock().size() : 0L);
+    return totalDataPagesSize + ((longArray != null) ? longArray.memoryBlock().size() : 0L);
   }
 
   private void updatePeakMemoryUsed() {
@@ -848,11 +836,33 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Returns the underline long[] of longArray.
+   */
+  public LongArray getArray() {
+    assert(longArray != null);
+    return longArray;
+  }
+
+  /**
+   * Reset this map to initialized state.
+   */
+  public void reset() {
+    numElements = 0;
+    longArray.zeroOut();
+
+    while (dataPages.size() > 0) {
+      MemoryBlock dataPage = dataPages.removeLast();
+      freePage(dataPage);
+    }
+    currentPage = null;
+    pageCursor = 0;
+  }
+
+  /**
    * Grows the size of the hash table and re-hash everything.
    */
   @VisibleForTesting
   void growAndRehash() {
-    assert(bitset != null);
     assert(longArray != null);
 
     long resizeStartTime = -1;
@@ -861,41 +871,28 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
     // Store references to the old data structures to be used when we re-hash
     final LongArray oldLongArray = longArray;
-    final BitSet oldBitSet = bitset;
-    final int oldCapacity = (int) oldBitSet.capacity();
+    final int oldCapacity = (int) oldLongArray.size() / 2;
 
     // Allocate the new data structures
-    try {
-      allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
-    } catch (OutOfMemoryError oom) {
-      longArray = oldLongArray;
-      bitset = oldBitSet;
-      throw oom;
-    }
+    allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
 
     // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
-    for (int pos = oldBitSet.nextSetBit(0); pos >= 0; pos = oldBitSet.nextSetBit(pos + 1)) {
-      final long keyPointer = oldLongArray.get(pos * 2);
-      final int hashcode = (int) oldLongArray.get(pos * 2 + 1);
+    for (int i = 0; i < oldLongArray.size(); i += 2) {
+      final long keyPointer = oldLongArray.get(i);
+      if (keyPointer == 0) {
+        continue;
+      }
+      final int hashcode = (int) oldLongArray.get(i + 1);
       int newPos = hashcode & mask;
       int step = 1;
-      boolean keepGoing = true;
-
-      // No need to check for equality here when we insert so this has one less if branch than
-      // the similar code path in addWithoutResize.
-      while (keepGoing) {
-        if (!bitset.isSet(newPos)) {
-          bitset.set(newPos);
-          longArray.set(newPos * 2, keyPointer);
-          longArray.set(newPos * 2 + 1, hashcode);
-          keepGoing = false;
-        } else {
-          newPos = (newPos + step) & mask;
-          step++;
-        }
+      while (longArray.get(newPos * 2) != 0) {
+        newPos = (newPos + step) & mask;
+        step++;
       }
+      longArray.set(newPos * 2, keyPointer);
+      longArray.set(newPos * 2 + 1, hashcode);
     }
-    releaseMemory(oldLongArray.memoryBlock().size());
+    freeArray(oldLongArray);
 
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;

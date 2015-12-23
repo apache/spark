@@ -83,11 +83,11 @@ public final class UnsafeKVExternalSorter {
         /* initialSize */ 4096,
         pageSizeBytes);
     } else {
-      // The memory needed for UnsafeInMemorySorter should be less than longArray in map.
-      map.freeArray();
-      // The memory used by UnsafeInMemorySorter will be counted later (end of this block)
+      // During spilling, the array in map will not be used, so we can borrow that and use it
+      // as the underline array for in-memory sorter (it's always large enough).
+      // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
+        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray());
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.
@@ -123,10 +123,9 @@ public final class UnsafeKVExternalSorter {
         pageSizeBytes,
         inMemSorter);
 
-      sorter.spill();
-      map.free();
-      // counting the memory used UnsafeInMemorySorter
-      taskMemoryManager.acquireExecutionMemory(inMemSorter.getMemoryUsage(), sorter);
+      // reset the map, so we can re-use it to insert new records. the inMemSorter will not used
+      // anymore, so the underline array could be used by map again.
+      map.reset();
     }
   }
 
@@ -140,6 +139,15 @@ public final class UnsafeKVExternalSorter {
     sorter.insertKVRecord(
       key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes(),
       value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
+  }
+
+  /**
+   * Merges another UnsafeKVExternalSorter into `this`, the other one will be emptied.
+   *
+   * @throws IOException
+   */
+  public void merge(UnsafeKVExternalSorter other) throws IOException {
+    sorter.merge(other.sorter);
   }
 
   /**

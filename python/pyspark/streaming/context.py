@@ -218,7 +218,7 @@ class StreamingContext(object):
 
         @param timeout: time to wait in seconds
         """
-        self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
+        return self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
@@ -258,7 +258,7 @@ class StreamingContext(object):
         """
         self._jssc.checkpoint(directory)
 
-    def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
+    def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_2):
         """
         Create an input from TCP source hostname:port. Data is received using
         a TCP socket and receive byte is interpreted as UTF8 encoded ``\\n`` delimited
@@ -363,3 +363,11 @@ class StreamingContext(object):
         first = dstreams[0]
         jrest = [d._jdstream for d in dstreams[1:]]
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+
+    def addStreamingListener(self, streamingListener):
+        """
+        Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+        receiving system events related to streaming.
+        """
+        self._jssc.addStreamingListener(self._jvm.JavaStreamingListenerWrapper(
+            self._jvm.PythonStreamingListenerWrapper(streamingListener)))

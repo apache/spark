@@ -113,35 +113,30 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   // Conf option used for testing the initialization code.
-  val initThread = if (!conf.getBoolean("spark.history.testing.skipInitialize", false)) {
-      initialize(None)
-    } else {
-      null
-    }
+  val initThread = initialize()
 
-  private[history] def initialize(errorHandler: Option[Thread.UncaughtExceptionHandler]): Thread = {
+  private[history] def initialize(): Thread = {
     if (!isFsInSafeMode()) {
       startPolling()
-      return null
+      null
+    } else {
+      startSafeModeCheckThread(None)
     }
+  }
 
+  private[history] def startSafeModeCheckThread(
+      errorHandler: Option[Thread.UncaughtExceptionHandler]): Thread = {
     // Cannot probe anything while the FS is in safe mode, so spawn a new thread that will wait
     // for the FS to leave safe mode before enabling polling. This allows the main history server
     // UI to be shown (so that the user can see the HDFS status).
-    //
-    // The synchronization in the run() method is needed because of the tests; mockito can
-    // misbehave if the test is modifying the mocked methods while the thread is calling
-    // them.
     val initThread = new Thread(new Runnable() {
       override def run(): Unit = {
         try {
-          clock.synchronized {
-            while (isFsInSafeMode()) {
-              logInfo("HDFS is still in safe mode. Waiting...")
-              val deadline = clock.getTimeMillis() +
-                TimeUnit.SECONDS.toMillis(SAFEMODE_CHECK_INTERVAL_S)
-              clock.waitTillTime(deadline)
-            }
+          while (isFsInSafeMode()) {
+            logInfo("HDFS is still in safe mode. Waiting...")
+            val deadline = clock.getTimeMillis() +
+              TimeUnit.SECONDS.toMillis(SAFEMODE_CHECK_INTERVAL_S)
+            clock.waitTillTime(deadline)
           }
           startPolling()
         } catch {
@@ -668,16 +663,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // For testing.
   private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
-    val hadoop1Class = "org.apache.hadoop.hdfs.protocol.FSConstants$SafeModeAction"
     val hadoop2Class = "org.apache.hadoop.hdfs.protocol.HdfsConstants$SafeModeAction"
-    val actionClass: Class[_] =
-      try {
-        getClass().getClassLoader().loadClass(hadoop2Class)
-      } catch {
-        case _: ClassNotFoundException =>
-          getClass().getClassLoader().loadClass(hadoop1Class)
-      }
-
+    val actionClass: Class[_] = getClass().getClassLoader().loadClass(hadoop2Class)
     val action = actionClass.getField("SAFEMODE_GET").get(null)
     val method = dfs.getClass().getMethod("setSafeMode", action.getClass())
     method.invoke(dfs, action).asInstanceOf[Boolean]

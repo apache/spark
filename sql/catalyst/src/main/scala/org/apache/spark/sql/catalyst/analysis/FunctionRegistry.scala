@@ -24,6 +24,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -177,6 +178,7 @@ object FunctionRegistry {
     expression[ToRadians]("radians"),
 
     // aggregate functions
+    expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),
@@ -187,11 +189,11 @@ object FunctionRegistry {
     expression[Max]("max"),
     expression[Average]("mean"),
     expression[Min]("min"),
-    expression[Stddev]("stddev"),
+    expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
-    expression[Variance]("variance"),
+    expression[VarianceSamp]("variance"),
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
     expression[Skewness]("skewness"),
@@ -242,6 +244,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTimestamp]("now"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -260,6 +263,7 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ToDate]("to_date"),
+    expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
@@ -278,7 +282,18 @@ object FunctionRegistry {
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
-    expression[InputFileName]("input_file_name")
+    expression[InputFileName]("input_file_name"),
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+
+    // window functions
+    expression[Lead]("lead"),
+    expression[Lag]("lag"),
+    expression[RowNumber]("row_number"),
+    expression[CumeDist]("cume_dist"),
+    expression[NTile]("ntile"),
+    expression[Rank]("rank"),
+    expression[DenseRank]("dense_rank"),
+    expression[PercentRank]("percent_rank")
   )
 
   val builtin: SimpleFunctionRegistry = {
