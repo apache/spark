@@ -439,8 +439,10 @@ case class MapObjects(
       s"boolean ${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
     }
 
-    val isGenFunctionReturnOption = lambdaFunction.dataType match {
-      case ObjectType(cls) if cls == classOf[Option[_]] => "true"
+    // If lambdaFunction is WrapOption, we will not determine null or not based on the
+    // value of loopVar.isNull, because WrapOption will return None for null.
+    val isWrapOption = lambdaFunction match {
+      case _: WrapOption => "true"
       case _ => "false"
     }
 
@@ -461,7 +463,7 @@ case class MapObjects(
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
           $loopNullCheck
 
-          if (${loopVar.isNull} && !${isGenFunctionReturnOption}) {
+          if (${loopVar.isNull} && !${isWrapOption}) {
             $convertedArray[$loopIndex] = null;
           } else {
             ${genFunction.code}
