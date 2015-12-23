@@ -73,13 +73,14 @@ private[sql] object StatFunctions extends Logging {
     def cov: Double = Ck / (count - 1)
   }
 
-  private def collectStatisticalData(df: DataFrame, cols: Seq[String], functionName: String): CovarianceCounter = {
+  private def collectStatisticalData(df: DataFrame, cols: Seq[String],
+              functionName: String): CovarianceCounter = {
     require(cols.length == 2, s"Currently $functionName calculation is supported " +
       "between two columns.")
     cols.map(name => (name, df.schema.fields.find(_.name == name))).foreach { case (name, data) =>
       require(data.nonEmpty, s"Couldn't find column with name $name")
-      require(data.get.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation for columns " +
-        s"with dataType ${data.get.dataType} not supported.")
+      require(data.get.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${data.get.dataType} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
     df.select(columns: _*).queryExecution.toRdd.aggregate(new CovarianceCounter)(
