@@ -19,27 +19,26 @@
 
 set -e
 
-# TODO: This would be much nicer to do in SBT, once SBT supports Maven-style
-# resolution.
+FWDIR="$(cd "`dirname $0`"/..; pwd)"
+cd "$FWDIR"
 
-MVN="build/mvn --force"
+# TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
+
 # NOTE: These should match those in the release publishing script
 HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
-LOCAL_REPO="mvn-tmp"
+MVN="build/mvn --force"
 
-if [ -n "$AMPLAB_JENKINS" ]; then
-  # To speed up Maven install process we remove source files
-  # Maven dependency list only works once installed
-  find . -name *.scala | xargs rm
-  find . -name *.java | xargs rm
-fi
+# We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
+# the old version. We need to do this because the `dependency:build-classpath` task needs to
+# resolve Spark's internal submodule dependencies.
 
-# Use custom version to avoid Maven contention
-spark_version="spark-$(date +%s | tail -c6)"
-$MVN -q versions:set -DnewVersion=$spark_version > /dev/null
+# See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
+OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
+TEMP_VERSION="spark-$(date +%s | tail -c6)"
+$MVN -q versions:set -DnewVersion=$TEMP_VERSION > /dev/null
 
 echo "Performing Maven install"
-$MVN $HADOOP2_MODULE_PROFILES install -q \
+$MVN $HADOOP2_MODULE_PROFILES jar:jar install:install \
   -pl '!assembly' \
   -pl '!examples' \
   -pl '!external/flume-assembly' \
@@ -50,34 +49,28 @@ $MVN $HADOOP2_MODULE_PROFILES install -q \
   -pl '!external/mqtt-assembly' \
   -pl '!external/zeromq' \
   -pl '!external/kafka' \
+  -pl '!tags' \
   -DskipTests
 
 echo "Generating dependency manifest"
-
-$MVN -Phadoop-1 dependency:build-classpath -pl assembly \
-  | grep "Building Spark Project Assembly" -A 5 \
-  | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
-  | grep -v spark > dev/pr-deps-hadoop1
-
-
 $MVN $HADOOP2_MODULE_PROFILES -Phadoop-2.4 dependency:build-classpath -pl assembly \
   | grep "Building Spark Project Assembly" -A 5 \
   | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
   | grep -v spark > dev/pr-deps-hadoop24
 
-if [ -n "$AMPLAB_JENKINS" ]; then
-  git reset --hard HEAD
-fi
+# Restore the original version number:
+$MVN -q versions:set -DnewVersion=$OLD_VERSION > /dev/null
+
+# Delete the temporary POMs that we wrote to the local Maven repo:
+find "$HOME/.m2/" | grep "$TEMP_VERSION" | xargs rm -rf
 
 if [[ $@ == **replace-manifest** ]]; then
   echo "Replacing manifest and creating new file at dev/spark-deps"
-  mv dev/pr-deps-hadoop1 dev/spark-deps-hadoop1
   mv dev/pr-deps-hadoop24 dev/spark-deps-hadoop24
   exit 0
 fi
 
 set +e
-dep_diff="$(diff dev/pr-deps-hadoop1 dev/spark-deps-hadoop1)"
 dep_diff="$(diff dev/pr-deps-hadoop24 dev/spark-deps-hadoop24)"
 set -e
 
