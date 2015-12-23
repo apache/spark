@@ -83,34 +83,52 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
       instances.get(CacheKey(appId, attemptId)).map( e =>
-        LoadedAppUI(e.ui, Some(new StubHistoryProviderUpdateState(e.probeTime))))
+        LoadedAppUI(e.ui, new StubHistoryUpdateProbe(appId, attemptId, e.probeTime)))
     }
 
-    override def attachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI,
+    override def attachSparkUI(
+        appId: String,
+        attemptId: Option[String],
+        ui: SparkUI,
         completed: Boolean): Unit = {
       logDebug(s"attachSparkUI($appId, $attemptId, $ui)")
       attachCount += 1
       attached += (CacheKey(appId, attemptId) -> ui)
     }
 
-    def putAndAttach(appId: String, attemptId: Option[String], completed: Boolean, started: Long,
-        ended: Long, timestamp: Long): SparkUI = {
+    def putAndAttach(
+        appId: String,
+        attemptId: Option[String],
+        completed: Boolean,
+        started: Long,
+        ended: Long,
+        timestamp: Long): SparkUI = {
       val ui = putAppUI(appId, attemptId, completed, started, ended, timestamp)
       attachSparkUI(appId, attemptId, ui, completed)
       ui
     }
 
-    def putAppUI(appId: String, attemptId: Option[String], completed: Boolean, started: Long,
-        ended: Long, timestamp: Long): SparkUI = {
+    def putAppUI(
+        appId: String,
+        attemptId: Option[String],
+        completed: Boolean,
+        started: Long,
+        ended: Long,
+        timestamp: Long): SparkUI = {
       val ui = newUI(appId, attemptId, completed, started, ended)
       putInstance(appId, attemptId, ui, completed, timestamp)
       ui
     }
 
-    def putInstance(appId: String, attemptId: Option[String], ui: SparkUI, completed: Boolean,
+    def putInstance(
+        appId: String,
+        attemptId: Option[String],
+        ui: SparkUI,
+        completed: Boolean,
         timestamp: Long): Unit = {
       instances += (CacheKey(appId, attemptId) ->
-          new CacheEntry(ui, completed, None, timestamp))
+          new CacheEntry(ui, completed,
+            new StubHistoryUpdateProbe(appId, attemptId, timestamp), timestamp))
     }
 
     /**
@@ -128,46 +146,46 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
 
     /**
-     * Update state probe.
-     * @param appId application ID
-     * @param attemptId optional attempt ID
-     * @param updateState state containing the timestamp of the data previously loaded.
-     * @return true if the application has been updated
-     */
-    override def isUpdated(
-        appId: String,
-        attemptId: Option[String],
-        updateState: Option[HistoryProviderUpdateState]): Boolean = {
-      updateProbeCount += 1
-      val updateTimeMillis = updateState.get.asInstanceOf[StubHistoryProviderUpdateState].updateTime
-      logDebug(s"isUpdated($appId, $attemptId, $updateTimeMillis)")
-      val entry = instances.get(CacheKey(appId, attemptId)).get
-      val updated = entry.probeTime > updateTimeMillis
-      logDebug(s"entry = $entry; updated = $updated")
-      updated
-    }
-
-    /**
      * Lookup from the internal cache of attached UIs
      */
     def getAttached(appId: String, attemptId: Option[String]): Option[SparkUI] = {
       attached.get(CacheKey(appId, attemptId))
     }
 
-  }
+    /**
+     * The update probe.
+     * @param appId application to probe
+     * @param attemptId attempt to probe
+     * @param updateTime timestamp of this UI load
+     */
+    private[history] class StubHistoryUpdateProbe(
+        appId: String,
+        attemptId: Option[String],
+        updateTime: Long)
+        extends HistoryUpdateProbe {
 
-  /**
-   * The update state for the [[StubCacheOperations]]
-   * @param updateTime a timestamp
-   */
-  private[history] class StubHistoryProviderUpdateState(val updateTime: Long)
-      extends HistoryProviderUpdateState
+      override def isUpdated(): Boolean = {
+        updateProbeCount += 1
+        logDebug(s"isUpdated($appId, $attemptId, ${updateTime})")
+        val entry = instances.get(CacheKey(appId, attemptId)).get
+        val updated = entry.probeTime > updateTime
+        logDebug(s"entry = $entry; updated = $updated")
+        updated
+      }
+    }
+
+
+  }
 
   /**
    * Create a new UI. The info/attempt info classes here are from the package
    * `org.apache.spark.status.api.v1`, not the near-equivalents from the history package
    */
-  def newUI(name: String, attemptId: Option[String], completed: Boolean, started: Long,
+  def newUI(
+      name: String,
+      attemptId: Option[String],
+      completed: Boolean,
+      started: Long,
       ended: Long): SparkUI = {
     val info = new ApplicationInfo(name, name, Some(1), Some(1), Some(1), Some(64),
       Seq(new AttemptInfo(attemptId, new Date(started), new Date(ended), "user", completed)))

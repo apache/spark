@@ -45,23 +45,30 @@ private[spark] case class ApplicationHistoryInfo(
 }
 
 /**
- * Case class which can be subclasses by any provider to store information which
- * can then be used to determine whether an application attempt has been updated
- * since the last time it was retrieved.
- *
- * Examples include: a timestamp, a counter or a checksum.
+ *  A probe which can be invoked to see if a loaded Web UI has been updated.
+ *  The probe is expected to be relative purely to that of the UI returned
+ *  in the same [[LoadedAppUI]] instance. That is, whenever a new UI is loaded,
+ *  the probe returned with it is the one that must be used to check for it
+ *  being out of date; previous probes must be discarded.
  */
-private[history] case class HistoryProviderUpdateState()
+private[history] abstract class HistoryUpdateProbe {
+  /**
+   * Return true if the history provider has a later version of the application
+   * attempt than the one against this probe was constructed.
+   * @return
+   */
+  def isUpdated(): Boolean
+}
 
 /**
  * All the information returned from a call to `getAppUI()`: the new UI
  * and any required update state.
  * @param ui Spark UI
- * @param updateState any provider-specific update state
+ * @param updateProbe probe to call to check on the update state of this application attempt
  */
 private[history] case class LoadedAppUI(
     ui: SparkUI,
-    updateState: Option[HistoryProviderUpdateState])
+    updateProbe: HistoryUpdateProbe)
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -101,19 +108,5 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
-
-  /**
-   * Probe for an update to an (incompleted) application
-   * @param appId application ID
-   * @param attemptId optional attempt ID
-   * @param updateState state information needed by the provider to determine age
-   * @return true if the application has been updated
-   */
-  def isUpdated(
-      appId: String,
-      attemptId: Option[String],
-      updateState: Option[HistoryProviderUpdateState]): Boolean = {
-    false
-  }
 
 }

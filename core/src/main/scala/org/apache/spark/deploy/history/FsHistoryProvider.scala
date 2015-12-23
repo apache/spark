@@ -56,12 +56,10 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * is created copying over all the original data, the current size, and an incremented version
  * counter. Accordingly, the fact the attempt is updated is detected, but there is no replay
  * cost.
- * - When [[isUpdated()]] is invoked to check if a loaded [[SparkUI]] instance is out of date,
- * the version counter of the application attempt loaded is compared with that attempt's current
- * value; the loaded UI is considered out of date if its counter is less than the current value.
- * -The value of the version counter at attempt load time is declared in the
- * [[FsHistoryProviderUpdateState]] instance returned in the [[getAppUI()]] call. The cache is
- * required to preserve this value and return it in then update probes.
+ * - When [[UpdateProbe.isUpdated()]] is invoked to check if a loaded [[SparkUI]]
+ * instance is out of date, the version counter of the application attempt loaded is
+ * compared with that attempt's current value; the loaded UI is considered out of date
+ * if its version is less than that of the current listing.
  *
  * The use of a version counter, rather than simply relying on modification times, is needed to
  * address the following issues
@@ -265,8 +263,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
               appListener.viewAcls.getOrElse(""))
-            LoadedAppUI(ui,
-              Some(new FsHistoryProviderUpdateState(attempt.version)))
+            LoadedAppUI(ui, new UpdateProbe(appId, attemptId, attempt.version))
           }
         }
       }
@@ -458,7 +455,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * @param current the current attempt list
    * @return the updated list
    */
-  private def mergeAttempts(newAttempts: Iterable[FsApplicationAttemptInfo],
+  private def mergeAttempts(
+      newAttempts: Iterable[FsApplicationAttemptInfo],
       current: mutable.LinkedHashMap[String, FsApplicationHistoryInfo])
       : mutable.LinkedHashMap[String, FsApplicationHistoryInfo] = {
 
@@ -728,36 +726,31 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Probe for an update to an (incompleted) application.
-   *
-   * @param appId application ID
-   * @param attemptId optional attempt ID
-   * @param state an [[FsHistoryProviderUpdateState]] instance
-   * @return true if the attempt has been updated.
+   * The update probe of the is the generational counter of attempts:
+   * if the counter is less than that of the attempt's current value, it is out of date.
+   * @param appId application to probe
+   * @param attemptId attempt to probe
+   * @param version the version value of the last attempt.
    */
-  override def isUpdated(
+  private class UpdateProbe(
       appId: String,
       attemptId: Option[String],
-      state: Option[HistoryProviderUpdateState]): Boolean = {
-    val updateState = state.get.asInstanceOf[FsHistoryProviderUpdateState]
-    lookup(appId, attemptId) match {
-      case None =>
-        logDebug(s"Application Attempt $appId/$attemptId not found")
-        false
-      case Some(attempt) =>
-        updateState.version < attempt.version
+      version: Long) extends HistoryUpdateProbe {
+
+    override def toString: String = {
+      s"UpdateProbe($appId/$attemptId @$version)"
+    }
+
+    override def isUpdated(): Boolean = {
+      lookup(appId, attemptId) match {
+        case None =>
+          logDebug(s"Application Attempt $appId/$attemptId not found")
+          false
+        case Some(latest) =>
+          version < latest.version
+      }
     }
   }
-
-}
-
-/**
- * The update state of the FsHistoryProvider is the generational counter of attempts:
- * if the counter is less than that of the attempt's current value, it is out of date.
- * @param version the current attempt version value.
- */
-private class FsHistoryProviderUpdateState(val version: Long) extends HistoryProviderUpdateState {
-  override def toString: String = s"FsHistoryProviderUpdateState($version)"
 }
 
 private[history] object FsHistoryProvider {

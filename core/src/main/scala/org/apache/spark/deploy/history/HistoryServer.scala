@@ -171,20 +171,6 @@ class HistoryServer(
   }
 
   /**
-   * Relay checks for the update to the history provider, passing down the update state
-   * returned by the provider's `getAppUI` call previously.
-   * @param appId application ID
-   * @param attemptId optional attempt ID
-   * @param updateState state information needed by the provider to determine age
-   * @return true if the application was updated
-   */
-  override def isUpdated(appId: String,
-      attemptId: Option[String],
-      updateState: Option[HistoryProviderUpdateState]): Boolean = {
-    provider.isUpdated(appId, attemptId, updateState)
-  }
-
-  /**
    * Returns a list of available applications, in descending order according to their end time.
    *
    * @return List of all known applications.
