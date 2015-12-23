@@ -26,11 +26,11 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
+import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl, JobContextImpl}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -66,9 +66,7 @@ class NewHadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     @transient private val _conf: Configuration)
-  extends RDD[(K, V)](sc, Nil)
-  with SparkHadoopMapReduceUtil
-  with Logging {
+  extends RDD[(K, V)](sc, Nil) with Logging {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
@@ -109,7 +107,7 @@ class NewHadoopRDD[K, V](
         configurable.setConf(_conf)
       case _ =>
     }
-    val jobContext = newJobContext(_conf, jobId)
+    val jobContext = new JobContextImpl(_conf, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
@@ -144,8 +142,8 @@ class NewHadoopRDD[K, V](
           configurable.setConf(conf)
         case _ =>
       }
-      val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
-      val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
+      val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
+      val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
       private var reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)

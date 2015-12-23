@@ -167,7 +167,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
       throw new IllegalArgumentException(msg)
     }
-    if (!fs.getFileStatus(path).isDir) {
+    if (!fs.getFileStatus(path).isDirectory) {
       throw new IllegalArgumentException(
         "Logging directory specified is not a directory: %s".format(logDir))
     }
@@ -304,7 +304,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logError("Exception encountered when attempting to update last scan time", e)
         lastScanTime
     } finally {
-      if (!fs.delete(path)) {
+      if (!fs.delete(path, true)) {
         logWarning(s"Error deleting ${path}")
       }
     }
@@ -603,7 +603,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * As of Spark 1.3, these files are consolidated into a single one that replaces the directory.
    * See SPARK-2261 for more detail.
    */
-  private def isLegacyLogDirectory(entry: FileStatus): Boolean = entry.isDir()
+  private def isLegacyLogDirectory(entry: FileStatus): Boolean = entry.isDirectory
 
   /**
    * Returns the modification time of the given event log. If the status points at an empty
