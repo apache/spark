@@ -19,19 +19,21 @@ package org.apache.spark.streaming.kafka.v09
 
 import java.io.OutputStream
 import java.lang.{Integer => JInt, Long => JLong}
-import java.util.{List => JList, Map => JMap, Set => JSet}
+import java.util.{Map => JMap, Set => JSet}
+
+import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.common.config.SslConfigs
 
 import scala.reflect.ClassTag
 
 import com.google.common.base.Charsets.UTF_8
 import kafka.common.TopicAndPartition
-import kafka.message.MessageAndMetadata
-import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
+import kafka.serializer.Decoder
 import net.razorvine.pickle.{Opcodes, Pickler, IObjectPickler}
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SSLOptions, SparkContext, SparkException}
 
 import scala.collection.JavaConverters._
 import scala.reflect._
@@ -41,9 +43,34 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java._
-import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
+import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
 
 object KafkaUtils {
+
+  def addSSLOptions(
+      kafkaParams: Map[String, String],
+      sc: SparkContext
+     ): Map[String, String] = {
+
+    val sparkConf = sc.getConf
+    val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", None)
+    val kafkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.kafka", Some(defaultSSLOptions))
+
+    if (kafkaSSLOptions.enabled) {
+      val sslParams = Map[String, Option[_]](
+        CommonClientConfigs.SECURITY_PROTOCOL_CONFIG -> Some("SSL"),
+        SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG -> kafkaSSLOptions.trustStore,
+        SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG -> kafkaSSLOptions.trustStorePassword,
+        SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG -> kafkaSSLOptions.keyStore,
+        SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG -> kafkaSSLOptions.keyStorePassword,
+        SslConfigs.SSL_KEY_PASSWORD_CONFIG -> kafkaSSLOptions.keyPassword
+      )
+      kafkaParams ++ sslParams.filter(_._2.isDefined).mapValues(_.get.toString)
+    } else {
+      kafkaParams
+    }
+
+  }
 
   /**
    * Create an input stream that pulls messages from Kafka Brokers.
@@ -91,7 +118,12 @@ object KafkaUtils {
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
     val walEnabled = WriteAheadLogUtils.enableReceiverLog(ssc.conf)
-    new KafkaInputDStream[K, V](ssc, kafkaParams, topics, walEnabled, storageLevel)
+    new KafkaInputDStream[K, V](
+      ssc,
+      addSSLOptions(kafkaParams, ssc.sparkContext),
+      topics,
+      walEnabled,
+      storageLevel)
   }
 
   /**
@@ -149,9 +181,9 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange]
      ): RDD[(K, V)] = sc.withScope {
     val messageHandler = (cr: ConsumerRecord[K, V]) => (cr.key, cr.value)
-    val kc = new KafkaCluster[K, V](kafkaParams)
+    val kc = new KafkaCluster[K, V](addSSLOptions(kafkaParams, sc))
     checkOffsets(kc, offsetRanges)
-    new KafkaRDD[K, V, (K, V)](sc, kafkaParams, offsetRanges, messageHandler)
+    new KafkaRDD[K, V, (K, V)](sc, addSSLOptions(kafkaParams, sc), offsetRanges, messageHandler)
   }
 
   /**
@@ -174,10 +206,10 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange],
       messageHandler: ConsumerRecord[K, V] => R
      ): RDD[R] = sc.withScope {
-    val kc = new KafkaCluster[K, V](kafkaParams)
+    val kc = new KafkaCluster[K, V](addSSLOptions(kafkaParams, sc))
     val cleanedHandler = sc.clean(messageHandler)
     checkOffsets(kc, offsetRanges)
-    new KafkaRDD[K, V, R](sc, kafkaParams, offsetRanges, cleanedHandler)
+    new KafkaRDD[K, V, R](sc, addSSLOptions(kafkaParams, sc), offsetRanges, cleanedHandler)
   }
 
   /**
@@ -269,7 +301,7 @@ object KafkaUtils {
      ): InputDStream[R] = {
     val cleanedHandler = ssc.sc.clean(messageHandler)
     new DirectKafkaInputDStream[K, V, R](
-      ssc, kafkaParams, fromOffsets, messageHandler)
+      ssc, addSSLOptions(kafkaParams, ssc.sparkContext), fromOffsets, messageHandler)
   }
 
   /**
@@ -308,7 +340,7 @@ object KafkaUtils {
       topics: Set[String]
      ): InputDStream[(K, V)] = {
     val messageHandler = (cr: ConsumerRecord[K, V]) => (cr.key, cr.value)
-    val kc = new KafkaCluster[K, V](kafkaParams)
+    val kc = new KafkaCluster[K, V](addSSLOptions(kafkaParams, ssc.sparkContext))
     val reset = kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).map(_.toLowerCase)
 
     val fromOffsets = if (reset == Some("earliest")) {
@@ -320,7 +352,7 @@ object KafkaUtils {
     kc.close()
 
     new DirectKafkaInputDStream[K, V, (K, V)](
-      ssc, kafkaParams, fromOffsets, messageHandler)
+      ssc, addSSLOptions(kafkaParams, ssc.sparkContext), fromOffsets, messageHandler)
   }
 
   /**
