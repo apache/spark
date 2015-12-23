@@ -389,7 +389,7 @@ class Analyzer(
         a.copy(aggregateExpressions = expanded)
 
       // Special handling for cases when self-join introduce duplicate expression ids.
-      case j @ Join(left, right, _, _) if !j.selfJoinResolved =>
+      case j @ Join(left, right, _, condition) if !j.selfJoinResolved =>
         val conflictingAttributes = left.outputSet.intersect(right.outputSet)
         logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} in $j")
 
@@ -437,7 +437,11 @@ class Analyzer(
                 case a: Attribute => attributeRewrites.get(a).getOrElse(a)
               }
             }
-            j.copy(right = newRight)
+            val newCondition = condition.map(_ transformUp {
+                case a: AttributeReference => attributeRewrites.get(a).getOrElse(a)
+            })
+
+            j.copy(right = newRight, condition = newCondition)
         }
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as

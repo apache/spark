@@ -76,6 +76,37 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
   }
 
+  test("Spark-11576: Complex self join") {
+    val df1 = Seq((1,3), (2,1)).toDF("keyCol1", "keyCol2")
+    val df2 = Seq((1,4), (2,1)).toDF("keyCol1", "keyCol3")
+    val df3 = df1.join(df2, df1("keyCol1")===df2("keyCol1")).select(df1("keyCol1"), $"keyCol3")
+    checkAnswer(
+      df3.join(df1, df3("keyCol3")===df1("keyCol1")),
+      Row(2,1,1,3) :: Nil)
+  }
+
+  test("Spark-10838: Complex Self-Join") {
+    val df1 = Seq(Tuple1("1")).toDF("col_a")
+    val df2 = Seq(Tuple2("1","1")).toDF("col_a", "col_b")
+    val df3 = df1.join(df2, df1("col_a") === df2("col_a")).select(df1("col_a"), $"col_b")
+
+    checkAnswer(
+      df3.join(df2, df3("col_b") === df2("col_a")),
+      Row("1", "1", "1", "1") :: Nil
+    )
+
+    val df4 = df2.as("df4")
+    checkAnswer(
+      df3.join(df4, df3("col_b") === df4("col_a")),
+      Row("1", "1", "1", "1") :: Nil
+    )
+
+    checkAnswer(
+      df3.join(df2.as("df4"), df3("col_b") === $"df4.col_a"),
+      Row("1", "1", "1", "1") :: Nil
+    )
+  }
+
   test("join - self join") {
     val df1 = testData.select(testData("key")).as('df1)
     val df2 = testData.select(testData("key")).as('df2)
