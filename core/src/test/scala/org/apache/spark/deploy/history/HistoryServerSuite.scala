@@ -334,6 +334,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       def buildURL(appId: String, suffix: String): URL = {
         new URL(s"http://localhost:$port/history/$appId$suffix")
       }
+
+      // build a rest URL for the application and suffix.
+      def applications(appId: String, suffix: String): URL = {
+        new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
+      }
+
       val historyServerRoot = new URL(s"http://localhost:$port/")
       val historyServerIncompleted = new URL(historyServerRoot, "?page=1&showIncomplete=true")
 
@@ -380,17 +386,28 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
             throw new Exception(s"Against $target\n$targetBody", ex)
         }
       }
+      // use REST API to get #of jobs
+      def getNumJobsRestful(): Int = {
+        val jobs = applications(appId, "/jobs")
+        val json = HistoryServerSuite.getUrl(jobs)
+        val jsonAst = parse(json)
+        val jobList = jsonAst.asInstanceOf[JArray]
+        jobList.values.size
+      }
+
       def completedJobs(): Seq[JobUIData] = {
         getAppUI.jobProgressListener.completedJobs
       }
+
       def activeJobs(): Seq[JobUIData] = {
         getAppUI.jobProgressListener.activeJobs.values.toSeq
       }
 
       activeJobs() should have size 0
       completedJobs() should have size 1
-      getNumJobs("") should be(1)
-      getNumJobs("/jobs") should be(1)
+      getNumJobs("") should be (1)
+      getNumJobs("/jobs") should be (1)
+      getNumJobsRestful() should be (1)
       assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
 
       // dump state before the next bit of test, which is where update
@@ -406,23 +423,21 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       d2.count()
       dumpLogDir("After second job")
 
-
       val stdTimeout = timeout(10 seconds)
-
       logDebug("waiting for UI to update")
       eventually(stdTimeout, stdInterval) {
         assert(2 === getNumJobs(""),
           s"jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
         assert(2 === getNumJobs("/jobs"),
           s"job count under /jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
-        }
+        getNumJobsRestful() should be(2)
+      }
 
       // and again, without any intermediate sleep, so relying on size changes rather than modtime
       d.count()
       d.count()
       eventually(stdTimeout, stdInterval) {
-        assert(4 === getNumJobs("/jobs"),
-          s"two jobs back-to-back not updated, server=$server\n")
+        assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
       }
       val jobcount = getNumJobs("/jobs")
       assert(!provider.getListing().head.completed)
