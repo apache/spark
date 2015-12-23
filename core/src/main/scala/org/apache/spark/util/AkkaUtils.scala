@@ -19,14 +19,11 @@ package org.apache.spark.util
 
 import scala.collection.JavaConverters._
 
-import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
-import akka.pattern.ask
-
+import akka.actor.{ActorSystem, ExtendedActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
-import org.apache.spark.rpc.RpcTimeout
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * Various utility classes for working with Akka.

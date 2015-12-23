@@ -339,7 +339,7 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
     try {
       slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
-      fail("should receive either ActorNotFound or TimeoutException")
+      fail("should receive either RuntimeException or TimeoutException")
     } catch {
       case e: RuntimeException =>
       case e: TimeoutException =>
