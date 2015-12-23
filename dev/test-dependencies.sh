@@ -91,6 +91,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
     echo "Spark's published dependencies DO NOT MATCH the manifest file (dev/spark-deps)."
     echo "To update the manifest file, run './dev/test-dependencies --replace-manifest'."
     echo "$dep_diff"
+    rm -rf dev/pr-deps
     exit 1
   fi
 done
