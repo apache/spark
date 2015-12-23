@@ -73,12 +73,12 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
       // is a cached thread pool.
       val results = new ArrayBuffer[T](num)
       val totalParts = self.partitions.length
-      var partsScanned = 0
+      var partsScanned = 0L
       self.context.setCallSite(callSite)
       while (results.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1
+        var numPartsToTry = 1L
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate it
@@ -94,7 +94,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         }
 
         val left = num - results.size
-        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+        val p = partsScanned.toInt until math.min(partsScanned + numPartsToTry, totalParts).toInt
 
         val buf = new Array[Array[T]](p.size)
         f.runJob(self,
@@ -104,7 +104,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           Unit)
 
         buf.foreach(results ++= _.take(num - results.size))
-        partsScanned += numPartsToTry
+        partsScanned += p.size
       }
       results.toSeq
     }(AsyncRDDActions.futureExecutionContext)
