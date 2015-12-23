@@ -58,6 +58,7 @@ object DefaultOptimizer extends Optimizer {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      CNFNormalization,
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
