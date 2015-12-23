@@ -157,8 +157,8 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case Limit(exp, Union(left, right)) =>
       Limit(exp,
         Union(
-          Limit(exp, left),
-          Limit(exp, right)
+          CombineLimits(Limit(exp, left)),
+          CombineLimits(Limit(exp, right))
         )
       )
 
