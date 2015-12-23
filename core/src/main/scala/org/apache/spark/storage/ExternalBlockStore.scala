@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.nio.ByteBuffer
+import java.util.UUID._
 
 import scala.util.control.NonFatal
 
@@ -207,5 +208,9 @@ private[spark] object ExternalBlockStore extends Logging {
   val FOLD_NAME = "spark.externalBlockStore.folderName"
   val MASTER_URL = "spark.externalBlockStore.url"
   val BLOCK_MANAGER_NAME = "spark.externalBlockStore.blockManager"
+  val DIR_ID = "spark.externalBlockStore.dirId"
   val DEFAULT_BLOCK_MANAGER_NAME = "org.apache.spark.storage.TachyonBlockManager"
+  val KEEP_EXTERNAL_DIR_ON_SHUTDOWN =
+    "spark.externalBlockStore.keepExternalBlockStoreDirOnShutdown"
+  val externalBlockStoreFolderName = "spark-" + randomUUID.toString()
 }

@@ -22,10 +22,11 @@ import scala.util.Random
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.rdd.BlockRDD
+import org.apache.spark.rdd.ExternalStoreBlockRDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
-import org.apache.spark.streaming.receiver.{BlockManagerBasedStoreResult, Receiver, WriteAheadLogBasedStoreResult}
+import org.apache.spark.streaming.receiver.{ExternalBlockStoreResult, BlockManagerBasedStoreResult, Receiver, WriteAheadLogBasedStoreResult}
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -118,6 +119,19 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
     }
   }
 
+  testWithoutWAL("Create ExternalStoreBlockRDD with block info") {
+    receiverStream =>
+      val blockInfos1 = Seq.fill(2)(createExternalBlockInfo(createBlock = false))
+      val blockInfos2 = Seq.fill(2)(createExternalBlockInfo(createBlock = false))
+      val blockInfos = blockInfos1 ++ blockInfos2
+      val blockIds = blockInfos.map(_.blockId)
+      val rdd = receiverStream.createBlockRDD(Time(0), blockInfos)
+      assert(rdd.isInstanceOf[ExternalStoreBlockRDD[_]])
+      assert(!rdd.isInstanceOf[WriteAheadLogBackedBlockRDD[_]])
+      val blockRDD = rdd.asInstanceOf[ExternalStoreBlockRDD[_]]
+      assert(blockRDD.blockIds.toSeq === blockInfos.map { _.blockId})
+  }
+
   private def runTest(enableWAL: Boolean, body: ReceiverInputDStream[_] => Unit): Unit = {
     val conf = new SparkConf()
     conf.setMaster("local[4]").setAppName("ReceiverInputDStreamSuite")
@@ -151,6 +165,17 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
     } else {
       new BlockManagerBasedStoreResult(blockId, None)
     }
+    new ReceivedBlockInfo(0, None, None, storeResult)
+  }
+
+  private def createExternalBlockInfo(
+    createBlock: Boolean = true): ReceivedBlockInfo = {
+    val blockId = new StreamBlockId(0, Random.nextLong())
+    if (createBlock) {
+      SparkEnv.get.blockManager.putSingle(blockId, 1, StorageLevel.OFF_HEAP, tellMaster = true)
+      require(SparkEnv.get.blockManager.master.contains(blockId))
+    }
+    val storeResult = new ExternalBlockStoreResult(blockId, None)
     new ReceivedBlockInfo(0, None, None, storeResult)
   }
 }

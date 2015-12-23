@@ -438,6 +438,48 @@ private[spark] class BlockManager(
     }
   }
 
+  /**
+   * Get block from ExternalBlock Store if Local BlockManager do not have the block.
+   * Only happen when StoreLevel is OFF_HEAP and BlockManager failure happen
+   */
+  def getBlockResultFromExternalBlockStore(blockId: BlockId) : Option[BlockResult] = {
+    if (externalBlockStore.contains(blockId)) {
+      logDebug(s" block $blockId present in ExternalBlockStore")
+      val putBlockInfo = {
+        val tinfo = new BlockInfo(StorageLevel.OFF_HEAP, true)
+        val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
+        if (oldBlockOpt.isDefined) {
+          oldBlockOpt.get
+        } else {
+          tinfo
+        }
+      }
+      putBlockInfo.synchronized {
+        val size = externalBlockStore.getSize(blockId)
+        val result = {
+          externalBlockStore.getValues(blockId)
+            .map(new BlockResult(_, DataReadMethod.Memory, size))
+        }
+        result match {
+          case Some(values) =>
+            val putBlockStatus = BlockStatus(StorageLevel.OFF_HEAP, 0L, 0L, size)
+            putBlockInfo.markReady(size)
+            reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
+            logDebug(s" block $blockId reported back to BlockManagerMaster")
+            return result
+          case None =>
+            blockInfo.remove(blockId)
+            putBlockInfo.markFailure()
+            logWarning(s"Putting block $blockId failed")
+            logDebug(s"Block $blockId not found in ExternalBlockStore")
+        }
+      }
+    } else {
+      logDebug(s"Block $blockId not present in External Store")
+    }
+    None
+  }
+
   private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
