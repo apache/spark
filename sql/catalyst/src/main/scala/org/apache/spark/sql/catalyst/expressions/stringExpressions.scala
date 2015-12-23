@@ -35,6 +35,10 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  * An expression that concatenates multiple input strings into a single string.
  * If any input is null, concat returns null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string1, string2, ...) - Concatenates multiple strings together into a single " +
+    "string. If any input is null, concat returns null.",
+  extended = "> SELECT _FUNC_('This ', 'is ', 'a ', 'test');\n 'This is a test'")
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
@@ -70,6 +74,11 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
  *
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(separator, string1, string2, ...) - Concatenates multiple input string" +
+    " columns together into a single string, using a given separator (the first child). " +
+    "If any input is null, concat returns null.",
+  extended = "> SELECT _FUNC_(Seq (' ', 'This', 'is', 'a', 'test');\n 'This is a test'")
 case class ConcatWs(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
 
@@ -270,6 +279,12 @@ object StringTranslate {
  * The translate will happen when any character in the string matching with the character
  * in the `matchingExpr`.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string, matchingString: String, replaceString) - Translates any character" +
+    " in the string by a character in replaceString. The characters in replaceString is " +
+    "corresponding to the characters in matchingString. The translate will happen when any " +
+    "character in the string matching with the character in the matchingString.",
+  extended = "> SELECT _FUNC_('translate', 'rnlt', '123');\n '1a2s3ae'")
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -345,6 +360,9 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 /**
  * A function that trim the spaces from both ends for the specified string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Trims the spaces from both ends for the specified string.",
+  extended = "> SELECT _FUNC_('  SparkSql ');\n 'SparkSql'")
 case class StringTrim(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -360,6 +378,9 @@ case class StringTrim(child: Expression)
 /**
  * A function that trim the spaces from left end for given string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Trims the spaces from left end for given string.",
+  extended = "> SELECT _FUNC_('  SparkSql ');\n 'SparkSql '")
 case class StringTrimLeft(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -375,6 +396,9 @@ case class StringTrimLeft(child: Expression)
 /**
  * A function that trim the spaces from right end for given string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Trims the spaces from right end for given string.",
+  extended = "> SELECT _FUNC_('  SparkSql ');\n '  SparkSql'")
 case class StringTrimRight(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -394,6 +418,11 @@ case class StringTrimRight(child: Expression)
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string, substr) - Returns the position of the first occurrence of substr in " +
+    "string. Returns null if either of the arguments are null and returns 0 if substr could " +
+    "not be found in string",
+  extended = "> SELECT _FUNC_('This is a test', 'is');\n 3")
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -420,6 +449,13 @@ case class StringInstr(str: Expression, substr: Expression)
  * returned. If count is negative, every to the right of the final delimiter (counting from the
  * right) is returned. substring_index performs a case-sensitive match when searching for delim.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, delim, count) - Returns the substring from string str before count occurrences " +
+    "of the delimiter delim. If count is positive, everything the left of the final delimiter " +
+    "(counting from left) is returned. If count is negative, every to the right of the final delimiter " +
+    "(counting from the right) is returned. substring_index performs a case-sensitive match when searching " +
+    "for delim.",
+  extended = "> SELECT _FUNC_('www.apache.org','.',1);\n 'www'")
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -443,6 +479,10 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
  * A function that returns the position of the first occurrence of substr
  * in given string after position pos.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(substr, string, pos) - Returns the position of the first occurrence of substr" +
+    " in given string after position pos.",
+  extended = "> SELECT _FUNC_('is', 'This is a test', 3);\n 6")
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -508,6 +548,9 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 /**
  * Returns str, left-padded with pad to a length of len.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string, len, pad) - Left-pad the string with pad to a length of len.",
+  extended = "> SELECT _FUNC_('SparkSql', 16,  'Learning');\n 'LearningSparkSql'")
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -529,6 +572,9 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns str, right-padded with pad to a length of len.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string, len, pad) - Right-pad the string with pad to a length of len.",
+  extended = "> SELECT _FUNC_('SparkSql', 16,  ' is Cool');\n 'SparkSql is Cool'")
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -550,6 +596,10 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns the input formatted according do printf-style format strings
  */
+@ExpressionDescription(
+  usage = "_FUNC_(arguments) - Formats the arguments in printf-style and returns the result " +
+    "as a string column.",
+  extended = "> SELECT _FUNC_('aa%d%s',123, 'cc');\n 'aa123cc'")
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, "format_string() should take at least 1 argument")
@@ -619,6 +669,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
  * Returns string, with the first letter of each word in uppercase.
  * Words are delimited by whitespace.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Returns a new string column by converting the first letter of " +
+    "each word of string to uppercase.",
+  extended = "> SELECT _FUNC_('This is a test');\n 'This Is A Test'")
 case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
@@ -635,6 +689,9 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
 /**
  * Returns the string which repeat the given string value n times.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string, n) - Repeats a string column n times, and returns it as a new string.",
+  extended = "> SELECT _FUNC_('SparkSql', 3);\n 'SparkSqlSparkSqlSparkSql'")
 case class StringRepeat(str: Expression, times: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -657,6 +714,9 @@ case class StringRepeat(str: Expression, times: Expression)
 /**
  * Returns the reversed given string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Returns the reversed given string.",
+  extended = "> SELECT _FUNC_('SparkSql');\n 'lqSkrapS'")
 case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = v.reverse()
 
@@ -693,6 +753,12 @@ case class StringSpace(child: Expression)
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, delim, count) - Returns the substring from string str before count " +
+    "occurrences of the delimiter delim. If count is positive, everything the left of the " +
+    "final delimiter (counting from left) is returned. If count is negative, every to the " +
+    "right of the final delimiter (counting from the right) is returned.",
+  extended = "> SELECT _FUNC_('SparkSql',1,5);\n 'Spark'")
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -730,6 +796,9 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 /**
  * A function that return the length of the given string or binary expression.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Returns the length of the given string or binary expression.",
+  extended = "> SELECT _FUNC_('This is a test');\n 14")
 case class Length(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
@@ -750,6 +819,9 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
 /**
  * A function that return the Levenshtein distance between the two given strings.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string1, string2) - Returns the Levenshtein distance between the two given strings.",
+  extended = "> SELECT _FUNC_('This is a test', 'Another test');\n 9")
 case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes {
 
@@ -768,6 +840,9 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 /**
  * A function that return soundex code of the given string expression.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Returns soundex code of the given string expression.",
+  extended = "> SELECT _FUNC_('SparkSql');\n S162")
 case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
@@ -784,6 +859,9 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
 /**
  * Returns the numeric value of the first character of str.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(string) - Returns the numeric value of the first character of the string.",
+  extended = "> SELECT _FUNC_('SparkSql');\n 83")
 case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = IntegerType
@@ -815,6 +893,9 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
 /**
  * Converts the argument from binary to a base 64 string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(binary) - Computes the BASE64 encoding of the binary string and returns it.",
+  extended = "> SELECT _FUNC_(binary_column)")
 case class Base64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
@@ -838,6 +919,9 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
 /**
  * Converts the argument from a base 64 string to BINARY.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Converts the str from a base 64 string to BINARY.",
+  extended = "> SELECT _FUNC_('SparkSql');\n [4A 96 AB 91 2A A5]")
 case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = BinaryType
@@ -859,6 +943,11 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
  * If either argument is null, the result will also be null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(binary, charset) - Computes the first argument into a string from a binary " +
+    "using the provided character set (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', " +
+    "'UTF-16LE', 'UTF-16'). If either argument is null, the result will also be null.",
+  extended = "> SELECT _FUNC_(decode(binary_column, 'UTF-8'))")
 case class Decode(bin: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -889,6 +978,11 @@ case class Decode(bin: Expression, charset: Expression)
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
  * If either argument is null, the result will also be null.
 */
+@ExpressionDescription(
+  usage = "_FUNC_(string, charset) - Computes the first argument into a BINARY using " +
+    "the provided charset (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', " +
+    "'UTF-16LE', 'UTF-16'). If either argument is null, the result will also be null.",
+  extended = "> SELECT _FUNC_('SparkSql', 'UTF-8');\n [53 70 61 72 6B 53 71 6C]")
 case class Encode(value: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -918,6 +1012,11 @@ case class Encode(value: Expression, charset: Expression)
  * and returns the result as a string. If D is 0, the result has no decimal point or
  * fractional part.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(number, decimal) - Formats the number to a format like '#,###,###.##', " +
+    "rounded to decimal places,  and returns the result as a string. If decimal is 0, the " +
+    "result has no decimal point or fractional part.",
+  extended = "> SELECT _FUNC_(1234567.890, 2));\n 1,234,567.89")
 case class FormatNumber(x: Expression, d: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
