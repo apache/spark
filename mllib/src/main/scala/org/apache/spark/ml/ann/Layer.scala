@@ -17,8 +17,8 @@
 
 package org.apache.spark.ml.ann
 
-import breeze.linalg.{*, DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy,
-  sum => Bsum}
+import breeze.generic.{MappingUFunc, UFunc}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy, sum => Bsum, max => Bmax, *}
 import breeze.numerics.{log => Blog, sigmoid => Bsigmoid}
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -27,13 +27,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * Trait that holds Layer properties, that are needed to instantiate it.
- * Implements Layer instantiation.
+ * Trait holding Layer properties required for instantiating a [[LayerModel]].
  *
  */
 private[ann] trait Layer extends Serializable {
   /**
-   * Returns the instance of the layer based on weights provided
+   * Returns the instance of the layer based on weights provided.
    * @param weights vector with layer weights
    * @param position position of weights in the vector
    * @return the layer model
@@ -41,7 +40,7 @@ private[ann] trait Layer extends Serializable {
   def getInstance(weights: Vector, position: Int): LayerModel
 
   /**
-   * Returns the instance of the layer with random generated weights
+   * Returns the instance of the layer with random generated weights.
    * @param seed seed
    * @return the layer model
    */
@@ -49,33 +48,34 @@ private[ann] trait Layer extends Serializable {
 }
 
 /**
- * Trait that holds Layer weights (or parameters).
- * Implements functions needed for forward propagation, computing delta and gradient.
- * Can return weights in Vector format.
+ * Trait holding weights (or parameters) for a layer.
+ * Implements functions needed for forward and back propagation.
+ * Can return weights in [[Vector]] format.
  */
 private[ann] trait LayerModel extends Serializable {
   /**
-   * number of weights
+   * Number of weights.
    */
   val size: Int
 
   /**
-   * Evaluates the data (process the data through the layer)
+   * Evaluates the data (process the data forwards through the layer).
    * @param data data
    * @return processed data
    */
   def eval(data: BDM[Double]): BDM[Double]
 
   /**
-   * Computes the delta for back propagation
-   * @param nextDelta delta of the next layer
+   * Computes the delta (gradient of the objective function with respect to weighted inputs) for
+   * back propagation.
+   * @param nextDelta delta for the next layer
    * @param input input data
-   * @return delta
+   * @return delta for this layer
    */
   def prevDelta(nextDelta: BDM[Double], input: BDM[Double]): BDM[Double]
 
   /**
-   * Computes the gradient
+   * Computes the gradient of the objective function with respect to this layer's weights.
    * @param delta delta for this layer
    * @param input input data
    * @return gradient
@@ -83,14 +83,14 @@ private[ann] trait LayerModel extends Serializable {
   def grad(delta: BDM[Double], input: BDM[Double]): Array[Double]
 
   /**
-   * Returns weights for the layer in a single vector
+   * Returns weights for the layer in a single vector.
    * @return layer weights
    */
   def weights(): Vector
 }
 
 /**
- * Layer properties of affine transformations, that is y=A*x+b
+ * Layer properties for affine transformations, that is y=A*x+b.
  * @param numIn number of inputs
  * @param numOut number of outputs
  */
@@ -106,35 +106,41 @@ private[ann] class AffineLayer(val numIn: Int, val numOut: Int) extends Layer {
 }
 
 /**
- * Model of Affine layer y=A*x+b
+ * Model of Affine layer y=A*x+b.
  * @param w weights (matrix A)
  * @param b bias (vector b)
  */
 private[ann] class AffineLayerModel private(w: BDM[Double], b: BDV[Double]) extends LayerModel {
   val size = w.size + b.length
-  val gwb = new Array[Double](size)
-  private lazy val gw: BDM[Double] = new BDM[Double](w.rows, w.cols, gwb)
-  private lazy val gb: BDV[Double] = new BDV[Double](gwb, w.size)
+  val gwb = new Array[Double](size) // gradient with respect to weights + biases
+  private lazy val gw: BDM[Double] = new BDM[Double](w.rows, w.cols, gwb) // gradient wrt weights
+  private lazy val gb: BDV[Double] = new BDV[Double](gwb, w.size) // gradient wrt biases
   private var z: BDM[Double] = null
   private var d: BDM[Double] = null
   private var ones: BDV[Double] = null
 
   override def eval(data: BDM[Double]): BDM[Double] = {
-    if (z == null || z.cols != data.cols) z = new BDM[Double](w.rows, data.cols)
+    if (z == null || z.cols != data.cols) {
+      z = new BDM[Double](w.rows, data.cols)
+    }
     z(::, *) := b
     BreezeUtil.dgemm(1.0, w, data, 1.0, z)
     z
   }
 
   override def prevDelta(nextDelta: BDM[Double], input: BDM[Double]): BDM[Double] = {
-    if (d == null || d.cols != nextDelta.cols) d = new BDM[Double](w.cols, nextDelta.cols)
+    if (d == null || d.cols != nextDelta.cols) {
+      d = new BDM[Double](w.cols, nextDelta.cols)
+    }
     BreezeUtil.dgemm(1.0, w.t, nextDelta, 0.0, d)
     d
   }
 
   override def grad(delta: BDM[Double], input: BDM[Double]): Array[Double] = {
     BreezeUtil.dgemm(1.0 / input.cols, delta, input.t, 0.0, gw)
-    if (ones == null || ones.length != delta.cols) ones = BDV.ones[Double](delta.cols)
+    if (ones == null || ones.length != delta.cols) {
+      ones = BDV.ones[Double](delta.cols)
+    }
     BreezeUtil.dgemv(1.0 / input.cols, delta, ones, 0.0, gb)
     gwb
   }
@@ -143,12 +149,12 @@ private[ann] class AffineLayerModel private(w: BDM[Double], b: BDV[Double]) exte
 }
 
 /**
- * Fabric for Affine layer models
+ * Fabric for Affine layer models.
  */
 private[ann] object AffineLayerModel {
 
   /**
-   * Creates a model of Affine layer
+   * Creates a model of Affine layer.
    * @param layer layer properties
    * @param weights vector with weights
    * @param position position of weights in the vector
@@ -160,7 +166,7 @@ private[ann] object AffineLayerModel {
   }
 
   /**
-   * Creates a model of Affine layer
+   * Creates a model of Affine layer.
    * @param layer layer properties
    * @param seed seed
    * @return model of Affine layer
@@ -171,41 +177,38 @@ private[ann] object AffineLayerModel {
   }
 
   /**
-   * Unrolls the weights from the vector
+   * Unrolls the weights from the vector.
    * @param weights vector with weights
    * @param position position of weights for this layer
    * @param numIn number of layer inputs
    * @param numOut number of layer outputs
-   * @return matrix A and vector b
+   * @return matrix A and vector b, both views of the data in `weights`
    */
   def unroll(
-    weights: Vector,
-    position: Int,
-    numIn: Int,
-    numOut: Int): (BDM[Double], BDV[Double]) = {
-    val weightsCopy = weights.toArray
+      weights: Vector,
+      position: Int,
+      numIn: Int,
+      numOut: Int): (BDM[Double], BDV[Double]) = {
+    val weightsArray = weights.toArray
     // TODO: the array is not copied to BDMs, make sure this is OK!
-    val a = new BDM[Double](numOut, numIn, weightsCopy, position)
-    val b = new BDV[Double](weightsCopy, position + (numOut * numIn), 1, numOut)
+    val a = new BDM[Double](numOut, numIn, weightsArray, position)
+    val b = new BDV[Double](weightsArray, position + (numOut * numIn), 1, numOut)
     (a, b)
   }
 
   /**
-   * Roll the layer weights into a vector
+   * Roll the layer weights into a vector.
    * @param a matrix A
    * @param b vector b
-   * @return vector of weights
+   * @return vector of weights, a copy of the data in `a` and `b`
    */
   def roll(a: BDM[Double], b: BDV[Double]): Vector = {
-    val result = new Array[Double](a.size + b.length)
-    // TODO: make sure that we need to copy!
-    System.arraycopy(a.toArray, 0, result, 0, a.size)
-    System.arraycopy(b.toArray, 0, result, a.size, b.length)
-    Vectors.dense(result)
+    // TODO: the array is copied to Vector, make sure this is necessary!
+    Vectors.dense(a.toArray ++ b.toArray)
   }
 
   /**
-   * Generate random weights for the layer
+   * Generate random weights for the layer.
    * @param numIn number of inputs
    * @param numOut number of outputs
    * @param seed seed
@@ -220,26 +223,26 @@ private[ann] object AffineLayerModel {
 }
 
 /**
- * Trait for functions and their derivatives for functional layers
+ * Trait for functions and their derivatives for functional layers.
  */
 private[ann] trait ActivationFunction extends Serializable {
 
   /**
-   * Implements a function
+   * Implements in-place application of a function.
    * @param x input data
-   * @param y output data
+   * @param y output data, mutated to hold the result of applying the function to the given input
    */
   def eval(x: BDM[Double], y: BDM[Double]): Unit
 
   /**
-   * Implements a derivative of a function (needed for the back propagation)
+   * Implements in-place application of the derivative of a function (needed for back propagation).
    * @param x input data
-   * @param y output data
+   * @param y output data, mutated to hold the function's derivative value for given input
    */
   def derivative(x: BDM[Double], y: BDM[Double]): Unit
 
   /**
-   * Implements a cross entropy error of a function.
+   * Implements the cross entropy error of a function.
    * Needed if the functional layer that contains this function is the output layer
    * of the network.
    * @param target target output
@@ -250,7 +253,7 @@ private[ann] trait ActivationFunction extends Serializable {
   def crossEntropy(target: BDM[Double], output: BDM[Double], result: BDM[Double]): Double
 
   /**
-   * Implements a mean squared error of a function
+   * Implements the mean squared error of a function.
    * @param target target output
    * @param output computed output
    * @param result intermediate result
@@ -260,127 +263,126 @@ private[ann] trait ActivationFunction extends Serializable {
 }
 
 /**
- * Implements in-place application of functions
+ * Implements in-place application of functions.
  */
 private[ann] object ActivationFunction {
 
-  def apply(x: BDM[Double], y: BDM[Double], func: Double => Double): Unit = {
-    var i = 0
-    while (i < x.rows) {
-      var j = 0
-      while (j < x.cols) {
-        y(i, j) = func(x(i, j))
-        j += 1
-      }
-      i += 1
-    }
+  def apply(x: BDM[Double], y: BDM[Double], func: UFunc with MappingUFunc)(
+      implicit impl: func.Impl[BDM[Double], BDM[Double]]): Unit = {
+    y := func(x)
   }
 
   def apply(
-    x1: BDM[Double],
-    x2: BDM[Double],
-    y: BDM[Double],
-    func: (Double, Double) => Double): Unit = {
-    var i = 0
-    while (i < x1.rows) {
-      var j = 0
-      while (j < x1.cols) {
-        y(i, j) = func(x1(i, j), x2(i, j))
-        j += 1
-      }
-      i += 1
-    }
+      x1: BDM[Double],
+      x2: BDM[Double],
+      y: BDM[Double],
+      func: UFunc with MappingUFunc)(
+      implicit impl: func.Impl2[BDM[Double], BDM[Double], BDM[Double]]): Unit = {
+    y := func(x1, x2)
   }
 }
 
 /**
- * Implements SoftMax activation function
+ * Implements Softmax activation function.
  */
 private[ann] class SoftmaxFunction extends ActivationFunction {
   override def eval(x: BDM[Double], y: BDM[Double]): Unit = {
-    var j = 0
-    // find max value to make sure later that exponent is computable
-    while (j < x.cols) {
-      var i = 0
-      var max = Double.MinValue
-      while (i < x.rows) {
-        if (x(i, j) > max) {
-          max = x(i, j)
-        }
-        i += 1
-      }
-      var sum = 0.0
-      i = 0
-      while (i < x.rows) {
-        val res = Math.exp(x(i, j) - max)
-        y(i, j) = res
-        sum += res
-        i += 1
-      }
-      i = 0
-      while (i < x.rows) {
-        y(i, j) /= sum
-        i += 1
-      }
-      j += 1
+    (0 until x.cols).foreach { j =>
+      // subtract max value to prevent overflow during exp
+      // does not affect correctness since we normalize right after
+      val maxVal = Bmax(x(::, j))
+      y(::, j) := breeze.numerics.exp(x(::, j) - maxVal)
+      y(::, j) :/= Bsum(y(::, j))
     }
   }
 
   override def crossEntropy(
-    output: BDM[Double],
-    target: BDM[Double],
-    result: BDM[Double]): Double = {
-    def m(o: Double, t: Double): Double = o - t
-    ActivationFunction(output, target, result, m)
+      output: BDM[Double],
+      target: BDM[Double],
+      result: BDM[Double]): Double = {
+    ActivationFunction(output, target, result, OutputMinusTarget)
     -Bsum( target :* Blog(output)) / output.cols
   }
 
+  private object OutputMinusTarget extends UFunc with MappingUFunc {
+    implicit val implDoubleDouble: Impl2[Double, Double, Double] =
+      new Impl2[Double, Double, Double] {
+        def apply(o: Double, t: Double): Double = o - t
+      }
+  }
+
   override def derivative(x: BDM[Double], y: BDM[Double]): Unit = {
-    def sd(z: Double): Double = (1 - z) * z
-    ActivationFunction(x, y, sd)
+    ActivationFunction(x, y, SoftmaxDerivative)
+  }
+
+  private object SoftmaxDerivative extends UFunc with MappingUFunc {
+    implicit val implDouble: Impl[Double, Double] = new Impl[Double, Double] {
+      def apply(z: Double) = (1 - z) * z
+    }
   }
 
   override def squared(output: BDM[Double], target: BDM[Double], result: BDM[Double]): Double = {
-    throw new UnsupportedOperationException("Sorry, squared error is not defined for SoftMax.")
+    throw new UnsupportedOperationException("Sorry, squared error is not defined for Softmax.")
   }
 }
 
 /**
- * Implements Sigmoid activation function
+ * Implements Sigmoid activation function.
  */
 private[ann] class SigmoidFunction extends ActivationFunction {
   override def eval(x: BDM[Double], y: BDM[Double]): Unit = {
-    def s(z: Double): Double = Bsigmoid(z)
-    ActivationFunction(x, y, s)
+    ActivationFunction(x, y, Sigmoid)
+  }
+
+  private object Sigmoid extends UFunc with MappingUFunc {
+    implicit val implDouble: Impl[Double, Double] = new Impl[Double, Double] {
+      def apply(z: Double): Double = Bsigmoid(z)
+    }
   }
 
   override def crossEntropy(
-    output: BDM[Double],
-    target: BDM[Double],
-    result: BDM[Double]): Double = {
-    def m(o: Double, t: Double): Double = o - t
-    ActivationFunction(output, target, result, m)
+      output: BDM[Double],
+      target: BDM[Double],
+      result: BDM[Double]): Double = {
+    ActivationFunction(output, target, result, OutputMinusTarget)
     -Bsum(target :* Blog(output)) / output.cols
   }
 
+  private object OutputMinusTarget extends UFunc with MappingUFunc {
+    implicit val implDoubleDouble: Impl2[Double, Double, Double] =
+      new Impl2[Double, Double, Double] {
+        def apply(o: Double, t: Double): Double = o - t
+      }
+  }
+
   override def derivative(x: BDM[Double], y: BDM[Double]): Unit = {
-    def sd(z: Double): Double = (1 - z) * z
-    ActivationFunction(x, y, sd)
+    ActivationFunction(x, y, SigmoidDerivative)
+  }
+
+  private object SigmoidDerivative extends UFunc with MappingUFunc {
+    implicit val implDouble: Impl[Double, Double] =
+      new Impl[Double, Double] {
+        def apply(z: Double) = (1 - z) * z
+      }
   }
 
   override def squared(output: BDM[Double], target: BDM[Double], result: BDM[Double]): Double = {
-    // TODO: make it readable
-    def m(o: Double, t: Double): Double = (o - t)
-    ActivationFunction(output, target, result, m)
-    val e = Bsum(result :* result) / 2 / output.cols
-    def m2(x: Double, o: Double) = x * (o - o * o)
-    ActivationFunction(result, output, result, m2)
+    ActivationFunction(output, target, result, OutputMinusTarget)
+    val e = (Bsum(result :* result) / 2) / output.cols
+    ActivationFunction(result, output, result, ResultTimesOutputMinusOutputSquared)
     e
+  }
+
+  private object ResultTimesOutputMinusOutputSquared extends UFunc with MappingUFunc {
+    implicit val implDoubleDouble: Impl2[Double, Double, Double] =
+      new Impl2[Double, Double, Double] {
+        def apply(x: Double, o: Double): Double = x * (o - o * o)
+      }
   }
 }
 
 /**
- * Functional layer properties, y = f(x)
+ * Functional layer properties, y = f(x).
  * @param activationFunction activation function
  */
 private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) extends Layer {
@@ -408,13 +410,17 @@ private[ann] class FunctionalLayerModel private (val activationFunction: Activat
   private lazy val dg = new Array[Double](0)
 
   override def eval(data: BDM[Double]): BDM[Double] = {
-    if (f == null || f.cols != data.cols) f = new BDM[Double](data.rows, data.cols)
+    if (f == null || f.cols != data.cols) {
+      f = new BDM[Double](data.rows, data.cols)
+    }
     activationFunction.eval(data, f)
     f
   }
 
   override def prevDelta(nextDelta: BDM[Double], input: BDM[Double]): BDM[Double] = {
-    if (d == null || d.cols != nextDelta.cols) d = new BDM[Double](nextDelta.rows, nextDelta.cols)
+    if (d == null || d.cols != nextDelta.cols) {
+      d = new BDM[Double](nextDelta.rows, nextDelta.cols)
+    }
     activationFunction.derivative(input, d)
     d :*= nextDelta
     d
@@ -425,19 +431,23 @@ private[ann] class FunctionalLayerModel private (val activationFunction: Activat
   override def weights(): Vector = Vectors.dense(new Array[Double](0))
 
   def crossEntropy(output: BDM[Double], target: BDM[Double]): (BDM[Double], Double) = {
-    if (e == null || e.cols != output.cols) e = new BDM[Double](output.rows, output.cols)
+    if (e == null || e.cols != output.cols) {
+      e = new BDM[Double](output.rows, output.cols)
+    }
     val error = activationFunction.crossEntropy(output, target, e)
     (e, error)
   }
 
   def squared(output: BDM[Double], target: BDM[Double]): (BDM[Double], Double) = {
-    if (e == null || e.cols != output.cols) e = new BDM[Double](output.rows, output.cols)
+    if (e == null || e.cols != output.cols) {
+      e = new BDM[Double](output.rows, output.cols)
+    }
     val error = activationFunction.squared(output, target, e)
     (e, error)
   }
 
   def error(output: BDM[Double], target: BDM[Double]): (BDM[Double], Double) = {
-    // TODO: allow user pick error
+    // TODO: allow user to pick error
     activationFunction match {
       case sigmoid: SigmoidFunction => squared(output, target)
       case softmax: SoftmaxFunction => crossEntropy(output, target)
@@ -446,7 +456,7 @@ private[ann] class FunctionalLayerModel private (val activationFunction: Activat
 }
 
 /**
- * Fabric of functional layer models
+ * Fabric of functional layer models.
  */
 private[ann] object FunctionalLayerModel {
   def apply(layer: FunctionalLayer): FunctionalLayerModel =
@@ -454,33 +464,33 @@ private[ann] object FunctionalLayerModel {
 }
 
 /**
- * Trait for the artificial neural network (ANN) topology properties
+ * Trait for the artificial neural network (ANN) topology properties.
  */
-private[ann] trait Topology extends Serializable{
+private[ann] trait Topology extends Serializable {
   def getInstance(weights: Vector): TopologyModel
   def getInstance(seed: Long): TopologyModel
 }
 
 /**
- * Trait for ANN topology model
+ * Trait for ANN topology model.
  */
-private[ann] trait TopologyModel extends Serializable{
+private[ann] trait TopologyModel extends Serializable {
   /**
-   * Forward propagation
+   * Forward propagation.
    * @param data input data
    * @return array of outputs for each of the layers
    */
   def forward(data: BDM[Double]): Array[BDM[Double]]
 
   /**
-   * Prediction of the model
+   * Prediction of the model.
    * @param data input data
    * @return prediction
    */
   def predict(data: Vector): Vector
 
   /**
-   * Computes gradient for the network
+   * Computes gradient for the network.
    * @param data input data
    * @param target target output
    * @param cumGradient cumulative gradient
@@ -488,18 +498,18 @@ private[ann] trait TopologyModel extends Serializable{
    * @return error
    */
   def computeGradient(data: BDM[Double], target: BDM[Double], cumGradient: Vector,
-                      blockSize: Int): Double
+      blockSize: Int): Double
 
   /**
-   * Returns the weights of the ANN
+   * Returns the weights of the ANN.
    * @return weights
    */
   def weights(): Vector
 }
 
 /**
- * Feed forward ANN
- * @param layers
+ * Feed forward ANN.
+ * @param layers the layers of the neural network
  */
 private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends Topology {
   override def getInstance(weights: Vector): TopologyModel = FeedForwardModel(this, weights)
@@ -508,11 +518,11 @@ private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends
 }
 
 /**
- * Factory for some of the frequently-used topologies
+ * Factory for some of the frequently-used topologies.
  */
 private[ml] object FeedForwardTopology {
   /**
-   * Creates a feed forward topology from the array of layers
+   * Creates a feed forward topology from the array of layers.
    * @param layers array of layers
    * @return feed forward topology
    */
@@ -521,15 +531,14 @@ private[ml] object FeedForwardTopology {
   }
 
   /**
-   * Creates a multi-layer perceptron
+   * Creates a multi-layer perceptron.
    * @param layerSizes sizes of layers including input and output size
-   * @param softmax wether to use SoftMax or Sigmoid function for an output layer.
-   *                Softmax is default
+   * @param softmax wether to use Softmax or Sigmoid function for an output layer (default: Softmax)
    * @return multilayer perceptron topology
    */
   def multiLayerPerceptron(layerSizes: Array[Int], softmax: Boolean = true): FeedForwardTopology = {
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
-    for(i <- 0 until layerSizes.length - 1){
+    for (i <- 0 until layerSizes.length - 1) {
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
       layers(i * 2 + 1) =
         if (softmax && i == layerSizes.length - 2) {
@@ -561,10 +570,10 @@ private[ml] class FeedForwardModel private(
   }
 
   override def computeGradient(
-    data: BDM[Double],
-    target: BDM[Double],
-    cumGradient: Vector,
-    realBatchSize: Int): Double = {
+      data: BDM[Double],
+      target: BDM[Double],
+      cumGradient: Vector,
+      realBatchSize: Int): Double = {
     val outputs = forward(data)
     val deltas = new Array[BDM[Double]](layerModels.length)
     val L = layerModels.length - 1
@@ -573,17 +582,18 @@ private[ml] class FeedForwardModel private(
       case _ =>
         throw new UnsupportedOperationException("Non-functional layer not supported at the top")
     }
+    // backward pass (back-propagate deltas given errors)
     deltas(L) = new BDM[Double](0, 0)
     deltas(L - 1) = newE
     for (i <- (L - 2) to (0, -1)) {
       deltas(i) = layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1))
     }
-    val grads = new Array[Array[Double]](layerModels.length)
-    for (i <- 0 until layerModels.length) {
-      val input = if (i==0) data else outputs(i - 1)
-      grads(i) = layerModels(i).grad(deltas(i), input)
+    // forward pass (forward-propagate gradients given inputs)
+    val grads = layerModels.zipWithIndex.map { case (layer, i) =>
+      val input = if (i == 0) data else outputs(i - 1)
+      layer.grad(deltas(i), input)
     }
-    // update cumGradient
+    // update cumulative gradients
     val cumGradientArray = cumGradient.toArray
     var offset = 0
     // TODO: extract roll
@@ -624,12 +634,12 @@ private[ml] class FeedForwardModel private(
 }
 
 /**
- * Fabric for feed forward ANN models
+ * Fabric for feed forward ANN models.
  */
 private[ann] object FeedForwardModel {
 
   /**
-   * Creates a model from a topology and weights
+   * Creates a model from a topology and weights.
    * @param topology topology
    * @param weights weights
    * @return model
@@ -646,7 +656,7 @@ private[ann] object FeedForwardModel {
   }
 
   /**
-   * Creates a model given a topology and seed
+   * Creates a model given a topology and seed.
    * @param topology topology
    * @param seed seed for generating the weights
    * @return model
@@ -664,7 +674,7 @@ private[ann] object FeedForwardModel {
 }
 
 /**
- * Neural network gradient. Does nothing but calling Model's gradient
+ * Neural network gradient. Does nothing but call [[LayerModel.grad()]].
  * @param topology topology
  * @param dataStacker data stacker
  */
@@ -677,10 +687,10 @@ private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) ext
   }
 
   override def compute(
-    data: Vector,
-    label: Double,
-    weights: Vector,
-    cumGradient: Vector): Double = {
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
     val (input, target, realBatchSize) = dataStacker.unstack(data)
     val model = topology.getInstance(weights)
     model.computeGradient(input, target, cumGradient, realBatchSize)
@@ -700,7 +710,7 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
   extends Serializable {
 
   /**
-   * Stacks the data
+   * Stacks the data.
    * @param data RDD of vector pairs
    * @return RDD of double (always zero) and vector that contains the stacked vectors
    */
@@ -710,8 +720,8 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
         (0.0,
           Vectors.fromBreeze(BDV.vertcat(
             v._1.toBreeze.toDenseVector,
-            v._2.toBreeze.toDenseVector))
-          ) }
+            v._2.toBreeze.toDenseVector)))
+      }
     } else {
       data.mapPartitions { it =>
         it.grouped(stackSize).map { seq =>
@@ -732,7 +742,7 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
   }
 
   /**
-   * Unstack the stacked vectors into matrices for batch operations
+   * Unstack the stacked vectors into matrices for batch operations.
    * @param data stacked vector
    * @return pair of matrices holding input and output data and the real stack size
    */
@@ -746,16 +756,16 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
 }
 
 /**
- * Simple updater
+ * Simple updater.
  */
 private[ann] class ANNUpdater extends Updater {
 
   override def compute(
-    weightsOld: Vector,
-    gradient: Vector,
-    stepSize: Double,
-    iter: Int,
-    regParam: Double): (Vector, Double) = {
+      weightsOld: Vector,
+      gradient: Vector,
+      stepSize: Double,
+      iter: Int,
+      regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
     Baxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
@@ -764,7 +774,7 @@ private[ann] class ANNUpdater extends Updater {
 }
 
 /**
- * MLlib-style trainer class that trains a network given the data and topology
+ * MLlib-style trainer class that trains a network given the data and topology.
  * @param topology topology of ANN
  * @param inputSize input size
  * @param outputSize output size
@@ -783,13 +793,13 @@ private[ml] class FeedForwardTrainer(
   private var optimizer: Optimizer = LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(100)
 
   /**
-   * Returns weights
+   * Returns weights.
    * @return weights
    */
   def getWeights: Vector = _weights
 
   /**
-   * Sets weights
+   * Sets weights.
    * @param value weights
    * @return trainer
    */
@@ -799,7 +809,7 @@ private[ml] class FeedForwardTrainer(
   }
 
   /**
-   * Sets the stack size
+   * Sets the stack size.
    * @param value stack size
    * @return trainer
    */
@@ -810,7 +820,7 @@ private[ml] class FeedForwardTrainer(
   }
 
   /**
-   * Sets the SGD optimizer
+   * Sets the SGD optimizer.
    * @return SGD optimizer
    */
   def SGDOptimizer: GradientDescent = {
@@ -820,8 +830,8 @@ private[ml] class FeedForwardTrainer(
   }
 
   /**
-   * Sets the LBFGS optimizer
-   * @return LBGS optimizer
+   * Sets the L-BFGS optimizer.
+   * @return L-BFGS optimizer
    */
   def LBFGSOptimizer: LBFGS = {
     val lbfgs = new LBFGS(_gradient, _updater)
@@ -830,7 +840,7 @@ private[ml] class FeedForwardTrainer(
   }
 
   /**
-   * Sets the updater
+   * Sets the updater.
    * @param value updater
    * @return trainer
    */
@@ -841,7 +851,7 @@ private[ml] class FeedForwardTrainer(
   }
 
   /**
-   * Sets the gradient
+   * Sets the gradient.
    * @param value gradient
    * @return trainer
    */
@@ -870,7 +880,7 @@ private[ml] class FeedForwardTrainer(
   }
 
   /**
-   * Trains the ANN
+   * Trains the ANN.
    * @param data RDD of input and output vector pairs
    * @return model
    */
