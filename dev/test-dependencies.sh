@@ -54,7 +54,7 @@ $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /de
 # Generate manifests for each Hadoop profile:
 for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   echo "Performing Maven install for $HADOOP_PROFILE"
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar install:install \
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar install:install -q \
     -pl '!assembly' \
     -pl '!examples' \
     -pl '!external/flume-assembly' \
@@ -89,7 +89,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   set -e
   if [ "$dep_diff" != "" ]; then
     echo "Spark's published dependencies DO NOT MATCH the manifest file (dev/spark-deps)."
-    echo "To update the manifest file, run './dev/test-dependencies --replace-manifest'."
+    echo "To update the manifest file, run './dev/test-dependencies.sh --replace-manifest'."
     echo "$dep_diff"
     rm -rf dev/pr-deps
     exit 1
