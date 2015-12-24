@@ -79,6 +79,10 @@ class SizeEstimatorSuite
     System.setProperty("spark.test.useCompressedOops", "true")
   }
 
+  override def afterEach(): Unit = {
+    super.afterEach()
+  }
+
   test("simple classes") {
     assertResult(16)(SizeEstimator.estimate(new DummyClass1))
     assertResult(16)(SizeEstimator.estimate(new DummyClass2))
