@@ -323,6 +323,26 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  test("SPARK-112231: Filter combine partition key and projects doesn't work in DataSource scan") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i + 1, i + 2, i + 3)).toDF("a", "b", "c", "d").write.parquet(path)
+
+        // If the "part = 1" filter gets pushed down, this query will throw an exception since
+        // "part" is not a valid column in the actual Parquet file
+        checkAnswer(
+          sqlContext.read.parquet(dir.getCanonicalPath).filter("a > 1").orderBy("a")
+            selectExpr("a", "b", "c", "d"),
+          (2 to 3).map(i => Row(i, i + 1, i + 2, i + 3, 1)))
+      }
+    }
+  }
+
+
+
   test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
     import testImplicits._
 
