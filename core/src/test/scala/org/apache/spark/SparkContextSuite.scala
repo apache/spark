@@ -278,7 +278,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
       // Test textFile, wholeTextFiles and binaryFiles for default paths
-      val mockPath = "default/path/for/wholeTextFile/"
+      val mockPath = "default/path/for/"
       assert(sc.textFile(mockPath + "textFile").name == mockPath + "textFile")
       assert(sc.wholeTextFiles(mockPath + "wholeTextFile").name == mockPath + "wholeTextFile")
       assert(sc.binaryFiles(mockPath + "binaryFiles").name == mockPath + "binaryFiles")
