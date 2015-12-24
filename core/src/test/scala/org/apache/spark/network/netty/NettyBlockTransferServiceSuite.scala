@@ -31,14 +31,18 @@ class NettyBlockTransferServiceSuite
   private var service1: NettyBlockTransferService = _
 
   override def afterEach() {
-    if (service0 != null) {
-      service0.close()
-      service0 = null
-    }
+    try {
+      if (service0 != null) {
+        service0.close()
+        service0 = null
+      }
 
-    if (service1 != null) {
-      service1.close()
-      service1 = null
+      if (service1 != null) {
+        service1.close()
+        service1 = null
+      }
+    } finally {
+      super.afterEach()
     }
   }
 

@@ -55,6 +55,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   private var shuffleHandle: BypassMergeSortShuffleHandle[Int, Int] = _
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     tempDir = Utils.createTempDir()
     outputFile = File.createTempFile("shuffle", null, tempDir)
     taskMetrics = new TaskMetrics
@@ -119,9 +120,13 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   }
 
   override def afterEach(): Unit = {
-    Utils.deleteRecursively(tempDir)
-    blockIdToFileMap.clear()
-    temporaryFilesCreated.clear()
+    try {
+      Utils.deleteRecursively(tempDir)
+      blockIdToFileMap.clear()
+      temporaryFilesCreated.clear()
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("write empty iterator") {

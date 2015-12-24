@@ -44,8 +44,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   override def afterEach() {
-    super.afterEach()
-    Utils.deleteRecursively(tempDir)
+    try {
+      Utils.deleteRecursively(tempDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("text files") {

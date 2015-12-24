@@ -44,6 +44,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   var env: RpcEnv = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val conf = new SparkConf()
     env = createRpcEnv(conf, "local", 0)
 
@@ -53,10 +54,14 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    if (env != null) {
-      env.shutdown()
+    try {
+      if (env != null) {
+        env.shutdown()
+      }
+      SparkEnv.set(null)
+    } finally {
+      super.afterAll()
     }
-    SparkEnv.set(null)
   }
 
   def createRpcEnv(conf: SparkConf, name: String, port: Int, clientMode: Boolean = false): RpcEnv

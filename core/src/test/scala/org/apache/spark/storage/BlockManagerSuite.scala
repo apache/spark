@@ -79,6 +79,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
@@ -97,22 +98,26 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   override def afterEach(): Unit = {
-    if (store != null) {
-      store.stop()
-      store = null
+    try {
+      if (store != null) {
+        store.stop()
+        store = null
+      }
+      if (store2 != null) {
+        store2.stop()
+        store2 = null
+      }
+      if (store3 != null) {
+        store3.stop()
+        store3 = null
+      }
+      rpcEnv.shutdown()
+      rpcEnv.awaitTermination()
+      rpcEnv = null
+      master = null
+    } finally {
+      super.afterEach()
     }
-    if (store2 != null) {
-      store2.stop()
-      store2 = null
-    }
-    if (store3 != null) {
-      store3.stop()
-      store3 = null
-    }
-    rpcEnv.shutdown()
-    rpcEnv.awaitTermination()
-    rpcEnv = null
-    master = null
   }
 
   test("StorageLevel object caching") {

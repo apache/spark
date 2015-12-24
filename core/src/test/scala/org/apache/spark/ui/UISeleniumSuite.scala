@@ -76,14 +76,19 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     webDriver = new HtmlUnitDriver {
       getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
     }
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
   }
 

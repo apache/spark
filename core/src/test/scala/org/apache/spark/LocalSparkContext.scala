@@ -28,13 +28,16 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
   @transient var sc: SparkContext = _
 
   override def beforeAll() {
-    InternalLoggerFactory.setDefaultFactory(new Slf4JLoggerFactory())
     super.beforeAll()
+    InternalLoggerFactory.setDefaultFactory(new Slf4JLoggerFactory())
   }
 
   override def afterEach() {
-    resetSparkContext()
-    super.afterEach()
+    try {
+      resetSparkContext()
+    } finally {
+      super.afterEach()
+    }
   }
 
   def resetSparkContext(): Unit = {

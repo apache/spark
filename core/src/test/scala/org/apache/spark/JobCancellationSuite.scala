@@ -38,8 +38,11 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   with LocalSparkContext {
 
   override def afterEach() {
-    super.afterEach()
-    resetSparkContext()
+    try {
+      resetSparkContext()
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("local mode, FIFO scheduler") {

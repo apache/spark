@@ -34,10 +34,11 @@ import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, ResetSystemProperties}
 
 
-class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging {
+class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
+  with ResetSystemProperties {
 
   val hasBash =
     try {

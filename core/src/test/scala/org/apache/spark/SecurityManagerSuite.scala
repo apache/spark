@@ -19,9 +19,9 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.spark.util.{SparkConfWithEnv, Utils}
+import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
-class SecurityManagerSuite extends SparkFunSuite {
+class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with conf") {
     val conf = new SparkConf
