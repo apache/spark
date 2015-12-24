@@ -174,7 +174,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
           }
           assert(b)
         }
-        assert(result.accumUpdates == that.accumUpdates)
         assert(result.valueBytes == that.valueBytes)
         val thisMetrics = result.metrics;
         val thatMetrics = that.metrics;
