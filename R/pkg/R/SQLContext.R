@@ -596,14 +596,14 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 #'
 #' @param sqlContext SQLContext to use
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
-#' @param tableName Name of the table in the external database
+#' @param tableName the name of the table in the external database
 #' @param partitionColumn the name of a column of integral type that will be used for partitioning
 #' @param lowerBound the minimum value of `partitionColumn` used to decide partition stride
 #' @param upperBound the maximum value of `partitionColumn` used to decide partition stride
 #' @param numPartitions the number of partitions, the range `lowerBound`-`upperBound` will be
 #' splitted evenly into this many partitions on the `partitionColumn`; if 0 or unset, it defaults to
 #' SparkContext.defaultParallelism
-#' @param predicates Condition in the where clause for each partition
+#' @param predicates a list of condition in the where clause; each one defines one partition
 #' @return DataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc
