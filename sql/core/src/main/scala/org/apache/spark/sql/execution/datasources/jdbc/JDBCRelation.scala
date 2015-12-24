@@ -92,7 +92,7 @@ private[sql] case class JDBCRelation(
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
-    filters.filterNot(JDBCRDD.compileFilter(_) != null)
+    filters.filter(JDBCRDD.compileFilter(_) == null)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
