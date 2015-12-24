@@ -282,19 +282,19 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       val mockPath = "default/path/for/"
 
       var targetPath = mockPath + "textFile"
-      assert(sc.textFile(targetPath).name == targetPath")
+      assert(sc.textFile(targetPath).name == targetPath)
 
       targetPath = mockPath + "wholeTextFile"
-      assert(sc.wholeTextFile(targetPath).name == targetPath")
+      assert(sc.wholeTextFile(targetPath).name == targetPath)
 
       targetPath = mockPath + "binaryFiles"
-      assert(sc.binaryFiles(targetPath).name == targetPath")
+      assert(sc.binaryFiles(targetPath).name == targetPath)
       
       targetPath = mockPath + "hadoopFile"
-      assert(sc.hadoopFile(targetPath).name == targetPath")
+      assert(sc.hadoopFile(targetPath).name == targetPath)
       
       targetPath = mockPath + "newAPIHadoopFile"
-      assert(sc.newAPIHadoopFile(targetPath).name == targetPath")
+      assert(sc.newAPIHadoopFile(targetPath).name == targetPath)
 
       sc.stop()
   }
