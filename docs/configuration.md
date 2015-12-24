@@ -408,6 +408,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.index.cacheSize</code></td>
+  <td>1m</td>
+  <td>
+    Size of the in-memory cache for the shuffle index that is used when serving map outputs
+    to reducers.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.io.maxRetries</code></td>
   <td>3</td>
   <td>
@@ -461,6 +469,14 @@ Apart from these, the following properties are also available, and may be useful
     must be set up in order to enable it. See
     <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.indexCacheSize</code></td>
+  <td>10m</td>
+  <td>
+    Size of the in-memory cache for the shuffle index on the external shuffle service
+    that is used when serving map outputs to reducers.
   </td>
 </tr>
 <tr>

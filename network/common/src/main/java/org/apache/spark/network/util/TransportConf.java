@@ -165,4 +165,12 @@ public class TransportConf {
     return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
   }
 
+  /**
+   * Size of the in-memory cache for the shuffle index on the external shuffle service
+   * that is used when serving map outputs to reducers.
+   */
+  public int shuffleIndexCacheSize() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.shuffle.service.indexCacheSize", "10m")));
+  }
 }

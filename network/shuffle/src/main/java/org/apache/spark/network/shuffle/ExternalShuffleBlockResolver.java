@@ -71,6 +71,8 @@ public class ExternalShuffleBlockResolver {
 
   private final TransportConf conf;
 
+  private final ShuffleIndexCache indexCache;
+
   @VisibleForTesting
   final File registeredExecutorFile;
   @VisibleForTesting
@@ -140,6 +142,7 @@ public class ExternalShuffleBlockResolver {
       executors = Maps.newConcurrentMap();
     }
     this.directoryCleaner = directoryCleaner;
+    this.indexCache = new ShuffleIndexCache(conf.shuffleIndexCacheSize());
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -266,27 +269,19 @@ public class ExternalShuffleBlockResolver {
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
     ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
-    File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
-      "shuffle_" + shuffleId + "_" + mapId + "_0.index");
-
-    DataInputStream in = null;
     try {
-      in = new DataInputStream(new FileInputStream(indexFile));
-      in.skipBytes(reduceId * 8);
-      long offset = in.readLong();
-      long nextOffset = in.readLong();
+      File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+          "shuffle_" + shuffleId + "_" + mapId + "_0.index");
+      ShuffleIndexRecord info =
+        indexCache.getIndexInformation(indexFile, shuffleId, mapId, reduceId);
       return new FileSegmentManagedBuffer(
         conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
-        offset,
-        nextOffset - offset);
+        info.offset,
+        info.nextOffset - info.offset);
     } catch (IOException e) {
-      throw new RuntimeException("Failed to open file: " + indexFile, e);
-    } finally {
-      if (in != null) {
-        JavaUtils.closeQuietly(in);
-      }
+      throw new RuntimeException("Failed to get index information :", e);
     }
   }
 

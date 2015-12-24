@@ -23,6 +23,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.ShuffleIndexCache
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -46,6 +47,9 @@ private[spark] class IndexShuffleBlockResolver(
   with Logging {
 
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
+
+  private val indexCache = new ShuffleIndexCache(
+    conf.getSizeAsBytes("spark.shuffle.index.cacheSize", "1m").toInt)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
@@ -188,22 +192,18 @@ private[spark] class IndexShuffleBlockResolver(
     // find out the consolidated file, then the offset within that from our index
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
 
-    val in = new DataInputStream(new FileInputStream(indexFile))
-    try {
-      ByteStreams.skipFully(in, blockId.reduceId * 8)
-      val offset = in.readLong()
-      val nextOffset = in.readLong()
-      new FileSegmentManagedBuffer(
-        transportConf,
-        getDataFile(blockId.shuffleId, blockId.mapId),
-        offset,
-        nextOffset - offset)
-    } finally {
-      in.close()
-    }
+    val indexInfo = indexCache.getIndexInformation(indexFile, blockId.shuffleId, blockId.mapId,
+      blockId.reduceId)
+    new FileSegmentManagedBuffer(
+      transportConf,
+      getDataFile(blockId.shuffleId, blockId.mapId),
+      indexInfo.offset,
+      indexInfo.nextOffset - indexInfo.offset)
   }
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = {
+    indexCache.clear()
+  }
 }
 
 private[spark] object IndexShuffleBlockResolver {
