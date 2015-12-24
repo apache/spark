@@ -48,7 +48,7 @@ private[spark] object SchemaUtils {
     * @param colName  column name
     * @param dataTypes  required column data types
     */
-  def checkColumnType(
+  def checkColumnTypes(
       schema: StructType,
       colName: String,
       dataTypes: Seq[DataType],
@@ -57,7 +57,7 @@ private[spark] object SchemaUtils {
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(dataTypes.exists(actualDataType.equals(_)),
       s"Column $colName must be of type equals to one of the following types " +
-        s"${dataTypes.mkString("[", ", ", "]")} but was actually $actualDataType.$message")
+        s"${dataTypes.mkString("[", ", ", "]")} but was actually of type $actualDataType.$message")
   }
 
   /**
