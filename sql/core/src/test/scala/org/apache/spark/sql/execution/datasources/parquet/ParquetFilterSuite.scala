@@ -323,24 +323,45 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("SPARK-112231: Filter combine partition key and projects doesn't work in DataSource scan") {
+  test("SPARK-12231: test the filter and empty project in partitioned DataSource scan") {
     import testImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/part=1"
-        (1 to 3).map(i => (i, i + 1, i + 2, i + 3)).toDF("a", "b", "c", "d").write.parquet(path)
+        val path = s"${dir.getCanonicalPath}"
+        (1 to 3).map(i => (i, i + 1, i + 2, i + 3)).toDF("a", "b", "c", "d").
+          write.partitionBy("a").parquet(path)
 
-        // If the "part = 1" filter gets pushed down, this query will throw an exception since
-        // "part" is not a valid column in the actual Parquet file
-        checkAnswer(
-          sqlContext.read.parquet(dir.getCanonicalPath).filter("a > 1").orderBy("a")
-            selectExpr("a", "b", "c", "d"),
-          (2 to 3).map(i => Row(i, i + 1, i + 2, i + 3, 1)))
+        // The filter "a > 1 or b < 2" will not get pushed down, and the projection is empty,
+        // this query will throw an exception since the project from combinedFilter expect
+        // two projection while the
+        val df1 = sqlContext.read.parquet(dir.getCanonicalPath)
+
+        assert(df1.filter("a > 1 or b < 2").count() == 2)
       }
     }
   }
 
+  test("SPARK-12231: test the new projection in partitioned DataSource scan") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}"
+        (1 to 3).map(i => (i, i + 1, i + 2, i + 3)).toDF("a", "b", "c", "d").
+          write.partitionBy("a").parquet(path)
+
+        // test the generate new projection case
+        // when projects != partitionAndNormalColumnProjs
+
+        val df1 = sqlContext.read.parquet(dir.getCanonicalPath)
+
+        checkAnswer(
+          df1.filter("a > 1 or b > 2").orderBy("a").selectExpr("a", "b", "c", "d"),
+          (2 to 3).map(i => Row(i, i + 1, i + 2, i + 3)))
+      }
+    }
+  }
 
 
   test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {

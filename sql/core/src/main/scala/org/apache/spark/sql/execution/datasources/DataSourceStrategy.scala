@@ -77,7 +77,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val pushedFilters = filters.filter(_.references.intersect(partitionColumns).isEmpty)
 
       // Predicates with both partition keys and attributes
-      val partitionAndNormalColumnFilters = filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
+      val partitionAndNormalColumnFilters =
+        filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
 
       val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
@@ -88,7 +89,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 
-      // need to add projections from combineFilters in
+      // need to add projections from "partitionAndNormalColumnAttrs" in if it is not empty
       val partitionAndNormalColumnAttrs = AttributeSet(partitionAndNormalColumnFilters)
       val partitionAndNormalColumnProjs = if (partitionAndNormalColumnAttrs.isEmpty) {
         projects
@@ -104,8 +105,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         selectedPartitions)
 
       // Add a Projection to guarantee the original projection:
-      // this is because "partitionAndNormalColumnAttrs" may be different from the original "projects",
-      // in elements or their ordering
+      // this is because "partitionAndNormalColumnAttrs" may be different
+      // from the original "projects", in elements or their ordering
 
       partitionAndNormalColumnFilters.reduceLeftOption(expressions.And).map(cf =>
         if (projects.isEmpty || projects == partitionAndNormalColumnProjs) {
