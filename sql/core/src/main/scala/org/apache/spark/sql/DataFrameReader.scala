@@ -159,8 +159,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @param columnName the name of a column of integral type that will be used for partitioning.
    * @param lowerBound the minimum value of `columnName` used to decide partition stride
    * @param upperBound the maximum value of `columnName` used to decide partition stride
-   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
-   *                      evenly into this many partitions
+   * @param numPartitions the number of partitions, the range `lowerBound`-`upperBound` will be
+   *                      split evenly into this many partitions on the column `columnName`
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
