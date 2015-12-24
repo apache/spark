@@ -163,13 +163,13 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       if (ret != null && ret.isInstanceOf[DirectTaskResult[_]]) {
         val result = ret.asInstanceOf[DirectTaskResult[_]];
         val that = t.asInstanceOf[DirectTaskResult[_]];
-        val accumSize = if (accumUpdates != null) accumUpdates.size else 0
+        val accumSize = if (result.accumUpdates != null) result.accumUpdates.size else 0
         val thatAccumSize = if (that.accumUpdates != null) that.accumUpdates.size else 0
         if (accumSize != thatAccumSize) {
           assert(false, "Sizes of accumUpdates don't match")
         }
         if (accumSize > 0) {
-          this.accumUpdates.keys.forall { key =>
+          result.accumUpdates.keys.forall { key =>
             assert(this.accumUpdates.get(key) == that.accumUpdates.get(key))
           }
         }
