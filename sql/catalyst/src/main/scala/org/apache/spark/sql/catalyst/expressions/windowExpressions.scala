@@ -359,6 +359,8 @@ abstract class OffsetWindowFunction
  * default offset is 1. When the value of 'x' is null at the offset, or when the offset is larger
  * than the window, the default expression is evaluated.
  *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
+ *
  * @param input expression to evaluate 'offset' rows after the current row.
  * @param offset rows to jump ahead in the partition.
  * @param default to use when the input value is null or when the offset is larger than the window.
@@ -382,6 +384,8 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
  * Offsets start at 0, which is the current row. The offset must be constant integer value. The
  * default offset is 1. When the value of 'x' is null at the offset, or when the offset is smaller
  * than the window, the default expression is evaluated.
+ *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
  *
  * @param input expression to evaluate 'offset' rows before the current row.
  * @param offset rows to jump back in the partition.
@@ -436,6 +440,8 @@ object SizeBasedWindowFunction {
 /**
  * The RowNumber function computes a unique, sequential number to each row, starting with one,
  * according to the ordering of rows within the window partition.
+ *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
 @ExpressionDescription(usage = "_FUNC_() - The ROW_NUMBER() function assigns a unique, sequential" +
   "number to each row, starting with one, according to the ordering of rows within the window" +
@@ -449,6 +455,8 @@ case class RowNumber() extends RowNumberLike {
  * The result is the number of rows preceding or equal to the current row in the ordering of the
  * partition divided by the total number of rows in the window partition. Any tie values in the
  * ordering will evaluate to the same position.
+ *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
 @ExpressionDescription(usage = "_FUNC_(x) - The CUME_DIST() function computes the position of a " +
   "value relative to a all values in the partition.")
@@ -469,7 +477,17 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  * The NTile function is particularly useful for the calculation of tertiles, quartiles, deciles and
  * other common summary statistics
  *
- * @param buckets number of buckets to divide the rows in.
+ * The function calculates two variables during initialization. The size of a regular bucket, and
+ * the number of buckets that will have one extra row added to it (when the rows do not evenly fit
+ * into the number of buckets); both variables are based on the size of the current partition.
+ * During the calculation process the function keeps track of the current row number, the current
+ * bucket number, and the row number at which the bucket will change (bucketThreshold). When the
+ * current row number reaches bucket threshold, the bucket value is increased by one and the the
+ * threshold is increased by the bucket size (plus one extra if the current bucket is padded).
+ *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
+ *
+ * @param buckets number of buckets to divide the rows in. Default value is 1.
  */
 @ExpressionDescription(usage = "_FUNC_(x) - The NTILE(n) function divides the rows for each " +
   "window partition into 'n' buckets ranging from 1 to at most 'n'.")
@@ -526,6 +544,8 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
  * the order of the window in which is processed. For instance, when the value of 'x' changes in a
  * window ordered by 'x' the rank function also changes. The size of the change of the rank function
  * is (typically) not dependent on the size of the change in 'x'.
+ *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
 abstract class RankLike extends AggregateWindowFunction {
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
@@ -570,6 +590,8 @@ abstract class RankLike extends AggregateWindowFunction {
  * number of rows preceding or equal to the current row in the ordering of the partition. Tie values
  * will produce gaps in the sequence.
  *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
+ *
  * @param children to base the rank on; a change in the value of one the children will trigger a
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
@@ -586,6 +608,8 @@ case class Rank(children: Seq[Expression]) extends RankLike {
  * The DenseRank function computes the rank of a value in a group of values. The result is one plus
  * the previously assigned rank values. Unlike Rank, DenseRank will not produce gaps in the ranking
  * sequence.
+ *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
  *
  * @param children to base the rank on; a change in the value of one the children will trigger a
  *                 change in rank. This is an internal parameter and will be assigned by the
@@ -610,6 +634,8 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
  *
  * The PercentRank function is similar to the CumeDist function, but it uses rank values instead of
  * row counts in the its numerator.
+ *
+ * This documentation has been based upon similar documentation for the Hive and Presto projects.
  *
  * @param children to base the rank on; a change in the value of one the children will trigger a
  *                 change in rank. This is an internal parameter and will be assigned by the
