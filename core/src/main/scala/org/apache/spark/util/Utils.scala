@@ -704,7 +704,7 @@ private[spark] object Utils extends Logging {
           logError(s"Failed to create local root dir in $root. Ignoring this directory.")
           None
       }
-    }.toArray
+    }
   }
 
   /** Get the Yarn approved local directories. */
