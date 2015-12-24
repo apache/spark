@@ -227,6 +227,30 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
     checkSparsity(sparsePoints2, maxCategories = 2)
   }
 
+  test("handle invalid with error and skip") {
+    val data = sqlContext.createDataFrame(Seq(
+        (1, Vectors.dense(0, 1, 0.1)),
+        (2, Vectors.dense(0, 2, 0.2))
+      )).toDF("id", "features")
+
+    val indexer = getIndexer.setHandleInvalid("skip")
+    val indexerModel = indexer.fit(data)
+    val testData = sqlContext.createDataFrame(Seq(
+      (3, Vectors.dense(0, 3, 0.1)),  // dense with unseen 3
+      (4, Vectors.sparse(3, Array(1, 2), Array(1, 0.3))),  // sparse with unseen 0.3
+      (5, Vectors.dense(0, 1, 0.2))
+    )).toDF("id", "features")
+
+    val skipResult = indexerModel.transform(testData)
+    assert(skipResult.count() == 1)
+
+    withClue("get transform exception when handleInvalid with error") {
+      intercept[NoSuchElementException] {
+        indexerModel.setHandleInvalid("error").transform(testData).collect()
+      }
+    }
+  }
+
   test("Preserve metadata") {
     // For continuous features, preserve name and stats.
     val featureAttributes: Array[Attribute] = point1maxes.zipWithIndex.map { case (maxVal, i) =>
