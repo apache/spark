@@ -624,6 +624,7 @@ read.jdbc <- function(sqlContext, url, tableName,
                       numPartitions = 0L, predicates = list(), ...) {
   jprops <- envToJProperties(varargsToEnv(...))
 
+  read <- callJMethod(sqlContext, "read")
   if (!is.null(partitionColumn)) {
     if (is.null(numPartitions) || numPartitions == 0) {
       sc <- callJMethod(sqlContext, "_sc")

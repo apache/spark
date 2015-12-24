@@ -2502,6 +2502,7 @@ setMethod("write.jdbc",
             jmode <- convertToJSaveMode(mode)
             jprops <- envToJProperties(varargsToEnv(...))
             write <- callJMethod(x@sdf, "write")
-            invisible(callJMethod(write, "jdbc", url, tableName, jmode, jprops))
+            callJMethod(write, "mode", jmode)
+            invisible(callJMethod(write, "jdbc", url, tableName, jprops))
           })
 
