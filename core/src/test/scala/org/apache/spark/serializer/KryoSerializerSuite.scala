@@ -170,7 +170,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
         }
         if (accumSize > 0) {
           result.accumUpdates.keys.forall { key =>
-            assert(this.accumUpdates.get(key) == that.accumUpdates.get(key))
+            assert(result.accumUpdates.get(key) == that.accumUpdates.get(key))
           }
         }
         assert(result.accumUpdates == that.accumUpdates)
