@@ -650,3 +650,14 @@ convertToJSaveMode <- function(mode) {
  jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
  jmode
 }
+
+envToJProperties <- function(env) {
+  props <- newJObject("java.util.Properties")
+  if (length(env) > 0) {
+    lapply(ls(env), function(k) {
+      callJMethod(props, as.character(k), as.character(env[[k]]))
+    })
+  }
+  props
+}
+
