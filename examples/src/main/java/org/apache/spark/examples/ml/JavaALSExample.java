@@ -24,13 +24,13 @@ import org.apache.spark.sql.SQLContext;
 // $example on$
 import java.io.Serializable;
 
-import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.recommendation.ALSModel;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.types.DataTypes;
 // $example off$
 
 public class JavaALSExample {
@@ -114,17 +114,16 @@ public class JavaALSExample {
     ALSModel model = als.fit(training);
 
     // Evaluate the model by computing the RMSE on the test data
-    DataFrame predictions = model.transform(test);
-    double mse = JavaDoubleRDD.fromRDD(predictions
-      .select("rating", "prediction").javaRDD()
-      .map(new Function<Row, Object>() {
-        public Double call(Row row) {
-          // Difference between rating and prediction
-          Double err = (double) row.getFloat(0) - (double) row.getFloat(1);
-          return err * err;
-        }
-      }).rdd()).mean();
-    double rmse = Math.sqrt(mse);
+    DataFrame rawPredictions = model.transform(test);
+    DataFrame predictions = rawPredictions
+      .withColumn("prediction", rawPredictions.col("prediction").cast(DataTypes.DoubleType))
+      .withColumn("rating", rawPredictions.col("rating").cast(DataTypes.DoubleType));
+
+    RegressionEvaluator evaluator = new RegressionEvaluator()
+      .setMetricName("rmse")
+      .setLabelCol("rating")
+      .setPredictionCol("prediction");
+    Double rmse = evaluator.evaluate(predictions);
     System.out.println("Root-mean-square error = " + rmse);
     // $example off$
     jsc.stop();
