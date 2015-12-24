@@ -216,13 +216,19 @@ case class TakeOrderedAndProject(
 
   // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
   @transient private val projection = projectList.map(UnsafeProjection.create(_, child.output))
+  @transient private lazy val unsafeProjection =
+    UnsafeProjection.create(child.output.map(_.dataType).toArray)
 
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
     if (projection.isDefined) {
       projection.map(p => data.map(p(_).copy().asInstanceOf[InternalRow])).get
     } else {
-      data
+      if (child.outputsUnsafeRows) {
+        data
+      } else {
+        data.map(unsafeProjection(_).copy().asInstanceOf[InternalRow])
+      }
     }
   }
 
