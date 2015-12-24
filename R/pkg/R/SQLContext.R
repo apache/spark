@@ -584,12 +584,12 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
   dataFrame(sdf)
 }
 
-#' Create a DataFrame representing the database table accesible via JDBC URL
+#' Create a DataFrame representing the database table accessible via JDBC URL
 #'
-#' Additional JDBC database connection properties can be set(...)
+#' Additional JDBC database connection properties can be set (...)
 #'
 #' Only one of partitionColumn or predicates should be set. Partitions of the table will be
-#' retrieved in parallel based on the `numPartitions`.
+#' retrieved in parallel based on the `numPartitions` or by the predicates.
 #'
 #' Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
 #' your external database systems.
@@ -603,7 +603,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 #' @param numPartitions the number of partitions, the range `lowerBound`-`upperBound` will be
 #' splitted evenly into this many partitions on the `partitionColumn`; if 0 or unset, it defaults to
 #' SparkContext.defaultParallelism
-#' @param predicates a list of condition in the where clause; each one defines one partition
+#' @param predicates a list of conditions in the where clause; each one defines one partition
 #' @return DataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc
@@ -612,7 +612,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' jdbcUrl = "jdbc:mysql://localhost:3306/databasename"
+#' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
 #' df <- read.jdbc(sqlContext, jdbcUrl, "table", predicates = list("field='A'"), user = "username")
 #' df2 <- read.jdbc(sqlContext, jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
 #'                  upperBound = 1000, user = "username", password = "password")
@@ -621,7 +621,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 read.jdbc <- function(sqlContext, url, tableName,
                       partitionColumn = NULL, lowerBound = NULL, upperBound = NULL,
                       numPartitions = 0L, predicates = list(), ...) {
-  props <- envToJProperties(varargsToEnv(...))
+  jprops <- envToJProperties(varargsToEnv(...))
 
   if (!is.null(partitionColumn)) {
     if (is.null(numPartitions) || numPartitions == 0) {
@@ -631,11 +631,11 @@ read.jdbc <- function(sqlContext, url, tableName,
       numPartitions <- numToInt(numPartitions)
     }
     sdf <- callJMethod(read, "jdbc", url, tableName, as.character(partitionColumn),
-                       numToInt(lowerBound), numToInt(upperBound), numPartitions, props)
+                       numToInt(lowerBound), numToInt(upperBound), numPartitions, jprops)
   } else if (length(predicates) > 0) {
-    sdf <- callJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)), props)
+    sdf <- callJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)), jprops)
   } else {
-    sdf <- callJMethod(read, "jdbc", url, tableName, props)
+    sdf <- callJMethod(read, "jdbc", url, tableName, jprops)
   }
   dataFrame(sdf)
 }

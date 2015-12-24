@@ -101,6 +101,7 @@ exportMethods("arrange",
               "withColumn",
               "withColumnRenamed",
               "write.df",
+              "write.jdbc",
               "write.json",
               "write.parquet",
               "write.text")
