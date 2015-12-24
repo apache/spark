@@ -46,8 +46,6 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
 
   def this() = this(null.asInstanceOf[ByteBuffer], null, null)
 
-  override def toString: String = valueBytes.toString + " " + accumUpdates + " " + metrics
-
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
 
     out.writeInt(valueBytes.remaining);
