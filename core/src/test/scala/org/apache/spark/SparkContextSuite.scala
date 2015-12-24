@@ -277,13 +277,25 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     test("Default path for file based RDDs is properly set (SPARK-12517)") {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
-      // Test textFile, wholeTextFiles and binaryFiles for default paths
+      // Test  filetextFile, wholeTextFiles, binaryFiles, hadoopFile and
+      // newAPIHadoopFile for setting the default path as the RDD name
       val mockPath = "default/path/for/"
-      assert(sc.textFile(mockPath + "textFile").name == mockPath + "textFile")
-      assert(sc.wholeTextFiles(mockPath + "wholeTextFile").name == mockPath + "wholeTextFile")
-      assert(sc.binaryFiles(mockPath + "binaryFiles").name == mockPath + "binaryFiles")
-      assert(sc.hadoopFile(mockPath + "hadoopFile").name == mockPath + "hadoopFile")
-      assert(sc.newAPIHadoopFile(mockPath + "newAPIHadoopFile").name == mockPath + "newAPIHadoopFile")
+
+      var targetPath = mockPath + "textFile"
+      assert(sc.textFile(targetPath).name == targetPath")
+
+      targetPath = mockPath + "wholeTextFile"
+      assert(sc.wholeTextFile(targetPath).name == targetPath")
+
+      targetPath = mockPath + "binaryFiles"
+      assert(sc.binaryFiles(targetPath).name == targetPath")
+      
+      targetPath = mockPath + "hadoopFile"
+      assert(sc.hadoopFile(targetPath).name == targetPath")
+      
+      targetPath = mockPath + "newAPIHadoopFile"
+      assert(sc.newAPIHadoopFile(targetPath).name == targetPath")
+
       sc.stop()
   }
 
