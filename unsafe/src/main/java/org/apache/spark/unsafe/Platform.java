@@ -108,6 +108,7 @@ public final class Platform {
     // mayuresh: hacky way of tracking offheap usage
     TOTAL_BYTES += size;
     ADDRESS_SIZE_MAP.put(address, size);
+System.out.println("-- Adding to offheap: " + Thread.currentThread().getStackTrace());
     return address;
   }
 
@@ -115,17 +116,33 @@ public final class Platform {
     // mayuresh: hacky way of tracking offheap usage
     TOTAL_BYTES -= ADDRESS_SIZE_MAP.get(address);
     ADDRESS_SIZE_MAP.remove(address);
+System.out.println("-- Removing from offheap: " + Thread.currentThread().getStackTrace());
     _UNSAFE.freeMemory(address);
   }
 
   public static void copyMemory(
     Object src, long srcOffset, Object dst, long dstOffset, long length) {
-    while (length > 0) {
-      long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
-      _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
-      length -= size;
-      srcOffset += size;
-      dstOffset += size;
+    // Check if dstOffset is before or after srcOffset to determine if we should copy
+    // forward or backwards. This is necessary in case src and dst overlap.
+    if (dstOffset < srcOffset) {
+      while (length > 0) {
+        long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
+        _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
+        length -= size;
+        srcOffset += size;
+        dstOffset += size;
+      }
+    } else {
+      srcOffset += length;
+      dstOffset += length;
+      while (length > 0) {
+        long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
+        srcOffset -= size;
+        dstOffset -= size;
+        _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
+        length -= size;
+      }
+
     }
   }
 
