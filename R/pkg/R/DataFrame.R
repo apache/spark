@@ -2473,7 +2473,7 @@ setMethod("drop",
 #'
 #' Additional JDBC database connection properties can be set (...)
 #'
-#' Lastly, mode is used to specify the behavior of the save operation when
+#' Also, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes: \cr
 #'  append: Contents of this DataFrame are expected to be appended to existing data. \cr
 #'  overwrite: Existing data is expected to be overwritten by the contents of this DataFrame. \cr
@@ -2481,7 +2481,7 @@ setMethod("drop",
 #'  ignore: The save operation is expected to not save the contents of the DataFrame
 #'     and to not change the existing data. \cr
 #'
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
 #' @param tableName The name of the table in the external database
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
@@ -2494,7 +2494,7 @@ setMethod("drop",
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
-#' write.jdbc(df, jdbcUrl, "table", user = "username")
+#' write.jdbc(df, jdbcUrl, "table", user = "username", password = "password")
 #' }
 setMethod("write.jdbc",
           signature(x = "DataFrame", url = "character", tableName = "character"),
