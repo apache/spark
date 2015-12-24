@@ -79,13 +79,14 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.2.0")
   override def evaluate(dataset: DataFrame): Double = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
+    SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
     val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol))
-      .map { case Row(rawPrediction: Vector, label: Double) =>
-        (rawPrediction(1), label)
+      .map {
+        case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
+        case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = $(metricName) match {
