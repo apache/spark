@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{Partition => ParquetPartition, _}
 import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
@@ -612,6 +612,46 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
 
           execution.CreateTableAsSelect(
+            desc.copy(
+              specifiedDatabase = Some(dbName),
+              name = tblName),
+            child,
+            allowExisting)
+        }
+      case p @ org.apache.spark.sql.hive.CreateTableLike(table, child, allowExisting) =>
+        val schema = table.schema
+        val desc = table.copy(schema = schema)
+
+        if (hive.convertCTAS && table.serde.isEmpty) {
+          // Do the conversion when spark.sql.hive.convertCTAS is true and the query
+          // does not specify any storage format (file format and storage handler).
+          if (table.specifiedDatabase.isDefined) {
+            throw new AnalysisException(
+              "Cannot specify database name in a CTAS statement " +
+                "when spark.sql.hive.convertCTAS is set to true.")
+          }
+
+          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
+          org.apache.spark.sql.execution.datasources.CreateTableLike(
+            TableIdentifier(desc.name),
+            hive.conf.defaultDataSourceName,
+            temporary = false,
+            Array.empty[String],
+            mode,
+            options = Map.empty[String, String],
+            child
+          )
+        } else {
+          val desc = if (table.serde.isEmpty) {
+            // add default serde
+            table.copy(
+              serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+          } else {
+            table
+          }
+          val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
+
+          execution.CreateTableLike(
             desc.copy(
               specifiedDatabase = Some(dbName),
               name = tblName),
