@@ -63,8 +63,8 @@ object ALSExample {
 
     // Evaluate the model by computing the RMSE on the test data
     val predictions = model.transform(test)
-      .withColumn("prediction", col("prediction").cast(DoubleType))
       .withColumn("rating", col("rating").cast(DoubleType))
+      .withColumn("prediction", col("prediction").cast(DoubleType))
 
     val evaluator = new RegressionEvaluator()
       .setMetricName("rmse")

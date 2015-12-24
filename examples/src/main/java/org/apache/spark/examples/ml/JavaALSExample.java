@@ -116,8 +116,8 @@ public class JavaALSExample {
     // Evaluate the model by computing the RMSE on the test data
     DataFrame rawPredictions = model.transform(test);
     DataFrame predictions = rawPredictions
-      .withColumn("prediction", rawPredictions.col("prediction").cast(DataTypes.DoubleType))
-      .withColumn("rating", rawPredictions.col("rating").cast(DataTypes.DoubleType));
+      .withColumn("rating", rawPredictions.col("rating").cast(DataTypes.DoubleType))
+      .withColumn("prediction", rawPredictions.col("prediction").cast(DataTypes.DoubleType));
 
     RegressionEvaluator evaluator = new RegressionEvaluator()
       .setMetricName("rmse")
