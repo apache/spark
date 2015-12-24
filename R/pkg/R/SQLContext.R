@@ -600,9 +600,10 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 #' @param partitionColumn the name of a column of integral type that will be used for partitioning
 #' @param lowerBound the minimum value of `partitionColumn` used to decide partition stride
 #' @param upperBound the maximum value of `partitionColumn` used to decide partition stride
-#' @param numPartitions the number of partitions, the range `lowerBound`-`upperBound` will be
-#' splitted evenly into this many partitions on the `partitionColumn`; if 0 or unset, it defaults to
-#' SparkContext.defaultParallelism
+#' @param numPartitions the number of partitions, This, along with `lowerBound` (inclusive),
+#'                      `upperBound` (exclusive), form partition strides for generated WHERE
+#'                      clause expressions used to split the column `partitionColumn` evenly.
+#'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
 #' @return DataFrame
 #' @rdname read.jdbc
@@ -615,7 +616,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
 #' df <- read.jdbc(sqlContext, jdbcUrl, "table", predicates = list("field='A'"), user = "username")
 #' df2 <- read.jdbc(sqlContext, jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
-#'                  upperBound = 1000, user = "username", password = "password")
+#'                  upperBound = 10000, user = "username", password = "password")
 #' }
 
 read.jdbc <- function(sqlContext, url, tableName,
