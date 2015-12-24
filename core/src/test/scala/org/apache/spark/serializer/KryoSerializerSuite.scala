@@ -169,9 +169,10 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
           assert(false, "Sizes of accumUpdates don't match")
         }
         if (accumSize > 0) {
-          result.accumUpdates.keys.forall { key =>
-            assert(result.accumUpdates.get(key) == that.accumUpdates.get(key))
+          val b = result.accumUpdates.keys.forall { key =>
+            result.accumUpdates.get(key) == that.accumUpdates.get(key)
           }
+          assert(b)
         }
         assert(result.accumUpdates == that.accumUpdates)
         assert(result.valueBytes == that.valueBytes)
