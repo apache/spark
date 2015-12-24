@@ -186,7 +186,7 @@ private[sql] object JDBCRDD extends Logging {
    * Returns null for an unhandled filter.
    */
   private def compileFilter(f: Filter): Option[String] = {
-    Some(f match {
+    Option(f match {
       case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
       case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
       case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
