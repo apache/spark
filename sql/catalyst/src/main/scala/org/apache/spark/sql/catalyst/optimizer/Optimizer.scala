@@ -86,8 +86,8 @@ object SamplePushDown extends Rule[LogicalPlan] {
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
- * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
- * we will not be able to pushdown Projections.
+ * safe to pushdown Filters, Projections and Limits through it. Once we add UNION DISTINCT,
+ * we will not be able to pushdown Projections and Limits.
  *
  * Intersect:
  * It is not safe to pushdown Projections through it because we need to get the
