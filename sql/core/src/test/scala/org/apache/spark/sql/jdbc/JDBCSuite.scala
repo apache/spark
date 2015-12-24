@@ -18,12 +18,8 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.Date
-import java.sql.DriverManager
-import java.sql.Timestamp
-import java.util.Calendar
-import java.util.GregorianCalendar
-import java.util.Properties
+import java.sql.{Date, DriverManager, Timestamp}
+import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -221,6 +217,12 @@ class JDBCSuite extends SparkFunSuite
     val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
     assert(df1.collect.toSet === Set(Row("mary", 2)))
     assert(df2.collect.toSet === Set(Row("mary", 2)))
+  }
+
+  test("SELECT COUNT(1) WHERE (predicates)") {
+    // Check if an answer is correct when filters are pushed down into JDBC data sources
+    // and some columns are pruned in DataSourceStrategy.
+    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect.toSet === Set(Row(1)))
   }
 
   test("SELECT * WHERE (quoted strings)") {
