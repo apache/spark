@@ -21,8 +21,10 @@ package org.apache.spark.examples.ml
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
+import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.recommendation.ALS
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 // $example off$
 
 object ALSExample {
@@ -61,13 +63,14 @@ object ALSExample {
 
     // Evaluate the model by computing the RMSE on the test data
     val predictions = model.transform(test)
-    val mse = predictions
-      .select("rating", "prediction")
-      .map { case Row(rating: Float, prediction: Float) =>
-        val err = rating.toDouble - prediction.toDouble
-        err * err
-      }.mean()
-    val rmse = math.sqrt(mse)
+      .withColumn("prediction", col("prediction").cast(DoubleType))
+      .withColumn("rating", col("rating").cast(DoubleType))
+
+    val evaluator = new RegressionEvaluator()
+      .setMetricName("rmse")
+      .setLabelCol("rating")
+      .setPredictionCol("prediction")
+    val rmse = evaluator.evaluate(predictions)
     println(s"Root-mean-square error = $rmse")
     // $example off$
     sc.stop()
