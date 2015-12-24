@@ -796,10 +796,28 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.limit(1)
+    val left = testRelation
     val right = testRelation.limit(1)
     val correctAnswer =
       left.join(right, FullOuter).limit(1).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("limit: push down full outer join + project") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y, FullOuter).select('a, 'b, 'd)
+        .limit(1)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.select('a, 'b)
+    val right = testRelation1.limit(1)
+    val correctAnswer =
+      left.join(right, FullOuter).select('a, 'b, 'd).limit(1).analyze
 
     comparePlans(optimized, correctAnswer)
   }
