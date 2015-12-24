@@ -52,6 +52,8 @@ class SocketReceiver[T: ClassTag](
     storageLevel: StorageLevel
   ) extends Receiver[T](storageLevel) with Logging {
 
+  var socket: Socket = null
+
   def onStart() {
     // Start the thread that receives data over a connection
     new Thread("Socket Receiver") {
@@ -61,13 +63,14 @@ class SocketReceiver[T: ClassTag](
   }
 
   def onStop() {
-    // There is nothing much to do as the thread calling receive()
-    // is designed to stop by itself isStopped() returns false
+    if (socket != null) {
+      socket.close()
+      socket = null
+    }
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
   def receive() {
-    var socket: Socket = null
     try {
       logInfo("Connecting to " + host + ":" + port)
       socket = new Socket(host, port)
