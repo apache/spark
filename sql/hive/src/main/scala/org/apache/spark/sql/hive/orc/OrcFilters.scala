@@ -84,16 +84,13 @@ private[orc] object OrcFilters extends Logging {
 
     expression match {
       case And(left, right) =>
-        // Conventionally, it's safe to push down only one branch of an `And` predicate even if the
-        // other branch is inconvertible.  However, it's not safe to do so here.  Because the `And`
-        // predicate maybe nested within a `Not` predicate.  Take the following predicate as an
-        // example:
-        //
-        //   NOT(a = 1 AND weird_udf(b))
-        //
-        // If we decide to push down `a = 1` when dealing with the inner `And`, the whole predicate
-        // becomes `NOT(a = 1)`, which is stricter than the original predicate, and gives wrong
-        // query result.
+        // At here, it is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        // Pushing one side of AND down is only safe to do at the top level.
+        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
           _ <- buildSearchArgument(left, newBuilder)
           _ <- buildSearchArgument(right, newBuilder)
