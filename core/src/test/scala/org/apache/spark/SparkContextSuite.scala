@@ -274,6 +274,19 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+    test("Default path for file based RDDs is properly set (SPARK-12517)") {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+      // Test textFile, wholeTextFiles and binaryFiles for default paths
+      val mockPath = "default/path/for/wholeTextFile/"
+      assert(sc.textFile(mockPath + "textFile").name == mockPath + "textFile")
+      assert(sc.wholeTextFiles(mockPath + "wholeTextFile").name == mockPath + "wholeTextFile")
+      assert(sc.binaryFiles(mockPath + "binaryFiles").name == mockPath + "binaryFiles")
+      assert(sc.hadoopFile(mockPath + "hadoopFile").name == mockPath + "hadoopFile")
+      assert(sc.newAPIHadoopFile(mockPath + "newAPIHadoopFile").name == mockPath + "newAPIHadoopFile")
+      sc.stop()
+  }
+
   test("calling multiple sc.stop() must not throw any exception") {
     noException should be thrownBy {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
