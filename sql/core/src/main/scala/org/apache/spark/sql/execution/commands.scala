@@ -102,6 +102,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    // Configures the deprecated "spark.sql.planner.externalSort" property.
     case Some((SQLConf.Deprecated.EXTERNAL_SORT, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
@@ -111,6 +112,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    // Configures the deprecated "spark.sql.useAggregate2" property.
     case Some((SQLConf.Deprecated.USE_SQL_AGGREGATE2, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
@@ -121,6 +123,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    // Configures the deprecated "spark.sql.tungsten.enabled" property.
     case Some((SQLConf.Deprecated.TUNGSTEN_ENABLED, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
@@ -130,6 +133,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    // Configures the deprecated "spark.sql.codegen" property.
     case Some((SQLConf.Deprecated.CODEGEN_ENABLED, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
@@ -139,6 +143,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    // Configures the deprecated "spark.sql.unsafe.enabled" property.
     case Some((SQLConf.Deprecated.UNSAFE_ENABLED, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
@@ -148,8 +153,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
-      (keyValueOutput, runFunc)
-
+    // Configures the deprecated "spark.sql.planner.sortMergeJoin" property.
     case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
