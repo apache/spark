@@ -21,19 +21,8 @@ from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Estimator, Transformer, Model
+from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
-
-
-def _jvm():
-    """
-    Returns the JVM view associated with SparkContext. Must be called
-    after SparkContext is initialized.
-    """
-    jvm = SparkContext._jvm
-    if jvm:
-        return jvm
-    else:
-        raise AttributeError("Cannot load _jvm from SparkContext. Is SparkContext initialized?")
 
 
 @inherit_doc
