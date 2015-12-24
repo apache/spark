@@ -48,21 +48,6 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
 
   override def toString: String = valueBytes.toString + " " + accumUpdates + " " + metrics
 
-  override def equals(other: Any): Boolean = other match {
-    case that: DirectTaskResult[_] => {
-      val accumEquals =
-        if (accumUpdates != null) {
-          accumUpdates.keys.forall { k => accumUpdates.get(k) == that.accumUpdates.get(k) }
-        } else {
-          that.accumUpdates == null
-        }
-      valueBytes == that.valueBytes &&
-      metrics == that.metrics &&
-      accumEquals
-    }
-    case _ => false
-  }
-
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
 
     out.writeInt(valueBytes.remaining);

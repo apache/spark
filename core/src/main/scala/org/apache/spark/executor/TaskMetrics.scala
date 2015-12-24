@@ -215,18 +215,6 @@ class TaskMetrics extends Serializable {
     inputMetrics.foreach(_.updateBytesRead())
   }
 
-  override def equals(other: Any): Boolean = other match {
-    case that: TaskMetrics => {
-      this.executorDeserializeTime == that.executorDeserializeTime &&
-      this.executorRunTime == that.executorRunTime &&
-      this.resultSize == that.resultSize &&
-      this.jvmGCTime == that.jvmGCTime &&
-      this.resultSerializationTime == that.resultSerializationTime &&
-      this.hostname == that.hostname
-    }
-    case _ => false
-  }
-
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()

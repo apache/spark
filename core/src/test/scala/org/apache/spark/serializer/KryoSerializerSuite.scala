@@ -160,7 +160,22 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       .newInstance()
     def check[T: ClassTag](t: T) {
       val ret = ser.deserialize[T](ser.serialize(t))
-      assert(ret === t, "Deser " + ret + " orig " + t)
+      if (ret != null && ret.isInstanceOf[DirectTaskResult]) {
+        val result = ret.asInstanceOf[DirectTaskResult];
+        val that = t.asInstanceOf[DirectTaskResult];
+        assert(result.accumUpdates == that.accumUpdates)
+        assert(result.valueBytes == that.valueBytes)
+        val thisMetrics = result.metrics;
+        val thatMetrics = that.metrics;
+        assert(thisMetrics.executorDeserializeTime == thatMetrics.executorDeserializeTime)
+        assert(thisMetrics.executorRunTime == thatMetrics.executorRunTime)
+        assert(thisMetrics.resultSize == thatMetrics.resultSize)
+        assert(thisMetrics.jvmGCTime == thatMetrics.jvmGCTime)
+        assert(thisMetrics.resultSerializationTime == thatMetrics.resultSerializationTime)
+        assert(thisMetrics.hostname == thatMetrics.hostname)
+      } else {
+        assert(ret === t, "Deser " + ret + " orig " + t)
+      }
     }
     var metrics = new TaskMetrics
     metrics.setHostname(Utils.localHostName())
