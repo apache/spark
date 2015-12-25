@@ -225,7 +225,7 @@ case class TakeOrderedAndProject(
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
     if (projection.isDefined) {
-      projection.map(p => data.map(p(_).copy().asInstanceOf[InternalRow])).get
+      projection.map(p => data.map(p(_).asInstanceOf[InternalRow])).get
     } else {
       data
     }

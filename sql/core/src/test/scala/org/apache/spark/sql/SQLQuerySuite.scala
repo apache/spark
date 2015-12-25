@@ -571,12 +571,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
   }
 
-  test("sort and limit") {
-    checkAnswer(
-      sql("SELECT * FROM arrayData ORDER BY data[0] ASC LIMIT 1"),
-      arrayData.collect().sortBy(_.data(0)).map(Row.fromTuple).take(1).toSeq)
-  }
-
   test("CTE feature") {
     checkAnswer(
       sql("with q1 as (select * from testData limit 10) select * from q1"),
