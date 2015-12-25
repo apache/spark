@@ -239,7 +239,6 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
       val offsetAndMetadata = new OffsetAndMetadata(offset)
       offsets.put(topicPartition, offsetAndMetadata)
       val lock = consumerAndLockMap(kafkaConsumer)
-      kafkaConsumer.wakeup()
       lock.lock()
       try {
         kafkaConsumer.commitSync(offsets)
