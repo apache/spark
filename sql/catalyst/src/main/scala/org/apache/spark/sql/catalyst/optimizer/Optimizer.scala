@@ -52,6 +52,7 @@ object DefaultOptimizer extends Optimizer {
       ProjectCollapsing,
       CombineFilters,
       CombineLimits,
+      CombineProjectJoin,
       // Constant folding
       NullPropagation,
       OptimizeIn,
@@ -284,6 +285,17 @@ object ColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
+}
+
+/**
+ * Combines the adjacent [[Project]] and [[Join]] operators, iff their output sets are the same.
+ */
+object CombineProjectJoin extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case p @ Project(_, j: Join)
+      if j.outputSet == p.outputSet => j
+  }
 }
 
 /**

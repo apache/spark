@@ -42,7 +42,8 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
         ColumnPruning,
-        ProjectCollapsing) :: Nil
+        ProjectCollapsing,
+        CombineProjectJoin) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -747,6 +748,19 @@ class FilterPushdownSuite extends PlanTest {
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
       .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("combine join and projection") {
+    val query = testRelation
+      .join(testRelation1).where("a".attr === "d".attr)
+      .select('a, 'b, 'c, 'd)
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = Optimize.execute(testRelation
+      .join(testRelation1).where("a".attr === "d".attr).analyze)
 
     comparePlans(optimized, correctAnswer)
   }
