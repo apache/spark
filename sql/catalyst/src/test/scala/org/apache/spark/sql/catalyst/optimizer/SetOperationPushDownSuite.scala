@@ -65,7 +65,7 @@ class SetOperationPushDownSuite extends PlanTest {
     val unionQuery = testUnion.limit(1)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Limit(1, Union(testRelation.limit(1), testRelation2.limit(1))).analyze
+      Limit(1, Union(testRelation.limit(1), testRelation2.limit(1)), optimized = true).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 

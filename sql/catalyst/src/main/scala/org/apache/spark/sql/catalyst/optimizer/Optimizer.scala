@@ -154,12 +154,13 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       )
 
     // Push down limit into union
-    case Limit(exp, Union(left, right)) =>
+    case Limit(exp, Union(left, right), optimized) if !optimized =>
       Limit(exp,
         Union(
-          CombineLimits(Limit(exp, left)),
-          CombineLimits(Limit(exp, right))
-        )
+          Limit(exp, left),
+          Limit(exp, right)
+        ),
+        optimized = true
       )
 
     // Push down deterministic projection through UNION ALL
@@ -263,7 +264,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
     // Push down project through limit, so that we may have chance to push it further.
-    case Project(projectList, Limit(exp, child)) =>
+    case Project(projectList, Limit(exp, child, _)) =>
       Limit(exp, Project(projectList, child))
 
     // Push down project if possible when the child is sort.
@@ -891,7 +892,7 @@ object RemoveDispensableExpressions extends Rule[LogicalPlan] {
  */
 object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
+    case ll @ Limit(le, nl @ Limit(ne, grandChild, _), _) =>
       Limit(If(LessThan(ne, le), ne, le), grandChild)
   }
 }
