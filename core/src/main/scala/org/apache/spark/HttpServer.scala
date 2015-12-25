@@ -173,7 +173,8 @@ private[spark] class HttpServer(
   }
 
   /**
-   * Get the URI of this HTTP server (http://host:port or https://host:port)
+   * Get the advertised URI of this HTTP server (http://host:port or https://host:port).
+   * This URI is what executors use to reply to the master.
    */
   def uri: String = {
     if (server == null) {
