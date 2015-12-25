@@ -169,7 +169,7 @@ private[json] object InferSchema {
         None
       }
 
-    case NullType => Some(StringType)
+    case NullType => Some(NullType)
     case other => Some(other)
   }
 
