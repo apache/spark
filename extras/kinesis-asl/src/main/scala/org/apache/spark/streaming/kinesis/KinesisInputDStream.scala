@@ -30,7 +30,7 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 
 private[kinesis] class KinesisInputDStream[T: ClassTag](
-    @transient _ssc: StreamingContext,
+    _ssc: StreamingContext,
     streamName: String,
     endpointUrl: String,
     regionName: String,
