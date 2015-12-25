@@ -135,14 +135,21 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => s"$rowWriter.write($index, ${input.value});"
         }
 
-        s"""
-          ${input.code}
-          if (${input.isNull}) {
-            ${setNull.trim}
-          } else {
+        if (input.isNull == "false") {
+          s"""
+            ${input.code}
             ${writeField.trim}
-          }
-        """
+          """
+        } else {
+          s"""
+            ${input.code}
+            if (${input.isNull}) {
+              ${setNull.trim}
+            } else {
+              ${writeField.trim}
+            }
+          """
+        }
     }
 
     s"""
@@ -287,8 +294,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
 
-    // Reset the isLoaded flag for each row.
-    val subexprReset = ctx.subExprIsLoadedVariables.map { v => s"${v} = false;" }.mkString("\n")
+    // Reset the subexpression values for each row.
+    val subexprReset = ctx.subExprResetVariables.mkString("\n")
 
     val code =
       s"""

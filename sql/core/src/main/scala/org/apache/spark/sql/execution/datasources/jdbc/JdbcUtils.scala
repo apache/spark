@@ -21,6 +21,7 @@ import java.sql.{Connection, PreparedStatement}
 import java.util.Properties
 
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
@@ -62,14 +63,10 @@ object JdbcUtils extends Logging {
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
-    var fieldsLeft = rddSchema.fields.length
-    while (fieldsLeft > 0) {
-      sql.append("?")
-      if (fieldsLeft > 1) sql.append(", ") else sql.append(")")
-      fieldsLeft = fieldsLeft - 1
-    }
-    conn.prepareStatement(sql.toString())
+    val columns = rddSchema.fields.map(_.name).mkString(",")
+    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
+    val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    conn.prepareStatement(sql)
   }
 
   /**
@@ -125,8 +122,19 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
+    val supportsTransactions = try {
+      conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
+      conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Exception while detecting transaction support", e)
+        true
+    }
+
     try {
-      conn.setAutoCommit(false) // Everything in the same db transaction.
+      if (supportsTransactions) {
+        conn.setAutoCommit(false) // Everything in the same db transaction.
+      }
       val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0
@@ -175,14 +183,18 @@ object JdbcUtils extends Logging {
       } finally {
         stmt.close()
       }
-      conn.commit()
+      if (supportsTransactions) {
+        conn.commit()
+      }
       committed = true
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
         // let the exception through unless rollback() or close() want to
         // tell the user about another problem.
-        conn.rollback()
+        if (supportsTransactions) {
+          conn.rollback()
+        }
         conn.close()
       } else {
         // The stage must succeed.  We cannot propagate any exception close() might throw.

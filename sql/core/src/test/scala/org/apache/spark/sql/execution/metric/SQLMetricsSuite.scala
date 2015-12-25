@@ -116,7 +116,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
     val df = person.select('name)
     testSparkPlanMetrics(df, 1, Map(
-      0L ->("Project", Map(
+      0L -> ("Project", Map(
         "number of rows" -> 2L)))
     )
   }
@@ -317,7 +317,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       testSparkPlanMetrics(df, 1, Map(
         1L -> ("CartesianProduct", Map(
           "number of left rows" -> 12L, // left needs to be scanned twice
-          "number of right rows" -> 12L, // right is read 6 times
+          "number of right rows" -> 4L, // right is read twice
           "number of output rows" -> 12L)))
       )
     }

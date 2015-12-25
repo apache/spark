@@ -339,7 +339,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
    * Each line in the text file is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:

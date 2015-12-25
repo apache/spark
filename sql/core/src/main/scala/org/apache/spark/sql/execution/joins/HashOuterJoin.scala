@@ -75,7 +75,7 @@ trait HashOuterJoin {
     UnsafeProjection.create(streamedKeys, streamedPlan.output)
 
   protected[this] def resultProjection: InternalRow => InternalRow =
-    UnsafeProjection.create(self.schema)
+    UnsafeProjection.create(output, output)
 
   @transient private[this] lazy val DUMMY_LIST = CompactBuffer[InternalRow](null)
   @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
@@ -150,83 +150,5 @@ trait HashOuterJoin {
       }
     }
     ret.iterator
-  }
-
-  protected[this] def fullOuterIterator(
-      key: InternalRow,
-      leftIter: Iterable[InternalRow],
-      rightIter: Iterable[InternalRow],
-      joinedRow: JoinedRow,
-      resultProjection: InternalRow => InternalRow,
-      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
-    if (!key.anyNull) {
-      // Store the positions of records in right, if one of its associated row satisfy
-      // the join condition.
-      val rightMatchedSet = scala.collection.mutable.Set[Int]()
-      leftIter.iterator.flatMap[InternalRow] { l =>
-        joinedRow.withLeft(l)
-        var matched = false
-        rightIter.zipWithIndex.collect {
-          // 1. For those matched (satisfy the join condition) records with both sides filled,
-          //    append them directly
-
-          case (r, idx) if boundCondition(joinedRow.withRight(r)) =>
-            numOutputRows += 1
-            matched = true
-            // if the row satisfy the join condition, add its index into the matched set
-            rightMatchedSet.add(idx)
-            resultProjection(joinedRow)
-
-        } ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
-          // 2. For those unmatched records in left, append additional records with empty right.
-
-          // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-          // as we don't know whether we need to append it until finish iterating all
-          // of the records in right side.
-          // If we didn't get any proper row, then append a single row with empty right.
-          numOutputRows += 1
-          resultProjection(joinedRow.withRight(rightNullRow))
-        })
-      } ++ rightIter.zipWithIndex.collect {
-        // 3. For those unmatched records in right, append additional records with empty left.
-
-        // Re-visiting the records in right, and append additional row with empty left, if its not
-        // in the matched set.
-        case (r, idx) if !rightMatchedSet.contains(idx) =>
-          numOutputRows += 1
-          resultProjection(joinedRow(leftNullRow, r))
-      }
-    } else {
-      leftIter.iterator.map[InternalRow] { l =>
-        numOutputRows += 1
-        resultProjection(joinedRow(l, rightNullRow))
-      } ++ rightIter.iterator.map[InternalRow] { r =>
-        numOutputRows += 1
-        resultProjection(joinedRow(leftNullRow, r))
-      }
-    }
-  }
-
-  // This is only used by FullOuter
-  protected[this] def buildHashTable(
-      iter: Iterator[InternalRow],
-      numIterRows: LongSQLMetric,
-      keyGenerator: Projection): java.util.HashMap[InternalRow, CompactBuffer[InternalRow]] = {
-    val hashTable = new java.util.HashMap[InternalRow, CompactBuffer[InternalRow]]()
-    while (iter.hasNext) {
-      val currentRow = iter.next()
-      numIterRows += 1
-      val rowKey = keyGenerator(currentRow)
-
-      var existingMatchList = hashTable.get(rowKey)
-      if (existingMatchList == null) {
-        existingMatchList = new CompactBuffer[InternalRow]()
-        hashTable.put(rowKey.copy(), existingMatchList)
-      }
-
-      existingMatchList += currentRow.copy()
-    }
-
-    hashTable
   }
 }

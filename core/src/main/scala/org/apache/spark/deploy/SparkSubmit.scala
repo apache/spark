@@ -545,6 +545,10 @@ object SparkSubmit {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
+    }
+
+    // assure a keytab is available from any place in a JVM
+    if (clusterManager == YARN || clusterManager == LOCAL) {
       if (args.principal != null) {
         require(args.keytab != null, "Keytab must be specified when principal is specified")
         if (!new File(args.keytab).exists()) {
@@ -961,7 +965,7 @@ private[spark] object SparkSubmitUtils {
     // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
     // other spark-streaming utility components. Underscore is there to differentiate between
     // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
-    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 
     components.foreach { comp =>

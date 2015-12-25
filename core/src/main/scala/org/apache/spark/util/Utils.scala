@@ -43,8 +43,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
-import tachyon.TachyonURI
-import tachyon.client.{TachyonFS, TachyonFile}
+import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -178,7 +177,20 @@ private[spark] object Utils extends Logging {
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
-  def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
+  def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
+    }
+  }
+
+  /**
+   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.OutputStream]]
+   */
+  def writeByteBuffer(bb: ByteBuffer, out: OutputStream): Unit = {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
@@ -318,6 +330,30 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * A file name may contain some invalid URI characters, such as " ". This method will convert the
+   * file name to a raw path accepted by `java.net.URI(String)`.
+   *
+   * Note: the file name must not contain "/" or "\"
+   */
+  def encodeFileNameToURIRawPath(fileName: String): String = {
+    require(!fileName.contains("/") && !fileName.contains("\\"))
+    // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
+    // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
+    // We should remove it after we get the raw path.
+    new URI("file", null, "localhost", -1, "/" + fileName, null, null).getRawPath.substring(1)
+  }
+
+  /**
+   * Get the file name from uri's raw path and decode it. If the raw path of uri ends with "/",
+   * return the name before the last "/".
+   */
+  def decodeFileNameInURI(uri: URI): String = {
+    val rawPath = uri.getRawPath
+    val rawFileName = rawPath.split("/").last
+    new URI("file:///" + rawFileName).getPath.substring(1)
+  }
+
+    /**
    * Download a file or directory to target directory. Supports fetching the file in a variety of
    * ways, including HTTP, Hadoop-compatible filesystems, and files on a standard filesystem, based
    * on the URL parameter. Fetching directories is only supported from Hadoop-compatible
@@ -338,7 +374,7 @@ private[spark] object Utils extends Logging {
       hadoopConf: Configuration,
       timestamp: Long,
       useCache: Boolean) {
-    val fileName = url.split("/").last
+    val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
     if (useCache && fetchCacheEnabled) {
@@ -906,15 +942,6 @@ private[spark] object Utils extends Logging {
           }
         }
       }
-    }
-  }
-
-  /**
-   * Delete a file or directory and its contents recursively.
-   */
-  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
-      throw new IOException("Failed to delete the tachyon dir: " + dir)
     }
   }
 
@@ -2184,6 +2211,23 @@ private[spark] object Utils extends Logging {
    */
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
+  }
+
+  /**
+   * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
+   * this is formatted as PID@hostname.
+   */
+  def getProcessName(): String = {
+    ManagementFactory.getRuntimeMXBean().getName()
+  }
+
+  /**
+   * Utility function that should be called early in `main()` for daemons to set up some common
+   * diagnostic state.
+   */
+  def initDaemon(log: Logger): Unit = {
+    log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
+    SignalLogger.register(log)
   }
 }
 

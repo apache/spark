@@ -34,9 +34,10 @@ import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This class manages write ahead log files.
- * - Writes records (bytebuffers) to periodically rotating log files.
- * - Recovers the log files and the reads the recovered records upon failures.
- * - Cleans up old log files.
+ *
+ *  - Writes records (bytebuffers) to periodically rotating log files.
+ *  - Recovers the log files and the reads the recovered records upon failures.
+ *  - Cleans up old log files.
  *
  * Uses [[org.apache.spark.streaming.util.FileBasedWriteAheadLogWriter]] to write
  * and [[org.apache.spark.streaming.util.FileBasedWriteAheadLogReader]] to read.
@@ -252,7 +253,7 @@ private[streaming] object FileBasedWriteAheadLog {
 
   def getCallerName(): Option[String] = {
     val stackTraceClasses = Thread.currentThread.getStackTrace().map(_.getClassName)
-    stackTraceClasses.find(!_.contains("WriteAheadLog")).flatMap(_.split(".").lastOption)
+    stackTraceClasses.find(!_.contains("WriteAheadLog")).flatMap(_.split("\\.").lastOption)
   }
 
   /** Convert a sequence of files to a sequence of sorted LogInfo objects */

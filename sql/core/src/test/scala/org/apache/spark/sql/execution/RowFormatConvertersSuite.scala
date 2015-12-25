@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, Literal, IsNull}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -58,6 +58,41 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     assert(!preparedPlan.outputsUnsafeRows)
   }
 
+  test("coalesce can process unsafe rows") {
+    val plan = Coalesce(1, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 1)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("except can process unsafe rows") {
+    val plan = Except(outputsUnsafe, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 2)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("except requires all of its input rows' formats to agree") {
+    val plan = Except(outputsSafe, outputsUnsafe)
+    assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("intersect can process unsafe rows") {
+    val plan = Intersect(outputsUnsafe, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 2)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("intersect requires all of its input rows' formats to agree") {
+    val plan = Intersect(outputsSafe, outputsUnsafe)
+    assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
   test("execute() fails an assertion if inputs rows are of different formats") {
     val e = intercept[AssertionError] {
       Union(Seq(outputsSafe, outputsUnsafe)).execute()
@@ -94,7 +129,7 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-9683: copy UTF8String when convert unsafe array/map to safe") {
-    SparkPlan.currentContext.set(sqlContext)
+    SQLContext.setActive(sqlContext)
     val schema = ArrayType(StringType)
     val rows = (1 to 100).map { i =>
       InternalRow(new GenericArrayData(Array[Any](UTF8String.fromString(i.toString))))

@@ -297,7 +297,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cast from string") {
     assert(cast("abcdef", StringType).nullable === false)
     assert(cast("abcdef", BinaryType).nullable === false)
-    assert(cast("abcdef", BooleanType).nullable === false)
+    assert(cast("abcdef", BooleanType).nullable === true)
     assert(cast("abcdef", TimestampType).nullable === true)
     assert(cast("abcdef", LongType).nullable === true)
     assert(cast("abcdef", IntegerType).nullable === true)
@@ -547,7 +547,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved === true)
+      assert(ret.resolved === false)
       checkEvaluation(ret, Seq(null, true, false))
     }
 
@@ -606,7 +606,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === true)
+      assert(ret.resolved === false)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
     {
@@ -713,7 +713,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false))))
-      assert(ret.resolved === true)
+      assert(ret.resolved === false)
       checkEvaluation(ret, InternalRow(null, true, false))
     }
 
@@ -734,7 +734,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val complex = Literal.create(
       Row(
         Seq("123", "true", "f"),
-        Map("a" ->"123", "b" -> "true", "c" -> "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
         Row(0)),
       StructType(Seq(
         StructField("a",
@@ -754,7 +754,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructType(Seq(
           StructField("l", LongType, nullable = true)))))))
 
-    assert(ret.resolved === true)
+    assert(ret.resolved === false)
     checkEvaluation(ret, Row(
       Seq(123, null, null),
       Map("a" -> null, "b" -> true, "c" -> false),

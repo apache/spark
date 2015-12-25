@@ -26,7 +26,6 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
@@ -37,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution._
@@ -45,9 +44,10 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkException}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
@@ -339,6 +339,15 @@ class SQLContext private[sql](
   }
 
   /**
+    * Returns true if the [[Queryable]] is currently cached in-memory.
+    * @group cachemgmt
+    * @since 1.3.0
+    */
+  private[sql] def isCached(qName: Queryable): Boolean = {
+    cacheManager.lookupCachedData(qName).nonEmpty
+  }
+
+  /**
    * Caches the specified table in-memory.
    * @group cachemgmt
    * @since 1.3.0
@@ -401,7 +410,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-    SparkPlan.currentContext.set(self)
+    SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
@@ -417,7 +426,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-    SparkPlan.currentContext.set(self)
+    SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     DataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
@@ -776,9 +785,20 @@ class SQLContext private[sql](
    */
   @Experimental
   def range(start: Long, end: Long): DataFrame = {
-    createDataFrame(
-      sparkContext.range(start, end).map(Row(_)),
-      StructType(StructField("id", LongType, nullable = false) :: Nil))
+    range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
+  }
+
+  /**
+    * :: Experimental ::
+    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+    * in an range from `start` to `end` (exclusive) with an step value.
+    *
+    * @since 2.0.0
+    * @group dataframe
+    */
+  @Experimental
+  def range(start: Long, end: Long, step: Long): DataFrame = {
+    range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
@@ -792,9 +812,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    createDataFrame(
-      sparkContext.range(start, end, step, numPartitions).map(Row(_)),
-      StructType(StructField("id", LongType, nullable = false) :: Nil))
+    DataFrame(this, Range(start, end, step, numPartitions))
   }
 
   /**
@@ -1236,6 +1254,7 @@ class SQLContext private[sql](
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       SQLContext.clearInstantiatedContext()
+      SQLContext.clearSqlListener()
     }
   })
 
@@ -1334,7 +1353,7 @@ object SQLContext {
     activeContext.remove()
   }
 
-  private[sql] def getActiveContextOption(): Option[SQLContext] = {
+  private[sql] def getActive(): Option[SQLContext] = {
     Option(activeContext.get())
   }
 

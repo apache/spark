@@ -117,6 +117,10 @@ private[spark] class ApplicationMaster(
 
   private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
 
+  def getAttemptId(): ApplicationAttemptId = {
+    client.getAttemptId()
+  }
+
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -372,7 +376,14 @@ private[spark] class ApplicationMaster(
             case i: InterruptedException =>
             case e: Throwable => {
               failureCount += 1
-              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+              // this exception was introduced in hadoop 2.4 and this code would not compile
+              // with earlier versions if we refer it directly.
+              if ("org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException" ==
+                e.getClass().getName()) {
+                logError("Exception from Reporter thread.", e)
+                finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
+                  e.getMessage)
+              } else if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                     s"$failureCount time(s) from Reporter thread.")
@@ -596,11 +607,12 @@ private[spark] class ApplicationMaster(
               localityAwareTasks, hostToLocalTaskCount)) {
               resetAllocatorInterval()
             }
+            context.reply(true)
 
           case None =>
             logWarning("Container allocator is not ready to request executors yet.")
+            context.reply(false)
         }
-        context.reply(true)
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
@@ -660,6 +672,10 @@ object ApplicationMaster extends Logging {
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
     master.sparkContextStopped(sc)
+  }
+
+  private[spark] def getAttemptId(): ApplicationAttemptId = {
+    master.getAttemptId
   }
 
 }
