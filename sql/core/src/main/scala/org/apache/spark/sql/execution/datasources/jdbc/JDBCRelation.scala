@@ -58,10 +58,15 @@ private[sql] object JDBCRelation {
     var i: Int = 0
     var currentValue: Long = partitioning.lowerBound
     var ans = new ArrayBuffer[Partition]()
-    while (i < numPartitions) {
-      val lowerBound = if (i != 0) s"$column >= $currentValue" else null
+    while (i < numPartitions && currentValue <= partitioning.upperBound) {
+      val lowerBound = s"$column >= $currentValue"
       currentValue += stride
-      val upperBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
+      val upperBound =
+        if (i != numPartitions - 1 && currentValue <= partitioning.upperBound) {
+          s"$column < $currentValue"
+        } else {
+          s"$column <= ${partitioning.upperBound}"
+        }
       val whereClause =
         if (upperBound == null) {
           lowerBound
