@@ -37,7 +37,7 @@ private case object MySQLDialect extends JdbcDialect {
     } else None
   }
 
-  override def quoteIdentifier(colName: String): String = {
+  override def quoteColumnName(colName: String): String = {
     s"`$colName`"
   }
 

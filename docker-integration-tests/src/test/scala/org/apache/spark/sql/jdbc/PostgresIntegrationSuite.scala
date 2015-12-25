@@ -21,7 +21,7 @@ import java.sql.Connection
 import java.util.Properties
 
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{If, Literal}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -45,6 +45,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO bar VALUES ('hello', 42, 1.25, 123456789012345, B'0', "
       + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16', "
       + """'{1, 2}', '{"a", null, "b"}')""").executeUpdate()
+    // Table for case-sensitive tests
+    conn.prepareStatement("CREATE TABLE foo (c0 text, c1 integer)").executeUpdate()
+    conn.prepareStatement("INSERT INTO foo VALUES ('abc', 0)").executeUpdate()
+    conn.prepareStatement("INSERT INTO foo VALUES ('def', 1)").executeUpdate()
+    conn.prepareStatement("CREATE TABLE FOO (c0 text, c1 integer)").executeUpdate()
+    conn.prepareStatement("INSERT INTO FOO VALUES ('ghi', 2)").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -90,5 +96,20 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     df.select(df.queryExecution.analyzed.output.map { a =>
       Column(Literal.create(null, a.dataType)).as(a.name)
     }: _*).write.jdbc(jdbcUrl, "public.barcopy2", new Properties)
+  }
+
+  test("Case-sensitive test for table names") {
+    val df1 = sqlContext.read.jdbc(jdbcUrl, "foo", new Properties)
+    val rows1 = df1.collect()
+    assert(rows1.length == 2)
+    assert(rows1(0).getString(0).equals("abc"))
+    assert(rows1(0).getInt(1) == 0)
+    assert(rows1(1).getString(0).equals("def"))
+    assert(rows1(1).getInt(1) == 1)
+    val df2 = sqlContext.read.jdbc(jdbcUrl, "FOO", new Properties)
+    val rows2 = df2.collect()
+    assert(rows2.length == 1)
+    assert(rows2(0).getString(0).equals("ghi"))
+    assert(rows2(0).getInt(1) == 2)
   }
 }

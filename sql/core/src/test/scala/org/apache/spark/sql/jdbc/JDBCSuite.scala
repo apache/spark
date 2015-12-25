@@ -447,9 +447,9 @@ class JDBCSuite extends SparkFunSuite
     val Derby = JdbcDialects.get("jdbc:derby:db")
 
     val columns = Seq("abc", "key")
-    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
-    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
-    val DerbyColumns = columns.map(Derby.quoteIdentifier(_))
+    val MySQLColumns = columns.map(MySQL.quoteColumnName(_))
+    val PostgresColumns = columns.map(Postgres.quoteColumnName(_))
+    val DerbyColumns = columns.map(Derby.quoteColumnName(_))
     assert(MySQLColumns === Seq("`abc`", "`key`"))
     assert(PostgresColumns === Seq(""""abc"""", """"key""""))
     assert(DerbyColumns === Seq(""""abc"""", """"key""""))

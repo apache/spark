@@ -82,10 +82,15 @@ abstract class JdbcDialect extends Serializable {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
-   * Quotes the identifier. This is used to put quotes around the identifier in case the column
-   * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
+   * Quotes the table name. This is used to put quotes around the table name in case it is
+   * a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
-  def quoteIdentifier(colName: String): String = {
+  def quoteTableName(tableName: String): String = tableName
+
+  /**
+   * Quotes the column name. This is used for the same purpose as [[quoteTableName]].
+   */
+  def quoteColumnName(colName: String): String = {
     s""""$colName""""
   }
 

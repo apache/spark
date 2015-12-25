@@ -253,12 +253,13 @@ private[sql] object JDBCRDD extends Logging {
       filters: Array[Filter],
       parts: Array[Partition]): RDD[InternalRow] = {
     val dialect = JdbcDialects.get(url)
-    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+    val quotedTable = dialect.quoteTableName(fqTable)
+    val quotedColumns = requiredColumns.map(colName => dialect.quoteColumnName(colName))
     new JDBCRDD(
       sc,
       JdbcUtils.createConnectionFactory(url, properties),
       pruneSchema(schema, requiredColumns),
-      fqTable,
+      quotedTable,
       quotedColumns,
       filters,
       parts,
