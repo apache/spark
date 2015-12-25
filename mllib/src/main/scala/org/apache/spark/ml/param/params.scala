@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
@@ -504,9 +504,9 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
  * :: Experimental ::
  * A param and its value.
  */
-@Experimental
 @Since("1.2.0")
-case class ParamPair[T](
+@Experimental
+case class ParamPair[T] @Since("1.2.0") (
     @Since("1.2.0") param: Param[T],
     @Since("1.2.0") value: T) {
   // This is *the* place Param.validate is called.  Whenever a parameter is specified, we should
@@ -789,8 +789,8 @@ abstract class JavaParams extends Params
  * :: Experimental ::
  * A param to value map.
  */
-@Experimental
 @Since("1.2.0")
+@Experimental
 final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
   extends Serializable {
 
@@ -926,11 +926,12 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
   /**
    * Number of param pairs in this map.
    */
+  @Since("1.3.0")
   def size: Int = map.size
 }
 
-@Experimental
 @Since("1.2.0")
+@Experimental
 object ParamMap {
 
   /**
