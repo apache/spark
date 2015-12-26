@@ -73,7 +73,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
     @transient private val sc: SparkContext,
     val regionName: String,
     val endpointUrl: String,
-    @transient private val blockIds: Array[BlockId],
+    @transient val blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
