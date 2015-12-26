@@ -614,7 +614,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
-#' df <- read.jdbc(sqlContext, jdbcUrl, "table", predicates = list("field='A'"), user = "username")
+#' df <- read.jdbc(sqlContext, jdbcUrl, "table", predicates = list("field<=123"), user = "username")
 #' df2 <- read.jdbc(sqlContext, jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
 #'                  upperBound = 10000, user = "username", password = "password")
 #' }
