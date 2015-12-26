@@ -655,7 +655,7 @@ envToJProperties <- function(env) {
   props <- newJObject("java.util.Properties")
   if (length(env) > 0) {
     lapply(ls(env), function(k) {
-      callJMethod(props, as.character(k), as.character(env[[k]]))
+      callJMethod(props, "setProperty", as.character(k), as.character(env[[k]]))
     })
   }
   props

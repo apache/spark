@@ -627,7 +627,7 @@ read.jdbc <- function(sqlContext, url, tableName,
   read <- callJMethod(sqlContext, "read")
   if (!is.null(partitionColumn)) {
     if (is.null(numPartitions) || numPartitions == 0) {
-      sc <- callJMethod(sqlContext, "_sc")
+      sc <- callJMethod(sqlContext, "sparkContext")
       numPartitions <- callJMethod(sc, "defaultParallelism")
     } else {
       numPartitions <- numToInt(numPartitions)
