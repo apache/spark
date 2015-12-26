@@ -75,7 +75,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
     val endpointUrl: String,
     @transient private val blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
-    @transient private isBlockIdValid: Array[Boolean] = Array.empty,
+    @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
     val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
     val awsCredentialsOption: Option[SerializableAWSCredentials] = None
