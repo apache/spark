@@ -70,12 +70,12 @@ class KinesisBackedBlockRDDPartition(
  */
 private[kinesis]
 class KinesisBackedBlockRDD[T: ClassTag](
-    @transient sc: SparkContext,
+    @transient private val sc: SparkContext,
     val regionName: String,
     val endpointUrl: String,
-    @transient blockIds: Array[BlockId],
+    @transient private val blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
-    @transient isBlockIdValid: Array[Boolean] = Array.empty,
+    @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
     val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
     val awsCredentialsOption: Option[SerializableAWSCredentials] = None
