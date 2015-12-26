@@ -448,21 +448,7 @@ case class Pivot(
   }
 }
 
-/** Factory for constructing new `Limit` nodes. */
-object Limit {
-  def apply(limitExpr: Expression, child: LogicalPlan): Limit = {
-    new Limit(limitExpr, child, optimized = false)
-  }
-}
-
-/**
- * Take the first `limitExpr` rows.
- * @param limitExpr The number of returned rows
- * @param child     Child operator
- * @param optimized This node has been optimized. Note that this is only a flag marker used
- *                  to avoid adding extra `Limit` nodes to the child operators more than once.
- */
-case class Limit(limitExpr: Expression, child: LogicalPlan, optimized: Boolean) extends UnaryNode {
+case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override lazy val statistics: Statistics = {

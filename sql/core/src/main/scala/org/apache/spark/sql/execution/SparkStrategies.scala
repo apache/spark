@@ -276,12 +276,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object TakeOrderedAndProject extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child), _) =>
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
         execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
       case logical.Limit(
              IntegerLiteral(limit),
-             logical.Project(projectList, logical.Sort(order, true, child)),
-             _) =>
+             logical.Project(projectList, logical.Sort(order, true, child))) =>
         execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
       case _ => Nil
     }
@@ -346,7 +345,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
-      case logical.Limit(IntegerLiteral(limit), child, _) =>
+      case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater)) :: Nil
