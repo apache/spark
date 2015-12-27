@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 
+@ExpressionDescription(
+  usage = "_FUNC_(column) -  Aggregate function: returns the sample standard deviation of " +
+    "the expression in a group.")
 case class StddevSamp(child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
@@ -50,6 +53,9 @@ case class StddevSamp(child: Expression,
   }
 }
 
+@ExpressionDescription(
+usage = "_FUNC_(column) -  Aggregate function: returns the population standard deviation of" +
+" the expression in a group.")
 case class StddevPop(
     child: Expression,
     mutableAggBufferOffset: Int = 0,

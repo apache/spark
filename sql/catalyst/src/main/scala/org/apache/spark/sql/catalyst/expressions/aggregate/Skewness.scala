@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 
+@ExpressionDescription(
+  usage = "_FUNC_(column) - Aggregate function: returns the skewness of the values in a group.")
 case class Skewness(child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
