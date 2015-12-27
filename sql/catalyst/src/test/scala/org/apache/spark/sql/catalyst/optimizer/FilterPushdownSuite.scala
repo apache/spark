@@ -288,7 +288,7 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('b >= 1)
+    val left = testRelation.where('b >= 1 && 'a >= 2)
     val right = testRelation1.where('d >= 2)
     val correctAnswer =
       left.join(right, LeftSemi, Option("a".attr === "d".attr)).analyze
@@ -537,8 +537,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val lleft = testRelation.where('a >= 3).subquery('z)
-    val left = testRelation.where('a === 1).subquery('x)
-    val right = testRelation.subquery('y)
+    val left = testRelation.where('a === 1 && 'b >= 3).subquery('x)
+    val right = testRelation.where('b >= 3).subquery('y)
     val correctAnswer =
       lleft.join(
         left.join(right, condition = Some("x.b".attr === "y.b".attr)),
@@ -747,6 +747,58 @@ class FilterPushdownSuite extends PlanTest {
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
       .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: push to both sides after predicate transitivity") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y)
+        .where("x.a".attr === 1 && "y.d".attr === "x.a".attr && 'd.isNotNull)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('a === 1 && 'a.isNotNull)
+    val right = testRelation1.where('d.isNotNull && 'd === 1)
+    val correctAnswer =
+      left.join(right, condition = Some("d".attr === "a".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: push down left outer join after predicate transitivity ") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr && "y.d".attr >= 2))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation
+    val right = testRelation1.where('d >= 2)
+    val correctAnswer =
+      left.join(right, LeftOuter, Option("a".attr === "d".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: push down right outer join after predicate transitivity ") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y, RightOuter, Option("x.a".attr === "y.d".attr && "y.d".attr >= 2))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('a >= 2)
+    val right = testRelation1
+    val correctAnswer =
+      left.join(right, RightOuter, Option("d".attr >= 2 && "a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

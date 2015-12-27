@@ -782,18 +782,57 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
   }
 
+  /**
+   * Infer the condition using equalTo predicate transitivity
+   */
+  private def inferConditions (
+    condition: Seq[Expression],
+    attrSet: AttributeSet,
+    commonCondition: Seq[Expression]) = {
+    val attrMap = AttributeMap(commonCondition.collect {
+      case EqualTo(l: AttributeReference, r: AttributeReference) if attrSet.contains(l) =>
+        (l.toAttribute, r)
+      case EqualTo(l: AttributeReference, r: AttributeReference) =>
+        (r.toAttribute, l)
+    })
+    condition.collect {
+      case EqualTo(ar: AttributeReference, l: Literal) if attrMap.contains(ar) =>
+        EqualTo(attrMap(ar), l)
+      case GreaterThan(ar: AttributeReference, l: Literal) if attrMap.contains(ar) =>
+        GreaterThan(attrMap(ar), l)
+      case GreaterThanOrEqual(ar: AttributeReference, l: Literal) if attrMap.contains(ar) =>
+        GreaterThanOrEqual(attrMap(ar), l)
+      case LessThan(ar: AttributeReference, l: Literal) if attrMap.contains(ar) =>
+        LessThan(attrMap(ar), l)
+      case LessThanOrEqual(ar: AttributeReference, l: Literal) if attrMap.contains(ar) =>
+        LessThanOrEqual(attrMap(ar), l)
+      case In(ar: AttributeReference, l) if attrMap.contains(ar) =>
+        In(attrMap(ar), l)
+      case IsNull(ar: AttributeReference) if attrMap.contains(ar) =>
+        IsNull(attrMap(ar))
+      case IsNotNull(ar: AttributeReference) if attrMap.contains(ar) =>
+        IsNotNull(attrMap(ar))
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) =>
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right)
+      val leftInferredFilterConditions =
+        (leftFilterConditions ++
+           inferConditions(rightFilterConditions, right.outputSet, commonFilterCondition)).distinct
+      val rightInferredFilterConditions =
+        (rightFilterConditions ++
+          inferConditions(leftFilterConditions, left.outputSet, commonFilterCondition)).distinct
 
       joinType match {
         case Inner =>
           // push down the single side `where` condition into respective sides
-          val newLeft = leftFilterConditions.
+          val newLeft = leftInferredFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-          val newRight = rightFilterConditions.
+          val newRight = rightInferredFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val newJoinCond = (commonFilterCondition ++ joinCondition).reduceLeftOption(And)
 
@@ -801,7 +840,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case RightOuter =>
           // push down the right side only `where` condition
           val newLeft = left
-          val newRight = rightFilterConditions.
+          val newRight = rightInferredFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val newJoinCond = joinCondition
           val newJoin = Join(newLeft, newRight, RightOuter, newJoinCond)
@@ -810,7 +849,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
         case _ @ (LeftOuter | LeftSemi) =>
           // push down the left side only `where` condition
-          val newLeft = leftFilterConditions.
+          val newLeft = leftInferredFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = right
           val newJoinCond = joinCondition
@@ -825,20 +864,26 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Join(left, right, joinType, joinCondition) =>
       val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
+      val leftInferredJoinConditions =
+        (leftJoinConditions ++
+          inferConditions(rightJoinConditions, right.outputSet, commonJoinCondition)).distinct
+      val rightInferredJoinConditions =
+        (rightJoinConditions ++
+          inferConditions(leftJoinConditions, left.outputSet, commonJoinCondition)).distinct
 
       joinType match {
         case _ @ (Inner | LeftSemi) =>
           // push down the single side only join filter for both sides sub queries
-          val newLeft = leftJoinConditions.
+          val newLeft = leftInferredJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-          val newRight = rightJoinConditions.
+          val newRight = rightInferredJoinConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val newJoinCond = commonJoinCondition.reduceLeftOption(And)
 
           Join(newLeft, newRight, joinType, newJoinCond)
         case RightOuter =>
           // push down the left side only join filter for left side sub query
-          val newLeft = leftJoinConditions.
+          val newLeft = leftInferredJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = right
           val newJoinCond = (rightJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
@@ -847,7 +892,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case LeftOuter =>
           // push down the right side only join filter for right sub query
           val newLeft = left
-          val newRight = rightJoinConditions.
+          val newRight = rightInferredJoinConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
