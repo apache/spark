@@ -488,12 +488,6 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator @ Exchange(partitioning, child, _) =>
-      child.children match {
-        case Exchange(childPartitioning, baseChild, _)::Nil =>
-          if (childPartitioning.guarantees(partitioning)) child else operator
-        case _ => operator
-      }
     case operator: SparkPlan => ensureDistributionAndOrdering(operator)
   }
 }
