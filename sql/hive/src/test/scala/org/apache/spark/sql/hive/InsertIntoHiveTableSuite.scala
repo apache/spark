@@ -20,10 +20,11 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.hadoop.hive.conf.HiveConf
+
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -258,5 +259,15 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     )
 
     sql("DROP TABLE table_with_partition")
+  }
+
+  test("Insert into partitioned table with no partition values") {
+    sql("DROP TABLE IF EXISTS partitioned_tab")
+    val df = Seq((1, 1), (2, 2), (3, 3)).toDF("c1", "C2")
+    df.registerTempTable("nonpartition_tab")
+    sql("CREATE TABLE partitioned_tab (x INT) PARTITIONED BY (y INT)")
+    intercept[AnalysisException] {
+      sql("INSERT OVERWRITE TABLE partitioned_tab SELECT c1 FROM nonpartition_tab")
+    }
   }
 }

@@ -23,22 +23,22 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
+import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Serializer
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
-import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.util.SerializableJobConf
 
 private[hive]
@@ -155,23 +155,28 @@ case class InsertIntoHiveTable(
     val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
     val partitionColumnNames = Option(partitionColumns).map(_.split("/")).orNull
 
+    // Validate that partition values are specified for partition columns.
+    if (partitionColumnNames != null && partitionColumnNames.size > 0 && partitionSpec.size == 0) {
+      throw new AnalysisException(ErrorMsg.NEED_PARTITION_ERROR.getMsg)
+    }
+
     // Validate partition spec if there exist any dynamic partitions
     if (numDynamicPartitions > 0) {
       // Report error if dynamic partitioning is not enabled
       if (!sc.hiveconf.getBoolVar(HiveConf.ConfVars.DYNAMICPARTITIONING)) {
-        throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_DISABLED.getMsg)
+        throw new AnalysisException(ErrorMsg.DYNAMIC_PARTITION_DISABLED.getMsg)
       }
 
       // Report error if dynamic partition strict mode is on but no static partition is found
       if (numStaticPartitions == 0 &&
         sc.hiveconf.getVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE).equalsIgnoreCase("strict")) {
-        throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_STRICT_MODE.getMsg)
+        throw new AnalysisException(ErrorMsg.DYNAMIC_PARTITION_STRICT_MODE.getMsg)
       }
 
       // Report error if any static partition appears after a dynamic partition
       val isDynamic = partitionColumnNames.map(partitionSpec(_).isEmpty)
       if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
-        throw new SparkException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
+        throw new AnalysisException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
       }
     }
 
