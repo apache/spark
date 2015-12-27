@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, Row, SQLConf}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.joins.{SortMergeJoin, BroadcastHashJoin}
 import org.apache.spark.sql.functions._
@@ -418,41 +418,35 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("EnsureRequirements eliminates Exchange if child has Exchange with same partitioning") {
-    val distribution = ClusteredDistribution(Literal(1) :: Nil)
-    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
-    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
-    assert(!childPartitioning.satisfies(distribution))
-    val inputPlan = Exchange(finalPartitioning,
-      DummySparkPlan(
-        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
-        requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Seq.empty)),
-        None)
+    val input = LocalRelation('a.int, 'b.int)
+    val planner = sqlContext.planner
+    import planner.BasicOperators
 
-    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.size == 2) {
-      fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
+    val inputPlan = RepartitionByExpression(input.output,
+      Aggregate(input.output, input.output, input)
+    )
+    val outputPlan = BasicOperators(inputPlan).head
+    val executionPlan = EnsureRequirements(sqlContext).apply(outputPlan)
+    assertDistributionRequirementsAreSatisfied(executionPlan)
+    if (executionPlan.collect { case e: Exchange => true }.size == 2) {
+      fail(s"Topmost Exchange should have been eliminated:\n$executionPlan")
     }
   }
 
   test("EnsureRequirements does not eliminate Exchange with different partitioning") {
-    val distribution = ClusteredDistribution(Literal(1) :: Nil)
-    // Number of partitions differ
-    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 8)
-    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
-    assert(!childPartitioning.satisfies(distribution))
-    val inputPlan = Exchange(finalPartitioning,
-      DummySparkPlan(
-        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
-        requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Seq.empty)),
-      None)
+    val input = LocalRelation('a.int, 'b.int)
+    val planner = sqlContext.planner
+    import planner.BasicOperators
 
-    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.size == 1) {
-      fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
+    val inputPlan = RepartitionByExpression(input.output,
+      Aggregate(input.output, input.output, input),
+      Some(25)
+    )
+    val outputPlan = BasicOperators(inputPlan).head
+    val executionPlan = EnsureRequirements(sqlContext).apply(outputPlan)
+    assertDistributionRequirementsAreSatisfied(executionPlan)
+    if (executionPlan.collect { case e: Exchange => true }.size == 1) {
+      fail(s"Topmost Exchange should not have been eliminated:\n$executionPlan")
     }
   }
 
