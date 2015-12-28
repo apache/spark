@@ -120,7 +120,8 @@ of the most common options to set are:
   <td><code>spark.driver.cores</code></td>
   <td>1</td>
   <td>
-    Number of cores to use for the driver process, only in cluster mode.
+    Number of cores to use for the driver process, only in cluster mode. This can be set through
+    <code>--driver-cores</code> command line option.
   </td>
 </tr>
   <td><code>spark.driver.maxResultSize</code></td>
@@ -151,7 +152,8 @@ of the most common options to set are:
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
+    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>). This can
+    be set through the <code>--executor-memory</code> command line option.
   </td>
 </tr>
 <tr>
@@ -173,7 +175,7 @@ of the most common options to set are:
     stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
 
-    NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    NOTE: In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
@@ -687,10 +689,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for 
-    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java 
-    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python). 
-    Can save substantial space at the cost of some extra CPU time. 
+    Whether to compress serialized RDD partitions (e.g. for
+    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
+    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python).
+    Can save substantial space at the cost of some extra CPU time.
   </td>
 </tr>
 <tr>
@@ -850,6 +852,8 @@ Apart from these, the following properties are also available, and may be useful
     In standalone mode, setting this parameter allows an application to run multiple executors on
     the same worker, provided that there are enough cores on that worker. Otherwise, only one
     executor per application will run on each worker.
+
+    This can be set through <code>--executor-cores</code> in the command line.
   </td>
 </tr>
 <tr>

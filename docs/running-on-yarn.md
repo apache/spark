@@ -193,6 +193,7 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
     Comma separated list of archives to be extracted into the working directory of each executor.
+    This can be set through <code>--archives</code> command line option.
   </td>
 </tr>
 <tr>
@@ -207,6 +208,7 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td><code>2</code></td>
   <td>
     The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used.
+    This can be set through <code>--num-executors</code> command line option.
   </td>
 </tr>
 <tr>
@@ -241,7 +243,8 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td><code>spark.yarn.queue</code></td>
   <td><code>default</code></td>
   <td>
-    The name of the YARN queue to which the application is submitted.
+    The name of the YARN queue to which the application is submitted. This can be set through
+    <code>--queue</code> command line option.
   </td>
 </tr>
 <tr>
@@ -359,6 +362,7 @@ If you need a reference to the proper location to put log files in the YARN so t
   The full path to the file that contains the keytab for the principal specified above.
   This keytab will be copied to the node running the YARN Application Master via the Secure Distributed Cache,
   for renewing the login tickets and the delegation tokens periodically. (Works also with the "local" master)
+  This can be set through <code>--keytab</code> command line option.
   </td>
 </tr>
 <tr>
@@ -366,6 +370,7 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
   Principal to be used to login to KDC, while running on secure HDFS. (Works also with the "local" master)
+  This can be set through <code>--principal</code> command line option.
   </td>
 </tr>
 <tr>
