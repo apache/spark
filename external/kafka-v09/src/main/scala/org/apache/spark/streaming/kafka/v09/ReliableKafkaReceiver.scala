@@ -135,7 +135,7 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
           topicAndPartition,
           newConsumer
         )
-        consumerAndLockMap.put(newConsumer, new ReentrantLock())
+        consumerAndLockMap.put(newConsumer, new ReentrantLock(true))
         newConsumer.subscribe(Collections.singletonList[String](topicAndPartition.topic))
         messageHandlerThreadPool.submit(new MessageHandler(newConsumer))
       }
