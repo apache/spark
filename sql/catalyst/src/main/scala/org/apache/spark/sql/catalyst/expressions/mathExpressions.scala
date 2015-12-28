@@ -153,20 +153,23 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns the arc cosine of a value; " +
-    "the returned angle is in the range 0.0 through pi.",
+  usage =
+    """_FUNC_(value) - Returns the arc cosine of a value;
+       the returned angle is in the range 0.0 through pi.""",
   extended = "> SELECT _FUNC_(-1);\n3.141592653589793")
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns the arc sine of a value; " +
-    "the returned angle is in the range -pi/2 through pi/2.",
+  usage =
+    """_FUNC_(value) - Returns the arc sine of a value;
+       the returned angle is in the range -pi/2 through pi/2.""",
   extended = "> SELECT _FUNC_(-1);\n-1.5707963267948966")
 case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns the arc tangent of a value; " +
-    "the returned angle is in the range -pi/2 through pi/2.",
+  usage =
+    """_FUNC_(value) - Returns the arc tangent of a value;
+       the returned angle is in the range -pi/2 through pi/2.""",
   extended = "> SELECT _FUNC_(1);\n0.7853981633974483")
 case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
@@ -176,8 +179,10 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns the smallest (closest to negative infinity) double value " +
-    "that is greater than or equal to the argument and is equal to a mathematical integer.",
+  usage =
+    """_FUNC_(value) - Returns the smallest (closest to negative infinity) double value
+       that is greater than or equal to the argument
+       and is equal to a mathematical integer.""",
   extended = "> SELECT _FUNC_(2.333);\n3")
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
@@ -263,8 +268,10 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns the largest (closest to positive infinity) double value " +"" +
-    "that is less than or equal to the argument and is equal to a mathematical integer.",
+  usage =
+    """_FUNC_(value) - Returns the largest (closest to positive infinity) double value
+       that is less than or equal to the argument
+       and is equal to a mathematical integer.""",
   extended = "> SELECT _FUNC_(-2.333);\n-3")
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
@@ -394,17 +401,19 @@ case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns the double value that is closest in value to the argument " +
-    "and is equal to a mathematical integer.",
+  usage =
+    """_FUNC_(value) - Returns the double value that is closest in value to the argument
+       and is equal to a mathematical integer.""",
   extended = "> SELECT _FUNC_(1.63);\n2.0")
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns the signum function of the argument; " +
-    "zero if the argument is zero, 1.0 if the argument is greater than zero, " +
-    "-1.0 if the argument is less than zero.",
+  usage =
+    """_FUNC_(value) - Returns the signum function of the argument;
+       zero if the argument is zero, 1.0 if the argument is greater than zero,
+       -1.0 if the argument is less than zero.""",
   extended = "> SELECT _FUNC_(-2.63);\n-1.0")
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
 
@@ -434,16 +443,18 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Converts an angle measured in radians to " +
-    "an approximately equivalent angle measured in degrees.",
+  usage =
+    """_FUNC_(value) - Converts an angle measured in radians to
+       an approximately equivalent angle measured in degrees.""",
   extended = "> SELECT _FUNC_(Pi());\n180.0")
 case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
   override def funcName: String = "toDegrees"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Converts an angle measured in degrees to " +
-    "an approximately equivalent angle measured in radians.",
+  usage =
+    """_FUNC_(value) - Converts an angle measured in degrees to
+       an approximately equivalent angle measured in radians.""",
   extended = "> SELECT _FUNC_(180.0);\n3.141592653589793")
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
@@ -575,8 +586,9 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
  * Resulting characters are returned as a byte array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Performs the inverse operation of HEX. " +
-    "Resulting characters are returned as a byte array.",
+  usage =
+    """_FUNC_(value) - Performs the inverse operation of HEX.
+      Resulting characters are returned as a byte array.""",
   extended = "> SELECT _FUNC_(41);\nA")
 case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -608,8 +620,10 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(leftValue, rightValue) - Returns the angle theta from the conversion of " +
-    "rectangular coordinates (x, y) to polar coordinates (r, theta).",
+  usage =
+    """_FUNC_(leftValue, rightValue) - Returns the angle theta
+       from the conversion of rectangular coordinates (x, y)
+       to polar coordinates (r, theta).""",
   extended = "> SELECT _FUNC_(1, 1);\n0.7853981633974483")
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
@@ -625,8 +639,9 @@ case class Atan2(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(leftValue, rightValue) - Returns the value of the first argument raised to " +
-    "the power of the second argument.",
+  usage =
+    """_FUNC_(leftValue, rightValue) - Returns the value of the first argument raised
+       to the power of the second argument.""",
   extended = "> SELECT _FUNC_(2, 3);\n8.0")
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
@@ -700,8 +715,9 @@ case class ShiftRight(left: Expression, right: Expression)
  * @param right the number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(leftValue, rightValue) - Returns bitwise unsigned right shift, " +
-    "for integer and long data type.",
+  usage =
+    """_FUNC_(leftValue, rightValue) - Returns bitwise unsigned right shift,
+       for integer and long data type.""",
   extended = "> SELECT _FUNC_(16, 3);\n2")
 case class ShiftRightUnsigned(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -725,8 +741,9 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(leftValue, rightValue) - Returns sqrt(x^2 +y^2) without intermediate " +
-    "overflow or underflow.",
+  usage =
+    """_FUNC_(leftValue, rightValue) - Returns sqrt(x^2 +y^2)
+       without intermediate overflow or underflow.""",
   extended = "> SELECT _FUNC_(3, 4);\n5.0")
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
@@ -797,8 +814,9 @@ case class Logarithm(left: Expression, right: Expression)
  * @param scale new scale to be round to, this should be a constant int at runtime
  */
 @ExpressionDescription(
-  usage = "_FUNC_(child, scale) - Round the child's result to scale decimal place " +
-    "when scale >= 0 or round at integral part when scale < 0.",
+  usage =
+    """_FUNC_(child, scale) - Round the child's result to scale decimal place
+       when scale >= 0 or round at integral part when scale < 0.""",
   extended = "> SELECT _FUNC_(31.415, -1);\n30.0")
 case class Round(child: Expression, scale: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
