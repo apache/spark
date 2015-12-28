@@ -82,4 +82,6 @@ case class Average(child: Expression) extends DeclarativeAggregate {
     case _ =>
       Cast(sum, resultType) / Cast(count, resultType)
   }
+
+  override def argumentsSQL: Option[String] = child.sql
 }

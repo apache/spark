@@ -74,6 +74,12 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
+
+  override def sql: Option[String] = for {
+    predicateSQL <- predicate.sql
+    trueSQL <- trueValue.sql
+    falseSQL <- falseValue.sql
+  } yield s"(IF($predicateSQL, $trueSQL, $falseSQL))"
 }
 
 trait CaseWhenLike extends Expression {

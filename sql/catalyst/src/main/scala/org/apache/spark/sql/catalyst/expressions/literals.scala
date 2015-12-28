@@ -21,9 +21,9 @@ import java.sql.{Date, Timestamp}
 
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
@@ -214,6 +214,34 @@ case class Literal protected (value: Any, dataType: DataType)
       }
     }
   }
+
+  override def sql: Option[String] = Option((value, dataType) match {
+    case _ if value == null =>
+      "NULL"
+
+    case (v: UTF8String, StringType) =>
+      "\"" + v.toString.replace("\"", "\\\"") + "\""
+
+    case (v: Byte, ByteType) =>
+      s"CAST($v AS ${ByteType.simpleString.toUpperCase})"
+
+    case (v: Short, ShortType) =>
+      s"CAST($v AS ${ShortType.simpleString.toUpperCase})"
+
+    case (v: Long, LongType) =>
+      s"CAST($v AS ${LongType.simpleString.toUpperCase})"
+
+    case (v: Float, FloatType) =>
+      s"CAST($v AS ${FloatType.simpleString.toUpperCase})"
+
+    case (v: Decimal, DecimalType.Fixed(precision, scale)) =>
+      s"CAST($v AS ${DecimalType.simpleString.toUpperCase}($precision, $scale))"
+
+    case (v: Int, DateType) =>
+      s"DATE '${DateTimeUtils.toJavaDate(v)}'"
+
+    case _ => value.toString
+  })
 }
 
 // TODO: Specialize

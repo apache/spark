@@ -94,6 +94,8 @@ private[sql] case class AggregateExpression(
   override def prettyString: String = aggregateFunction.prettyString
 
   override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
+
+  override def sql: Option[String] = aggregateFunction.sql
 }
 
 /**
@@ -320,6 +322,10 @@ abstract class DeclarativeAggregate
 
   final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
+
+  override def sql: Option[String] = argumentsSQL.map(sql => s"${prettyName.toUpperCase}($sql)")
+
+  def argumentsSQL: Option[String] = None
 
   /**
    * A helper class for representing an attribute used in merging two

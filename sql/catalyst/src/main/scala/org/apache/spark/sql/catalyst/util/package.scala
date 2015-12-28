@@ -130,6 +130,17 @@ package object util {
     ret
   }
 
+  def sequenceOption[T](seq: Seq[Option[T]]): Option[Seq[T]] = seq match {
+    case xs if xs.isEmpty =>
+      Option(Seq.empty[T])
+
+    case xs =>
+      for {
+        head <- xs.head
+        tail <- sequenceOption(xs.tail)
+      } yield head +: tail
+  }
+
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {

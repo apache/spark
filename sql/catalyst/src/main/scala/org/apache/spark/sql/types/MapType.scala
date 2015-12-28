@@ -62,6 +62,8 @@ case class MapType(
 
   override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
 
+  override def sql: String = s"MAP<${keyType.sql}, ${valueType.sql}>"
+
   override private[spark] def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
 

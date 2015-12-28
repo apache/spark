@@ -27,9 +27,10 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{ExplainCommand, SetCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
+import org.apache.spark.sql.execution.{ExplainCommand, SetCommand}
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable, SQLBuilder}
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -372,7 +373,43 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHive.QueryExecution(queryString)
+          val query = {
+            val originalQuery = new TestHive.QueryExecution(queryString)
+            val containsCommands = originalQuery.analyzed.collectFirst {
+              case _: Command => ()
+              case _: LogicalInsertIntoHiveTable => ()
+            }.nonEmpty
+
+            if (containsCommands) {
+              originalQuery
+            } else {
+              new SQLBuilder(originalQuery.analyzed, TestHive).toSQL.map { sql =>
+                logInfo(
+                  s"""
+                     |### Running SQL generation round-trip test {{{
+                     |${originalQuery.analyzed.treeString}
+                     |Original SQL:
+                     |$queryString
+                     |
+                     |Generated SQL:
+                     |$sql
+                     |}}}
+                   """.stripMargin.trim)
+                new TestHive.QueryExecution(sql)
+              }.getOrElse {
+                logInfo(
+                  s"""
+                     |### Cannot convert the following logical plan back to SQL {{{
+                     |${originalQuery.analyzed.treeString}
+                     |Original SQL:
+                     |$queryString
+                     |}}}
+                   """.stripMargin.trim)
+                originalQuery
+              }
+            }
+          }
+
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Throwable =>
               val errorMessage =

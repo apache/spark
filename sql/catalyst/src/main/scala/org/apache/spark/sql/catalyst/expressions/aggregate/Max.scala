@@ -56,4 +56,6 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   }
 
   override lazy val evaluateExpression: AttributeReference = max
+
+  override def argumentsSQL: Option[String] = child.sql
 }

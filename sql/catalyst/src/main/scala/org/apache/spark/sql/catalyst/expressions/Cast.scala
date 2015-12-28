@@ -931,6 +931,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
         $evPrim = $result.copy();
       """
   }
+
+  override def sql: Option[String] = {
+    child.sql.map(childSQL => s"CAST($childSQL AS ${dataType.sql})")
+  }
 }
 
 /**

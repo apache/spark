@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
@@ -59,6 +60,10 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
   override lazy val evaluateExpression = count
 
   override def defaultResult: Option[Literal] = Option(Literal(0L))
+
+  override def argumentsSQL: Option[String] = {
+    sequenceOption(children.map(_.sql)).map(_.mkString(", "))
+  }
 }
 
 object Count {

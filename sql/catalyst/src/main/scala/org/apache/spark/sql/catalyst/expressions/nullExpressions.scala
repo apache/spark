@@ -193,6 +193,8 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     ev.value = eval.isNull
     eval.code
   }
+
+  override def sql: Option[String] = child.sql.map(childSQL => s"($childSQL IS NULL)")
 }
 
 
@@ -212,6 +214,8 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     ev.value = s"(!(${eval.isNull}))"
     eval.code
   }
+
+  override def sql: Option[String] = child.sql.map(childSQL => s"($childSQL IS NOT NULL)")
 }
 
 

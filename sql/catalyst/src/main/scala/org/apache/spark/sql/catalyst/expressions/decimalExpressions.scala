@@ -73,6 +73,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
   override def prettyName: String = "promote_precision"
+  override def sql: Option[String] = child.sql
 }
 
 /**
@@ -107,4 +108,6 @@ case class CheckOverflow(child: Expression, dataType: DecimalType) extends Unary
   }
 
   override def toString: String = s"CheckOverflow($child, $dataType)"
+
+  override def sql: Option[String] = child.sql
 }

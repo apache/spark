@@ -24,9 +24,17 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
 
-abstract sealed class SortDirection
-case object Ascending extends SortDirection
-case object Descending extends SortDirection
+abstract sealed class SortDirection {
+  def sql: String
+}
+
+case object Ascending extends SortDirection {
+  override def sql: String = "ASC"
+}
+
+case object Descending extends SortDirection {
+  override def sql: String = "DESC"
+}
 
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that

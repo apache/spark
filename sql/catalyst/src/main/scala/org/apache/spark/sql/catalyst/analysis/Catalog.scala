@@ -110,7 +110,9 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
-    alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+    alias
+      .map(a => Subquery(a, tableWithQualifiers))
+      .getOrElse(tableWithQualifiers)
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {

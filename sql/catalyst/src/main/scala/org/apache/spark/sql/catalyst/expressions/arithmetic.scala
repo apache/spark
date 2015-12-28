@@ -54,6 +54,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
       numeric.negate(input)
     }
   }
+
+  override def sql: Option[String] = child.sql.map(sql => s"(-$sql)")
 }
 
 case class UnaryPositive(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -67,6 +69,8 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
     defineCodeGen(ctx, ev, c => c)
 
   protected override def nullSafeEval(input: Any): Any = input
+
+  override def sql: Option[String] = child.sql.map(sql => s"(+$sql)")
 }
 
 /**
@@ -91,6 +95,8 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
   }
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
+
+  override def sql: Option[String] = child.sql.map(sql => s"(ABS($sql))")
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
@@ -513,4 +519,9 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
     val r = a % n
     if (r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
   }
+
+  override def sql: Option[String] = for {
+    leftSQL <- left.sql
+    rightSQL <- right.sql
+  } yield s"Pmod($leftSQL, $rightSQL)"
 }

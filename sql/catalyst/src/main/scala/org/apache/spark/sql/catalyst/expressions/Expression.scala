@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -223,6 +224,8 @@ abstract class Expression extends TreeNode[Expression] {
   protected def toCommentSafeString: String = this.toString
     .replace("*/", "\\*\\/")
     .replace("\\u", "\\\\u")
+
+  def sql: Option[String] = None
 }
 
 
@@ -356,6 +359,8 @@ abstract class UnaryExpression extends Expression {
       """
     }
   }
+
+  override def sql: Option[String] = child.sql.map(childSQL => s"($prettyName($childSQL))")
 }
 
 
@@ -492,6 +497,11 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
       TypeCheckResult.TypeCheckSuccess
     }
   }
+
+  override def sql: Option[String] = for {
+    lhs <- left.sql
+    rhs <- right.sql
+  } yield s"($lhs $symbol $rhs)"
 }
 
 
@@ -592,5 +602,10 @@ abstract class TernaryExpression extends Expression {
         $resultCode
       """
     }
+  }
+
+  override def sql: Option[String] = sequenceOption(children.map(_.sql)).map {
+    case Seq(child1, child2, child3) =>
+      s"$prettyName($child1, $child2, $child3)"
   }
 }

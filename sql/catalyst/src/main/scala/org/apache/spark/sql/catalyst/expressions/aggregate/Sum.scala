@@ -77,4 +77,6 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   }
 
   override lazy val evaluateExpression: Expression = sum
+
+  override def argumentsSQL: Option[String] = child.sql
 }

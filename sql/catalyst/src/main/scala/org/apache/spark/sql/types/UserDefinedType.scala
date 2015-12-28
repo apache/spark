@@ -84,6 +84,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
   override private[sql] def acceptsType(dataType: DataType) =
     this.getClass == dataType.getClass
+
+  override def sql: String = sqlType.sql
 }
 
 /**
