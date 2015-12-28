@@ -198,6 +198,9 @@ abstract class QueryTest extends PlanTest {
       case a: ImperativeAggregate => return
     }
 
+    // bypass hive tests before we fix all corner cases in hive module.
+    if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
+
     val jsonString = try {
       logicalPlan.toJSON
     } catch {
@@ -208,9 +211,6 @@ abstract class QueryTest extends PlanTest {
              |${logicalPlan.treeString}
            """.stripMargin, e)
     }
-
-    // bypass hive tests before we fix all corner cases in hive module.
-    if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
 
     // scala function is not serializable to JSON, use null to replace them so that we can compare
     // the plans later.
