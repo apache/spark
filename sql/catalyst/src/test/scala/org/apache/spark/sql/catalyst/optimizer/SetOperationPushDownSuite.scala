@@ -31,6 +31,8 @@ class SetOperationPushDownSuite extends PlanTest {
         EliminateSubQueries) ::
       Batch("Union Pushdown", Once,
         SetOperationPushDown,
+        ConstantFolding,
+        BooleanSimplification,
         SimplifyFilters) :: Nil
   }
 
@@ -66,6 +68,25 @@ class SetOperationPushDownSuite extends PlanTest {
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
       Limit(1, Union(testRelation.limit(1), testRelation2.limit(1))).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("union: limit to each side with the new limit number") {
+    val testLimitUnion = Union(testRelation, testRelation2.limit(3))
+    val unionQuery = testLimitUnion.limit(1)
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Limit(1, Union(testRelation.limit(1), testRelation2.limit(1))).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  // If users already manually added the Limit, we do not add extra Limit
+  test("union: no limit to both sides") {
+    val testLimitUnion = Union(testRelation.limit(2), testRelation2.limit(3))
+    val unionQuery = testLimitUnion.limit(2)
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Limit(2, Union(testRelation.limit(2), testRelation2.limit(3))).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
