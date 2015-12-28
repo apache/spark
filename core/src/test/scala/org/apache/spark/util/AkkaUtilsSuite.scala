@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import java.util.concurrent.TimeoutException
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
@@ -57,9 +55,14 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, conf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    intercept[RuntimeException] {
+    try {
       slaveTracker.trackerEndpoint =
         slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+    } catch {
+      case e: RuntimeException =>
+        assert(e.getMessage.contains("javax.security.sasl.SaslException"))
+      case e: SparkException =>
+        assert(e.getMessage.contains("Message is dropped because Outbox is stopped"))
     }
 
     rpcEnv.shutdown()
@@ -186,9 +189,14 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, badconf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    intercept[RuntimeException] {
+    try {
       slaveTracker.trackerEndpoint =
         slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+    } catch {
+      case e: RuntimeException =>
+        assert(e.getMessage.contains("Expected SaslMessage"))
+      case e: SparkException =>
+        assert(e.getMessage.contains("Message is dropped because Outbox is stopped"))
     }
 
     rpcEnv.shutdown()
@@ -307,9 +315,14 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    intercept[RuntimeException] {
+    try {
       slaveTracker.trackerEndpoint =
         slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+    } catch {
+      case e: RuntimeException =>
+        assert(e.getMessage.contains("javax.security.sasl.SaslException"))
+      case e: SparkException =>
+        assert(e.getMessage.contains("Message is dropped because Outbox is stopped"))
     }
 
     rpcEnv.shutdown()
@@ -332,8 +345,8 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
     val slaveConf = sparkSSLConfig()
-      .set("spark.rpc.askTimeout", "5s")
-      .set("spark.rpc.lookupTimeout", "5s")
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
     val securityManagerBad = new SecurityManager(slaveConf)
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
@@ -342,7 +355,10 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       fail("should receive either RuntimeException or TimeoutException")
     } catch {
       case e: RuntimeException =>
-      case e: TimeoutException =>
+        // The server doesn't recognize the encrypted message
+        assert(e.getMessage.contains("java.io.StreamCorruptedException"))
+      case e: SparkException =>
+        assert(e.getMessage.contains("Message is dropped because Outbox is stopped"))
     }
 
     rpcEnv.shutdown()
