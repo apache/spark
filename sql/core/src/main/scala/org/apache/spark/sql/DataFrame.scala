@@ -1175,8 +1175,11 @@ class DataFrame private[sql](
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
       val columns = output.map { field =>
-        val name = field.name
-        if (resolver(name, colName)) col.as(colName) else Column(field)
+        if (resolver(field.name, colName)) {
+          col.as(colName)
+        } else {
+          Column(field)
+        }
       }
       select(columns : _*)
     } else {
@@ -1193,8 +1196,11 @@ class DataFrame private[sql](
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
       val columns = output.map { field =>
-        val name = field.name
-        if (resolver(name, colName)) col.as(colName, metadata) else Column(field)
+        if (resolver(field.name, colName)) {
+          col.as(colName, metadata)
+        } else {
+          Column(field)
+        }
       }
       select(columns : _*)
     } else {
