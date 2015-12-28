@@ -126,6 +126,6 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "true").json(rdd)
 
     assert(df.schema.head.name == "name")
-    assert(df.schema.head.name == "Cazen Lee")
+    assert(df.first().getString(0) == "Cazen Lee")
   }
 }
