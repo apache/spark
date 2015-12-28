@@ -111,4 +111,21 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.head.name == "age")
     assert(df.first().getDouble(0).isNaN)
   }
+
+  test("allowBackslashEscapingAnyCharacter off") {
+    val str = """{"name": "Cazen Lee", "price": "\$10"}"""
+    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
+    val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "false").json(rdd)
+
+    assert(df.schema.head.name == "_corrupt_record")
+  }
+
+  test("allowBackslashEscapingAnyCharacter on") {
+    val str = """{"name": "Cazen Lee", "price": "\$10"}"""
+    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
+    val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "true").json(rdd)
+
+    assert(df.schema.head.name == "name")
+    assert(df.first().getString(0) == "Cazen Lee")
+  }
 }
