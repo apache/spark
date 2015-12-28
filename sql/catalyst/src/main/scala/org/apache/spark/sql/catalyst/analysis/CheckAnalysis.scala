@@ -163,6 +163,12 @@ trait CheckAnalysis {
                     s"data type.")
               }
 
+              if (expr.isInstanceOf[AggregateExpression] || expr.isInstanceOf[AggregateFunction]) {
+                // Aggregate function in group by clause; this fails to execute
+                failAnalysis(s"aggregate expression ${expr.prettyString} should not " +
+                  s"appear in grouping expression.")
+              }
+
               if (!expr.deterministic) {
                 // This is just a sanity check, our analysis rule PullOutNondeterministic should
                 // already pull out those nondeterministic expressions and evaluate them in

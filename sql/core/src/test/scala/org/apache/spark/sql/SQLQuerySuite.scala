@@ -472,25 +472,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
   }
 
-  test("literal in agg grouping expressions") {
-    checkAnswer(
-      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-    checkAnswer(
-      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-
-    checkAnswer(
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-    checkAnswer(
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-    checkAnswer(
-      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-      sql("SELECT 1, 2, sum(b) FROM testData2"))
-  }
-
   test("aggregates with nulls") {
     checkAnswer(
       sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
@@ -2026,6 +2007,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |) my_view
         """.stripMargin),
       Row(false) :: Row(true) :: Nil)
+  }
+
+  test("SPARK-12063: Group by Columns Number") {
+    checkAnswer(
+      sql("SELECT a, SUM(b) FROM testData2 GROUP BY 1"),
+      Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
+  }
+
+  test("SPARK-12063: Order by Column Number") {
+    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("ord")
+    checkAnswer(
+      sql("SELECT v from ord order by 1 desc"),
+      Row(5) :: Row(3) :: Row(2) :: Row(1) :: Nil)
   }
 
 }

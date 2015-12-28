@@ -70,6 +70,7 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
+      ResolveNumericReferences ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
@@ -176,6 +177,46 @@ class Analyzer(
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
+    }
+  }
+
+  /**
+   * Replaces queries of the form "SELECT expr FROM A GROUP BY 1 ORDER BY 1"
+   * with a query of the form "SELECT expr FROM A GROUP BY expr ORDER BY expr"
+   */
+  object ResolveNumericReferences extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case Aggregate(groups, aggs, child) =>
+        val newGroups = groups.map {
+          case group if group.isInstanceOf[Literal] && group.dataType.isInstanceOf[IntegralType] =>
+            aggs(group.toString.toInt - 1) match {
+              case u: UnresolvedAlias =>
+                u.child match {
+                  case UnresolvedStar(_) => // Can't replace literal with column yet
+                    group
+                  case _ => u.child
+                }
+              case a: Alias => a.child
+              case a: AttributeReference => a
+            }
+          case group => group
+        }
+        Aggregate(newGroups, aggs, child)
+      case Sort(ordering, global, child) =>
+        val newOrdering = ordering.map {
+          case o if o.child.isInstanceOf[Literal] && o.dataType.isInstanceOf[IntegralType] =>
+            val newExpr = child.asInstanceOf[Project].projectList(o.child.toString.toInt - 1)
+                match {
+                  case u: UnresolvedAlias =>
+                    u.child
+                  case a: Alias =>
+                    a.child
+                }
+            SortOrder(newExpr, o.direction)
+          case other => other
+        }
+       Sort(newOrdering, global, child)
     }
   }
 
