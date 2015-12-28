@@ -26,15 +26,47 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.sources._
 
 /**
- * It may be optimized by push down partial filters. But we are conservative here.
- * Because if some filters fail to be parsed, the tree may be corrupted,
- * and cannot be used anymore.
+ * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
+ *
+ * Due to limitation of ORC `SearchArgument` builder, we had to end up with a pretty weird double-
+ * checking pattern when converting `And`/`Or`/`Not` filters.
+ *
+ * An ORC `SearchArgument` must be built in one pass using a single builder.  For example, you can't
+ * build `a = 1` and `b = 2` first, and then combine them into `a = 1 AND b = 2`.  This is quite
+ * different from the cases in Spark SQL or Parquet, where complex filters can be easily built using
+ * existing simpler ones.
+ *
+ * The annoying part is that, `SearchArgument` builder methods like `startAnd()`, `startOr()`, and
+ * `startNot()` mutate internal state of the builder instance.  This forces us to translate all
+ * convertible filters with a single builder instance. However, before actually converting a filter,
+ * we've no idea whether it can be recognized by ORC or not. Thus, when an inconvertible filter is
+ * found, we may already end up with a builder whose internal state is inconsistent.
+ *
+ * For example, to convert an `And` filter with builder `b`, we call `b.startAnd()` first, and then
+ * try to convert its children.  Say we convert `left` child successfully, but find that `right`
+ * child is inconvertible.  Alas, `b.startAnd()` call can't be rolled back, and `b` is inconsistent
+ * now.
+ *
+ * The workaround employed here is that, for `And`/`Or`/`Not`, we first try to convert their
+ * children with brand new builders, and only do the actual conversion with the right builder
+ * instance when the children are proven to be convertible.
+ *
+ * P.S.: Hive seems to use `SearchArgument` together with `ExprNodeGenericFuncDesc` only.  Usage of
+ * builder methods mentioned above can only be found in test code, where all tested filters are
+ * known to be convertible.
  */
 private[orc] object OrcFilters extends Logging {
   def createFilter(filters: Array[Filter]): Option[SearchArgument] = {
+    // First, tries to convert each filter individually to see whether it's convertible, and then
+    // collect all convertible ones to build the final `SearchArgument`.
+    val convertibleFilters = for {
+      filter <- filters
+      _ <- buildSearchArgument(filter, SearchArgumentFactory.newBuilder())
+    } yield filter
+
     for {
-      // Combines all filters with `And`s to produce a single conjunction predicate
-      conjunction <- filters.reduceOption(And)
+      // Combines all convertible filters using `And` to produce a single conjunction
+      conjunction <- convertibleFilters.reduceOption(And)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
@@ -49,28 +81,6 @@ private[orc] object OrcFilters extends Logging {
       case _: DateWritable | _: HiveDecimal | _: HiveChar | _: HiveVarchar => true
       case _ => false
     }
-
-    // lian: I probably missed something here, and had to end up with a pretty weird double-checking
-    // pattern when converting `And`/`Or`/`Not` filters.
-    //
-    // The annoying part is that, `SearchArgument` builder methods like `startAnd()` `startOr()`,
-    // and `startNot()` mutate internal state of the builder instance.  This forces us to translate
-    // all convertible filters with a single builder instance. However, before actually converting a
-    // filter, we've no idea whether it can be recognized by ORC or not. Thus, when an inconvertible
-    // filter is found, we may already end up with a builder whose internal state is inconsistent.
-    //
-    // For example, to convert an `And` filter with builder `b`, we call `b.startAnd()` first, and
-    // then try to convert its children.  Say we convert `left` child successfully, but find that
-    // `right` child is inconvertible.  Alas, `b.startAnd()` call can't be rolled back, and `b` is
-    // inconsistent now.
-    //
-    // The workaround employed here is that, for `And`/`Or`/`Not`, we first try to convert their
-    // children with brand new builders, and only do the actual conversion with the right builder
-    // instance when the children are proven to be convertible.
-    //
-    // P.S.: Hive seems to use `SearchArgument` together with `ExprNodeGenericFuncDesc` only.
-    // Usage of builder methods mentioned above can only be found in test code, where all tested
-    // filters are known to be convertible.
 
     expression match {
       case And(left, right) =>
@@ -101,6 +111,10 @@ private[orc] object OrcFilters extends Logging {
           _ <- buildSearchArgument(child, newBuilder)
           negate <- buildSearchArgument(child, builder.startNot())
         } yield negate.end()
+
+      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
+      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
+      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableLiteral(value) =>
         Some(builder.startAnd().equals(attribute, value).end())
