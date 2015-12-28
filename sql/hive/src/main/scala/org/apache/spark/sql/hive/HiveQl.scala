@@ -600,7 +600,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         NativePlaceholder
       } else {
         tableType match {
-          case Token("TOK_TABTYPE", nameParts) if nameParts.size == 1 => {
+          case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts)) if nameParts.size == 1 => {
             nameParts.head match {
               case Token(".", dbName :: tableName :: Nil) =>
                 // It is describing a table with the format like "describe db.table".

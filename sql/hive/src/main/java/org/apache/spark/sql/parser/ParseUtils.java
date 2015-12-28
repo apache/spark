@@ -18,10 +18,7 @@
 
 package org.apache.spark.sql.parser;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
@@ -54,7 +51,7 @@ public final class ParseUtils {
     // prevent instantiation
   }
 
-  public static VarcharTypeInfo getVarcharTypeInfo(org.apache.spark.sql.parser.ASTNode node)
+  public static VarcharTypeInfo getVarcharTypeInfo(ASTNode node)
       throws SemanticException {
     if (node.getChildCount() != 1) {
       throw new SemanticException("Bad params for type varchar");
@@ -64,7 +61,7 @@ public final class ParseUtils {
     return TypeInfoFactory.getVarcharTypeInfo(Integer.valueOf(lengthStr));
   }
 
-  public static CharTypeInfo getCharTypeInfo(org.apache.spark.sql.parser.ASTNode node)
+  public static CharTypeInfo getCharTypeInfo(ASTNode node)
       throws SemanticException {
     if (node.getChildCount() != 1) {
       throw new SemanticException("Bad params for type char");
@@ -74,16 +71,7 @@ public final class ParseUtils {
     return TypeInfoFactory.getCharTypeInfo(Integer.valueOf(lengthStr));
   }
 
-  static int getIndex(String[] list, String elem) {
-    for(int i=0; i < list.length; i++) {
-      if (list[i] != null && list[i].toLowerCase().equals(elem)) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  public static DecimalTypeInfo getDecimalTypeTypeInfo(org.apache.spark.sql.parser.ASTNode node)
+  public static DecimalTypeInfo getDecimalTypeTypeInfo(ASTNode node)
       throws SemanticException {
     if (node.getChildCount() > 2) {
         throw new SemanticException("Bad params for type decimal");
@@ -105,29 +93,4 @@ public final class ParseUtils {
       return TypeInfoFactory.getDecimalTypeInfo(precision, scale);
   }
 
-  public static String ensureClassExists(String className)
-      throws SemanticException {
-    if (className == null) {
-      return null;
-    }
-    try {
-      Class.forName(className, true, Utilities.getSessionSpecifiedClassLoader());
-    } catch (ClassNotFoundException e) {
-      throw new SemanticException("Cannot find class '" + className + "'", e);
-    }
-    return className;
-  }
-
-  public static String unparseIdentifier(String identifier) {
-    return unparseIdentifier(identifier, (Configuration)null);
-  }
-
-  public static String unparseIdentifier(String identifier, Configuration conf) {
-    String qIdSupport = conf == null?null: HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUOTEDID_SUPPORT);
-    if(qIdSupport != null && !"none".equals(qIdSupport)) {
-      identifier = identifier.replaceAll("`", "``");
-    }
-
-    return "`" + identifier + "`";
-  }
 }
