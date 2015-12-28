@@ -37,26 +37,31 @@ import org.apache.spark.storage.{StreamBlockId, BlockId}
 
 object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
+  protected val memoryStreamId = new AtomicInteger(0)
 
   def apply[A : Encoder]: MemoryStream[A] =
-    new MemoryStream[A](encoderFor[A].schema.toAttributes)
+    new MemoryStream[A](memoryStreamId.getAndIncrement())
 }
 
-case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode with Source {
+case class MemoryStream[A : Encoder](id: Int) extends Source with Logging {
+  protected val encoder = encoderFor[A]
+  protected val logicalPlan = StreamingRelation(this)
+  protected val output = logicalPlan.output
   protected var blocks = new ArrayBuffer[BlockId]
   protected var currentOffset: LongOffset = new LongOffset(-1)
-  protected val encoder = encoderFor[A]
 
   protected def blockManager = SparkEnv.get.blockManager
+
+  def schema: StructType = encoder.schema
 
   def offset: Offset = currentOffset
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
-    new Dataset(sqlContext, this)
+    new Dataset(sqlContext, logicalPlan)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    new DataFrame(sqlContext, this)
+    new DataFrame(sqlContext, logicalPlan)
   }
 
   def addData(data: TraversableOnce[A]): Offset = {
@@ -73,14 +78,16 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
     }
   }
 
-  def getSlice(sqlContext: SQLContext, start: Offset, end: Offset): RDD[InternalRow] = {
+  def getSlice(sqlContext: SQLContext, start: Option[Offset], end: Offset): RDD[InternalRow] = {
     val newBlocks =
       blocks.slice(
-        start.asInstanceOf[LongOffset].offset.toInt + 1,
+        start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1,
         end.asInstanceOf[LongOffset].offset.toInt + 1).toArray
     logDebug(s"Running [$start, $end] on blocks ${newBlocks.mkString(", ")}")
     new BlockRDD[InternalRow](sqlContext.sparkContext, newBlocks)
   }
+
+  def restart(): Source = this
 
   override def toString: String = s"MemoryStream[${output.mkString(",")}]"
 }

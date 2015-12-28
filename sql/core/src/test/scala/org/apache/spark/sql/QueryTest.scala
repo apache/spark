@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.lang.Thread.UncaughtExceptionHandler
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
@@ -190,13 +191,15 @@ abstract class QueryTest extends PlanTest with Timeouts {
   // Streaming helper functions
   // ==========================
 
+  implicit class RichSource(s: Source) {
+    def toDF(): DataFrame = new DataFrame(sqlContext, StreamingRelation(s))
+  }
+
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimout = 10.seconds
 
   /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
-
-
 
   /** A trait to mark actions that require the stream to be actively running. */
   trait StreamMustBeRunning
@@ -253,6 +256,9 @@ abstract class QueryTest extends PlanTest with Timeouts {
   /** Starts the stream, resuming if data has already been processed.  It must not be running. */
   case object StartStream extends StreamAction
 
+  /** Restarts all sources that implement a `restart()` method. */
+  case object RestartSources extends StreamAction
+
   /** Signals that a failure is expected and should not kill the test. */
   case object ExpectFailure extends StreamAction
 
@@ -269,6 +275,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
    */
   def testStream(stream: DataFrame)(actions: StreamAction*): Unit = {
     var pos = 0
+    var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Source, Offset]()
     val sink = new MemorySink(stream.schema)
@@ -328,6 +335,12 @@ abstract class QueryTest extends PlanTest with Timeouts {
         action match {
           case StartStream =>
             checkState(currentStream == null, "stream already running")
+
+            currentPlan = currentPlan transform {
+              case StreamingRelation(s, _) =>
+                StreamingRelation(s.restart())
+            }
+
             currentStream = new StreamExecution(sqlContext, stream.logicalPlan, sink)
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -348,7 +361,9 @@ abstract class QueryTest extends PlanTest with Timeouts {
 
           case ExpectFailure =>
             try failAfter(streamingTimout) {
-              while (streamDeathCause == null) { Thread.sleep(100) }
+              while (streamDeathCause == null) {
+                Thread.sleep(100)
+              }
             } catch {
               case _: InterruptedException =>
               case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
@@ -367,44 +382,16 @@ abstract class QueryTest extends PlanTest with Timeouts {
 
           case AwaitEventTime(time) =>
             checkState(currentStream != null, "stream not running")
-            try failAfter(streamingTimout) {
+            failAfter(streamingTimout) {
               currentStream.awaitOffset(currentStream.eventTimeSource, LongOffset(time))
-            } catch {
-              case _: InterruptedException =>
-                fail(
-                  s"""
-                     |Stream Thread Died
-                     |$testState
-                            """.stripMargin)
-              case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                fail(
-                  s"""
-                     |Timed out while waiting for eventTime to catch up to $time
-                     |Currently at: ${sink.currentOffset(currentStream.eventTimeSource)}
-                     |$testState
-                         """.stripMargin)
             }
           case CheckAnswerRows(expectedAnswer) =>
             checkState(currentStream != null, "stream not running")
 
             // Block until all data added has been processed
             awaiting.foreach { case (source, offset) =>
-              try failAfter(streamingTimout) {
+              failAfter(streamingTimout) {
                 currentStream.awaitOffset(source, offset)
-              } catch {
-                case _: InterruptedException =>
-                  fail(
-                    s"""
-                       |Stream Thread Died
-                       |$testState
-                      """.stripMargin)
-                case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                  fail(
-                    s"""
-                       |Timed out while waiting for $source to catch up to $offset
-                       |Currently at: ${sink.currentOffset(source)}
-                       |$testState
-                   """.stripMargin)
               }
             }
             QueryTest.sameRows(expectedAnswer, sink.allData).foreach {
@@ -417,6 +404,19 @@ abstract class QueryTest extends PlanTest with Timeouts {
         }
         pos += 1
       }
+    } catch {
+      case _: InterruptedException if streamDeathCause != null =>
+        fail(
+          s"""
+             |Stream Thread Died
+             |$testState
+                      """.stripMargin)
+      case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+        fail(
+          s"""
+             |Timed out waiting for stream
+             |$testState
+                   """.stripMargin)
     } finally {
       if (currentStream != null && currentStream.microBatchThread.isAlive) {
         currentStream.stop()

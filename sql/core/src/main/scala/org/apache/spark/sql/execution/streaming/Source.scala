@@ -18,10 +18,17 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.types.StructType
 
-trait Source {
+trait Source  {
+
+  /** Returns the schema of the data from this source */
+  def schema: StructType
+
   /** Returns the maximum offset that can be retrieved from the source. */
   def offset: Offset
 
@@ -29,5 +36,18 @@ trait Source {
    * Returns the data between the `start` and `end` offsets.  This function must always return
    * the same set of data for any given pair of offsets.
    */
-  def getSlice(sqlContext: SQLContext, start: Offset, end: Offset): RDD[InternalRow]
+  def getSlice(sqlContext: SQLContext, start: Option[Offset], end: Offset): RDD[InternalRow]
+
+  /** For testing. */
+  def restart(): Source
 }
+
+case class StreamingRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
+  override def toString: String = source.toString
+}
+
+object StreamingRelation {
+  def apply(source: Source): StreamingRelation =
+    StreamingRelation(source, source.schema.toAttributes)
+}
+

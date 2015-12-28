@@ -35,7 +35,7 @@ class StatefulStreamSuite extends QueryTest with SharedSQLContext {
   test("windowed aggregation") {
     val inputData = MemoryStream[Int]
     val tenSecondCounts =
-      inputData.toDF("eventTime")
+      inputData.toDF.toDF("eventTime")
         .window($"eventTime", step = 10, closingTriggerDelay = 20)
         .groupBy($"eventTime" % 2)
         .agg(count("*"))

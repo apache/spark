@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 class StreamProgress extends Serializable {
   private val currentOffsets = new mutable.HashMap[Source, Offset]
+    with mutable.SynchronizedMap[Source, Offset]
 
   def isEmpty: Boolean = currentOffsets.filterNot(_._2.isEmpty).isEmpty
 
@@ -34,6 +35,7 @@ class StreamProgress extends Serializable {
 
   def apply(source: Source): Offset = currentOffsets(source)
   def get(source: Source): Option[Offset] = currentOffsets.get(source)
+  def contains(source: Source): Boolean = currentOffsets.contains(source)
 
   def ++(updates: Map[Source, Offset]): StreamProgress = {
     val updated = new StreamProgress

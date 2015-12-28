@@ -24,7 +24,7 @@ package org.apache.spark.sql.execution.streaming
  * stream.  In addition to being comparable, a [[Offset]] must have a notion of being empty
  * which is used to denote a stream where no processing has yet occurred.
  */
-trait Offset {
+trait Offset extends Serializable {
   def isEmpty: Boolean
 
   def >(other: Offset): Boolean
