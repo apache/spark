@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 class ExpandNodeSuite extends LocalNodeTest {
 
   private def testExpand(inputData: Array[(Int, Int)] = Array.empty): Unit = {
-    val inputNode = new DummyNode(kvIntAttributes, inputData)
+    val inputNode = DummyNode(kvIntAttributes, inputData)
     val projections = Seq(Seq('k + 'v, 'k - 'v), Seq('k * 'v, 'k / 'v))
     val expandNode = new ExpandNode(conf, projections, inputNode.output, inputNode)
     val resolvedNode = resolveExpressions(expandNode)

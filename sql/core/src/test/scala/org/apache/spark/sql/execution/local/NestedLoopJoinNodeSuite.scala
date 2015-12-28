@@ -47,8 +47,8 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
         joinType: JoinType,
         leftInput: Array[(Int, String)],
         rightInput: Array[(Int, String)]): Unit = {
-      val leftNode = new DummyNode(joinNameAttributes, leftInput)
-      val rightNode = new DummyNode(joinNicknameAttributes, rightInput)
+      val leftNode = DummyNode(joinNameAttributes, leftInput)
+      val rightNode = DummyNode(joinNicknameAttributes, rightInput)
       val cond = 'id1 === 'id2
       val makeNode = (node1: LocalNode, node2: LocalNode) => {
         resolveExpressions(

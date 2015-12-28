@@ -21,7 +21,7 @@ package org.apache.spark.sql.execution.local
 class LimitNodeSuite extends LocalNodeTest {
 
   private def testLimit(inputData: Array[(Int, Int)] = Array.empty, limit: Int = 10): Unit = {
-    val inputNode = new DummyNode(kvIntAttributes, inputData)
+    val inputNode = DummyNode(kvIntAttributes, inputData)
     val limitNode = new LimitNode(conf, limit, inputNode)
     val expectedOutput = inputData.take(limit)
     val actualOutput = limitNode.collect().map { case row =>

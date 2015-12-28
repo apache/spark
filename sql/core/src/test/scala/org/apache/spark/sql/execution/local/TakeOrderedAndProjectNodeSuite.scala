@@ -30,7 +30,7 @@ class TakeOrderedAndProjectNodeSuite extends LocalNodeTest {
     val ascOrDesc = if (desc) "desc" else "asc"
     test(ascOrDesc) {
       val inputData = Random.shuffle((1 to 100).toList).map { i => (i, i) }.toArray
-      val inputNode = new DummyNode(kvIntAttributes, inputData)
+      val inputNode = DummyNode(kvIntAttributes, inputData)
       val firstColumn = inputNode.output(0)
       val sortDirection = if (desc) Descending else Ascending
       val sortOrder = SortOrder(firstColumn, sortDirection)

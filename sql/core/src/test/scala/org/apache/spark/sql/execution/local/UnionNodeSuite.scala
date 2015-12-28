@@ -22,7 +22,7 @@ class UnionNodeSuite extends LocalNodeTest {
 
   private def testUnion(inputData: Seq[Array[(Int, Int)]]): Unit = {
     val inputNodes = inputData.map { data =>
-      new DummyNode(kvIntAttributes, data)
+      DummyNode(kvIntAttributes, data)
     }
     val unionNode = new UnionNode(conf, inputNodes)
     val expectedOutput = inputData.flatten

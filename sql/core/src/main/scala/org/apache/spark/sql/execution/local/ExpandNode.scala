@@ -29,6 +29,10 @@ case class ExpandNode(
 
   assert(projections.size > 0)
 
+  override def canProcessUnsafeRows: Boolean = true
+
+  override def outputsUnsafeRows: Boolean = true
+
   private[this] var result: InternalRow = _
   private[this] var idx: Int = _
   private[this] var input: InternalRow = _
@@ -36,7 +40,7 @@ case class ExpandNode(
 
   override def open(): Unit = {
     child.open()
-    groups = projections.map(ee => newMutableProjection(ee, child.output)()).toArray
+    groups = projections.map(ee => UnsafeProjection.create(ee, child.output)).toArray
     idx = groups.length
   }
 

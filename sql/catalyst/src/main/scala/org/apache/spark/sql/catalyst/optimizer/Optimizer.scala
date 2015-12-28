@@ -937,8 +937,9 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Project(projectList, LocalRelation(output, data)) =>
-      val projection = new InterpretedProjection(projectList, output)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+      val projection = UnsafeProjection.create(projectList, output)
+      LocalRelation(projectList.map(_.toAttribute),
+        data.map(projection(_).copy()))
   }
 }
 

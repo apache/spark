@@ -114,7 +114,7 @@ private[sql] object FrequentItems extends Logging {
         baseCounts
       }
     )
-    val justItems = freqItems.map(m => m.baseMap.keys.toArray)
+    val justItems = freqItems.map(m => m.baseMap.keys.toSeq)
     val resultRow = Row(justItems : _*)
     // append frequent Items to the column name for easy debugging
     val outputCols = colInfo.map { v =>

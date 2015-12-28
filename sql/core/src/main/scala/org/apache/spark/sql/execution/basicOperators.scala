@@ -224,6 +224,10 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
 
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
 
   protected override def doExecute(): RDD[InternalRow] = {

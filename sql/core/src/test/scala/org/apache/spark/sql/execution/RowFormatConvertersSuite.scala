@@ -38,7 +38,7 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
   private val outputsUnsafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(outputsUnsafe.outputsUnsafeRows)
 
-  test("planner should insert unsafe->safe conversions when required") {
+  ignore("planner should insert unsafe->safe conversions when required") {
     val plan = Limit(10, outputsUnsafe)
     val preparedPlan = sqlContext.prepareForExecution.execute(plan)
     assert(preparedPlan.children.head.isInstanceOf[ConvertToSafe])
@@ -134,12 +134,11 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     val rows = (1 to 100).map { i =>
       InternalRow(new GenericArrayData(Array[Any](UTF8String.fromString(i.toString))))
     }
-    val relation = LocalTableScan(Seq(AttributeReference("t", schema)()), rows)
+    val relation = LocalTableScan.fromInternalRows(Seq(AttributeReference("t", schema)()), rows)
 
     val plan =
       DummyPlan(
-        ConvertToSafe(
-          ConvertToUnsafe(relation)))
+        ConvertToSafe(relation))
     assert(plan.execute().collect().map(_.getUTF8String(0).toString) === (1 to 100).map(_.toString))
   }
 }

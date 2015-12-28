@@ -18,14 +18,30 @@
 package org.apache.spark.sql.catalyst.util
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.WrappedArray
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
+object GenericArrayData {
+  def processSeq(seq: Seq[Any]): Array[Any] = {
+    seq match {
+      case wArray: WrappedArray[_] =>
+        if (wArray.array == null) {
+          null
+        } else {
+          wArray.toArray[Any]
+        }
+      case null => null
+      case _ => seq.toArray
+    }
+  }
+}
+
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
-  def this(seq: Seq[Any]) = this(seq.toArray)
+  def this(seq: Seq[Any]) = this(GenericArrayData.processSeq(seq))
   def this(list: java.util.List[Any]) = this(list.asScala)
 
   // TODO: This is boxing.  We should specialize.
@@ -39,7 +55,11 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
   override def copy(): ArrayData = new GenericArrayData(array.clone())
 
-  override def numElements(): Int = array.length
+  override def numElements(): Int = if (array != null) {
+    array.length
+  } else {
+    0
+  }
 
   private def getAs[T](ordinal: Int) = array(ordinal).asInstanceOf[T]
   override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null

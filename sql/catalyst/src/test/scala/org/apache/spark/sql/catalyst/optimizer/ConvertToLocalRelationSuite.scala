@@ -35,11 +35,11 @@ class ConvertToLocalRelationSuite extends PlanTest {
   }
 
   test("Project on LocalRelation should be turned into a single LocalRelation") {
-    val testRelation = LocalRelation(
+    val testRelation = LocalRelation.fromInternalRows(
       LocalRelation('a.int, 'b.int).output,
       InternalRow(1, 2) :: InternalRow(4, 5) :: Nil)
 
-    val correctAnswer = LocalRelation(
+    val correctAnswer = LocalRelation.fromInternalRows(
       LocalRelation('a1.int, 'b1.int).output,
       InternalRow(1, 3) :: InternalRow(4, 6) :: Nil)
 

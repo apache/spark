@@ -24,8 +24,8 @@ class IntersectNodeSuite extends LocalNodeTest {
     val n = 100
     val leftData = (1 to n).filter { i => i % 2 == 0 }.map { i => (i, i) }.toArray
     val rightData = (1 to n).filter { i => i % 3 == 0 }.map { i => (i, i) }.toArray
-    val leftNode = new DummyNode(kvIntAttributes, leftData)
-    val rightNode = new DummyNode(kvIntAttributes, rightData)
+    val leftNode = DummyNode(kvIntAttributes, leftData)
+    val rightNode = DummyNode(kvIntAttributes, rightData)
     val intersectNode = new IntersectNode(conf, leftNode, rightNode)
     val expectedOutput = leftData.intersect(rightData)
     val actualOutput = intersectNode.collect().map { case row =>

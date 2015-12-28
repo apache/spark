@@ -19,17 +19,26 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, UnsafeProjection, UnsafeRow}
 
+private[sql] object LocalTableScan {
+  def fromInternalRows(output: Seq[Attribute], data: Seq[InternalRow]): LocalTableScan = {
+    val projection = UnsafeProjection.create(output.map(_.dataType).toArray)
+    new LocalTableScan(output, data.map(projection(_).copy()))
+  }
+}
 
 /**
  * Physical plan node for scanning data from a local collection.
  */
 private[sql] case class LocalTableScan(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafNode {
+    rows: Seq[UnsafeRow]) extends LeafNode {
 
-  private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+
+  private lazy val rdd = sqlContext.sparkContext.parallelize(rows).asInstanceOf[RDD[InternalRow]]
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
