@@ -97,11 +97,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterTaskSortColumn = request.getParameter("task.sort")
       val parameterTaskSortDesc = request.getParameter("task.desc")
       val parameterTaskPageSize = request.getParameter("task.pageSize")
+      val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
       val taskSortColumn = Option(parameterTaskSortColumn).getOrElse("Index")
       val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
       val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
+      val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
 
       // If this is set, expand the dag visualization by default
       val expandDagVizParam = request.getParameter("expandDagViz")
@@ -274,6 +276,15 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         accumulableRow,
         externalAccumulables.toSeq)
 
+      val page: Int = {
+        // If the user has changed to a larger page size, then go to page 1 in order to avoid
+        // IndexOutOfBoundsException.
+        if (taskPageSize <= taskPrevPageSize) {
+          taskPage
+        } else {
+          1
+        }
+      }
       val currentTime = System.currentTimeMillis()
       val (taskTable, taskTableHTML) = try {
         val _taskTable = new TaskPagedTable(
@@ -292,7 +303,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           sortColumn = taskSortColumn,
           desc = taskSortDesc
         )
-        (_taskTable, _taskTable.table(taskPage))
+        (_taskTable, _taskTable.table(page))
       } catch {
         case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
           val errorMessage =
@@ -1225,6 +1236,8 @@ private[ui] class TaskPagedTable(
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
   override def pageSizeFormField: String = "task.pageSize"
+
+  override def prevPageSizeFormField: String = "task.prevPageSize"
 
   override def pageNumberFormField: String = "task.page"
 

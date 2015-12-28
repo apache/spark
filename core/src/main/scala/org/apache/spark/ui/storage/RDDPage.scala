@@ -38,11 +38,13 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val parameterBlockSortColumn = request.getParameter("block.sort")
     val parameterBlockSortDesc = request.getParameter("block.desc")
     val parameterBlockPageSize = request.getParameter("block.pageSize")
+    val parameterBlockPrevPageSize = request.getParameter("block.prevPageSize")
 
     val blockPage = Option(parameterBlockPage).map(_.toInt).getOrElse(1)
     val blockSortColumn = Option(parameterBlockSortColumn).getOrElse("Block Name")
     val blockSortDesc = Option(parameterBlockSortDesc).map(_.toBoolean).getOrElse(false)
     val blockPageSize = Option(parameterBlockPageSize).map(_.toInt).getOrElse(100)
+    val blockPrevPageSize = Option(parameterBlockPrevPageSize).map(_.toInt).getOrElse(blockPageSize)
 
     val rddId = parameterId.toInt
     val rddStorageInfo = AllRDDResource.getRDDStorageInfo(rddId, listener, includeDetails = true)
@@ -56,17 +58,26 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
       rddStorageInfo.dataDistribution.get, id = Some("rdd-storage-by-worker-table"))
 
     // Block table
-    val (blockTable, blockTableHTML) = try {
+    val page: Int = {
+      // If the user has changed to a larger page size, then go to page 1 in order to avoid
+      // IndexOutOfBoundsException.
+      if (blockPageSize <= blockPrevPageSize) {
+        blockPage
+      } else {
+        1
+      }
+    }
+    val blockTableHTML = try {
       val _blockTable = new BlockPagedTable(
         UIUtils.prependBaseUri(parent.basePath) + s"/storage/rdd/?id=${rddId}",
         rddStorageInfo.partitions.get,
         blockPageSize,
         blockSortColumn,
         blockSortDesc)
-      (_blockTable, _blockTable.table(blockPage))
+      _blockTable.table(page)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-        (null, <div class="alert alert-error">{e.getMessage}</div>)
+        <div class="alert alert-error">{e.getMessage}</div>
     }
 
     val jsForScrollingDownToBlockTable =
@@ -229,6 +240,8 @@ private[ui] class BlockPagedTable(
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
   override def pageSizeFormField: String = "block.pageSize"
+
+  override def prevPageSizeFormField: String = "block.prevPageSize"
 
   override def pageNumberFormField: String = "block.page"
 

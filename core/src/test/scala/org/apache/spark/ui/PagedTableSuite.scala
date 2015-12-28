@@ -66,6 +66,8 @@ class PagedTableSuite extends SparkFunSuite {
 
       override def pageSizeFormField: String = "pageSize"
 
+      override def prevPageSizeFormField: String = "prevPageSize"
+
       override def pageNumberFormField: String = "page"
 
       override def goButtonFormPath: String = ""
