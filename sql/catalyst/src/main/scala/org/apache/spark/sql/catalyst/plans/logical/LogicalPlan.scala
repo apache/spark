@@ -93,7 +93,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   /**
    * Returns the limited number of rows to be returned.
    */
-  def limitedNumRows: Option[Expression] = None
+  def maxRows: Option[Expression] = None
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema

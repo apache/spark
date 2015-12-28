@@ -451,7 +451,7 @@ case class Pivot(
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def limitedNumRows: Option[Expression] = Option(limitExpr)
+  override def maxRows: Option[Expression] = Option(limitExpr)
 
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]

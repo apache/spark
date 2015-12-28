@@ -156,7 +156,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // Adding extra Limit below UNION ALL if both left and right childs are not Limit.
     // This heuristic is valid assuming there does not exist any Limit push-down rule.
     case Limit(exp, Union(left, right))
-      if left.limitedNumRows.isEmpty || right.limitedNumRows.isEmpty =>
+      if left.maxRows.isEmpty || right.maxRows.isEmpty =>
       Limit(exp,
         Union(
           CombineLimits(Limit(exp, left)),
