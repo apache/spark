@@ -113,7 +113,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("allowBackslashEscapingAnyCharacter off") {
-    val str = """{"name": "Cazen Lee"}"""
+    val str = """{"name": "Cazen Lee", "price": "\$10"}"""
     val rdd = sqlContext.sparkContext.parallelize(Seq(str))
     val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "false").json(rdd)
 
@@ -122,7 +122,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("allowBackslashEscapingAnyCharacter on") {
-    val str = """{"name": "Cazen Lee"}"""
+    val str = """{"name": "Cazen Lee", "price": "\$10"}"""
     val rdd = sqlContext.sparkContext.parallelize(Seq(str))
     val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "true").json(rdd)
 
