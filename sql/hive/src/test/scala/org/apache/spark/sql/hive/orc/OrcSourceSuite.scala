@@ -21,8 +21,9 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.sources._
+import org.apache.spark.sql.{QueryTest, Row}
 
 case class OrcData(intField: Int, stringField: String)
 
@@ -173,5 +174,34 @@ class OrcSourceSuite extends OrcSuite {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
          |)
        """.stripMargin)
+  }
+
+  test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
+    // The `LessThan` should be converted while the `StringContains` shouldn't
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(Array(
+        LessThan("a", 10),
+        StringContains("b", "prefix")
+      )).get.toString
+    }
+
+    // The `LessThan` should be converted while the whole inner `And` shouldn't
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(Array(
+        LessThan("a", 10),
+        Not(And(
+          GreaterThan("a", 1),
+          StringContains("b", "prefix")
+        ))
+      )).get.toString
+    }
   }
 }
