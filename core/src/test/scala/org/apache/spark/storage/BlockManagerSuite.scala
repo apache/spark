@@ -121,11 +121,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("StorageLevel object caching") {
-    val level1 = StorageLevel(false, false, false, false, 3)
+    val level1 = StorageLevel(false, false, false, 3)
     // this should return the same object as level1
-    val level2 = StorageLevel(false, false, false, false, 3)
+    val level2 = StorageLevel(false, false, false, 3)
     // this should return a different object
-    val level3 = StorageLevel(false, false, false, false, 2)
+    val level3 = StorageLevel(false, false, false, 2)
     assert(level2 === level1, "level2 is not same as level1")
     assert(level2.eq(level1), "level2 is not the same object as level1")
     assert(level3 != level1, "level3 is same as level1")
@@ -583,26 +583,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.memoryStore.contains(rdd(0, 4)), "rdd_0_4 was in store")
     assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
     assert(store.memoryStore.contains(rdd(0, 3)), "rdd_0_3 was not in store")
-  }
-
-  test("tachyon storage") {
-    // TODO Make the spark.test.tachyon.enable true after using tachyon 0.5.0 testing jar.
-    val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
-    conf.set(ExternalBlockStore.BLOCK_MANAGER_NAME, ExternalBlockStore.DEFAULT_BLOCK_MANAGER_NAME)
-    if (tachyonUnitTestEnabled) {
-      store = makeBlockManager(1200)
-      val a1 = new Array[Byte](400)
-      val a2 = new Array[Byte](400)
-      val a3 = new Array[Byte](400)
-      store.putSingle("a1", a1, StorageLevel.OFF_HEAP)
-      store.putSingle("a2", a2, StorageLevel.OFF_HEAP)
-      store.putSingle("a3", a3, StorageLevel.OFF_HEAP)
-      assert(store.getSingle("a3").isDefined, "a3 was in store")
-      assert(store.getSingle("a2").isDefined, "a2 was in store")
-      assert(store.getSingle("a1").isDefined, "a1 was in store")
-    } else {
-      info("tachyon storage test disabled.")
-    }
   }
 
   test("on-disk storage") {

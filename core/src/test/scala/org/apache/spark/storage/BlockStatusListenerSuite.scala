@@ -34,16 +34,14 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         StreamBlockId(0, 100),
         StorageLevel.MEMORY_AND_DISK,
         memSize = 100,
-        diskSize = 100,
-        externalBlockStoreSize = 0)))
+        diskSize = 100)))
     // The new block status should be added to the listener
     val expectedBlock = BlockUIData(
       StreamBlockId(0, 100),
       "localhost:10000",
       StorageLevel.MEMORY_AND_DISK,
       memSize = 100,
-      diskSize = 100,
-      externalBlockStoreSize = 0
+      diskSize = 100
     )
     val expectedExecutorStreamBlockStatus = Seq(
       ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock))
@@ -60,15 +58,13 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         StreamBlockId(0, 100),
         StorageLevel.MEMORY_AND_DISK,
         memSize = 100,
-        diskSize = 100,
-        externalBlockStoreSize = 0)))
+        diskSize = 100)))
     val expectedBlock2 = BlockUIData(
       StreamBlockId(0, 100),
       "localhost:10001",
       StorageLevel.MEMORY_AND_DISK,
       memSize = 100,
-      diskSize = 100,
-      externalBlockStoreSize = 0
+      diskSize = 100
     )
     // Each block manager should contain one block
     val expectedExecutorStreamBlockStatus2 = Set(
@@ -84,8 +80,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         StreamBlockId(0, 100),
         StorageLevel.NONE, // StorageLevel.NONE means removing it
         memSize = 0,
-        diskSize = 0,
-        externalBlockStoreSize = 0)))
+        diskSize = 0)))
     // Only the first block manager contains a block
     val expectedExecutorStreamBlockStatus3 = Set(
       ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock)),
@@ -102,8 +97,7 @@ class BlockStatusListenerSuite extends SparkFunSuite {
         StreamBlockId(0, 100),
         StorageLevel.MEMORY_AND_DISK,
         memSize = 100,
-        diskSize = 100,
-        externalBlockStoreSize = 0)))
+        diskSize = 100)))
     // The second block manager is removed so we should not see the new block
     val expectedExecutorStreamBlockStatus4 = Seq(
       ExecutorStreamBlockStatus("0", "localhost:10000", Seq(expectedBlock))

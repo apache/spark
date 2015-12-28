@@ -81,13 +81,8 @@ private[spark] class BlockManager(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private var externalBlockStoreInitialized = false
   private[spark] val memoryStore = new MemoryStore(this, memoryManager)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
-  private[spark] lazy val externalBlockStore: ExternalBlockStore = {
-    externalBlockStoreInitialized = true
-    new ExternalBlockStore(this, executorId)
-  }
   memoryManager.setMemoryStore(memoryStore)
 
   // Note: depending on the memory manager, `maxStorageMemory` may actually vary over time.
@@ -317,7 +312,7 @@ private[spark] class BlockManager(
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
       val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
       // Assume that block is not in external block store
-      BlockStatus(info.level, memSize, diskSize, 0L)
+      BlockStatus(info.level, memSize = memSize, diskSize = diskSize)
     }
   }
 
@@ -366,10 +361,8 @@ private[spark] class BlockManager(
     if (info.tellMaster) {
       val storageLevel = status.storageLevel
       val inMemSize = Math.max(status.memSize, droppedMemorySize)
-      val inExternalBlockStoreSize = status.externalBlockStoreSize
       val onDiskSize = status.diskSize
-      master.updateBlockInfo(
-        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inExternalBlockStoreSize)
+      master.updateBlockInfo(blockManagerId, blockId, storageLevel, inMemSize, onDiskSize)
     } else {
       true
     }
@@ -384,20 +377,17 @@ private[spark] class BlockManager(
     info.synchronized {
       info.level match {
         case null =>
-          BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+          BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
-          val inExternalBlockStore = level.useOffHeap && externalBlockStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
           val deserialized = if (inMem) level.deserialized else false
-          val replication = if (inMem || inExternalBlockStore || onDisk) level.replication else 1
+          val replication = if (inMem  || onDisk) level.replication else 1
           val storageLevel =
-            StorageLevel(onDisk, inMem, inExternalBlockStore, deserialized, replication)
+            StorageLevel(onDisk, inMem, deserialized, replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
-          val externalBlockStoreSize =
-            if (inExternalBlockStore) externalBlockStore.getSize(blockId) else 0L
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
-          BlockStatus(storageLevel, memSize, diskSize, externalBlockStoreSize)
+          BlockStatus(storageLevel, memSize, diskSize)
       }
     }
   }
@@ -475,25 +465,6 @@ private[spark] class BlockManager(
               return result
             case None =>
               logDebug(s"Block $blockId not found in memory")
-          }
-        }
-
-        // Look for the block in external block store
-        if (level.useOffHeap) {
-          logDebug(s"Getting block $blockId from ExternalBlockStore")
-          if (externalBlockStore.contains(blockId)) {
-            val result = if (asBlockResult) {
-              externalBlockStore.getValues(blockId)
-                .map(new BlockResult(_, DataReadMethod.Memory, info.size))
-            } else {
-              externalBlockStore.getBytes(blockId)
-            }
-            result match {
-              case Some(values) =>
-                return result
-              case None =>
-                logDebug(s"Block $blockId not found in ExternalBlockStore")
-            }
           }
         }
 
@@ -789,9 +760,6 @@ private[spark] class BlockManager(
             // Put it in memory first, even if it also has useDisk set to true;
             // We will drop it to disk later if the memory store can't hold it.
             (true, memoryStore)
-          } else if (putLevel.useOffHeap) {
-            // Use external block store
-            (false, externalBlockStore)
           } else if (putLevel.useDisk) {
             // Don't get back the bytes from put unless we replicate them
             (putLevel.replication > 1, diskStore)
@@ -912,8 +880,7 @@ private[spark] class BlockManager(
     val peersForReplication = new ArrayBuffer[BlockManagerId]
     val peersReplicatedTo = new ArrayBuffer[BlockManagerId]
     val peersFailedToReplicateTo = new ArrayBuffer[BlockManagerId]
-    val tLevel = StorageLevel(
-      level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
+    val tLevel = StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
     val startTime = System.currentTimeMillis
     val random = new Random(blockId.hashCode)
 
@@ -1123,9 +1090,7 @@ private[spark] class BlockManager(
         // Removals are idempotent in disk store and memory store. At worst, we get a warning.
         val removedFromMemory = memoryStore.remove(blockId)
         val removedFromDisk = diskStore.remove(blockId)
-        val removedFromExternalBlockStore =
-          if (externalBlockStoreInitialized) externalBlockStore.remove(blockId) else false
-        if (!removedFromMemory && !removedFromDisk && !removedFromExternalBlockStore) {
+        if (!removedFromMemory && !removedFromDisk) {
           logWarning(s"Block $blockId could not be removed as it was not found in either " +
             "the disk, memory, or external block store")
         }
@@ -1161,7 +1126,6 @@ private[spark] class BlockManager(
           val level = info.level
           if (level.useMemory) { memoryStore.remove(id) }
           if (level.useDisk) { diskStore.remove(id) }
-          if (level.useOffHeap) { externalBlockStore.remove(id) }
           iterator.remove()
           logInfo(s"Dropped block $id")
         }
@@ -1245,9 +1209,6 @@ private[spark] class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
-    if (externalBlockStoreInitialized) {
-      externalBlockStore.clear()
-    }
     metadataCleaner.cancel()
     broadcastCleaner.cancel()
     futureExecutionContext.shutdownNow()
