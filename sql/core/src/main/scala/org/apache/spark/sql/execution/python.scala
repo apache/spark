@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
+import org.apache.spark.{Logging => SparkLogging, TaskContext, Accumulator}
 import org.apache.spark.api.python.{PythonRunner, PythonBroadcast, PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -33,9 +34,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayBasedMapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Logging => SparkLogging, TaskContext, Accumulator}
 
 /**
  * A serialized version of a Python lambda function.  Suitable for use in a [[PythonRDD]].
@@ -120,11 +121,13 @@ object EvaluatePython {
 
   def takeAndServe(df: DataFrame, n: Int): Int = {
     registerPicklers()
-    val iter = new SerDeUtil.AutoBatchedPickler(
-      df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
-        EvaluatePython.toJava(row, df.schema)
-      })
-    PythonRDD.serveIterator(iter, s"serve-DataFrame")
+    df.withNewExecutionId {
+      val iter = new SerDeUtil.AutoBatchedPickler(
+        df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
+          EvaluatePython.toJava(row, df.schema)
+        })
+      PythonRDD.serveIterator(iter, s"serve-DataFrame")
+    }
   }
 
   /**

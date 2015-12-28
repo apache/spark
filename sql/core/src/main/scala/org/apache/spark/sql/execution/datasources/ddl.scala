@@ -42,7 +42,7 @@ case class DescribeCommand(
       new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("data_type", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = false,
+    AttributeReference("comment", StringType, nullable = true,
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 }

@@ -22,7 +22,7 @@ import java.util.regex.{MatchResult, Pattern}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,7 +66,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 case class Like(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression with CodegenFallback {
+  extends BinaryExpression with StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
@@ -117,7 +117,7 @@ case class Like(left: Expression, right: Expression)
 
 
 case class RLike(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression with CodegenFallback {
+  extends BinaryExpression with StringRegexExpression {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)

@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, Literal, IsNull}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{GenericArrayData, ArrayType, StringType}
+import org.apache.spark.sql.types.{ArrayType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
@@ -32,9 +33,9 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     case c: ConvertToSafe => c
   }
 
-  private val outputsSafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
+  private val outputsSafe = ReferenceSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(!outputsSafe.outputsUnsafeRows)
-  private val outputsUnsafe = TungstenSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
+  private val outputsUnsafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(outputsUnsafe.outputsUnsafeRows)
 
   test("planner should insert unsafe->safe conversions when required") {
@@ -55,6 +56,41 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     val preparedPlan = sqlContext.prepareForExecution.execute(plan)
     assert(getConverters(preparedPlan).isEmpty)
     assert(!preparedPlan.outputsUnsafeRows)
+  }
+
+  test("coalesce can process unsafe rows") {
+    val plan = Coalesce(1, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 1)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("except can process unsafe rows") {
+    val plan = Except(outputsUnsafe, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 2)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("except requires all of its input rows' formats to agree") {
+    val plan = Except(outputsSafe, outputsUnsafe)
+    assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("intersect can process unsafe rows") {
+    val plan = Intersect(outputsUnsafe, outputsUnsafe)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(getConverters(preparedPlan).size === 2)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
+  test("intersect requires all of its input rows' formats to agree") {
+    val plan = Intersect(outputsSafe, outputsUnsafe)
+    assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
   }
 
   test("execute() fails an assertion if inputs rows are of different formats") {
@@ -93,7 +129,7 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-9683: copy UTF8String when convert unsafe array/map to safe") {
-    SparkPlan.currentContext.set(sqlContext)
+    SQLContext.setActive(sqlContext)
     val schema = ArrayType(StringType)
     val rows = (1 to 100).map { i =>
       InternalRow(new GenericArrayData(Array[Any](UTF8String.fromString(i.toString))))

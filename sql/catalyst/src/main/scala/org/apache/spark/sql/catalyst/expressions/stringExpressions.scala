@@ -22,6 +22,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -923,6 +924,7 @@ case class FormatNumber(x: Expression, d: Expression)
   override def left: Expression = x
   override def right: Expression = d
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
 
   // Associated with the pattern, for the last d value, and we will update the

@@ -212,7 +212,8 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        Scan PhysicalRDD[age#0,name#1]
+        == Physical Plan ==
+        Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -227,7 +228,7 @@ class DataFrame(object):
         if extended:
             print(self._jdf.queryExecution().toString())
         else:
-            print(self._jdf.queryExecution().executedPlan().toString())
+            print(self._jdf.queryExecution().simpleString())
 
     @since(1.3)
     def isLocal(self):
@@ -276,7 +277,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
+            port = self._jdf.collectToPython()
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
@@ -370,18 +371,18 @@ class DataFrame(object):
 
     @since(1.3)
     def cache(self):
-        """ Persists with the default storage level (C{MEMORY_ONLY_SER}).
+        """ Persists with the default storage level (C{MEMORY_ONLY}).
         """
         self.is_cached = True
         self._jdf.cache()
         return self
 
     @since(1.3)
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY):
         """Sets the storage level to persist its values across operations
         after the first time it is computed. This can only be used to assign
         a new storage level if the RDD does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
+        If no storage level is specified defaults to (C{MEMORY_ONLY}).
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -422,6 +423,67 @@ class DataFrame(object):
         return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     @since(1.3)
+    def repartition(self, numPartitions, *cols):
+        """
+        Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
+        resulting DataFrame is hash partitioned.
+
+        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
+        If it is a Column, it will be used as the first partitioning column. If not specified,
+        the default number of partitions is used.
+
+        .. versionchanged:: 1.6
+           Added optional arguments to specify the partitioning columns. Also made numPartitions
+           optional if partitioning columns are specified.
+
+        >>> df.repartition(10).rdd.getNumPartitions()
+        10
+        >>> data = df.unionAll(df).repartition("age")
+        >>> data.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  2|Alice|
+        |  5|  Bob|
+        |  5|  Bob|
+        +---+-----+
+        >>> data = data.repartition(7, "age")
+        >>> data.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|Alice|
+        +---+-----+
+        >>> data.rdd.getNumPartitions()
+        7
+        >>> data = data.repartition("name", "age")
+        >>> data.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|Alice|
+        +---+-----+
+        """
+        if isinstance(numPartitions, int):
+            if len(cols) == 0:
+                return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
+            else:
+                return DataFrame(
+                    self._jdf.repartition(numPartitions, self._jcols(*cols)), self.sql_ctx)
+        elif isinstance(numPartitions, (basestring, Column)):
+            cols = (numPartitions, ) + cols
+            return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sql_ctx)
+        else:
+            raise TypeError("numPartitions should be an int or Column")
+
+    @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 
@@ -435,7 +497,7 @@ class DataFrame(object):
         """Returns a sampled subset of this :class:`DataFrame`.
 
         >>> df.sample(False, 0.5, 42).count()
-        1
+        2
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
@@ -462,8 +524,8 @@ class DataFrame(object):
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    3|
-        |  1|    8|
+        |  0|    5|
+        |  1|    9|
         +---+-----+
 
         """
@@ -548,7 +610,7 @@ class DataFrame(object):
             If `on` is a string or a list of string indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an inner equi-join.
         :param how: str, default 'inner'.
-            One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
+            One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
@@ -588,6 +650,26 @@ class DataFrame(object):
                 jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(1.6)
+    def sortWithinPartitions(self, *cols, **kwargs):
+        """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
+
+        :param cols: list of :class:`Column` or column names to sort by.
+        :param ascending: boolean or list of boolean (default True).
+            Sort ascending vs. descending. Specify list for multiple sort orders.
+            If a list is specified, length of the list must equal length of the `cols`.
+
+        >>> df.sortWithinPartitions("age", ascending=False).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        """
+        jdf = self._jdf.sortWithinPartitions(self._sort_cols(cols, kwargs))
+        return DataFrame(jdf, self.sql_ctx)
+
     @ignore_unicode_prefix
     @since(1.3)
     def sort(self, *cols, **kwargs):
@@ -612,22 +694,7 @@ class DataFrame(object):
         >>> df.orderBy(["age", "name"], ascending=[0, 1]).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
-        if not cols:
-            raise ValueError("should sort by at least one column")
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        jcols = [_to_java_column(c) for c in cols]
-        ascending = kwargs.get('ascending', True)
-        if isinstance(ascending, (bool, int)):
-            if not ascending:
-                jcols = [jc.desc() for jc in jcols]
-        elif isinstance(ascending, list):
-            jcols = [jc if asc else jc.desc()
-                     for asc, jc in zip(ascending, jcols)]
-        else:
-            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
-
-        jdf = self._jdf.sort(self._jseq(jcols))
+        jdf = self._jdf.sort(self._sort_cols(cols, kwargs))
         return DataFrame(jdf, self.sql_ctx)
 
     orderBy = sort
@@ -648,6 +715,25 @@ class DataFrame(object):
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
+
+    def _sort_cols(self, cols, kwargs):
+        """ Return a JVM Seq of Columns that describes the sort order
+        """
+        if not cols:
+            raise ValueError("should sort by at least one column")
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        jcols = [_to_java_column(c) for c in cols]
+        ascending = kwargs.get('ascending', True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                jcols = [jc.desc() for jc in jcols]
+        elif isinstance(ascending, list):
+            jcols = [jc if asc else jc.desc()
+                     for asc, jc in zip(ascending, jcols)]
+        else:
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
+        return self._jseq(jcols)
 
     @since("1.3.1")
     def describe(self, *cols):
@@ -780,7 +866,7 @@ class DataFrame(object):
         This is a variant of :func:`select` that accepts SQL expressions.
 
         >>> df.selectExpr("age * 2", "abs(age)").collect()
-        [Row((age * 2)=4, 'abs(age)=2), Row((age * 2)=10, 'abs(age)=5)]
+        [Row((age * 2)=4, abs(age)=2), Row((age * 2)=10, abs(age)=5)]
         """
         if len(expr) == 1 and isinstance(expr[0], list):
             expr = expr[0]
@@ -1263,6 +1349,18 @@ class DataFrame(object):
             jdf = self._jdf.drop(col._jc)
         else:
             raise TypeError("col should be a string or a Column")
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
+    def toDF(self, *cols):
+        """Returns a new class:`DataFrame` that with new specified column names
+
+        :param cols: list of new column names (string)
+
+        >>> df.toDF('f1', 'f2').collect()
+        [Row(f1=2, f2=u'Alice'), Row(f1=5, f2=u'Bob')]
+        """
+        jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)

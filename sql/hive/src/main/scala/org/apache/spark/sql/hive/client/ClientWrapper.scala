@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
@@ -33,9 +32,10 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, SparkException, Logging}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -150,6 +150,27 @@ private[hive] class ClientWrapper(
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
+
+    // Set up kerberos credentials for UserGroupInformation.loginUser within
+    // current class loader
+    // Instead of using the spark conf of the current spark context, a new
+    // instance of SparkConf is needed for the original value of spark.yarn.keytab
+    // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
+    // keytab configuration for the link name in distributed cache
+    val sparkConf = new SparkConf
+    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
+      val principalName = sparkConf.get("spark.yarn.principal")
+      val keytabFileName = sparkConf.get("spark.yarn.keytab")
+      if (!new File(keytabFileName).exists()) {
+        throw new SparkException(s"Keytab file: ${keytabFileName}" +
+          " specified in spark.yarn.keytab does not exist")
+      } else {
+        logInfo("Attempting to login to Kerberos" +
+          s" using principal: ${principalName} and keytab: ${keytabFileName}")
+        UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
+      }
+    }
+
     val ret = try {
       val initialConf = new HiveConf(classOf[SessionState])
       // HiveConf is a Hadoop Configuration, which has a field of classLoader and
@@ -548,7 +569,15 @@ private[hive] class ClientWrapper(
   }
 
   def addJar(path: String): Unit = {
-    clientLoader.addJar(path)
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    clientLoader.addJar(jarURL)
     runSqlHive(s"ADD JAR $path")
   }
 

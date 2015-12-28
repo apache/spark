@@ -50,7 +50,7 @@ object MovieLensALS {
     def parseMovie(str: String): Movie = {
       val fields = str.split("::")
       assert(fields.size == 3)
-      Movie(fields(0).toInt, fields(1), fields(2).split("|"))
+      Movie(fields(0).toInt, fields(1), fields(2).split("\\|"))
     }
   }
 

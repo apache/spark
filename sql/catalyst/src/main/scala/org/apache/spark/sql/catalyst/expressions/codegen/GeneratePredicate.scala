@@ -55,7 +55,6 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
           ${initMutableStates(ctx)}
         }
 
-        @Override
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
           return !${eval.isNull} && ${eval.value};

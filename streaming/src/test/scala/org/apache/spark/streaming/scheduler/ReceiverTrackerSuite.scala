@@ -99,8 +99,8 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       output.register()
       ssc.start()
       eventually(timeout(10 seconds), interval(10 millis)) {
-        // If preferredLocations is set correctly, receiverTaskLocality should be NODE_LOCAL
-        assert(receiverTaskLocality === TaskLocality.NODE_LOCAL)
+        // If preferredLocations is set correctly, receiverTaskLocality should be PROCESS_LOCAL
+        assert(receiverTaskLocality === TaskLocality.PROCESS_LOCAL)
       }
     }
   }

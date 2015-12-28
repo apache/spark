@@ -87,7 +87,7 @@ options for deployment:
   in all supported languages (Scala, Java, Python, R)
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
+  * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): support for structured data and relational queries
   * [MLlib](mllib-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
 
@@ -117,7 +117,6 @@ options for deployment:
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
-* [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
 * Integration with other storage systems:
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
