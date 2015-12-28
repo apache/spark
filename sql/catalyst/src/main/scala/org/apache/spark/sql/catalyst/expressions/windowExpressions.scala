@@ -601,9 +601,10 @@ abstract class RankLike extends AggregateWindowFunction {
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
  */
-@ExpressionDescription(usage = "_FUNC_() -  RANK() computes the rank of a value in a group of" +
-  "values. The result is one plus the number of rows preceding or equal to the current row in " +
-  "the ordering of the partition. Tie values will produce gaps in the sequence.")
+@ExpressionDescription(usage =
+  """_FUNC_() -  RANK() computes the rank of a value in a group of values. The result is one plus
+     the number of rows preceding or equal to the current row in the ordering of the partition. Tie
+     values will produce gaps in the sequence.""")
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
@@ -611,7 +612,7 @@ case class Rank(children: Seq[Expression]) extends RankLike {
 
 /**
  * The DenseRank function computes the rank of a value in a group of values. The result is one plus
- * the previously assigned rank values. Unlike Rank, DenseRank will not produce gaps in the ranking
+ * the previously assigned rank value. Unlike Rank, DenseRank will not produce gaps in the ranking
  * sequence.
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
@@ -622,7 +623,7 @@ case class Rank(children: Seq[Expression]) extends RankLike {
  */
 @ExpressionDescription(usage =
   """_FUNC_() - The DENSE_RANK() function computes the rank of a value in a group of values. The
-     result is one plus the previously assigned rank values. Unlike Rank, DenseRank will not produce
+     result is one plus the previously assigned rank value. Unlike Rank, DenseRank will not produce
      gaps in the ranking sequence.""")
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
