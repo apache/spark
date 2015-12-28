@@ -27,6 +27,7 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
@@ -237,6 +238,24 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     val intEnc = ExpressionEncoder[Int]
     val longEnc = ExpressionEncoder[Long]
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
+  }
+
+  test("null as array") {
+    val data = Seq(
+      (Array[Int](2, 1, 3), Array("b", "c", "a")),
+      (Array[Int](), Array[String]()),
+      (null, null)
+    )
+
+    val schema = ScalaReflection.schemaFor[Tuple2[Array[Int], Array[String]]]
+      .dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    val arrayDataEncoder = encoderFor[Tuple2[Array[Int], Array[String]]]
+    val boundEncoder = arrayDataEncoder.resolve(attributeSeq, outers).bind(attributeSeq)
+    data.foreach { x =>
+      val convertedBack = boundEncoder.fromRow(boundEncoder.toRow(x))
+      assert(convertedBack._1 === x._1 && convertedBack._2 === x._2)
+    }
   }
 
   test("nullable of encoder schema") {
