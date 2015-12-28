@@ -399,12 +399,7 @@ private[serializer] class KryoInputDataInputBridge(input: KryoInput) extends Dat
   override def readInt(): Int = input.readInt()
   override def readUnsignedShort(): Int = input.readShortUnsigned()
   override def skipBytes(n: Int): Int = {
-    var remaining: Long = n
-    while (remaining > 0) {
-      val skip = Math.min(Integer.MAX_VALUE, remaining).asInstanceOf[Int]
-      input.skip(skip)
-      remaining -= skip
-    }
+    input.skip(n)
     n
   }
   override def readFully(b: Array[Byte]): Unit = input.read(b)
