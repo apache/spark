@@ -122,4 +122,23 @@ private[spark] class TaskContextImpl(
     internalAccumulators.foreach(registerAccumulator)
     internalAccumulators.map { a => (a.name.get, a) }.toMap
   }
+
+  @transient private var computeRddId: Long = -1L
+  @transient private var computeSplitId: Long = -1L
+
+  /**
+   * Set IDs of RDD and Split being computed. This is used by consistent accumulators.
+   */
+  private[spark] def setComputeRDDSplit(rddId: Long, splitId: Long): Unit = {
+    computeRddId = rddId
+    computeSplitId = splitId
+  }
+
+  /**
+   * Return the IDs of RDD and Split being computed. This is used by consistent accumulators.
+   */
+  private[spark] def getComputeRDDSplit(): (Long, Long) = {
+    (computeRddId, computeSplitId)
+  }
+
 }
