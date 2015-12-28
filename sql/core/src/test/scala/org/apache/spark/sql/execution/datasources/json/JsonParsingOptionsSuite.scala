@@ -118,7 +118,6 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     val df = sqlContext.read.option("allowBackslashEscapingAnyCharacter", "false").json(rdd)
 
     assert(df.schema.head.name == "_corrupt_record")
-    assert(df.first().getString(0) == "null")
   }
 
   test("allowBackslashEscapingAnyCharacter on") {
