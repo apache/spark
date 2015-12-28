@@ -165,22 +165,22 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-      case CreateTableUsingAsSelect(tableIdent, _, _, partitionColumns, mode, _, query) =>
+      case c: CreateTableUsingAsSelect =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (mode == SaveMode.Overwrite && catalog.tableExists(tableIdent)) {
+        if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableIdent)) {
           // Need to remove SubQuery operator.
-          EliminateSubQueries(catalog.lookupRelation(tableIdent)) match {
+          EliminateSubQueries(catalog.lookupRelation(c.tableIdent)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _) =>
               // Get all input data source relations of the query.
-              val srcRelations = query.collect {
+              val srcRelations = c.child.collect {
                 case LogicalRelation(src: BaseRelation, _) => src
               }
               if (srcRelations.contains(dest)) {
                 failAnalysis(
-                  s"Cannot overwrite table $tableIdent that is also being read from.")
+                  s"Cannot overwrite table ${c.tableIdent} that is also being read from.")
               } else {
                 // OK
               }
@@ -192,7 +192,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         }
 
         PartitioningUtils.validatePartitionColumnDataTypes(
-          query.schema, partitionColumns, catalog.conf.caseSensitiveAnalysis)
+          c.child.schema, c.partitionColumns, catalog.conf.caseSensitiveAnalysis)
 
       case _ => // OK
     }

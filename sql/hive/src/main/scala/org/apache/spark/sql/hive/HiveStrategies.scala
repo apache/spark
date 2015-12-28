@@ -89,10 +89,9 @@ private[hive] trait HiveStrategies {
             tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
         ExecutedCommand(cmd) :: Nil
 
-      case CreateTableUsingAsSelect(
-        tableIdent, provider, false, partitionCols, mode, opts, query) =>
-        val cmd =
-          CreateMetastoreDataSourceAsSelect(tableIdent, provider, partitionCols, mode, opts, query)
+      case c: CreateTableUsingAsSelect =>
+        val cmd = CreateMetastoreDataSourceAsSelect(c.tableIdent, c.provider, c.partitionColumns,
+          c.numBuckets, c.bucketColumns, c.sortColumns, c.mode, c.options, c.child)
         ExecutedCommand(cmd) :: Nil
 
       case _ => Nil

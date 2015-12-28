@@ -160,6 +160,9 @@ trait HadoopFsRelationProvider {
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
+      numBuckets: Int,
+      bucketColumns: Array[String],
+      sortColumns: Array[String],
       parameters: Map[String, String]): HadoopFsRelation
 }
 
@@ -351,7 +354,11 @@ abstract class OutputWriterFactory extends Serializable {
    *
    * @since 1.4.0
    */
-  def newInstance(path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter
+  def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter
 }
 
 /**
@@ -576,6 +583,10 @@ abstract class HadoopFsRelation private[sql](
    */
   final def partitionColumns: StructType =
     userDefinedPartitionColumns.getOrElse(partitionSpec.partitionColumns)
+
+  def numBuckets: Int
+  def bucketColumns: Array[String]
+  def sortColumns: Array[String]
 
   /**
    * Optional user defined partition columns.

@@ -54,17 +54,29 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
+      numBuckets: Int,
+      bucketColumns: Array[String],
+      sortColumns: Array[String],
       parameters: Map[String, String]): HadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
 
-    new OrcRelation(paths, dataSchema, None, partitionColumns, parameters)(sqlContext)
+    new OrcRelation(
+      paths,
+      dataSchema,
+      None,
+      partitionColumns,
+      numBuckets,
+      bucketColumns,
+      sortColumns,
+      parameters)(sqlContext)
   }
 }
 
 private[orc] class OrcOutputWriter(
     path: String,
+    bucketId: Option[Int],
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
@@ -103,7 +115,8 @@ private[orc] class OrcOutputWriter(
     val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
     val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
     val partition = taskAttemptId.getTaskID.getId
-    val filename = f"part-r-$partition%05d-$uniqueWriteJobId.orc"
+    val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
@@ -155,6 +168,9 @@ private[sql] class OrcRelation(
     maybeDataSchema: Option[StructType],
     maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    val numBuckets: Int,
+    val bucketColumns: Array[String],
+    val sortColumns: Array[String],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters)
@@ -171,6 +187,9 @@ private[sql] class OrcRelation(
       maybeDataSchema,
       maybePartitionSpec,
       maybePartitionSpec.map(_.partitionColumns),
+      0,
+      Array.empty,
+      Array.empty,
       parameters)(sqlContext)
   }
 
@@ -221,9 +240,10 @@ private[sql] class OrcRelation(
     new OutputWriterFactory {
       override def newInstance(
           path: String,
+          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, dataSchema, context)
+        new OrcOutputWriter(path, bucketId, dataSchema, context)
       }
     }
   }

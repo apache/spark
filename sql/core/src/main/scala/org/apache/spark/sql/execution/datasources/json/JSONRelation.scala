@@ -51,6 +51,9 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
+      numBuckets: Int,
+      bucketColumns: Array[String],
+      sortColumns: Array[String],
       parameters: Map[String, String]): HadoopFsRelation = {
 
     new JSONRelation(
@@ -58,6 +61,9 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       maybeDataSchema = dataSchema,
       maybePartitionSpec = None,
       userDefinedPartitionColumns = partitionColumns,
+      numBuckets,
+      bucketColumns,
+      sortColumns,
       paths = paths,
       parameters = parameters)(sqlContext)
   }
@@ -68,10 +74,32 @@ private[sql] class JSONRelation(
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    val numBuckets: Int,
+    val bucketColumns: Array[String],
+    val sortColumns: Array[String],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
+
+  def this(
+      inputRDD: Option[RDD[String]],
+      maybeDataSchema: Option[StructType],
+      maybePartitionSpec: Option[PartitionSpec],
+      userDefinedPartitionColumns: Option[StructType],
+      paths: Array[String] = Array.empty[String],
+      parameters: Map[String, String] = Map.empty[String, String])(sqlContext: SQLContext) = {
+    this(
+      inputRDD,
+      maybeDataSchema,
+      maybePartitionSpec,
+      userDefinedPartitionColumns,
+      0,
+      Array.empty,
+      Array.empty,
+      paths,
+      parameters)(sqlContext)
+  }
 
   val options: JSONOptions = JSONOptions.createFromConfigMap(parameters)
 
@@ -164,9 +192,10 @@ private[sql] class JSONRelation(
     new OutputWriterFactory {
       override def newInstance(
           path: String,
+          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, dataSchema, context)
+        new JsonOutputWriter(path, bucketId, dataSchema, context)
       }
     }
   }
@@ -174,6 +203,7 @@ private[sql] class JSONRelation(
 
 private[json] class JsonOutputWriter(
     path: String,
+    bucketId: Option[Int],
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with SparkHadoopMapRedUtil with Logging {
@@ -190,7 +220,8 @@ private[json] class JsonOutputWriter(
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
         val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
       }
     }.getRecordWriter(context)
   }

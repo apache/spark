@@ -109,6 +109,9 @@ class DDLParser(parseQuery: String => LogicalPlan)
             provider,
             temp.isDefined,
             Array.empty[String],
+            0,
+            Array.empty[String],
+            Array.empty[String],
             mode,
             options,
             queryPlan)

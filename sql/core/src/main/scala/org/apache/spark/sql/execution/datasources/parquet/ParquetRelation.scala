@@ -60,13 +60,20 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
+      numBuckets: Int,
+      bucketColumns: Array[String],
+      sortColumns: Array[String],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new ParquetRelation(paths, schema, None, partitionColumns, parameters)(sqlContext)
+    new ParquetRelation(paths, schema, None, partitionColumns, numBuckets, bucketColumns,
+      sortColumns, parameters)(sqlContext)
   }
 }
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
+private[sql] class ParquetOutputWriter(
+    path: String,
+    bucketId: Option[Int],
+    context: TaskAttemptContext)
   extends OutputWriter {
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
@@ -86,7 +93,8 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
           val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
           val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
           val split = taskAttemptId.getTaskID.getId
-          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+          val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
         }
       }
     }
@@ -107,6 +115,9 @@ private[sql] class ParquetRelation(
     // This is for metastore conversion.
     private val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    val numBuckets: Int,
+    val bucketColumns: Array[String],
+    val sortColumns: Array[String],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters)
@@ -123,6 +134,9 @@ private[sql] class ParquetRelation(
       maybeDataSchema,
       maybePartitionSpec,
       maybePartitionSpec.map(_.partitionColumns),
+      0,
+      Array.empty,
+      Array.empty,
       parameters)(sqlContext)
   }
 
@@ -282,8 +296,11 @@ private[sql] class ParquetRelation(
 
     new OutputWriterFactory {
       override def newInstance(
-          path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, context)
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new ParquetOutputWriter(path, bucketId, context)
       }
     }
   }

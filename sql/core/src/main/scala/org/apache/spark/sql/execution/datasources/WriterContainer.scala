@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWriterFactory}
-import org.apache.spark.sql.types.{StructType, StringType}
+import org.apache.spark.sql.types.{IntegerType, StructType, StringType}
 import org.apache.spark.util.SerializableConfiguration
 
 
@@ -124,9 +124,9 @@ private[sql] abstract class BaseWriterContainer(
     }
   }
 
-  protected def newOutputWriter(path: String): OutputWriter = {
+  protected def newOutputWriter(path: String, bucketId: Option[Int]): OutputWriter = {
     try {
-      outputWriterFactory.newInstance(path, dataSchema, taskAttemptContext)
+      outputWriterFactory.newInstance(path, bucketId, dataSchema, taskAttemptContext)
     } catch {
       case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
         if (outputCommitter.isInstanceOf[parquet.DirectParquetOutputCommitter]) {
@@ -252,7 +252,7 @@ private[sql] class DefaultWriterContainer(
     executorSideSetup(taskContext)
     val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
     configuration.set("spark.sql.sources.output.path", outputPath)
-    val writer = newOutputWriter(getWorkPath)
+    val writer = newOutputWriter(getWorkPath, None)
     writer.initConverter(dataSchema)
 
     var writerClosed = false
@@ -310,6 +310,9 @@ private[sql] class DynamicPartitionWriterContainer(
     relation: HadoopFsRelation,
     job: Job,
     partitionColumns: Seq[Attribute],
+    numBuckets: Int,
+    bucketColumns: Seq[Attribute],
+    sortColumns: Seq[Attribute],
     dataColumns: Seq[Attribute],
     inputSchema: Seq[Attribute],
     defaultPartitionName: String,
@@ -323,8 +326,30 @@ private[sql] class DynamicPartitionWriterContainer(
 
     var outputWritersCleared = false
 
-    // Returns the partition key given an input row
-    val getPartitionKey = UnsafeProjection.create(partitionColumns, inputSchema)
+    // TODO: this follows hive, but can we just use pmod?
+    val buckNumExpr = Remainder(Abs(Hash(bucketColumns)), Literal(numBuckets))
+
+    val getKey = if (numBuckets == 0) {
+      UnsafeProjection.create(partitionColumns, inputSchema)
+    } else {
+      UnsafeProjection.create(partitionColumns ++ (buckNumExpr +: sortColumns), inputSchema)
+    }
+
+    val keySchema = if (numBuckets == 0) {
+      StructType.fromAttributes(partitionColumns)
+    } else {
+      val fields = StructType.fromAttributes(partitionColumns)
+        .add("bucketId", IntegerType).fields ++
+        StructType.fromAttributes(sortColumns).fields
+      StructType(fields)
+    }
+
+    def getBucketId(key: InternalRow): Option[Int] = if (numBuckets > 0) {
+      Some(key.getInt(partitionColumns.length))
+    } else {
+      None
+    }
+
     // Returns the data columns to be written given an input row
     val getOutputRow = UnsafeProjection.create(dataColumns, inputSchema)
 
@@ -345,10 +370,18 @@ private[sql] class DynamicPartitionWriterContainer(
     // If anything below fails, we should abort the task.
     try {
       // This will be filled in if we have to fall back on sorting.
-      var sorter: UnsafeKVExternalSorter = null
+      var sorter: UnsafeKVExternalSorter = if (sortColumns.nonEmpty) {
+        new UnsafeKVExternalSorter(
+          keySchema,
+          StructType.fromAttributes(dataColumns),
+          SparkEnv.get.blockManager,
+          TaskContext.get().taskMemoryManager().pageSizeBytes)
+      } else {
+        null
+      }
       while (iterator.hasNext && sorter == null) {
         val inputRow = iterator.next()
-        val currentKey = getPartitionKey(inputRow)
+        val currentKey = getKey(inputRow)
         var currentWriter = outputWriters.get(currentKey)
 
         if (currentWriter == null) {
@@ -359,7 +392,7 @@ private[sql] class DynamicPartitionWriterContainer(
           } else {
             logInfo(s"Maximum partitions reached, falling back on sorting.")
             sorter = new UnsafeKVExternalSorter(
-              StructType.fromAttributes(partitionColumns),
+              keySchema,
               StructType.fromAttributes(dataColumns),
               SparkEnv.get.blockManager,
               TaskContext.get().taskMemoryManager().pageSizeBytes)
@@ -375,7 +408,7 @@ private[sql] class DynamicPartitionWriterContainer(
       if (sorter != null) {
         while (iterator.hasNext) {
           val currentRow = iterator.next()
-          sorter.insertKV(getPartitionKey(currentRow), getOutputRow(currentRow))
+          sorter.insertKV(getKey(currentRow), getOutputRow(currentRow))
         }
 
         logInfo(s"Sorting complete. Writing out partition files one at a time.")
@@ -417,11 +450,12 @@ private[sql] class DynamicPartitionWriterContainer(
     /** Open and returns a new OutputWriter given a partition key. */
     def newOutputWriter(key: InternalRow): OutputWriter = {
       val partitionPath = getPartitionString(key).getString(0)
+      val bucketId = getBucketId(key)
       val path = new Path(getWorkPath, partitionPath)
       val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
       configuration.set(
         "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
-      val newWriter = super.newOutputWriter(path.toString)
+      val newWriter = super.newOutputWriter(path.toString, bucketId)
       newWriter.initConverter(dataSchema)
       newWriter
     }

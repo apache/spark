@@ -129,6 +129,19 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     this
   }
 
+  @scala.annotation.varargs
+  def bucketBy(numBuckets: Int, colNames: String*): DataFrameWriter = {
+    this.numBuckets = Some(numBuckets)
+    this.bucketingColumns = Option(colNames)
+    this
+  }
+
+  @scala.annotation.varargs
+  def sortBy(colNames: String*): DataFrameWriter = {
+    this.sortingColumns = Option(colNames)
+    this
+  }
+
   /**
    * Saves the content of the [[DataFrame]] at the specified path.
    *
@@ -149,6 +162,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       df.sqlContext,
       source,
       partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+      numBuckets.getOrElse(0),
+      bucketingColumns.map(_.toArray).getOrElse(Array.empty[String]),
+      sortingColumns.map(_.toArray).getOrElse(Array.empty[String]),
       mode,
       extraOptions.toMap,
       df)
@@ -245,6 +261,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             source,
             temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            numBuckets.getOrElse(0),
+            bucketingColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            sortingColumns.map(_.toArray).getOrElse(Array.empty[String]),
             mode,
             extraOptions.toMap,
             df.logicalPlan)
@@ -368,4 +387,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var partitioningColumns: Option[Seq[String]] = None
 
+  private var bucketingColumns: Option[Seq[String]] = None
+
+  private var numBuckets: Option[Int] = None
+
+  private var sortingColumns: Option[Seq[String]] = None
 }

@@ -48,9 +48,13 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
+      numBuckets: Int,
+      bucketColumns: Array[String],
+      sortColumns: Array[String],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, partitionColumns, paths)(sqlContext)
+    new TextRelation(
+      None, partitionColumns, numBuckets, bucketColumns, sortColumns, paths)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -71,6 +75,9 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    val numBuckets: Int,
+    val bucketColumns: Array[String],
+    val sortColumns: Array[String],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
@@ -119,9 +126,10 @@ private[sql] class TextRelation(
     new OutputWriterFactory {
       override def newInstance(
           path: String,
+          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new TextOutputWriter(path, dataSchema, context)
+        new TextOutputWriter(path, bucketId, dataSchema, context)
       }
     }
   }
@@ -137,7 +145,11 @@ private[sql] class TextRelation(
   }
 }
 
-class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
+class TextOutputWriter(
+    path: String,
+    bucketId: Option[Int],
+    dataSchema: StructType,
+    context: TaskAttemptContext)
   extends OutputWriter
   with SparkHadoopMapRedUtil {
 
@@ -150,7 +162,8 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
         val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
       }
     }.getRecordWriter(context)
   }

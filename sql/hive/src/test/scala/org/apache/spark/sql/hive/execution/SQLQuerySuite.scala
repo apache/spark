@@ -1479,4 +1479,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
       """.stripMargin), Row("value1", "12", 3.14, "hello"))
   }
+
+  test("aa") {
+    Seq(("a", 1, 2.3), ("b", 2, 3.4)).toDF("i", "j", "k").write
+      .format("orc")
+      .partitionBy("i")
+      .bucketBy(5, "j")
+      .sortBy("k")
+      .saveAsTable("tt")
+    sqlContext.table("tt").show()
+  }
 }

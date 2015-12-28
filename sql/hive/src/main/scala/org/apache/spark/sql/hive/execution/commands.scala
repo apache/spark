@@ -151,6 +151,9 @@ case class CreateMetastoreDataSource(
       tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
+      0,
+      Array.empty[String],
+      Array.empty[String],
       provider,
       optionsWithPath,
       isExternal)
@@ -164,6 +167,9 @@ case class CreateMetastoreDataSourceAsSelect(
     tableIdent: TableIdentifier,
     provider: String,
     partitionColumns: Array[String],
+    numBuckets: Int,
+    bucketColumns: Array[String],
+    sortColumns: Array[String],
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
@@ -254,8 +260,16 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     // Create the relation based on the data of df.
-    val resolved =
-      ResolvedDataSource(sqlContext, provider, partitionColumns, mode, optionsWithPath, df)
+    val resolved = ResolvedDataSource(
+      sqlContext,
+      provider,
+      partitionColumns,
+      numBuckets,
+      bucketColumns,
+      sortColumns,
+      mode,
+      optionsWithPath,
+      df)
 
     if (createMetastoreTable) {
       // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -265,6 +279,9 @@ case class CreateMetastoreDataSourceAsSelect(
         tableIdent,
         Some(resolved.relation.schema),
         partitionColumns,
+        numBuckets,
+        bucketColumns,
+        sortColumns,
         provider,
         optionsWithPath,
         isExternal)

@@ -41,12 +41,24 @@ class SimpleTextSource extends HadoopFsRelationProvider {
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
+      numBuckets: Int,
+      bucketColumns: Array[String],
+      sortColumns: Array[String],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new SimpleTextRelation(paths, schema, partitionColumns, parameters)(sqlContext)
+    new SimpleTextRelation(
+      paths,
+      schema,
+      partitionColumns,
+      0,
+      bucketColumns,
+      sortColumns,
+      parameters)(sqlContext)
   }
 }
 
-class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullWritable, Text] {
+class AppendingTextOutputFormat(
+    outputFile: Path,
+    bucketId: Option[Int]) extends TextOutputFormat[NullWritable, Text] {
   val numberFormat = NumberFormat.getInstance()
 
   numberFormat.setMinimumIntegerDigits(5)
@@ -55,16 +67,20 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
     val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
     val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+    val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
     val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
     val split = taskAttemptId.getTaskID.getId
     val name = FileOutputFormat.getOutputName(context)
-    new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId")
+    new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId$bucketString")
   }
 }
 
-class SimpleTextOutputWriter(path: String, context: TaskAttemptContext) extends OutputWriter {
+class SimpleTextOutputWriter(
+    path: String,
+    bucketId: Option[Int],
+    context: TaskAttemptContext) extends OutputWriter {
   private val recordWriter: RecordWriter[NullWritable, Text] =
-    new AppendingTextOutputFormat(new Path(path)).getRecordWriter(context)
+    new AppendingTextOutputFormat(new Path(path), bucketId).getRecordWriter(context)
 
   override def write(row: Row): Unit = {
     val serialized = row.toSeq.map { v =>
@@ -87,6 +103,9 @@ class SimpleTextRelation(
     override val paths: Array[String],
     val maybeDataSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
+    val numBuckets: Int,
+    val bucketColumns: Array[String],
+    val sortColumns: Array[String],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(parameters) {
@@ -178,9 +197,10 @@ class SimpleTextRelation(
 
     override def newInstance(
         path: String,
+        bucketId: Option[Int],
         dataSchema: StructType,
         context: TaskAttemptContext): OutputWriter = {
-      new SimpleTextOutputWriter(path, context)
+      new SimpleTextOutputWriter(path, bucketId, context)
     }
   }
 
@@ -211,8 +231,18 @@ class CommitFailureTestSource extends HadoopFsRelationProvider {
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
+      numBuckets: Int,
+      bucketColumns: Array[String],
+      sortColumns: Array[String],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new CommitFailureTestRelation(paths, schema, partitionColumns, parameters)(sqlContext)
+    new CommitFailureTestRelation(
+      paths,
+      schema,
+      partitionColumns,
+      numBuckets,
+      bucketColumns,
+      sortColumns,
+      parameters)(sqlContext)
   }
 }
 
@@ -220,16 +250,26 @@ class CommitFailureTestRelation(
     override val paths: Array[String],
     maybeDataSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
+    numBuckets: Int,
+    bucketColumns: Array[String],
+    sortColumns: Array[String],
     parameters: Map[String, String])(
     @transient sqlContext: SQLContext)
   extends SimpleTextRelation(
-    paths, maybeDataSchema, userDefinedPartitionColumns, parameters)(sqlContext) {
+    paths,
+    maybeDataSchema,
+    userDefinedPartitionColumns,
+    numBuckets,
+    bucketColumns,
+    sortColumns,
+    parameters)(sqlContext) {
   override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
     override def newInstance(
         path: String,
+        bucketId: Option[Int],
         dataSchema: StructType,
         context: TaskAttemptContext): OutputWriter = {
-      new SimpleTextOutputWriter(path, context) {
+      new SimpleTextOutputWriter(path, bucketId, context) {
         override def close(): Unit = {
           super.close()
           sys.error("Intentional task commitment failure for testing purpose.")
