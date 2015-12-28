@@ -35,6 +35,18 @@ object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("2.0") =>
       Seq(
+        // SPARK-7995 Remove AkkaRpcEnv
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaFailure"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaFailure$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEndpointRef$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEnvFactory"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEnv"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaMessage$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEndpointRef"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.ErrorMonitor"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaMessage")
+      ) ++
+      Seq(
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD")
         ) ++
       // When 1.6 is officially released, update this exclusion list.
@@ -171,19 +183,7 @@ object MimaExcludes {
       ) ++
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.
-      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint") ++
-      Seq(
-        // SPARK-7995 Remove AkkaRpcEnv
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaFailure"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaFailure$"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEndpointRef$"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEnvFactory"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEnv"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaMessage$"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEndpointRef"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.ErrorMonitor"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaMessage")
-      )
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
