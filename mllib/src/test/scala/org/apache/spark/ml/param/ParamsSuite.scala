@@ -375,17 +375,7 @@ class ParamsSuite extends SparkFunSuite {
     // Now mutable.Map#filter is used instead of filterKeys and the return type is serializable.
     // So let's ensure serializability.
     val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
-    try {
-      objOut.writeObject(filteredParamMap)
-    } catch {
-      case _: NotSerializableException =>
-        fail("The field of ParamMap 'map' may not be serializable. " +
-          "See SI-6654 and the implementation of ParamMap#filter")
-      case e: Exception =>
-        fail(s"Exception was thrown unexpectedly during the serializability test: ${e.getMessage}")
-    } finally {
-      objOut.close()
-    }
+    objOut.writeObject(filteredParamMap)
   }
 }
 
