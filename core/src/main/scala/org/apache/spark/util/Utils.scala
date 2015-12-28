@@ -1719,12 +1719,15 @@ private[spark] object Utils extends Logging {
       destroyMethod.setAccessible(true)
       destroyMethod.invoke(process)
     } catch {
-      case e: Exception => {
-        process.destroy()
-      }
+      case NonFatal(e) =>
+        if (!e.isInstanceOf[NoSuchMethodException]) {
+          logWarning("Exception when attempting to kill process", e)
+        } else {
+          process.destroy()
+        }
     }
     if (waitForProcess(process, timeoutMs)) {
-      Some(process.exitValue())
+      Option(process.exitValue())
     } else {
       None
     }
