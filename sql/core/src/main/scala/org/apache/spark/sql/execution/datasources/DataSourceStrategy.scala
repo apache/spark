@@ -80,6 +80,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val partitionAndNormalColumnFilters =
         filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
 
+      // The columns to request if finally requestedColumns are empty
+      val fallbackColumns = AttributeSet(combineFilters.flatMap(_.references))
+
       val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
       logInfo {
@@ -102,7 +105,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         partitionAndNormalColumnProjs,
         pushedFilters,
         t.partitionSpec.partitionColumns,
-        selectedPartitions)
+        selectedPartitions,
+        fallbackColumns)
 
       // Add a Projection to guarantee the original projection:
       // this is because "partitionAndNormalColumnAttrs" may be different
@@ -151,7 +155,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       projections: Seq[NamedExpression],
       filters: Seq[Expression],
       partitionColumns: StructType,
-      partitions: Array[Partition]): SparkPlan = {
+      partitions: Array[Partition],
+      fallbackColumns: AttributeSet): SparkPlan = {
     val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
 
     // Because we are creating one RDD per partition, we need to have a shared HadoopConf.
@@ -203,7 +208,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       logicalRelation,
       projections,
       filters,
-      scanBuilder)
+      scanBuilder,
+      Some(fallbackColumns))
 
     sparkPlan
   }
@@ -283,14 +289,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       relation: LogicalRelation,
       projects: Seq[NamedExpression],
       filterPredicates: Seq[Expression],
-      scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow]) = {
+      scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow],
+      fallbackColumns: Option[AttributeSet] = None) = {
     pruneFilterProjectRaw(
       relation,
       projects,
       filterPredicates,
       (requestedColumns, _, pushedFilters) => {
         scanBuilder(requestedColumns, pushedFilters.toArray)
-      })
+      },
+      fallbackColumns)
   }
 
   // Based on Catalyst expressions. The `scanBuilder` function accepts three arguments:
@@ -311,7 +319,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     relation: LogicalRelation,
     projects: Seq[NamedExpression],
     filterPredicates: Seq[Expression],
-    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]) = {
+    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow],
+    fallbackColumns: Option[AttributeSet] = None) = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
@@ -357,7 +366,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.
-      val requestedColumns = projects
+
+      val finalProjectAttrs = if (projectSet.size == 0 && fallbackColumns.isDefined) {
+        fallbackColumns.get.toSeq
+      } else {
+        projects
+      }
+
+      val requestedColumns = finalProjectAttrs
         // Safe due to if above.
         .asInstanceOf[Seq[Attribute]]
         // Match original case of attributes.
@@ -366,7 +382,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         .filterNot(handledSet.contains)
 
       val scan = execution.PhysicalRDD.createFromDataSource(
-        projects.map(_.toAttribute),
+        finalProjectAttrs.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation, metadata)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
