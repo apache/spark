@@ -279,6 +279,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
 private[sql] trait LeafNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 private[sql] trait UnaryNode extends SparkPlan {
