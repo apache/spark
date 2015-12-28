@@ -225,7 +225,7 @@ setMethod("%in%",
 setMethod("otherwise",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
-            value <- if(class(value) == "Column") value@jc else value
+            value <- if(class(value) == "Column") { value@jc } else { value }
             jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
           })
