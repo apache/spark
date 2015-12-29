@@ -30,7 +30,6 @@ import org.apache.hadoop.hive.ql.lib.Node;
 public class ASTNode extends CommonTree implements Node, Serializable {
   private static final long serialVersionUID = 1L;
   private transient StringBuffer astStr;
-  private transient ASTNodeOrigin origin;
   private transient int startIndx = -1;
   private transient int endIndx = -1;
   private transient ASTNode rootNode;
@@ -51,7 +50,6 @@ public class ASTNode extends CommonTree implements Node, Serializable {
 
   public ASTNode(ASTNode node) {
     super(node);
-    this.origin = node.origin;
   }
 
   @Override
@@ -86,22 +84,6 @@ public class ASTNode extends CommonTree implements Node, Serializable {
   @Override
   public String getName() {
     return (Integer.valueOf(super.getToken().getType())).toString();
-  }
-
-  /**
-   * @return information about the object from which this ASTNode originated, or
-   *         null if this ASTNode was not expanded from an object reference
-   */
-  public ASTNodeOrigin getOrigin() {
-    return origin;
-  }
-
-  /**
-   * Tag this ASTNode with information about the object from which this node
-   * originated.
-   */
-  public void setOrigin(ASTNodeOrigin origin) {
-    this.origin = origin;
   }
 
   public String dump() {
