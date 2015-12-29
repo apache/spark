@@ -191,6 +191,9 @@ private[sql] object JDBCRDD extends Logging {
    */
   private def compileFilter(f: Filter): String = f match {
     case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    case EqualNullSafe(attr, value) =>
+      s"(NOT ($attr != ${compileValue(value)} OR $attr IS NULL OR " +
+        s"${compileValue(value)} IS NULL) OR ($attr IS NULL AND ${compileValue(value)} IS NULL))"
     case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
     case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
     case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
@@ -294,40 +297,6 @@ private[sql] class JDBCRDD(
     val sb = new StringBuilder()
     columns.foreach(x => sb.append(",").append(x))
     if (sb.length == 0) "1" else sb.substring(1)
-  }
-
-  /**
-   * Converts value to SQL expression.
-   */
-  private def compileValue(value: Any): Any = value match {
-    case stringValue: String => s"'${escapeSql(stringValue)}'"
-    case timestampValue: Timestamp => "'" + timestampValue + "'"
-    case dateValue: Date => "'" + dateValue + "'"
-    case _ => value
-  }
-
-  private def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
-
-  /**
-   * Turns a single Filter into a String representing a SQL expression.
-   * Returns null for an unhandled filter.
-   */
-  private def compileFilter(f: Filter): String = f match {
-    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
-    // Since the null-safe equality operator is not a standard SQL operator,
-    // This was written as using is-null and normal equality.
-    case EqualNullSafe(attr, value) =>
-      s"(NOT ($attr != ${compileValue(value)} OR $attr IS NULL OR " +
-        s"${compileValue(value)} IS NULL) OR ($attr IS NULL AND ${compileValue(value)} IS NULL))"
-    case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
-    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
-    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
-    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
-    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
-    case IsNull(attr) => s"$attr IS NULL"
-    case IsNotNull(attr) => s"$attr IS NOT NULL"
-    case _ => null
   }
 
   /**
