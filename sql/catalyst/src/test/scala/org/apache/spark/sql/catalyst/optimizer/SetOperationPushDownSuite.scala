@@ -31,9 +31,6 @@ class SetOperationPushDownSuite extends PlanTest {
         EliminateSubQueries) ::
       Batch("Union Pushdown", Once,
         SetOperationPushDown,
-        CombineLimits,
-        ConstantFolding,
-        BooleanSimplification,
         SimplifyFilters) :: Nil
   }
 

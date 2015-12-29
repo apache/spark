@@ -49,10 +49,12 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
+      PushDownLimit,
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
       CombineFilters,
+      CombineLimits,
       // Constant folding
       NullPropagation,
       OptimizeIn,
@@ -63,11 +65,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
-    Batch("Push Down Limits", FixedPoint(100),
-      PushDownLimit,
-      CombineLimits,
-      ConstantFolding,
-      BooleanSimplification) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -90,9 +87,6 @@ object DefaultOptimizer extends Optimizer
  * 2. Project is pushed through Limit in the rule ColumnPruning
  *
  * Any operator that a Limit can be pushed passed should override the maxRows function.
- *
- * Note: This rule has to be done when the logical plan is stable;
- *       Otherwise, it could impact the other rules.
  */
 object PushDownLimit extends Rule[LogicalPlan] {
 
