@@ -313,7 +313,7 @@ private[hive] object HiveQl extends Logging {
       context.clear()
       plan
     } catch {
-      case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
+      case pe: ParseException =>
         pe.getMessage match {
           case errorRegEx(line, start, message) =>
             throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
@@ -911,24 +911,20 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           Token("TOK_TABLE_PARTITION", table) :: Nil) => NativePlaceholder
 
     case Token("TOK_QUERY", queryArgs)
-        if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
+        if Seq("TOK_CTE", "TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
 
       val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
         queryArgs match {
-          case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
-            // check if has CTE
-            insertClauses.last match {
-              case Token("TOK_CTE", cteClauses) =>
-                val cteRelations = cteClauses.map(node => {
-                  val relation = nodeToRelation(node, context).asInstanceOf[Subquery]
-                  (relation.alias, relation)
-                }).toMap
-                (Some(args.head), insertClauses.init, Some(cteRelations))
-
-              case _ => (Some(args.head), insertClauses, None)
+          case Token("TOK_CTE", ctes) :: Token("TOK_FROM", from) :: inserts =>
+            val cteRelations = ctes.map { node =>
+              val relation = nodeToRelation(node, context).asInstanceOf[Subquery]
+              relation.alias -> relation
             }
-
-          case Token("TOK_INSERT", _) :: Nil => (None, queryArgs, None)
+            (Some(from.head), inserts, Some(cteRelations.toMap))
+          case Token("TOK_FROM", from) :: inserts =>
+            (Some(from.head), inserts, None)
+          case Token("TOK_INSERT", _) :: Nil =>
+            (None, queryArgs, None)
         }
 
       // Return one query for each insert clause.
