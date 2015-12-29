@@ -23,7 +23,6 @@ import scala.reflect.{classTag, ClassTag}
 import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.partial.{PartialResult, BoundedDouble}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.NextIterator
 
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
@@ -109,120 +108,20 @@ class KafkaRDD[
     Seq(part.host)
   }
 
-  private def errBeginAfterEnd(part: KafkaRDDPartition): String =
-    s"Beginning offset ${part.fromOffset} is after the ending offset ${part.untilOffset} " +
-      s"for topic ${part.topic} partition ${part.partition}. " +
-      "You either provided an invalid fromOffset, or the Kafka topic has been damaged"
-
-  private def errRanOutBeforeEnd(part: KafkaRDDPartition): String =
-    s"Ran out of messages before reaching ending offset ${part.untilOffset} " +
-    s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
-    " This should not happen, and indicates that messages may have been lost"
-
-  private def errOvershotEnd(itemOffset: Long, part: KafkaRDDPartition): String =
-    s"Got ${itemOffset} > ending offset ${part.untilOffset} " +
-    s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
-    " This should not happen, and indicates a message may have been skipped"
-
   override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
-    assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
+    assert(part.fromOffset <= part.untilOffset,
+      KafkaIteratorError.errBeginAfterEnd(
+        part.topic,
+        part.partition,
+        part.fromOffset,
+        part.untilOffset))
     if (part.fromOffset == part.untilOffset) {
       log.info(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
-      new KafkaRDDIterator(part, context)
-    }
-  }
-
-  private class KafkaRDDIterator(
-      part: KafkaRDDPartition,
-      context: TaskContext) extends NextIterator[R] {
-
-    context.addTaskCompletionListener{ context => closeIfNeeded() }
-
-    log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
-      s"offsets ${part.fromOffset} -> ${part.untilOffset}")
-
-    val kc = new KafkaCluster(kafkaParams)
-    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(kc.config.props)
-      .asInstanceOf[Decoder[K]]
-    val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(kc.config.props)
-      .asInstanceOf[Decoder[V]]
-    val consumer = connectLeader
-    var requestOffset = part.fromOffset
-    var iter: Iterator[MessageAndOffset] = null
-
-    // The idea is to use the provided preferred host, except on task retry atttempts,
-    // to minimize number of kafka metadata requests
-    private def connectLeader: SimpleConsumer = {
-      if (context.attemptNumber > 0) {
-        kc.connectLeader(part.topic, part.partition).fold(
-          errs => throw new SparkException(
-            s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
-              errs.mkString("\n")),
-          consumer => consumer
-        )
-      } else {
-        kc.connect(part.host, part.port)
-      }
-    }
-
-    private def handleFetchErr(resp: FetchResponse) {
-      if (resp.hasError) {
-        val err = resp.errorCode(part.topic, part.partition)
-        if (err == ErrorMapping.LeaderNotAvailableCode ||
-          err == ErrorMapping.NotLeaderForPartitionCode) {
-          log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
-            s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
-          Thread.sleep(kc.config.refreshLeaderBackoffMs)
-        }
-        // Let normal rdd retry sort out reconnect attempts
-        throw ErrorMapping.exceptionFor(err)
-      }
-    }
-
-    private def fetchBatch: Iterator[MessageAndOffset] = {
-      val req = new FetchRequestBuilder()
-        .addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes)
-        .build()
-      val resp = consumer.fetch(req)
-      handleFetchErr(resp)
-      // kafka may return a batch that starts before the requested offset
-      resp.messageSet(part.topic, part.partition)
-        .iterator
-        .dropWhile(_.offset < requestOffset)
-    }
-
-    override def close(): Unit = {
-      if (consumer != null) {
-        consumer.close()
-      }
-    }
-
-    override def getNext(): R = {
-      if (iter == null || !iter.hasNext) {
-        iter = fetchBatch
-      }
-      if (!iter.hasNext) {
-        assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part))
-        finished = true
-        null.asInstanceOf[R]
-      } else {
-        val item = iter.next()
-        if (item.offset >= part.untilOffset) {
-          assert(item.offset == part.untilOffset, errOvershotEnd(item.offset, part))
-          finished = true
-          null.asInstanceOf[R]
-        } else {
-          requestOffset = item.nextOffset
-          messageHandler(new MessageAndMetadata(
-            part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
-        }
-      }
+      new KafkaRDDIterator[K, V, U, T, R](kafkaParams, part, context, messageHandler)
     }
   }
 }

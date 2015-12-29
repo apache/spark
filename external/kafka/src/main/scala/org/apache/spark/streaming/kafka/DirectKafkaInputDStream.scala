@@ -62,8 +62,8 @@ class DirectKafkaInputDStream[
     val kafkaParams: Map[String, String],
     val fromOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
-  ) extends InputDStream[R](ssc_) with Logging {
-  val maxRetries = context.sparkContext.getConf.getInt(
+  ) extends InputDStream[R](ssc_) with KafkaDirect with Logging {
+  override val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
 
   // Keep this consistent with how other streams are named (e.g. "Flume polling stream [2]")
@@ -87,9 +87,9 @@ class DirectKafkaInputDStream[
 
   protected val kc = new KafkaCluster(kafkaParams)
 
-  private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
+  override val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
       "spark.streaming.kafka.maxRatePerPartition", 0)
-  protected def maxMessagesPerPartition: Option[Long] = {
+  override def maxMessagesPerPartition: Option[Long] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
     val numPartitions = currentOffsets.keys.size
 
@@ -113,36 +113,9 @@ class DirectKafkaInputDStream[
 
   protected var currentOffsets = fromOffsets
 
-  @tailrec
-  protected final def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, LeaderOffset] = {
-    val o = kc.getLatestLeaderOffsets(currentOffsets.keySet)
-    // Either.fold would confuse @tailrec, do it manually
-    if (o.isLeft) {
-      val err = o.left.get.toString
-      if (retries <= 0) {
-        throw new SparkException(err)
-      } else {
-        log.error(err)
-        Thread.sleep(kc.config.refreshLeaderBackoffMs)
-        latestLeaderOffsets(retries - 1)
-      }
-    } else {
-      o.right.get
-    }
-  }
-
-  // limits the maximum number of messages per partition
-  protected def clamp(
-    leaderOffsets: Map[TopicAndPartition, LeaderOffset]): Map[TopicAndPartition, LeaderOffset] = {
-    maxMessagesPerPartition.map { mmp =>
-      leaderOffsets.map { case (tp, lo) =>
-        tp -> lo.copy(offset = Math.min(currentOffsets(tp) + mmp, lo.offset))
-      }
-    }.getOrElse(leaderOffsets)
-  }
-
   override def compute(validTime: Time): Option[KafkaRDD[K, V, U, T, R]] = {
-    val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
+    val untilOffsets =
+      clamp(latestLeaderOffsets(kc, currentOffsets.keySet, maxRetries), currentOffsets(_))
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
@@ -210,5 +183,43 @@ class DirectKafkaInputDStream[
   private[streaming] class DirectKafkaRateController(id: Int, estimator: RateEstimator)
     extends RateController(id, estimator) {
     override def publish(rate: Long): Unit = ()
+  }
+}
+
+trait KafkaDirect extends Logging {
+  val maxRetries: Int = 1
+  val maxRateLimitPerPartition: Int = 0
+  def maxMessagesPerPartition: Option[Long] = None
+
+  @tailrec
+  final def latestLeaderOffsets(
+      kc: KafkaCluster,
+      topicAndPartition: Set[TopicAndPartition],
+      retries: Int): Map[TopicAndPartition, LeaderOffset] = {
+    val o = kc.getLatestLeaderOffsets(topicAndPartition)
+    // Either.fold would confuse @tailrec, do it manually
+    if (o.isLeft) {
+      val err = o.left.get.toString
+      if (retries <= 0) {
+        throw new SparkException(err)
+      } else {
+        log.error(err)
+        Thread.sleep(kc.config.refreshLeaderBackoffMs)
+        latestLeaderOffsets(kc, topicAndPartition, retries - 1)
+      }
+    } else {
+      o.right.get
+    }
+  }
+
+  // limits the maximum number of messages per partition
+  def clamp(
+    leaderOffsets: Map[TopicAndPartition, LeaderOffset],
+    currentOffsets: TopicAndPartition => Long): Map[TopicAndPartition, LeaderOffset] = {
+    maxMessagesPerPartition.map { mmp =>
+      leaderOffsets.map { case (tp, lo) =>
+        tp -> lo.copy(offset = Math.min(currentOffsets(tp) + mmp, lo.offset))
+      }
+    }.getOrElse(leaderOffsets)
   }
 }
