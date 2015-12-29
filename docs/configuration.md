@@ -120,8 +120,7 @@ of the most common options to set are:
   <td><code>spark.driver.cores</code></td>
   <td>1</td>
   <td>
-    Number of cores to use for the driver process, only in cluster mode. This can be set through
-    <code>--driver-cores</code> command line option.
+    Number of cores to use for the driver process, only in cluster mode.
   </td>
 </tr>
   <td><code>spark.driver.maxResultSize</code></td>
@@ -152,8 +151,7 @@ of the most common options to set are:
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>). This can
-    be set through the <code>--executor-memory</code> command line option.
+    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
   </td>
 </tr>
 <tr>
@@ -852,8 +850,6 @@ Apart from these, the following properties are also available, and may be useful
     In standalone mode, setting this parameter allows an application to run multiple executors on
     the same worker, provided that there are enough cores on that worker. Otherwise, only one
     executor per application will run on each worker.
-
-    This can be set through <code>--executor-cores</code> in the command line.
   </td>
 </tr>
 <tr>

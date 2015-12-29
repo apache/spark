@@ -120,6 +120,7 @@ If you need a reference to the proper location to put log files in the YARN so t
     Number of cores used by the driver in YARN cluster mode.
     Since the driver is run in the same JVM as the YARN Application Master in cluster mode, this also controls the cores used by the YARN Application Master.
     In client mode, use <code>spark.yarn.am.cores</code> to control the number of cores used by the YARN Application Master instead.
+    This can be set through <code>--driver-cores</code> command line option.
   </td>
 </tr>
 <tr>
@@ -204,11 +205,32 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.cores</code></td>
+  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
+  <td>
+    The number of cores to use on each executor. For YARN and standalone mode only.
+
+    In standalone mode, setting this parameter allows an application to run multiple executors on
+    the same worker, provided that there are enough cores on that worker. Otherwise, only one
+    executor per application will run on each worker.
+
+    This can be set through <code>--executor-cores</code> in the command line.
+  </td>
+</tr>
+<tr>
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
     The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used.
     This can be set through <code>--num-executors</code> command line option.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.memory</code></td>
+  <td>1g</td>
+  <td>
+    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>). This can
+    be set through the <code>--executor-memory</code> command line option.
   </td>
 </tr>
 <tr>
