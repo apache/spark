@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.filter2.predicate.Operators._
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.spark.sql.execution.PhysicalRDD
 
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -75,7 +76,10 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             assert(f.getClass === filterClass)
           }
         }
-        checker(stripSparkFilter(query), expected)
+        // Check if SparkPlan Filter is removed and this plan only has PhysicalRDD.
+        val executedPlan = query.queryExecution.executedPlan
+        assert(executedPlan.isInstanceOf[PhysicalRDD])
+        checker(query, expected)
       }
     }
   }
@@ -325,7 +329,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
     import testImplicits._
-
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
       withTempPath { dir =>
@@ -353,11 +356,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
           val df = sqlContext.read.parquet(path).filter("a = 2")
 
+          // Check if SparkPlan Filter is removed and this plan only has PhysicalRDD.
+          val executedPlan = df.queryExecution.executedPlan
+          assert(executedPlan.isInstanceOf[PhysicalRDD])
           // The result should be single row.
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
-          assert(stripSparkFilter(df).count == 1)
+          assert(df.count == 1)
         }
       }
     }
