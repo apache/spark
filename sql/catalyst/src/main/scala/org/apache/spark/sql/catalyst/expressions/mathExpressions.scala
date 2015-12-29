@@ -263,7 +263,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
 case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns e^x -1.",
+  usage = "_FUNC_(value) - Returns e^x - 1.",
   extended = "> SELECT _FUNC_(1.0);\n1.718281828459045")
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
@@ -331,7 +331,7 @@ object Factorial {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(value) - Returns Factorial of the number",
+  usage = "_FUNC_(value) - Returns the n factorial. n is valid in [0, 20] range.",
   extended = "> SELECT _FUNC_(5);\n120")
 case class Factorial(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
