@@ -49,8 +49,8 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * the array elements and returns it.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array, ascendingOrder) - Sorts the input array for the given column in " +
-    "ascending / descending order, according to the natural ordering of the array elements",
+  usage = """_FUNC_(array, ascendingOrder) - Sorts the input array for the given column in
+    | ascending / descending order, according to the natural ordering of the array elements""",
   extended = """> SELECT _FUNC_(array("b", "d", "c", "a"), false);
     | ["d","c","b","a"]""")
 case class SortArray(base: Expression, ascendingOrder: Expression)

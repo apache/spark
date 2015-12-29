@@ -335,7 +335,8 @@ object FunctionRegistry {
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
       (name,
-        (new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended().stripMargin),
+        (new ExpressionInfo(
+          clazz.getCanonicalName, name, df.usage().stripMargin, df.extended().stripMargin),
         builder))
     } else {
       (name, (new ExpressionInfo(clazz.getCanonicalName, name), builder))
