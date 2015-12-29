@@ -62,6 +62,10 @@ mockLinesComplexType <-
 complexTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
+test_that("calling sparkRSQL.init returns existing SQL context", {
+  expect_equal(sparkRSQL.init(sc), sqlContext)
+})
+
 test_that("infer types and check types", {
   expect_equal(infer_type(1L), "integer")
   expect_equal(infer_type(1.0), "double")
