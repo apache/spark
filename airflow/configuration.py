@@ -95,7 +95,9 @@ defaults = {
         'keytab': 'airflow.keytab',
     },
     'qds': {
-        'auth_token': ''
+        'api_token': '',
+        'api_url': 'https://api.qubole.com/api',
+        'version': 'v1.2'
     }
 }
 
@@ -276,6 +278,10 @@ authenticate = False
 # Mesos credentials, if authentication is enabled
 # default_principal = admin
 # default_secret = admin
+
+# QDS credentials, if intergation with Qubole is enabled
+[qds]
+api_token = ''
 
 """
 

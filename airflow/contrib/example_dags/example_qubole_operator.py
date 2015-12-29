@@ -15,19 +15,15 @@ default_args = {
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
-    # 'queue': 'bash_queue',
-    # 'pool': 'backfill',
-    # 'priority_weight': 10,
-    # 'schedule_interval': timedelta(1),
-    # 'end_date': datetime(2016, 1, 1),
+    'retry_delay': timedelta(minutes=5)
 }
 
 dag = DAG('example_qubole_operator', default_args=default_args)
 
 def compare_result(ds, **kwargs):
-    r1 = t1.get_results(None, True)
-    r2 = t2.get_results(None, True)
+    ti = kwargs['ti']
+    r1 = t1.get_results(ti)
+    r2 = t2.get_results(ti)
     return filecmp.cmp(r1, r2)
 
 # t1, t2 and t3 are examples of tasks created by instatiating operators
