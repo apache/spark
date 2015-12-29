@@ -21,10 +21,10 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.*;
 
+import scala.Option;
 import scala.Tuple2;
 
 import com.google.common.collect.Iterables;
-import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -110,11 +110,11 @@ public class Java8APISuite implements Serializable {
       new Tuple2<>(2, 'z'),
       new Tuple2<>(4, 'w')
     ));
-    List<Tuple2<Integer, Tuple2<Integer, Optional<Character>>>> joined =
+    List<Tuple2<Integer, Tuple2<Integer, Option<Character>>>> joined =
       rdd1.leftOuterJoin(rdd2).collect();
     Assert.assertEquals(5, joined.size());
-    Tuple2<Integer, Tuple2<Integer, Optional<Character>>> firstUnmatched =
-      rdd1.leftOuterJoin(rdd2).filter(tup -> !tup._2()._2().isPresent()).first();
+    Tuple2<Integer, Tuple2<Integer, Option<Character>>> firstUnmatched =
+      rdd1.leftOuterJoin(rdd2).filter(tup -> !tup._2()._2().isDefined()).first();
     Assert.assertEquals(3, firstUnmatched._1().intValue());
   }
 
