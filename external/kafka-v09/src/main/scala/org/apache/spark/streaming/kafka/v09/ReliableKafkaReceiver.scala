@@ -126,8 +126,8 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
 
     try {
       // Start the messages handler for each partition
-      val topicAndPartitions = kafkaCluster.getPartitions(topics.keys.toSet).right.toOption
-      val iter = topicAndPartitions.get.iterator
+      val topicAndPartitions = kafkaCluster.getPartitions(topics.keys.toSet)
+      val iter = topicAndPartitions.iterator
       while (iter.hasNext) {
         val topicAndPartition = iter.next()
         val newConsumer = new KafkaConsumer[K, V](props)

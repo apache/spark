@@ -54,10 +54,10 @@ class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("leader offset apis") {
-    val earliest = newKc.getEarliestOffsets(Set(topicPartition)).right.get
+    val earliest = newKc.getEarliestOffsets(Set(topicPartition))
     assert(earliest(topicPartition) === 0, "didn't get earliest")
 
-    val latest = newKc.getLatestOffsets(Set(topicPartition)).right.get
+    val latest = newKc.getLatestOffsets(Set(topicPartition))
     assert(latest(topicPartition) === 1, "didn't get latest")
   }
 

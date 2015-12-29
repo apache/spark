@@ -156,7 +156,7 @@ class DirectKafkaStreamSuite
       "spark.kafka.poll.time" -> "100")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
-      kc.getLatestOffsets(Set(topicPartition)).right.get.get(topicPartition).get
+      kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).get
     }
 
     // Send some initial messages before starting context
@@ -205,7 +205,7 @@ class DirectKafkaStreamSuite
       "spark.kafka.poll.time" -> "100")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
-      kc.getLatestOffsets(Set(topicPartition)).right.get.get(topicPartition).get
+      kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).get
     }
 
     // Send some initial messages before starting context
@@ -407,7 +407,7 @@ class DirectKafkaStreamSuite
     val kafkaStream = withClue("Error creating direct stream") {
       val kc = new KafkaCluster(kafkaParams)
       val messageHandler = (mmd: ConsumerRecord[String, String]) => (mmd.key(), mmd.value())
-      val m = kc.getEarliestOffsets(Set(topicPartition)).right.get
+      val m = kc.getEarliestOffsets(Set(topicPartition))
 
       new DirectKafkaInputDStream[String, String, (String, String)](
         ssc, kafkaParams, m, messageHandler) {
@@ -453,7 +453,8 @@ class DirectKafkaStreamSuite
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */
-  private def getOffsetRanges[K, V](kafkaStream: DStream[(K, V)]): Seq[(Time, Array[OffsetRange])] = {
+  private def getOffsetRanges[K, V](kafkaStream: DStream[(K, V)]):
+    Seq[(Time, Array[OffsetRange])] = {
     kafkaStream.generatedRDDs.mapValues { rdd =>
       rdd.asInstanceOf[KafkaRDD[K, V, (K, V)]].offsetRanges
     }.toSeq.sortBy {

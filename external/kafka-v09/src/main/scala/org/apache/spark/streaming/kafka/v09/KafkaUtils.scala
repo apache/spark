@@ -159,16 +159,12 @@ object KafkaUtils {
                             kc: KafkaCluster[_, _],
                             offsetRanges: Array[OffsetRange]): Unit = {
     val topics = offsetRanges.map(_.topicAndPartition).toSet
-    val result = for {
-      low <- kc.getEarliestOffsets(topics).right
-      high <- kc.getLatestOffsets(topics).right
-    } yield {
-      offsetRanges.filterNot { o =>
-        low(o.topicAndPartition) <= o.fromOffset &&
-          o.untilOffset <= high(o.topicAndPartition)
-      }
+    val low = kc.getEarliestOffsets(topics)
+    val high = kc.getLatestOffsets(topics)
+    val badRanges = offsetRanges.filterNot { o =>
+      low(o.topicAndPartition()) <= o.fromOffset &&
+        o.untilOffset <= high(o.topicAndPartition())
     }
-    val badRanges = KafkaCluster.checkErrors(result)
     if (!badRanges.isEmpty) {
       throw new SparkException("Offsets not available on leader: " + badRanges.mkString(","))
     }
@@ -344,9 +340,9 @@ object KafkaUtils {
     val reset = kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).map(_.toLowerCase)
 
     val fromOffsets = if (reset == Some("earliest")) {
-      kc.getEarliestOffsets(kc.getPartitions(topics).right.get).right.get
+      kc.getEarliestOffsets(kc.getPartitions(topics))
     } else {
-      kc.getLatestOffsets(kc.getPartitions(topics).right.get).right.get
+      kc.getLatestOffsets(kc.getPartitions(topics))
     }
 
     kc.close()

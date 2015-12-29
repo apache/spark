@@ -156,25 +156,21 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   // get an rdd from the committed consumer offsets until the latest leader offsets,
   private def getRdd(kc: KafkaCluster[_, _], topics: Set[String]) = {
     val groupId = kc.kafkaParams("group.id")
-    def consumerOffsets(topicPartitions: Set[TopicAndPartition]) = {
-      kc.getCommittedOffsets(topicPartitions).right.toOption.orElse(
-        kc.getEarliestOffsets(topicPartitions).right.toOption.map { offs =>
-          offs.map(kv => kv._1 -> kv._2)
-        })
+    val topicPartitions = kc.getPartitions(topics)
+    val consumerOffsets = try {
+      kc.getCommittedOffsets(topicPartitions)
+    } catch {
+      case e: SparkException => kc.getEarliestOffsets(topicPartitions)
     }
-    kc.getPartitions(topics).right.toOption.flatMap { topicPartitions =>
-      consumerOffsets(topicPartitions).flatMap { from =>
-        kc.getLatestOffsets(topicPartitions).right.toOption.map { until =>
-          val offsetRanges = from.map {
-            case (tp: TopicAndPartition, fromOffset: Long) =>
-              OffsetRange(tp.topic, tp.partition, fromOffset, until(tp))
-          }.toArray
+    val latestOffsets = kc.getLatestOffsets(topicPartitions)
 
-          KafkaUtils.createRDD[String, String, String](
-            sc, kc.kafkaParams, offsetRanges,
-            (cr: ConsumerRecord[String, String]) => s"${cr.offset()} ${cr.value()}")
-        }
-      }
+    val offsetRanges = consumerOffsets.map { case (tp: TopicAndPartition, fromOffset: Long) =>
+      OffsetRange(tp.topic, tp.partition, fromOffset, latestOffsets(tp))
+    }.toArray
+
+    Option(KafkaUtils.createRDD[String, String, String](
+      sc, kc.kafkaParams, offsetRanges,
+      (cr: ConsumerRecord[String, String]) => s"${cr.offset()} ${cr.value()}"))
     }
-  }
+
 }

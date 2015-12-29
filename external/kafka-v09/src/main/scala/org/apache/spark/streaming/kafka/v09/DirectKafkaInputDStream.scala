@@ -109,7 +109,7 @@ class DirectKafkaInputDStream[
 
   protected final def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, Long] = {
     val topicPartition = fromOffsets.map(fo => fo._1).toSet
-    kafkaCluster.getLatestOffsets(topicPartition).right.get
+    kafkaCluster.getLatestOffsets(topicPartition)
   }
 
   // limits the maximum number of messages per partition
