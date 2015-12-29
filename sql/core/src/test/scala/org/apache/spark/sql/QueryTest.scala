@@ -130,6 +130,8 @@ abstract class QueryTest extends PlanTest {
 
     checkJsonFormat(analyzedDF)
 
+    assertEmptyMissingInput(df)
+
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
@@ -198,6 +200,9 @@ abstract class QueryTest extends PlanTest {
       case a: ImperativeAggregate => return
     }
 
+    // bypass hive tests before we fix all corner cases in hive module.
+    if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
+
     val jsonString = try {
       logicalPlan.toJSON
     } catch {
@@ -208,9 +213,6 @@ abstract class QueryTest extends PlanTest {
              |${logicalPlan.treeString}
            """.stripMargin, e)
     }
-
-    // bypass hive tests before we fix all corner cases in hive module.
-    if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
 
     // scala function is not serializable to JSON, use null to replace them so that we can compare
     // the plans later.
@@ -274,6 +276,18 @@ abstract class QueryTest extends PlanTest {
            |${sideBySide(logicalPlan.treeString, normalized2.treeString).mkString("\n")}
           """.stripMargin)
     }
+  }
+
+  /**
+    * Asserts that a given [[Queryable]] does not have missing inputs in all the analyzed plans.
+    */
+  def assertEmptyMissingInput(query: Queryable): Unit = {
+    assert(query.queryExecution.analyzed.missingInput.isEmpty,
+      s"The analyzed logical plan has missing inputs: ${query.queryExecution.analyzed}")
+    assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
+      s"The optimized logical plan has missing inputs: ${query.queryExecution.optimizedPlan}")
+    assert(query.queryExecution.executedPlan.missingInput.isEmpty,
+      s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
   }
 }
 

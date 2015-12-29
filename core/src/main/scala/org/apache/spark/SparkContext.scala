@@ -836,7 +836,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       minPartitions: Int = defaultMinPartitions): RDD[String] = withScope {
     assertNotStopped()
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minPartitions).map(pair => pair._2.toString)
+      minPartitions).map(pair => pair._2.toString).setName(path)
   }
 
   /**
@@ -885,7 +885,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       classOf[Text],
       classOf[Text],
       updateConf,
-      minPartitions).setName(path).map(record => (record._1.toString, record._2.toString))
+      minPartitions).map(record => (record._1.toString, record._2.toString)).setName(path)
   }
 
   /**
@@ -2073,8 +2073,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // its own local file system, which is incorrect because the checkpoint files
     // are actually on the executor machines.
     if (!isLocal && Utils.nonLocalPaths(directory).isEmpty) {
-      logWarning("Checkpoint directory must be non-local " +
-        "if Spark is running on a cluster: " + directory)
+      logWarning("Spark is not running in local mode, therefore the checkpoint directory " +
+        s"must not be on the local filesystem. Directory '$directory' " +
+        "appears to be on the local filesystem.")
     }
 
     checkpointDir = Option(directory).map { dir =>
@@ -2095,7 +2096,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   @deprecated("use defaultMinPartitions", "1.0.0")
-  def defaultMinSplits: Int = math.min(defaultParallelism, 2)
+  def defaultMinSplits: Int = defaultMinPartitions
 
   /**
    * Default min number of partitions for Hadoop RDDs when not given by user

@@ -432,6 +432,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   private val queueLength = PrivateMethod[Int]('getQueueLength)
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     wal = mock[WriteAheadLog]
     walHandle = mock[WriteAheadLogRecordHandle]
     walBatchingThreadPool = ThreadUtils.newDaemonFixedThreadPool(8, "wal-test-thread-pool")
@@ -439,8 +440,12 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   }
 
   override def afterEach(): Unit = {
-    if (walBatchingExecutionContext != null) {
-      walBatchingExecutionContext.shutdownNow()
+    try {
+      if (walBatchingExecutionContext != null) {
+        walBatchingExecutionContext.shutdownNow()
+      }
+    } finally {
+      super.afterEach()
     }
   }
 

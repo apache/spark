@@ -334,7 +334,8 @@ private[spark] object SQLConf {
 
   val HIVE_VERIFY_PARTITION_PATH = booleanConf("spark.sql.hive.verifyPartitionPath",
     defaultValue = Some(false),
-    doc = "<TODO>")
+    doc = "When true, check all the partition paths under the table\'s root directory " +
+          "when reading data stored in HDFS.")
 
   val HIVE_METASTORE_PARTITION_PRUNING = booleanConf("spark.sql.hive.metastorePartitionPruning",
     defaultValue = Some(false),
@@ -352,7 +353,7 @@ private[spark] object SQLConf {
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
-    doc = "<TODO>")
+    doc = "The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
 
   val BROADCAST_TIMEOUT = intConf("spark.sql.broadcastTimeout",
     defaultValue = Some(5 * 60),
@@ -413,7 +414,8 @@ private[spark] object SQLConf {
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD = intConf(
     key = "spark.sql.sources.parallelPartitionDiscovery.threshold",
     defaultValue = Some(32),
-    doc = "<TODO>")
+    doc = "The degree of parallelism for schema merging and partition discovery of " +
+      "Parquet data sources.")
 
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
