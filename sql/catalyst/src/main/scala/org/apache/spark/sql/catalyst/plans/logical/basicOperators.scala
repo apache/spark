@@ -28,6 +28,8 @@ import scala.collection.mutable.ArrayBuffer
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  override def maxRows: Option[Expression] = child.maxRows
+
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg

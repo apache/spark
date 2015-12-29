@@ -153,14 +153,16 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         )
       )
 
-    // Adding extra Limit below UNION ALL if both left and right childs are not Limit.
-    // This heuristic is valid assuming there does not exist any Limit push-down rule.
+    // Adding extra Limit below UNION ALL iff both left and right childs are not Limit and no Limit
+    // was pushed down before. This heuristic is valid assuming there does not exist any Limit
+    // push-down rule that is unable to infer the value of maxRows. Any operator that a Limit can
+    // be pushed passed should override this function.
     case Limit(exp, Union(left, right))
       if left.maxRows.isEmpty || right.maxRows.isEmpty =>
       Limit(exp,
         Union(
-          CombineLimits(Limit(exp, left)),
-          CombineLimits(Limit(exp, right))))
+          Limit(exp, left),
+          Limit(exp, right)))
 
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, u @ Union(left, right)) =>
