@@ -30,7 +30,8 @@ class KafkaRDDPartition(
     val topic: String,
     val partition: Int,
     val fromOffset: Long,
-    val untilOffset: Long
+    val untilOffset: Long,
+    val host: String
   ) extends Partition {
   /** Number of messages this partition refers to */
   def count(): Long = untilOffset - fromOffset

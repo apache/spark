@@ -22,7 +22,7 @@ import java.util.{Collections}
 
 import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.{OffsetResetStrategy, KafkaConsumer, OffsetAndMetadata}
-import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 import org.apache.spark.SparkException
 
 import scala.collection.JavaConverters._
@@ -63,6 +63,24 @@ class KafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String
         topicPartitions
       }
     }.asInstanceOf[Set[TopicAndPartition]]
+  }
+
+  def getPartitionsLeader(topics: Set[String]): Map[TopicPartition, String] = {
+    getPartitionInfo(topics).map { pi =>
+      new TopicPartition(pi.topic, pi.partition) -> pi.leader.host
+    }.toMap
+  }
+
+  def getPartitionInfo(topics: Set[String]): Set[PartitionInfo] = {
+    withConsumer { consumer =>
+      topics.flatMap { topic =>
+        Option(consumer.partitionsFor(topic)) match {
+          case None =>
+            throw new SparkException("Topic doesn't exist " + topic)
+          case Some(piList) => piList.asScala.toList
+        }
+      }
+    }.asInstanceOf[Set[PartitionInfo]]
   }
 
   def setConsumerOffsets(offsets: Map[TopicAndPartition, Long]): Unit = {

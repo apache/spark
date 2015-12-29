@@ -261,7 +261,7 @@ class DirectKafkaStreamSuite
       kafkaTestUtils.sendMessages(topic, strings.map {
         _ -> 1
       }.toMap)
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(20 seconds), interval(50 milliseconds)) {
         assert(strings.forall {
           DirectKafkaStreamSuite.collectedData.contains
         })

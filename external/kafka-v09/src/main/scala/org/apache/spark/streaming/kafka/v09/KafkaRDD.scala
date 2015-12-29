@@ -24,6 +24,7 @@ import org.apache.kafka.clients.consumer.{ ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.TopicPartition
 import org.apache.spark.partial.{ BoundedDouble, PartialResult }
 import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.kafka.v09.KafkaCluster
 import org.apache.spark.streaming.kafka.v09.KafkaCluster.toTopicPart
 import org.apache.spark.util.NextIterator
 import org.apache.spark.{ Logging, Partition, SparkContext, TaskContext }
@@ -53,9 +54,13 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
     .getOrElse(KAFKA_DEFAULT_POLL_TIME).toInt
 
   override def getPartitions: Array[Partition] = {
+    val topics = offsetRanges.map { _.topic }.toSet
+    val tpLeaders = new KafkaCluster[K, V](kafkaParams).getPartitionsLeader(topics)
+
     offsetRanges.zipWithIndex.map {
       case (o, i) =>
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset)
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset,
+          tpLeaders(new TopicPartition(o.topic, o.partition)))
     }.toArray
   }
 
@@ -97,6 +102,12 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
       parts.keys.toArray)
     res.foreach(buf ++= _)
     buf.toArray
+  }
+
+  override def getPreferredLocations(thePart: Partition): Seq[String] = {
+    val part = thePart.asInstanceOf[KafkaRDDPartition]
+    // TODO is additional hostname resolution necessary here
+    Seq(part.host)
   }
 
   private def errBeginAfterEnd(part: KafkaRDDPartition): String =
