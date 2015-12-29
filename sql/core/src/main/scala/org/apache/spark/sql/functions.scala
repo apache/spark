@@ -1931,6 +1931,40 @@ object functions extends LegacyFunctions {
     new Murmur3Hash(cols.map(_.expr))
   }
 
+  /**
+   * Encrypts input using AES and Returns the result as a binary column.
+   * Key lengths of 128, 192 or 256 bits can be used. 192 and 256 bits keys can be used if
+   * Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
+   * If either argument is NULL or the key length is not one of the permitted values,
+   * the result will also be null.
+   *
+   * @param input binary column to encrypt input
+   * @param key binary column of 128, 192 or 256 bits key
+   *
+   * @group misc_funcs
+   * @since 2.0.0
+   */
+  def aes_encrypt(input: Column, key: Column): Column = withExpr {
+    AesEncrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Decrypts input using AES and Returns the result as a string column.
+   * Key lengths of 128, 192 or 256 bits can be used. 192 and 256 bits keys can be used if
+   * Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
+   * If either argument is NULL or the key length is not one of the permitted values,
+   * the result will also be null.
+   *
+   * @param input binary column to decrypt input
+   * @param key binary column of 128, 192 or 256 bits key
+   *
+   * @group misc_funcs
+   * @since 2.0.0
+   */
+  def aes_decrypt(input: Column, key: Column): Column = withExpr {
+    AesEncrypt(input.expr, key.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

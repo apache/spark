@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.security.{MessageDigest, NoSuchAlgorithmException}
+import java.security.{GeneralSecurityException, MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
+
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
 
 import org.apache.commons.codec.digest.DigestUtils
 
@@ -440,5 +443,129 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
          | System.err.println("Result of ${child.simpleString} is " + $c);
          | ${ev.value} = $c;
        """.stripMargin)
+  }
+}
+
+/**
+ * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * 192 and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength
+ * Jurisdiction Policy Files are installed. If either argument is NULL or the key length is
+ * not one of the permitted values, the return value is NULL.
+ */
+@ExpressionDescription(
+  usage =
+    """_FUNC_(input, key) - Encrypts input using AES. Key lengths of 128, 192 or 256 bits can
+ be used. 192 and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength
+ Jurisdiction Policy Files are installed. If either argument is NULL or the key length is not one
+ of the permitted values, the return value is NULL.""",
+  extended = """> SELECT Base64(_FUNC_('ABC', '1234567890123456'));
+ 'y6Ss+zCYObpCbgfWfyNWTw=='"""
+)
+case class AesEncrypt(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = BinaryType
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val cipher = Cipher.getInstance("AES")
+    val secretKey: SecretKeySpec = input2.asInstanceOf[Array[Byte]].length match {
+      case 16 | 24 | 32 =>
+        new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
+          input2.asInstanceOf[Array[Byte]].length, "AES")
+      case _ => null
+    }
+    try {
+      cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+      cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0, input1.asInstanceOf[Array[Byte]].length)
+    } catch {
+      case e: GeneralSecurityException => null
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    nullSafeCodeGen(ctx, ev, (str, key) => {
+      val Cipher = "javax.crypto.Cipher"
+      val SecretKeySpec = "javax.crypto.spec.SecretKeySpec"
+      s"""
+          try {
+            $Cipher cipher = $Cipher.getInstance("AES");
+            if ($key.length == 16 || $key.length == 24 || $key.length == 32) {
+              cipher.init($Cipher.ENCRYPT_MODE, new $SecretKeySpec($key, 0, $key.length, "AES"));
+              ${ev.value} = cipher.doFinal($str, 0, $str.length);
+            } else {
+              ${ev.isNull} = true;
+            }
+          } catch (java.security.GeneralSecurityException e) {
+            org.apache.spark.unsafe.Platform.throwException(e);
+          }
+      """
+    })
+  }
+}
+
+/**
+ * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * 192 and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength
+ * Jurisdiction Policy Files are installed. If either argument is NULL or the key length is
+ * not one of the permitted values, the return value is NULL.
+ */
+@ExpressionDescription(
+  usage = """_FUNC_(input, key) - Decrypts input using AES. Key lengths of 128, 192 or 256 bits can
+ be used. 192 and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength
+ Jurisdiction Policy Files are installed. If either argument is NULL or the key length is not one
+ of the permitted values, the return value is NULL.""",
+  extended =
+    """> SELECT _FUNC_(UnBase64('y6Ss+zCYObpCbgfWfyNWTw=='),'1234567890123456');
+ 'ABC'"""
+)
+case class AesDecrypt(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = StringType
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val cipher = Cipher.getInstance("AES")
+    val secretKey = input2.asInstanceOf[Array[Byte]].length match {
+      case 16 | 24 | 32 =>
+        new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
+          input2.asInstanceOf[Array[Byte]].length, "AES")
+      case _ => null
+    }
+
+    try {
+      cipher.init(Cipher.DECRYPT_MODE, secretKey)
+      UTF8String.fromBytes(
+        cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0,
+          input1.asInstanceOf[Array[Byte]].length))
+    } catch {
+      case e: GeneralSecurityException => null
+    }
+
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    nullSafeCodeGen(ctx, ev, (str, key) => {
+      val Cipher = "javax.crypto.Cipher"
+      val SecretKeySpec = "javax.crypto.spec.SecretKeySpec"
+      s"""
+          try {
+            $Cipher cipher = $Cipher.getInstance("AES");
+            if ($key.length == 16 || $key.length == 24 || $key.length == 32) {
+              cipher.init($Cipher.DECRYPT_MODE, new $SecretKeySpec($key, 0, $key.length, "AES"));
+              ${ev.value} = UTF8String.fromBytes(cipher.doFinal($str, 0, $str.length));
+            } else {
+              ${ev.isNull} = true;
+            }
+          } catch (java.security.GeneralSecurityException e) {
+            org.apache.spark.unsafe.Platform.throwException(e);
+          }
+      """
+    })
   }
 }

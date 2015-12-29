@@ -132,4 +132,49 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("aesEncrypt") {
+    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
+      Literal("1234567890123456".getBytes))), "y6Ss+zCYObpCbgfWfyNWTw==")
+    checkEvaluation(Base64(AesEncrypt(Literal("".getBytes),
+      Literal("1234567890123456".getBytes))), "BQGHoM3lqYcsurCRq3PlUw==")
+
+    // Before testing this, installing Java Cryptography Extension (JCE)
+    // Unlimited Strength Jurisdiction Policy Files first
+//    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
+//      Literal("12345678901234561234567890123456".getBytes))), "nYfCuJeRd5eD60yXDw7WEA==")
+
+    // input is null
+    checkEvaluation(AesEncrypt(Literal.create(null, BinaryType),
+      Literal("1234567890123456".getBytes)), null)
+    // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
+    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
+      Literal("1234567890".getBytes))), null)
+    // key is null
+    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
+      Literal.create(null, BinaryType))), null)
+    // both are null
+    checkEvaluation(Base64(AesEncrypt(Literal.create(null, BinaryType),
+      Literal.create(null, BinaryType))), null)
+  }
+
+  test("aesDecrypt") {
+    checkEvaluation(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
+      Literal("1234567890123456".getBytes)), "ABC")
+    checkEvaluation(AesDecrypt(UnBase64(Literal("BQGHoM3lqYcsurCRq3PlUw==")),
+      Literal("1234567890123456".getBytes)), "")
+
+    // input is null
+    checkEvaluation(AesDecrypt(UnBase64(Literal.create(null, StringType)),
+      Literal("1234567890123456".getBytes)), null)
+    // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
+    checkEvaluation(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
+      Literal("1234567890".getBytes)), null)
+    // key is null
+    checkEvaluation(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
+      Literal.create(null, BinaryType)), null)
+    // both are null
+    checkEvaluation(AesDecrypt(UnBase64(Literal.create(null, StringType)),
+      Literal.create(null, BinaryType)), null)
+  }
 }
