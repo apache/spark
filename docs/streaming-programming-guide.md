@@ -2030,9 +2030,9 @@ you can limit the rate by setting the [configuration parameter](configuration.ht
 `spark.streaming.receiver.maxRate`.
 
 If using S3 for checkpointing, please remember to enable `spark.streaming.driver.writeAheadLog.closeFileAfterWrite`
-and `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. You can also enable
-`spark.streaming.driver.writeAheadLog.allowBatching` to improve the performance of writing write
-ahead logs in driver. See [Spark Streaming Configuration](configuration.html#spark-streaming) or more details.
+and `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. By default,
+`spark.streaming.driver.writeAheadLog.allowBatching` is enabled to improve the performance of writing write
+ahead logs on the driver. See [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
 
 ***
 
