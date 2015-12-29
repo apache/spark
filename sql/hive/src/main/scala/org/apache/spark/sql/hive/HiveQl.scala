@@ -600,12 +600,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         NativePlaceholder
       } else {
         tableType match {
-          case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts)) if nameParts.size == 1 => {
-            nameParts.head match {
+          case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts :: Nil) :: Nil) => {
+            nameParts match {
               case Token(".", dbName :: tableName :: Nil) =>
                 // It is describing a table with the format like "describe db.table".
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
-                val tableIdent = extractTableIdent(nameParts.head)
+                val tableIdent = extractTableIdent(nameParts)
                 DescribeCommand(
                   UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
