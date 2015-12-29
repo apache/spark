@@ -29,6 +29,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, expressions}
+import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLContext, sources}
 
@@ -41,18 +42,9 @@ class SimpleTextSource extends HadoopFsRelationProvider {
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      numBuckets: Int,
-      bucketColumns: Array[String],
-      sortColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new SimpleTextRelation(
-      paths,
-      schema,
-      partitionColumns,
-      0,
-      bucketColumns,
-      sortColumns,
-      parameters)(sqlContext)
+    new SimpleTextRelation(paths, schema, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
 
@@ -103,9 +95,7 @@ class SimpleTextRelation(
     override val paths: Array[String],
     val maybeDataSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
-    val numBuckets: Int,
-    val bucketColumns: Array[String],
-    val sortColumns: Array[String],
+    val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(parameters) {
@@ -231,18 +221,10 @@ class CommitFailureTestSource extends HadoopFsRelationProvider {
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
-      numBuckets: Int,
-      bucketColumns: Array[String],
-      sortColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new CommitFailureTestRelation(
-      paths,
-      schema,
-      partitionColumns,
-      numBuckets,
-      bucketColumns,
-      sortColumns,
-      parameters)(sqlContext)
+    new CommitFailureTestRelation(paths, schema, partitionColumns, bucketSpec, parameters)(
+      sqlContext)
   }
 }
 
@@ -250,18 +232,14 @@ class CommitFailureTestRelation(
     override val paths: Array[String],
     maybeDataSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
-    numBuckets: Int,
-    bucketColumns: Array[String],
-    sortColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient sqlContext: SQLContext)
   extends SimpleTextRelation(
     paths,
     maybeDataSchema,
     userDefinedPartitionColumns,
-    numBuckets,
-    bucketColumns,
-    sortColumns,
+    bucketSpec,
     parameters)(sqlContext) {
   override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
     override def newInstance(

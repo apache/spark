@@ -35,7 +35,7 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitionSpec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
@@ -51,9 +51,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
-      numBuckets: Int,
-      bucketColumns: Array[String],
-      sortColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
 
     new JSONRelation(
@@ -61,9 +59,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       maybeDataSchema = dataSchema,
       maybePartitionSpec = None,
       userDefinedPartitionColumns = partitionColumns,
-      numBuckets,
-      bucketColumns,
-      sortColumns,
+      bucketSpec = bucketSpec,
       paths = paths,
       parameters = parameters)(sqlContext)
   }
@@ -74,9 +70,7 @@ private[sql] class JSONRelation(
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    val numBuckets: Int,
-    val bucketColumns: Array[String],
-    val sortColumns: Array[String],
+    val bucketSpec: Option[BucketSpec],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
@@ -94,9 +88,7 @@ private[sql] class JSONRelation(
       maybeDataSchema,
       maybePartitionSpec,
       userDefinedPartitionColumns,
-      0,
-      Array.empty,
-      Array.empty,
+      None,
       paths,
       parameters)(sqlContext)
   }

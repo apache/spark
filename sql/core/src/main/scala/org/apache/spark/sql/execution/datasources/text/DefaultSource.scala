@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitionSpec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -48,13 +48,10 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
-      numBuckets: Int,
-      bucketColumns: Array[String],
-      sortColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(
-      None, partitionColumns, numBuckets, bucketColumns, sortColumns, paths)(sqlContext)
+    new TextRelation(None, partitionColumns, bucketSpec, paths)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -75,9 +72,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    val numBuckets: Int,
-    val bucketColumns: Array[String],
-    val sortColumns: Array[String],
+    val bucketSpec: Option[BucketSpec],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)

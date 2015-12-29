@@ -310,9 +310,7 @@ private[sql] class DynamicPartitionWriterContainer(
     relation: HadoopFsRelation,
     job: Job,
     partitionColumns: Seq[Attribute],
-    numBuckets: Int,
-    bucketColumns: Seq[Attribute],
-    sortColumns: Seq[Attribute],
+    bucketSpec: Option[BucketSpec],
     dataColumns: Seq[Attribute],
     inputSchema: Seq[Attribute],
     defaultPartitionName: String,
@@ -320,31 +318,34 @@ private[sql] class DynamicPartitionWriterContainer(
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
 
+  private def toAttribute(columnName: String) = inputSchema.find(_.name == columnName).get
+
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     val outputWriters = new java.util.HashMap[InternalRow, OutputWriter]
     executorSideSetup(taskContext)
 
     var outputWritersCleared = false
 
-    // TODO: this follows hive, but can we just use pmod?
-    val buckNumExpr = Remainder(Abs(Hash(bucketColumns)), Literal(numBuckets))
-
-    val getKey = if (numBuckets == 0) {
+    val getKey = if (bucketSpec.isEmpty) {
       UnsafeProjection.create(partitionColumns, inputSchema)
     } else {
-      UnsafeProjection.create(partitionColumns ++ (buckNumExpr +: sortColumns), inputSchema)
+      val BucketSpec(numBuckets, bucketColumns, sortColumns) = bucketSpec.get
+      val bucketIdExpr = Pmod(Hash(bucketColumns.map(toAttribute)), Literal(numBuckets))
+      val sortingAttrs = sortColumns.map(_.map(toAttribute)).getOrElse(Nil)
+      UnsafeProjection.create(partitionColumns ++ (bucketIdExpr +: sortingAttrs), inputSchema)
     }
 
-    val keySchema = if (numBuckets == 0) {
+    val keySchema = if (bucketSpec.isEmpty) {
       StructType.fromAttributes(partitionColumns)
     } else {
+      val sortingAttrs = bucketSpec.get.sortingColumns.map(_.map(toAttribute)).getOrElse(Nil)
       val fields = StructType.fromAttributes(partitionColumns)
         .add("bucketId", IntegerType).fields ++
-        StructType.fromAttributes(sortColumns).fields
+        StructType.fromAttributes(sortingAttrs).fields
       StructType(fields)
     }
 
-    def getBucketId(key: InternalRow): Option[Int] = if (numBuckets > 0) {
+    def getBucketId(key: InternalRow): Option[Int] = if (bucketSpec.isDefined) {
       Some(key.getInt(partitionColumns.length))
     } else {
       None
@@ -370,7 +371,8 @@ private[sql] class DynamicPartitionWriterContainer(
     // If anything below fails, we should abort the task.
     try {
       // This will be filled in if we have to fall back on sorting.
-      var sorter: UnsafeKVExternalSorter = if (sortColumns.nonEmpty) {
+      val alwaysSort = bucketSpec.isDefined && bucketSpec.get.sortingColumns.isDefined
+      var sorter: UnsafeKVExternalSorter = if (alwaysSort) {
         new UnsafeKVExternalSorter(
           keySchema,
           StructType.fromAttributes(dataColumns),
@@ -449,13 +451,17 @@ private[sql] class DynamicPartitionWriterContainer(
 
     /** Open and returns a new OutputWriter given a partition key. */
     def newOutputWriter(key: InternalRow): OutputWriter = {
-      val partitionPath = getPartitionString(key).getString(0)
+      val path = if (partitionColumns.nonEmpty) {
+        val partitionPath = getPartitionString(key).getString(0)
+        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
+        configuration.set(
+          "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
+        new Path(getWorkPath, partitionPath).toString
+      } else {
+        getWorkPath
+      }
       val bucketId = getBucketId(key)
-      val path = new Path(getWorkPath, partitionPath)
-      val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
-      configuration.set(
-        "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
-      val newWriter = super.newOutputWriter(path.toString, bucketId)
+      val newWriter = super.newOutputWriter(path, bucketId)
       newWriter.initConverter(dataSchema)
       newWriter
     }

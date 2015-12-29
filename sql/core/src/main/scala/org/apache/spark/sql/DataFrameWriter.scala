@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, InsertIntoTable}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.sources.HadoopFsRelation
 
 
@@ -158,13 +158,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def save(): Unit = {
+    assertNoBucketing()
     ResolvedDataSource(
       df.sqlContext,
       source,
       partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-      numBuckets.getOrElse(0),
-      bucketingColumns.map(_.toArray).getOrElse(Array.empty[String]),
-      sortingColumns.map(_.toArray).getOrElse(Array.empty[String]),
+      getBucketSpec,
       mode,
       extraOptions.toMap,
       df)
@@ -183,6 +182,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
+    assertNoBucketing()
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
@@ -205,13 +205,44 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         ifNotExists = false)).toRdd
   }
 
-  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { parCols =>
-    parCols.map { col =>
-      df.logicalPlan.output
-        .map(_.name)
-        .find(df.sqlContext.analyzer.resolver(_, col))
-        .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
-          s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
+    cols.map(normalize(_, "Partition"))
+  }
+
+  private def normalizedBucketCols: Option[Seq[String]] = bucketingColumns.map { cols =>
+    cols.map(normalize(_, "Bucketing"))
+  }
+
+  private def normalizedSortCols: Option[Seq[String]] = sortingColumns.map { cols =>
+    cols.map(normalize(_, "Sorting"))
+  }
+
+  private def getBucketSpec: Option[BucketSpec] = {
+    if (numBuckets.isEmpty && sortingColumns.isDefined) {
+      throw new IllegalArgumentException("Specify numBuckets and bucketing columns first.")
+    }
+    if (numBuckets.isDefined && numBuckets.get <= 0) {
+      throw new IllegalArgumentException("numBuckets must be greater than 0.")
+    }
+
+    if (numBuckets.isDefined) {
+      Some(BucketSpec(numBuckets.get, normalizedBucketCols.get, normalizedSortCols))
+    } else {
+      None
+    }
+  }
+
+  private def normalize(columnName: String, columnType: String): String = {
+    val validColumnNames = df.logicalPlan.output.map(_.name)
+    validColumnNames.find(df.sqlContext.analyzer.resolver(_, columnName))
+      .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
+        s"existing columns (${validColumnNames.mkString(", ")})"))
+  }
+
+  private def assertNoBucketing(): Unit = {
+    if (numBuckets.isDefined || sortingColumns.isDefined) {
+      throw new IllegalArgumentException(
+        "Currently we don't support writing bucketed data to this data source.")
     }
   }
 
@@ -261,9 +292,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             source,
             temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-            numBuckets.getOrElse(0),
-            bucketingColumns.map(_.toArray).getOrElse(Array.empty[String]),
-            sortingColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            getBucketSpec,
             mode,
             extraOptions.toMap,
             df.logicalPlan)

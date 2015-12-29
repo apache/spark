@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
+import org.apache.spark.sql.catalyst.expressions.{RowOrdering, Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -193,6 +193,13 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
 
         PartitioningUtils.validatePartitionColumnDataTypes(
           c.child.schema, c.partitionColumns, catalog.conf.caseSensitiveAnalysis)
+
+        c.bucketSpec.foreach(_.sortingColumns.foreach(_.foreach { sortCol =>
+          val dataType = c.child.schema.find(_.name == sortCol).get.dataType
+          if (!RowOrdering.isOrderable(dataType)) {
+            failAnalysis(s"Cannot use ${dataType.simpleString} for sorting column.")
+          }
+        }))
 
       case _ => // OK
     }

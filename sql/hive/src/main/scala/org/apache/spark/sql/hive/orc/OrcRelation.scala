@@ -38,7 +38,7 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitionSpec}
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
@@ -54,23 +54,13 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
-      numBuckets: Int,
-      bucketColumns: Array[String],
-      sortColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
 
-    new OrcRelation(
-      paths,
-      dataSchema,
-      None,
-      partitionColumns,
-      numBuckets,
-      bucketColumns,
-      sortColumns,
-      parameters)(sqlContext)
+    new OrcRelation(paths, dataSchema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
 
@@ -168,9 +158,7 @@ private[sql] class OrcRelation(
     maybeDataSchema: Option[StructType],
     maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    val numBuckets: Int,
-    val bucketColumns: Array[String],
-    val sortColumns: Array[String],
+    val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters)
@@ -187,9 +175,7 @@ private[sql] class OrcRelation(
       maybeDataSchema,
       maybePartitionSpec,
       maybePartitionSpec.map(_.partitionColumns),
-      0,
-      Array.empty,
-      Array.empty,
+      None,
       parameters)(sqlContext)
   }
 

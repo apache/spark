@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{JobConf, FileInputFormat}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
-import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
@@ -160,9 +160,7 @@ trait HadoopFsRelationProvider {
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
-      numBuckets: Int,
-      bucketColumns: Array[String],
-      sortColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation
 }
 
@@ -584,9 +582,7 @@ abstract class HadoopFsRelation private[sql](
   final def partitionColumns: StructType =
     userDefinedPartitionColumns.getOrElse(partitionSpec.partitionColumns)
 
-  def numBuckets: Int
-  def bucketColumns: Array[String]
-  def sortColumns: Array[String]
+  def bucketSpec: Option[BucketSpec]
 
   /**
    * Optional user defined partition columns.

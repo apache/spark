@@ -76,9 +76,7 @@ case class CreateTableUsingAsSelect(
     provider: String,
     temporary: Boolean,
     partitionColumns: Array[String],
-    numBuckets: Int,
-    bucketColumns: Array[String],
-    sortColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     mode: SaveMode,
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
@@ -116,9 +114,7 @@ case class CreateTempTableUsingAsSelect(
       sqlContext,
       provider,
       partitionColumns,
-      0,
-      Array.empty,
-      Array.empty,
+      None,
       mode,
       options,
       df)
