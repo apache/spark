@@ -26,6 +26,15 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{ArrayType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
+case class DummySafeNode(limit: Int, child: SparkPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def canProcessUnsafeRows: Boolean = false
+  override def canProcessSafeRows: Boolean = true
+
+  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
+  protected override def doExecute(): RDD[InternalRow] = child.execute()
+}
+
 class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
 
   private def getConverters(plan: SparkPlan): Seq[SparkPlan] = plan.collect {
@@ -38,8 +47,8 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
   private val outputsUnsafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(outputsUnsafe.outputsUnsafeRows)
 
-  ignore("planner should insert unsafe->safe conversions when required") {
-    val plan = Limit(10, outputsUnsafe)
+  test("planner should insert unsafe->safe conversions when required") {
+    val plan = DummySafeNode(10, outputsUnsafe)
     val preparedPlan = sqlContext.prepareForExecution.execute(plan)
     assert(preparedPlan.children.head.isInstanceOf[ConvertToSafe])
   }
