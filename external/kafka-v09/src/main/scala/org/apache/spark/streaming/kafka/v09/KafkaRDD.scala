@@ -158,6 +158,7 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
       }
 
       if (!iter.hasNext) {
+        assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part))
         finished = true
         null.asInstanceOf[R]
       } else {
