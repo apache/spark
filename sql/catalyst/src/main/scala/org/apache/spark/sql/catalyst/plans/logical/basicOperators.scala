@@ -111,6 +111,9 @@ private[sql] object SetOperation {
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
+  override def maxRows: Option[Expression] =
+    for (leftMax <- left.maxRows; rightMax <- right.maxRows) yield Add(leftMax, rightMax)
+
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
     Statistics(sizeInBytes = sizeInBytes)

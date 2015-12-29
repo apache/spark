@@ -51,7 +51,6 @@ object DefaultOptimizer extends Optimizer {
       // Operator combine
       ProjectCollapsing,
       CombineFilters,
-      CombineLimits,
       // Constant folding
       NullPropagation,
       OptimizeIn,
@@ -62,10 +61,42 @@ object DefaultOptimizer extends Optimizer {
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
+    Batch("Push Down Limits", FixedPoint(100),
+      PushDownLimit,
+      CombineLimits,
+      ConstantFolding,
+      BooleanSimplification) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
+}
+
+/**
+ * Pushes down Limit for reducing the amount of returned data.
+ *
+ * 1. Adding Extra Limit beneath the operations, including Union All.
+ * 2. Project is pushed through Limit in the rule ColumnPruning
+ *
+ * Any operator that a Limit can be pushed passed should override the maxRows function.
+ *
+ * Note: This rule has to be done when the logical plan is stable;
+ *       Otherwise, it could impact the other rules.
+ */
+object PushDownLimit extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // Adding extra Limit below UNION ALL iff both left and right childs are not Limit or
+    // do not have Limit descendants. This heuristic is valid assuming there does not exist
+    // any Limit push-down rule that is unable to infer the value of maxRows.
+    case Limit(exp, Union(left, right))
+      if left.maxRows.isEmpty || right.maxRows.isEmpty =>
+      Limit(exp,
+        Union(
+          Limit(exp, left),
+          Limit(exp, right)))
+  }
 }
 
 /**
@@ -152,17 +183,6 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           Filter(pushToRight(deterministic, rewrites), right)
         )
       )
-
-    // Adding extra Limit below UNION ALL iff both left and right childs are not Limit and no Limit
-    // was pushed down before. This heuristic is valid assuming there does not exist any Limit
-    // push-down rule that is unable to infer the value of maxRows. Any operator that a Limit can
-    // be pushed passed should override this function.
-    case Limit(exp, Union(left, right))
-      if left.maxRows.isEmpty || right.maxRows.isEmpty =>
-      Limit(exp,
-        Union(
-          Limit(exp, left),
-          Limit(exp, right)))
 
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, u @ Union(left, right)) =>
