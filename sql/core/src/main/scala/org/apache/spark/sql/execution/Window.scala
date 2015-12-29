@@ -257,16 +257,16 @@ case class Window(
    * @return the final resulting projection.
    */
   private[this] def createResultProjection(
-      expressions: Seq[Expression]): MutableProjection = {
+      expressions: Seq[Expression]): UnsafeProjection = {
     val references = expressions.zipWithIndex.map{ case (e, i) =>
       // Results of window expressions will be on the right side of child's output
       BoundReference(child.output.size + i, e.dataType, e.nullable)
     }
     val unboundToRefMap = expressions.zip(references).toMap
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
-    newMutableProjection(
+    UnsafeProjection.create(
       projectList ++ patchedWindowExpression,
-      child.output)()
+      child.output)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
