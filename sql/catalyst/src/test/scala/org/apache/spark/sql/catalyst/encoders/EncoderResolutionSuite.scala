@@ -36,12 +36,16 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder[StringLongClass]
     val cls = classOf[StringLongClass]
 
+
     {
       val attrs = Seq('a.string, 'b.int)
       val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
       val expected: Expression = NewInstance(
         cls,
-        toExternalString('a.string) :: 'b.int.cast(LongType) :: Nil,
+        Seq(
+          toExternalString('a.string),
+          AssertNotNull('b.int.cast(LongType), cls.getName, "b", "Long")
+        ),
         false,
         ObjectType(cls))
       compareExpressions(fromRowExpr, expected)
@@ -52,7 +56,10 @@ class EncoderResolutionSuite extends PlanTest {
       val fromRowExpr = encoder.resolve(attrs, null).fromRowExpression
       val expected = NewInstance(
         cls,
-        toExternalString('a.int.cast(StringType)) :: 'b.long :: Nil,
+        Seq(
+          toExternalString('a.int.cast(StringType)),
+          AssertNotNull('b.long, cls.getName, "b", "Long")
+        ),
         false,
         ObjectType(cls))
       compareExpressions(fromRowExpr, expected)
@@ -69,7 +76,7 @@ class EncoderResolutionSuite extends PlanTest {
     val expected: Expression = NewInstance(
       cls,
       Seq(
-        'a.int.cast(LongType),
+        AssertNotNull('a.int.cast(LongType), cls.getName, "a", "Long"),
         If(
           'b.struct('a.int, 'b.long).isNull,
           Literal.create(null, ObjectType(innerCls)),
@@ -78,7 +85,9 @@ class EncoderResolutionSuite extends PlanTest {
             Seq(
               toExternalString(
                 GetStructField('b.struct('a.int, 'b.long), 0, Some("a")).cast(StringType)),
-              GetStructField('b.struct('a.int, 'b.long), 1, Some("b"))),
+              AssertNotNull(
+                GetStructField('b.struct('a.int, 'b.long), 1, Some("b")),
+                innerCls.getName, "b", "Long")),
             false,
             ObjectType(innerCls))
         )),
@@ -102,7 +111,9 @@ class EncoderResolutionSuite extends PlanTest {
           cls,
           Seq(
             toExternalString(GetStructField('a.struct('a.string, 'b.byte), 0, Some("a"))),
-            GetStructField('a.struct('a.string, 'b.byte), 1, Some("b")).cast(LongType)),
+            AssertNotNull(
+              GetStructField('a.struct('a.string, 'b.byte), 1, Some("b")).cast(LongType),
+              cls.getName, "b", "Long")),
           false,
           ObjectType(cls)),
         'b.int.cast(LongType)),

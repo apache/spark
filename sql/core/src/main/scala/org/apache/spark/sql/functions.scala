@@ -2512,7 +2512,8 @@ object functions extends LegacyFunctions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
-  // scalastyle:off
+  // scalastyle:off line.size.limit
+  // scalastyle:off parameter.number
 
   /* Use the following code to generate:
   (0 to 10).map { x =>
@@ -2839,7 +2840,8 @@ object functions extends LegacyFunctions {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
 
-  // scalastyle:on
+  // scalastyle:on parameter.number
+  // scalastyle:on line.size.limit
 
   /**
    * Call an user-defined function.

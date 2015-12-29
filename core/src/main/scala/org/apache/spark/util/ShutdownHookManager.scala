@@ -21,7 +21,6 @@ import java.io.File
 import java.util.PriorityQueue
 
 import scala.util.{Failure, Success, Try}
-import tachyon.client.TachyonFile
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.Logging
@@ -52,7 +51,6 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
-  private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
@@ -77,27 +75,11 @@ private[spark] object ShutdownHookManager extends Logging {
     }
   }
 
-  // Register the tachyon path to be deleted via shutdown hook
-  def registerShutdownDeleteDir(tachyonfile: TachyonFile) {
-    val absolutePath = tachyonfile.getPath()
-    shutdownDeleteTachyonPaths.synchronized {
-      shutdownDeleteTachyonPaths += absolutePath
-    }
-  }
-
   // Remove the path to be deleted via shutdown hook
   def removeShutdownDeleteDir(file: File) {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths.remove(absolutePath)
-    }
-  }
-
-  // Remove the tachyon path to be deleted via shutdown hook
-  def removeShutdownDeleteDir(tachyonfile: TachyonFile) {
-    val absolutePath = tachyonfile.getPath()
-    shutdownDeleteTachyonPaths.synchronized {
-      shutdownDeleteTachyonPaths.remove(absolutePath)
     }
   }
 
@@ -109,14 +91,6 @@ private[spark] object ShutdownHookManager extends Logging {
     }
   }
 
-  // Is the path already registered to be deleted via a shutdown hook ?
-  def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
-    val absolutePath = file.getPath()
-    shutdownDeleteTachyonPaths.synchronized {
-      shutdownDeleteTachyonPaths.contains(absolutePath)
-    }
-  }
-
   // Note: if file is child of some registered path, while not equal to it, then return true;
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in IOException and incomplete cleanup.
@@ -124,22 +98,6 @@ private[spark] object ShutdownHookManager extends Logging {
     val absolutePath = file.getAbsolutePath()
     val retval = shutdownDeletePaths.synchronized {
       shutdownDeletePaths.exists { path =>
-        !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }
-    }
-    if (retval) {
-      logInfo("path = " + file + ", already present as root for deletion.")
-    }
-    retval
-  }
-
-  // Note: if file is child of some registered path, while not equal to it, then return true;
-  // else false. This is to ensure that two shutdown hooks do not try to delete each others
-  // paths - resulting in Exception and incomplete cleanup.
-  def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
-    val absolutePath = file.getPath()
-    val retval = shutdownDeleteTachyonPaths.synchronized {
-      shutdownDeleteTachyonPaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
       }
     }
