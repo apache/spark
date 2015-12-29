@@ -40,7 +40,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
 
   protected val serializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {
-      sparkEnv.closureSerializer.newInstance()
+      sparkEnv.serializer.newInstance()
     }
   }
 

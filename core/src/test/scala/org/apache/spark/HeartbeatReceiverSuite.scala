@@ -29,6 +29,7 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.mockito.Matchers
 import org.mockito.Matchers._
+import org.mockito.internal.verification.VerificationModeFactory
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv, RpcEndpointRef}
@@ -213,6 +214,7 @@ class HeartbeatReceiverSuite
       executorId: String,
       executorShouldReregister: Boolean): Unit = {
     val metrics = new TaskMetrics
+    metrics.setHostname("localhost")
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
       Heartbeat(executorId, Array(1L -> metrics), blockManagerId))
@@ -221,7 +223,7 @@ class HeartbeatReceiverSuite
     } else {
       assert(!response.reregisterBlockManager)
       // Additionally verify that the scheduler callback is called with the correct parameters
-      verify(scheduler).executorHeartbeatReceived(
+      verify(scheduler, VerificationModeFactory.atLeast(1)).executorHeartbeatReceived(
         Matchers.eq(executorId), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
     }
   }

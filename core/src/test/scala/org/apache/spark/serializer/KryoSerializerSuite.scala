@@ -29,10 +29,11 @@ import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
-import org.apache.spark.scheduler.HighlyCompressedMapStatus
+import org.apache.spark.scheduler.{DirectTaskResult, HighlyCompressedMapStatus, IndirectTaskResult}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.Utils
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockManagerId, TaskResultBlockId}
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -152,6 +153,44 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
       mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
+  }
+
+  test("Bug: SPARK-12415") {
+    val ser = new KryoSerializer(conf.clone.set("spark.kryo.registrationRequired", "true"))
+      .newInstance()
+    def check[T: ClassTag](t: T) {
+      val ret = ser.deserialize[T](ser.serialize(t))
+      if (ret != null && ret.isInstanceOf[DirectTaskResult[_]]) {
+        val result = ret.asInstanceOf[DirectTaskResult[_]];
+        val that = t.asInstanceOf[DirectTaskResult[_]];
+        val accumSize = if (result.accumUpdates != null) result.accumUpdates.size else 0
+        val thatAccumSize = if (that.accumUpdates != null) that.accumUpdates.size else 0
+        if (accumSize != thatAccumSize) {
+          assert(false, "Sizes of accumUpdates don't match")
+        }
+        if (accumSize > 0) {
+          val b = result.accumUpdates.keys.forall { key =>
+            result.accumUpdates.get(key) == that.accumUpdates.get(key)
+          }
+          assert(b)
+        }
+        assert(result.valueBytes == that.valueBytes)
+        val thisMetrics = result.metrics;
+        val thatMetrics = that.metrics;
+        assert(thisMetrics.executorDeserializeTime == thatMetrics.executorDeserializeTime)
+        assert(thisMetrics.executorRunTime == thatMetrics.executorRunTime)
+        assert(thisMetrics.resultSize == thatMetrics.resultSize)
+        assert(thisMetrics.jvmGCTime == thatMetrics.jvmGCTime)
+        assert(thisMetrics.resultSerializationTime == thatMetrics.resultSerializationTime)
+        assert(thisMetrics.hostname == thatMetrics.hostname)
+      } else {
+        assert(ret === t, "Deser " + ret + " orig " + t)
+      }
+    }
+    var metrics = new TaskMetrics
+    metrics.setHostname(Utils.localHostName())
+    check(new DirectTaskResult[Int](ser.serialize(1), mutable.Map.empty, metrics))
+    check(new IndirectTaskResult[Any](TaskResultBlockId(1), 2))
   }
 
   test("Bug: SPARK-10251") {
