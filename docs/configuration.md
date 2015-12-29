@@ -1124,6 +1124,48 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.blacklist.enabled</code></td>
+  <td>true</td>
+  <td>
+    If set to "true", prevent Spark from scheduling tasks on executors that have been blacklisted due to too many task failures. The blacklisting algorithm can be further controlled by the other "spark.scheduler.blacklist" configuration options.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.timeout</code></td>
+  <td>0s</td>
+  <td>
+    If executor blacklisting is enabled, this controls how long an executor remains in the blacklist before it is returned to the pool of available executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.recoverPeriod</code></td>
+  <td>60s</td>
+  <td>
+    If executor blacklisting is enabled, this controls how often to check if executors can be returned to the pool of active executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.strategy</code></td>
+  <td>singleTask</td>
+  <td>
+    The strategy to determine executor blacklist and node blacklist. There are "singleTask" strategy which is the srandard behavior before spark 1.6 and "executorAndNode" strategy which is taskId unrelated and can learn experience from other taskSet to avoid allocating tasks on problematic executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.executorAndNode.maxFailedTasks</code></td>
+  <td>3</td>
+  <td>
+    It is used in "executorAndNode" blacklist strategy. If failure task number is more than maxFailedTasks on same executor, then the executor will be in blacklist
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.executorAndNode.maxBlacklistedExecutors</code></td>
+  <td>3</td>
+  <td>
+    It is used in "executorAndNode" blacklist strategy. If failure executor number is more than maxBlacklistedExecutors on same node, then the node will be in blacklist
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>

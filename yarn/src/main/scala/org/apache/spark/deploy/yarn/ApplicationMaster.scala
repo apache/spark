@@ -598,11 +598,12 @@ private[spark] class ApplicationMaster(
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount) =>
+      case RequestExecutors(
+          requestedTotal, localityAwareTasks, hostToLocalTaskCount, nodeBlacklist) =>
         Option(allocator) match {
           case Some(a) =>
             if (a.requestTotalExecutorsWithPreferredLocalities(requestedTotal,
-              localityAwareTasks, hostToLocalTaskCount)) {
+              localityAwareTasks, hostToLocalTaskCount, nodeBlacklist)) {
               resetAllocatorInterval()
             }
             context.reply(true)
