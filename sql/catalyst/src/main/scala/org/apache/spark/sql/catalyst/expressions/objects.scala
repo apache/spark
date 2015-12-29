@@ -241,15 +241,15 @@ case class NewInstance(
         $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
         if ($argsNonNull) {
           ${ev.value} = $constructorCall;
-          ${ev.isNull} = ${ev.value} == null;
+          ${ev.isNull} = false;
         }
        """
     } else {
       s"""
         $setup
 
-        $javaType ${ev.value} = $constructorCall;
-        final boolean ${ev.isNull} = ${ev.value} == null;
+        final $javaType ${ev.value} = $constructorCall;
+        final boolean ${ev.isNull} = false;
       """
     }
   }
