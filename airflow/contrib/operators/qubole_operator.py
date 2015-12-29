@@ -74,9 +74,12 @@ class QuboleOperator(BaseOperator):
 
         return self.cmd.id
 
-    def on_kill(self):
-        logging.info('Sending KILL signal to Qubole Command Id: %s' % self.cmd.id)
+    def on_kill(self, ti):
+        if self.cmd is None:
+            cmd_id = ti.xcom_pull(key="return_value", task_ids=self.task_id)
+            self.cmd = self.cls.find(cmd_id)
         if self.cls and self.cmd:
+            logging.info('Sending KILL signal to Qubole Command Id: %s' % self.cmd.id)
             self.cmd.cancel()
 
     def get_results(self, ti, fp=None, inline=True, delim=None, fetch=True):
@@ -99,7 +102,7 @@ class QuboleOperator(BaseOperator):
     def get_log(self, ti):
         if self.cmd is None:
             cmd_id = ti.xcom_pull(key="return_value", task_ids=self.task_id)
-        Command.get_jobs_id(self.cls, cmd_id)
+        Command.get_log_id(self.cls, cmd_id)
 
     def get_jobs_id(self, ti):
         if self.cmd is None:
