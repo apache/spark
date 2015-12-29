@@ -601,7 +601,7 @@ private[deploy] class Master(
 
     /** Return whether the specified worker can launch an executor for this app. */
     def canLaunchExecutor(pos: Int): Boolean = {
-      val keepScheduling = coresToAssign >= 0
+      val keepScheduling = coresToAssign > 0
       val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
 
       // If we allow multiple executors per worker, then we can always launch new executors.
