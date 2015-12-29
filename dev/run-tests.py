@@ -148,7 +148,7 @@ def determine_java_executable():
     return java_exe if java_exe else which("java")
 
 
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch', 'update'])
+JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
 
 
 def determine_java_version(java_exe):
@@ -164,14 +164,13 @@ def determine_java_version(java_exe):
     # find raw version string, eg 'java version "1.8.0_25"'
     raw_version_str = next(x for x in raw_output_lines if " version " in x)
 
-    match = re.search('(\d+)\.(\d+)\.(\d+)_(\d+)', raw_version_str)
+    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
 
     major = int(match.group(1))
     minor = int(match.group(2))
     patch = int(match.group(3))
-    update = int(match.group(4))
 
-    return JavaVersion(major, minor, patch, update)
+    return JavaVersion(major, minor, patch)
 
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
