@@ -148,8 +148,6 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
-      (keyValueOutput, runFunc)
-
     case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
