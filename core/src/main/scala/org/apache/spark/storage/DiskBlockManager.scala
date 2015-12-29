@@ -50,35 +50,89 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   private val shutdownHook = addShutdownHook()
 
-  /** Looks up a file by hashing it into one of our local subdirectories. */
-  // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
-  def getFile(filename: String): File = {
-    // Figure out which local directory it hashes to, and which subdirectory in that
-    val hash = Utils.nonNegativeHash(filename)
-    val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+  private abstract class FileAllocationStrategy {
+    def apply(filename: String): File
 
-    // Create the subdirectory if it doesn't already exist
-    val subDir = subDirs(dirId).synchronized {
-      val old = subDirs(dirId)(subDirId)
-      if (old != null) {
-        old
-      } else {
-        val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && !newDir.mkdir()) {
-          throw new IOException(s"Failed to create local dir in $newDir.")
+    protected def getFile(filename: String, storageDirs: Array[File]): File = {
+      require(storageDirs.nonEmpty, "could not find file when the directories are empty")
+
+      // Figure out which local directory it hashes to, and which subdirectory in that
+      val hash = Utils.nonNegativeHash(filename)
+      val dirId = localDirs.indexOf(storageDirs(hash % storageDirs.length))
+      val subDirId = (hash / storageDirs.length) % subDirsPerLocalDir
+
+      // Create the subdirectory if it doesn't already exist
+      val subDir = subDirs(dirId).synchronized {
+        val old = subDirs(dirId)(subDirId)
+        if (old != null) {
+          old
+        } else {
+          val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
+          if (!newDir.exists() && !newDir.mkdir()) {
+            throw new IOException(s"Failed to create local dir in $newDir.")
+          }
+          subDirs(dirId)(subDirId) = newDir
+          newDir
         }
-        subDirs(dirId)(subDirId) = newDir
-        newDir
       }
-    }
 
-    new File(subDir, filename)
+      new File(subDir, filename)
+    }
   }
 
-  def getFile(blockId: BlockId): File = getFile(blockId.name)
+  /** Looks up a file by hashing it into one of our local subdirectories. */
+  private object hashAllocator extends FileAllocationStrategy {
+    def apply(filename: String): File = getFile(filename, localDirs)
+  }
 
+  /** Looks up a file by hierarchy way in different speed storage devices. */
+  private val hierarchyStore = conf.getOption("spark.storage.hierarchyStore")
+  private class HierarchyAllocator extends FileAllocationStrategy {
+    case class LayerInfo(key: String, threshold: Long, dirs: Array[File])
+    val hsSpecs: Array[(String, Long)] =
+      // e.g.: hierarchyStore = "ssd 200GB, hdd 100GB"
+      hierarchyStore.get.trim.split(",").map {
+        s => val x = s.trim.split(" +")
+          (x(0).toLowerCase, Utils.byteStringAsGb(x(1)))
+      }
+    val hsLayers: Array[LayerInfo] = hsSpecs.map(
+      s => LayerInfo(s._1, s._2, localDirs.filter(_.getPath.toLowerCase.containsSlice(s._1)))
+    )
+    val lastLayerDirs = localDirs.filter(dir => !hsLayers.exists(_.dirs.contains(dir)))
+    val allLayers: Array[LayerInfo] = hsLayers :+
+      LayerInfo("Last Storage", 10.toLong, lastLayerDirs)
+    val finalLayers: Array[LayerInfo] = allLayers.filter(_.dirs.nonEmpty)
+    logInfo("Hierarchy store info:")
+    for (layer <- finalLayers) {
+      logInfo("Layer: %s, Threshold: %dGB".format(layer.key, layer.threshold))
+      layer.dirs.foreach { dir => logInfo("\t%s".format(dir.getCanonicalPath)) }
+    }
+
+    def apply(filename: String): File = {
+      var availableFile: File = null
+      for (layer <- finalLayers) {
+        val file = getFile(filename, layer.dirs)
+        if (file.exists()) return file
+
+        if (availableFile == null && file.getParentFile.getUsableSpace>>30 >= layer.threshold) {
+          availableFile = file
+        }
+      }
+
+      if (availableFile != null) {
+        throw new IOException(s"No enough disk space.")
+      }
+      availableFile
+    }
+  }
+
+  private val fileAllocator: FileAllocationStrategy =
+    if (!hierarchyStore.isDefined) hashAllocator else new HierarchyAllocator
+
+  def getFile(filename: String): File = fileAllocator(filename)
+
+  def getFile(blockId: BlockId): File = getFile(blockId.name)
+  
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
     getFile(blockId.name).exists()

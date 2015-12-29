@@ -137,7 +137,9 @@ private[spark] class IndexShuffleBlockResolver(
       shuffleId: Int,
       mapId: Int,
       lengths: Array[Long],
-      dataTmp: File): Unit = {
+      dataFileTmp: File,
+      // SPARK-12196, in hierarchy store, the getDataFile could return different value
+      dataFile: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     try {
@@ -154,34 +156,32 @@ private[spark] class IndexShuffleBlockResolver(
         out.close()
       }
 
-      val dataFile = getDataFile(shuffleId, mapId)
-      // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
-      // the following check and rename are atomic.
-      synchronized {
-        val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
-        if (existingLengths != null) {
-          // Another attempt for the same task has already written our map outputs successfully,
-          // so just use the existing partition lengths and delete our temporary map outputs.
-          System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
-          if (dataTmp != null && dataTmp.exists()) {
-            dataTmp.delete()
-          }
-          indexTmp.delete()
-        } else {
-          // This is the first successful attempt in writing the map outputs for this task,
-          // so override any existing index and data files with the ones we wrote.
-          if (indexFile.exists()) {
-            indexFile.delete()
-          }
-          if (dataFile.exists()) {
-            dataFile.delete()
-          }
-          if (!indexTmp.renameTo(indexFile)) {
-            throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
-          }
-          if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
-            throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
-          }
+    // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
+    // the following check and rename are atomic.
+    synchronized {
+      val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
+      if (existingLengths != null) {
+        // Another attempt for the same task has already written our map outputs successfully,
+        // so just use the existing partition lengths and delete our temporary map outputs.
+        System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
+        if (dataFileTmp != null && dataFileTmp.exists()) {
+          dataFileTmp.delete()
+        }
+        indexTmp.delete()
+      } else {
+        // This is the first successful attempt in writing the map outputs for this task,
+        // so override any existing index and data files with the ones we wrote.
+        if (indexFile.exists()) {
+          indexFile.delete()
+        }
+        if (dataFile != null && dataFile.exists()) {
+          dataFile.delete()
+        }
+        if (!indexTmp.renameTo(indexFile)) {
+          throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
+        }
+        if (dataFileTmp != null && dataFileTmp.exists() && !dataFileTmp.renameTo(dataFile)) {
+          throw new IOException("fail to rename file " + dataFileTmp + " to " + dataFile)
         }
       }
     } finally {

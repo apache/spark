@@ -150,12 +150,13 @@ public class UnsafeShuffleWriterSuite {
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
         partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
         File tmp = (File) invocationOnMock.getArguments()[3];
-        mergedOutputFile.delete();
-        tmp.renameTo(mergedOutputFile);
+        File dataFile = (File) invocationOnMock.getArguments()[4];
+        tmp.renameTo(dataFile);
         return null;
       }
     }).when(shuffleBlockResolver)
-      .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), any(File.class));
+      .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class),
+              any(File.class), any(File.class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer<Tuple2<TempShuffleBlockId, File>>() {
