@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList, Map => JMap}
-
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
