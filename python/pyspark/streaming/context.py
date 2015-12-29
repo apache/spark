@@ -98,8 +98,9 @@ class StreamingContext(object):
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
-        cls._transformerSerializer = TransformFunctionSerializer(
-            SparkContext._active_spark_context, CloudPickleSerializer(), gw)
+        if cls._transformerSerializer is None:
+            cls._transformerSerializer = TransformFunctionSerializer(
+                SparkContext._active_spark_context, CloudPickleSerializer(), gw)
 
     @classmethod
     def getOrCreate(cls, checkpointPath, setupFunc):
