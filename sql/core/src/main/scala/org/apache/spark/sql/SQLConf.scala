@@ -326,7 +326,7 @@ private[spark] object SQLConf {
   val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = booleanConf(
     key = "spark.sql.parquet.enableUnsafeRowRecordReader",
     defaultValue = Some(true),
-    doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
+    doc = "Enables using the custom UnsafeRowParquetRecordReader.")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),

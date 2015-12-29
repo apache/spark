@@ -294,7 +294,12 @@ private[sql] class ParquetRelation(
   }
 
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
-    if (safeParquetFilterPushDown) {
+    // The unsafe row RecordReader does not support row by row filtering so for this case
+    // it should wrap this with Spark-side filtering.
+    val enableUnsafeRowParquetReader =
+      sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
+    val shouldHandleFilters = safeParquetFilterPushDown && !enableUnsafeRowParquetReader
+    if (shouldHandleFilters) {
       filters.filter(ParquetFilters.createFilter(dataSchema, _).isEmpty)
     } else {
       filters
