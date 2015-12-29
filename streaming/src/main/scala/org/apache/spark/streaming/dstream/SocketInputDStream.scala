@@ -52,29 +52,33 @@ class SocketReceiver[T: ClassTag](
     storageLevel: StorageLevel
   ) extends Receiver[T](storageLevel) with Logging {
 
-  var socket: Socket = null
+  private var socket: Socket = null
 
   def onStart() {
-    logInfo("Connecting to " + host + ":" + port)
+    logInfo(s"Connecting to $host:$port")
     socket = new Socket(host, port)
-    logInfo("Connected to " + host + ":" + port)
+    logInfo(s"Connecting to $host:$port")
 
     // Start the thread that receives data over a connection
     new Thread("Socket Receiver") {
       setDaemon(true)
-      override def run() { receive(socket) }
+      override def run() { receive() }
     }.start()
   }
 
   def onStop() {
-    if (socket != null) {
-      socket.close()
-      socket = null
+    //in case restart thread close it twice
+    synchronized {
+      if (socket != null) {
+        socket.close()
+        socket = null
+        logInfo(s"Closed socket to $host:$port")
+      }
     }
   }
 
   /** Receive data until receiver is stopped */
-  def receive(socket: Socket) {
+  def receive() {
     try {
       if (socket.isConnected) {
         val iterator = bytesToObjects(socket.getInputStream())
@@ -89,15 +93,12 @@ class SocketReceiver[T: ClassTag](
       }
     } catch {
       case e: java.net.ConnectException =>
-        restart("Error connecting to " + host + ":" + port, e)
+        restart(s"Error connecting to $host:$port", e)
       case NonFatal(e) =>
         logWarning("Error receiving data", e)
         restart("Error receiving data", e)
     } finally {
-      if (socket != null) {
-        socket.close()
-        logInfo("Closed socket to " + host + ":" + port)
-      }
+      onStop()
     }
   }
 }
