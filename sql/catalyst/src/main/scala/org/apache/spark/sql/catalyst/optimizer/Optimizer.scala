@@ -53,7 +53,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       // Operator combine
       ProjectCollapsing,
       CombineFilters,
-      CombineLimits,
       // Constant folding
       NullPropagation,
       OptimizeIn,
@@ -64,6 +63,11 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
+    Batch("Push Down Limits", FixedPoint(100),
+      PushDownLimit,
+      CombineLimits,
+      ConstantFolding,
+      BooleanSimplification) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -78,6 +82,36 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   * specific rules go to the subclasses
   */
 object DefaultOptimizer extends Optimizer
+
+/**
+ * Pushes down Limit for reducing the amount of returned data.
+ *
+ * 1. Adding Extra Limit beneath the operations, including Union All.
+ * 2. Project is pushed through Limit in the rule ColumnPruning
+ *
+ * Any operator that a Limit can be pushed passed should override the maxRows function.
+ *
+ * Note: This rule has to be done when the logical plan is stable;
+ *       Otherwise, it could impact the other rules.
+ */
+object PushDownLimit extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // Adding extra Limit below UNION ALL iff both left and right childs are not Limit or
+    // do not have Limit descendants. This heuristic is valid assuming there does not exist
+    // any Limit push-down rule that is unable to infer the value of maxRows.
+    // Note, right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
+    // safe to pushdown Limit through it. Once we add UNION DISTINCT, we will not be able to
+    // pushdown Limit.
+    case Limit(exp, Union(left, right))
+      if left.maxRows.isEmpty || right.maxRows.isEmpty =>
+      Limit(exp,
+        Union(
+          Limit(exp, left),
+          Limit(exp, right)))
+  }
+}
 
 /**
  * Pushes operations down into a Sample.
@@ -97,8 +131,8 @@ object SamplePushDown extends Rule[LogicalPlan] {
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
- * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
- * we will not be able to pushdown Projections.
+ * safe to pushdown Filters, Projections and Limits through it. Once we add UNION DISTINCT,
+ * we will not be able to pushdown Projections and Limits.
  *
  * Intersect:
  * It is not safe to pushdown Projections through it because we need to get the

@@ -28,6 +28,8 @@ import scala.collection.mutable.ArrayBuffer
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  override def maxRows: Option[Expression] = child.maxRows
+
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
@@ -108,6 +110,9 @@ private[sql] object SetOperation {
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+
+  override def maxRows: Option[Expression] =
+    for (leftMax <- left.maxRows; rightMax <- right.maxRows) yield Add(leftMax, rightMax)
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
@@ -450,6 +455,8 @@ case class Pivot(
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def maxRows: Option[Expression] = Option(limitExpr)
 
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
