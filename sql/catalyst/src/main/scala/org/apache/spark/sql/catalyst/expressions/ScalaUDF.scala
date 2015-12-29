@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * User-defined function.
@@ -30,23 +30,21 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
  *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
- * @param expectedInputTypes  The expected input types of this UDF.
+ * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
+ *                    not want to perform coercion, simply use "Nil". Note that it would've been
+ *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
+ *                    type coercion. However, that would require more refactoring of the codebase.
  */
 case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    expectedInputTypes: Option[Seq[AbstractDataType]] = None)
+    inputTypes: Seq[DataType] = Nil)
   extends Expression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = true
 
   override def toString: String = s"UDF(${children.mkString(",")})"
-
-  override def inputTypes: Seq[AbstractDataType] = {
-    // If expectedInputTypes is specified, use that; otherwise, accept any data type.
-    expectedInputTypes.getOrElse(Seq.fill(children.size)(AnyDataType))
-  }
 
   // scalastyle:off line.size.limit
 

@@ -47,7 +47,7 @@ case class UserDefinedFunction protected[sql] (
     inputTypes: Option[Seq[DataType]]) {
 
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes))
+    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
   }
 }
 
