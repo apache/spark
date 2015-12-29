@@ -62,10 +62,6 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     case _ => false
   }
 
-  override def simpleString: String =
-    if (data == Seq.empty) super.simpleString + " [Empty Seq]"
-    else super.simpleString
-
   override lazy val statistics =
     Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
 }

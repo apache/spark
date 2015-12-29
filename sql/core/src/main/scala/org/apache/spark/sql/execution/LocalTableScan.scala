@@ -40,8 +40,4 @@ private[sql] case class LocalTableScan(
   override def executeTake(limit: Int): Array[InternalRow] = {
     rows.take(limit).toArray
   }
-
-  override def simpleString: String =
-    if (rows == Seq.empty) super.simpleString + " [Empty Seq]"
-    else super.simpleString
 }
