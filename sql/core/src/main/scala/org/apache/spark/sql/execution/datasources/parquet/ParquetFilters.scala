@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.Serializable
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.io.api.Binary
@@ -208,11 +210,30 @@ private[sql] object ParquetFilters {
   }
 
   /**
+   *  Return referenced columns in [[sources.Filter]].
+   */
+  def referencedColumns(schema: StructType, predicate: sources.Filter): Array[String] = {
+    val dataTypeOf = schema.map(f => f.name -> f.dataType).toMap
+    val referencedColumns = ArrayBuffer.empty[String]
+    def getDataTypeOf(name: String): DataType = {
+      referencedColumns += name
+      dataTypeOf(name)
+    }
+    createParquetFilter(getDataTypeOf, predicate)
+    referencedColumns.distinct.toArray
+  }
+
+  /**
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
     val dataTypeOf = schema.map(f => f.name -> f.dataType).toMap
+    createParquetFilter(dataTypeOf, predicate)
+  }
 
+  private def createParquetFilter(
+      dataTypeOf: String => DataType,
+      predicate: sources.Filter): Option[FilterPredicate] = {
     relaxParquetValidTypeMap
 
     // NOTE:
@@ -265,18 +286,18 @@ private[sql] object ParquetFilters {
         // Pushing one side of AND down is only safe to do at the top level.
         // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
+          lhsFilter <- createParquetFilter(dataTypeOf, lhs)
+          rhsFilter <- createParquetFilter(dataTypeOf, rhs)
         } yield FilterApi.and(lhsFilter, rhsFilter)
 
       case sources.Or(lhs, rhs) =>
         for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
+          lhsFilter <- createParquetFilter(dataTypeOf, lhs)
+          rhsFilter <- createParquetFilter(dataTypeOf, rhs)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createFilter(schema, pred).map(FilterApi.not)
+        createParquetFilter(dataTypeOf, pred).map(FilterApi.not)
 
       case _ => None
     }
