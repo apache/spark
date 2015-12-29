@@ -55,10 +55,14 @@ class SocketReceiver[T: ClassTag](
   var socket: Socket = null
 
   def onStart() {
+    logInfo("Connecting to " + host + ":" + port)
+    socket = new Socket(host, port)
+    logInfo("Connected to " + host + ":" + port)
+
     // Start the thread that receives data over a connection
     new Thread("Socket Receiver") {
       setDaemon(true)
-      override def run() { receive() }
+      override def run() { receive(socket) }
     }.start()
   }
 
@@ -69,20 +73,19 @@ class SocketReceiver[T: ClassTag](
     }
   }
 
-  /** Create a socket connection and receive data until receiver is stopped */
-  def receive() {
+  /** Receive data until receiver is stopped */
+  def receive(socket: Socket) {
     try {
-      logInfo("Connecting to " + host + ":" + port)
-      socket = new Socket(host, port)
-      logInfo("Connected to " + host + ":" + port)
-      val iterator = bytesToObjects(socket.getInputStream())
-      while(!isStopped && iterator.hasNext) {
-        store(iterator.next)
-      }
-      if (!isStopped()) {
-        restart("Socket data stream had no more data")
-      } else {
-        logInfo("Stopped receiving")
+      if (socket.isConnected) {
+        val iterator = bytesToObjects(socket.getInputStream())
+        while (!isStopped && iterator.hasNext) {
+          store(iterator.next)
+        }
+        if (!isStopped()) {
+          restart("Socket data stream had no more data")
+        } else {
+          logInfo("Stopped receiving")
+        }
       }
     } catch {
       case e: java.net.ConnectException =>
