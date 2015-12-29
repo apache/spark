@@ -337,7 +337,7 @@ object StructType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "struct"
 
-  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
+  private[sql] def fromString(raw: String): StructType = DataType.fromJson(raw) match {
     case t: StructType => t
     case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
   }
