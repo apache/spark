@@ -122,8 +122,11 @@ private[netty] class NettyRpcEnv(
 
   @Nullable
   override lazy val address: RpcAddress = {
-    if (server != null)
-      RpcAddress(host, conf.getInt("spark.driver.advertisedPort", server.getPort())) else null
+    if (server != null) {
+      RpcAddress(host, conf.getInt("spark.driver.advertisedPort", server.getPort()))
+    } else {
+      null
+    }
   }
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {

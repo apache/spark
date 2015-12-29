@@ -199,9 +199,7 @@ object SparkEnv extends Logging {
       isLocal = isLocal,
       numUsableCores = numCores,
       listenerBus = listenerBus,
-      mockOutputCommitCoordinator = mockOutputCommitCoordinator,
-      advertisedHost = conf.getOption("spark.driver.advertisedHost"),
-      advertisedPort = conf.getOption("spark.driver.advertisedPort").map(_.toInt)
+      mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
   }
 
@@ -241,9 +239,7 @@ object SparkEnv extends Logging {
       isLocal: Boolean,
       numUsableCores: Int,
       listenerBus: LiveListenerBus = null,
-      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None,
-      advertisedHost: Option[String] = None,
-      advertisedPort: Option[Int] = None): SparkEnv = {
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
     // Listener bus is only used on the driver
     if (isDriver) {
@@ -252,10 +248,19 @@ object SparkEnv extends Logging {
 
     val securityManager = new SecurityManager(conf)
 
+    val driverAdverisedData = if (isDriver) {
+      (conf.getOption("spark.driver.advertisedHost"),
+       conf.getOption("spark.driver.advertisedPort").map(_.toInt))
+    } else {
+      (None, None)
+    }
+
     // Create the ActorSystem for Akka and get the port it binds to.
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
     val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager,
-      clientMode = !isDriver, advertisedHost = advertisedHost, advertisedPort = advertisedPort)
+      clientMode = !isDriver,
+      advertisedHost = driverAdverisedData._1,
+      advertisedPort = driverAdverisedData._2)
     val actorSystem: ActorSystem =
       if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
         rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
