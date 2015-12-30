@@ -543,10 +543,12 @@ def main():
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
-    # spark build
-    build_apache_spark(build_tool, hadoop_version)
     if m.should_run_build_tests:
         run_build_tests()
+
+    # spark build
+    build_apache_spark(build_tool, hadoop_version)
+
 
     # backwards compatibility checks
     if build_tool == "sbt":
