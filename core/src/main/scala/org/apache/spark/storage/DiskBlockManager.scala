@@ -130,9 +130,11 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   private val fileAllocator: FileAllocationStrategy =
     if (hierarchyStore.isDefined && !conf.getBoolean("spark.shuffle.service.enabled", false)) {
+      logInfo(s"Hierarchy allocator for blocks is enabled")
       new HierarchyAllocator
     }
     else {
+      logInfo(s"Hash allocator for blocks is enabled")
       hashAllocator
     }
 
