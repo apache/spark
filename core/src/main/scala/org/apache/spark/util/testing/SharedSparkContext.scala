@@ -22,7 +22,13 @@ import org.apache.spark._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.Suite
 
-/** Shares a local `SparkContext` between all tests in a suite and closes it at the end */
+/**
+ * Shares a local `SparkContext` between all tests in a suite and closes it at the end.
+ * Mixin this trait when working with scalatest tests to provide a SparkContext.
+ * The `conf` variable is used when constructing the SparkContext and defaults to
+ * local mode with 4 cores.
+ * See `SharedJavaSparkContext` for a Java version of this API.
+ */
 trait SharedSparkContext extends BeforeAndAfterAll { self: Suite =>
 
   @transient private var _sc: SparkContext = _

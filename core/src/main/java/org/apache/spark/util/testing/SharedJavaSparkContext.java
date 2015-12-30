@@ -20,10 +20,21 @@ import org.apache.spark.*;
 import org.apache.spark.api.java.*;
 import org.junit.*;
 
-/** Shares a local `SparkContext` between all tests in a suite and closes it at the end */
+/**
+ * Shares a local `SparkContext` and `JavaSparkContext` between all tests in a suite and
+ * shutting down the SparkContext at the end. The `conf` variable is used when constructing the
+ * `SparkContext` and defaults to  mode with 4 cores.
+ * Extend this class to provide a JavaSparkContext for use with JUnit based tests.
+ * See `SharedSparkContext` for a Scala version of this API.
+ */
 public class SharedJavaSparkContext {
   private static transient SparkContext _sc;
   private static transient JavaSparkContext _jsc;
+  /**
+   * SparkConf used to create the SparkContext for testing.
+   * Override to change the master, application name, disable web ui
+   * or other changes.
+   */
   public static SparkConf _conf = new SparkConf().
     setMaster("local[4]").
     setAppName("test");
