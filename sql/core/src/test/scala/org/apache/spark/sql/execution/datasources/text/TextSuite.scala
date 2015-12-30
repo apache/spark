@@ -58,6 +58,17 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
+    val df = sqlContext.read.text(testFile).withColumnRenamed("value", "col1")
+
+    val tempFile = Utils.createTempDir()
+    tempFile.delete()
+    df.write.text(tempFile.getCanonicalPath)
+    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
+
+    Utils.deleteRecursively(tempFile)
+  }
+
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
   }

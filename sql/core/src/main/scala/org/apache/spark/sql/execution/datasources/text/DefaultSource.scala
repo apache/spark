@@ -77,7 +77,7 @@ private[sql] class TextRelation(
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
-  /** Data schema is always a single column, named "value". */
+  /** Data schema is always a single column, named "value" if original Data source has no schema. */
   override def dataSchema: StructType =
     textSchema.getOrElse(new StructType().add("value", StringType))
   /** This is an internal data source that outputs internal row format. */
