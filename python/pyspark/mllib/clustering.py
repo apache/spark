@@ -128,7 +128,7 @@ class BisectingKMeans:
         :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
         :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum
             proportion of points (if < 1.0) of a divisible cluster (default: 1)
-        :param seed: a random seed (default: -1888008604 based on classOf[BisectingKMeans].getName.##)
+        :param seed: a random seed (default: -1888008604 from classOf[BisectingKMeans].getName.##)
         """
         java_model = callMLlibFunc(
             "trainBisectingKMeans", rdd.map(_convert_to_vector),
