@@ -45,10 +45,8 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
 
 class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
-  private val torrentConf = broadcastConf("TorrentBroadcastFactory")
-
   test("Using TorrentBroadcast locally") {
-    sc = new SparkContext("local", "test", torrentConf)
+    sc = new SparkContext("local", "test")
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to 2).map(x => (x, broadcast.value.sum))
@@ -56,7 +54,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("Accessing TorrentBroadcast variables from multiple threads") {
-    sc = new SparkContext("local[10]", "test", torrentConf)
+    sc = new SparkContext("local[10]", "test")
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to 10).map(x => (x, broadcast.value.sum))
@@ -65,7 +63,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Accessing TorrentBroadcast variables in a local cluster") {
     val numSlaves = 4
-    val conf = torrentConf.clone
+    val conf = new SparkConf
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
@@ -95,10 +93,8 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Test Lazy Broadcast variables with TorrentBroadcast") {
     val numSlaves = 2
-    val conf = torrentConf.clone
-    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
     val rdd = sc.parallelize(1 to numSlaves)
-
     val results = new DummyBroadcastClass(rdd).doSomething()
 
     assert(results.toSet === (1 to numSlaves).map(x => (x, false)).toSet)
@@ -179,7 +175,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
       assert(statuses.size === expectedNumBlocks)
     }
 
-    testUnpersistBroadcast(distributed, numSlaves, torrentConf, afterCreation,
+    testUnpersistBroadcast(distributed, numSlaves, afterCreation,
       afterUsingBroadcast, afterUnpersist, removeFromDriver)
   }
 
@@ -195,7 +191,6 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   private def testUnpersistBroadcast(
       distributed: Boolean,
       numSlaves: Int,  // used only when distributed = true
-      broadcastConf: SparkConf,
       afterCreation: (Long, BlockManagerMaster) => Unit,
       afterUsingBroadcast: (Long, BlockManagerMaster) => Unit,
       afterUnpersist: (Long, BlockManagerMaster) => Unit,
@@ -203,7 +198,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
     sc = if (distributed) {
       val _sc =
-        new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", broadcastConf)
+        new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
       // Wait until all salves are up
       try {
         _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 60000)
@@ -214,7 +209,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
           throw e
       }
     } else {
-      new SparkContext("local", "test", broadcastConf)
+      new SparkContext("local", "test")
     }
     val blockManagerMaster = sc.env.blockManager.master
     val list = List[Int](1, 2, 3, 4)
@@ -250,13 +245,6 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
       val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
       assert(results.collect().toSet === (1 to partitions).map(x => (x, list.sum)).toSet)
     }
-  }
-
-  /** Helper method to create a SparkConf that uses the given broadcast factory. */
-  private def broadcastConf(factoryName: String): SparkConf = {
-    val conf = new SparkConf
-    conf.set("spark.broadcast.factory", "org.apache.spark.broadcast.%s".format(factoryName))
-    conf
   }
 }
 
