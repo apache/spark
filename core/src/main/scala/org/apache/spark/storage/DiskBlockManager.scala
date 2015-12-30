@@ -81,6 +81,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
+  // This method should be kept in sync with
+  // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
   private object hashAllocator extends FileAllocationStrategy {
     def apply(filename: String): File = getFile(filename, localDirs)
   }
@@ -127,7 +129,12 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   private val fileAllocator: FileAllocationStrategy =
-    if (!hierarchyStore.isDefined) hashAllocator else new HierarchyAllocator
+    if (hierarchyStore.isDefined && !conf.getBoolean("spark.shuffle.service.enabled", false)) {
+      new HierarchyAllocator
+    }
+    else {
+      hashAllocator
+    }
 
   def getFile(filename: String): File = fileAllocator(filename)
 
