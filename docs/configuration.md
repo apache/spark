@@ -595,7 +595,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>snappy</td>
+  <td>lz4</td>
   <td>
     The codec used to compress internal data such as RDD partitions, broadcast variables and
     shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
@@ -687,9 +687,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for
-    <code>StorageLevel.MEMORY_ONLY_SER</code>). Can save substantial space at the cost of some
-    extra CPU time.
+    Whether to compress serialized RDD partitions (e.g. for 
+    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java 
+    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python). 
+    Can save substantial space at the cost of some extra CPU time. 
   </td>
 </tr>
 <tr>
