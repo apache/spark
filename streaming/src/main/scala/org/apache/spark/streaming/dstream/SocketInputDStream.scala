@@ -61,7 +61,7 @@ class SocketReceiver[T: ClassTag](
       socket = new Socket(host, port)
       logInfo(s"Connected to $host:$port")
     } catch {
-      case e: ConnectException =>
+      case NonFatal(e) =>
         restart(s"Error connecting to $host:$port", e)
     } finally {
       onStop()
