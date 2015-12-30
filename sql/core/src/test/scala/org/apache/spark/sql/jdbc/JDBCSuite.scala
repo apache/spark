@@ -456,7 +456,7 @@ class JDBCSuite extends SparkFunSuite
     val compileFilter = PrivateMethod[String]('compileFilter)
     def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f)
     assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
-    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "NOT (col1 = 'abc')")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "(NOT (col1 = 'abc'))")
     assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
       === "(col0 = 0) AND (col1 = 'def')")
     assert(doCompileFilter(Or(EqualTo("col0", 2), EqualTo("col1", "ghi")))
@@ -469,7 +469,8 @@ class JDBCSuite extends SparkFunSuite
     assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
     assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
     assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
-    assert(doCompileFilter(Not(In("col1", Array("mno", "pqr")))) === "NOT (col1 IN ('mno', 'pqr'))")
+    assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
+      === "(NOT (col1 IN ('mno', 'pqr')))")
     assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
     assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
   }
