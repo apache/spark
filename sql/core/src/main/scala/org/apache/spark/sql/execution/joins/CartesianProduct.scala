@@ -56,15 +56,14 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
     // Create an iterator from sorter and wrapper it as Iterator[UnsafeRow]
     def createIter(): Iterator[UnsafeRow] = {
       val iter = sorter.getIterator
-      val unsafeRow = new UnsafeRow
+      val unsafeRow = new UnsafeRow(numFieldsOfRight)
       new Iterator[UnsafeRow] {
         override def hasNext: Boolean = {
           iter.hasNext
         }
         override def next(): UnsafeRow = {
           iter.loadNext()
-          unsafeRow.pointTo(iter.getBaseObject, iter.getBaseOffset, numFieldsOfRight,
-            iter.getRecordLength)
+          unsafeRow.pointTo(iter.getBaseObject, iter.getBaseOffset, iter.getRecordLength)
           unsafeRow
         }
       }
