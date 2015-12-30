@@ -27,9 +27,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
 object Literal {
-  val True: Literal = Literal(true, BooleanType)
+  val TrueLiteral: Literal = Literal(true, BooleanType)
 
-  val False: Literal = Literal(false, BooleanType)
+  val FalseLiteral: Literal = Literal(false, BooleanType)
 
   def apply(v: Any): Literal = v match {
     case i: Int => Literal(i, IntegerType)
