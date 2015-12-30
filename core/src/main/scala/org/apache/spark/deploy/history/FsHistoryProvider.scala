@@ -28,6 +28,7 @@ import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
@@ -648,8 +649,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Checks whether HDFS is in safe mode. The API is slightly different between hadoop 1 and 2,
-   * so we have to resort to ugly reflection (as usual...).
+   * Checks whether HDFS is in safe mode.
    *
    * Note that DistributedFileSystem is a `@LimitedPrivate` class, which for all practical reasons
    * makes it more public than not.
@@ -663,11 +663,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // For testing.
   private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
-    val hadoop2Class = "org.apache.hadoop.hdfs.protocol.HdfsConstants$SafeModeAction"
-    val actionClass: Class[_] = getClass().getClassLoader().loadClass(hadoop2Class)
-    val action = actionClass.getField("SAFEMODE_GET").get(null)
-    val method = dfs.getClass().getMethod("setSafeMode", action.getClass())
-    method.invoke(dfs, action).asInstanceOf[Boolean]
+    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET)
   }
 
 }
