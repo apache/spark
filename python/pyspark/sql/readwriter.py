@@ -207,7 +207,7 @@ class DataFrameReader(object):
     @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths):
-        """Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+        """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
 
         Each line in the text file is a new row in the resulting DataFrame.
 

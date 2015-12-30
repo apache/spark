@@ -146,6 +146,12 @@ private[sql] class ParquetRelation(
     meta
   }
 
+  override def toString: String = {
+    parameters.get(ParquetRelation.METASTORE_TABLE_NAME).map { tableName =>
+      s"${getClass.getSimpleName}: $tableName"
+    }.getOrElse(super.toString)
+  }
+
   override def equals(other: Any): Boolean = other match {
     case that: ParquetRelation =>
       val schemaEquality = if (shouldMergeSchemas) {
@@ -521,6 +527,10 @@ private[sql] object ParquetRelation extends Logging {
   // internally.
   private[sql] val METASTORE_SCHEMA = "metastoreSchema"
 
+  // If a ParquetRelation is converted from a Hive metastore table, this option is set to the
+  // original Hive table name.
+  private[sql] val METASTORE_TABLE_NAME = "metastoreTableName"
+
   /**
    * If parquet's block size (row group size) setting is larger than the min split size,
    * we use parquet's block size setting as the min split size. Otherwise, we will create
@@ -862,9 +872,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "NONE" -> CompressionCodecName.UNCOMPRESSED,
     "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY"       -> CompressionCodecName.SNAPPY,
-    "GZIP"         -> CompressionCodecName.GZIP,
-    "LZO"          -> CompressionCodecName.LZO)
+    "SNAPPY" -> CompressionCodecName.SNAPPY,
+    "GZIP" -> CompressionCodecName.GZIP,
+    "LZO" -> CompressionCodecName.LZO)
 }

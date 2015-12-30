@@ -57,12 +57,12 @@ public class JavaMultiLabelClassificationMetricsExample {
 
     // Stats by labels
     for (int i = 0; i < metrics.labels().length - 1; i++) {
-      System.out.format("Class %1.1f precision = %f\n", metrics.labels()[i], metrics.precision
-        (metrics.labels()[i]));
-      System.out.format("Class %1.1f recall = %f\n", metrics.labels()[i], metrics.recall(metrics
-        .labels()[i]));
-      System.out.format("Class %1.1f F1 score = %f\n", metrics.labels()[i], metrics.f1Measure
-        (metrics.labels()[i]));
+      System.out.format("Class %1.1f precision = %f\n", metrics.labels()[i], metrics.precision(
+        metrics.labels()[i]));
+      System.out.format("Class %1.1f recall = %f\n", metrics.labels()[i], metrics.recall(
+        metrics.labels()[i]));
+      System.out.format("Class %1.1f F1 score = %f\n", metrics.labels()[i], metrics.f1Measure(
+        metrics.labels()[i]));
     }
 
     // Micro stats

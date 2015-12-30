@@ -33,13 +33,18 @@ class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var ssc: StreamingContext = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val sc = new SparkContext("local", "test")
     ssc = new StreamingContext(sc, Seconds(1))
   }
 
   override def afterAll(): Unit = {
-    ssc.stop(stopSparkContext = true)
-    ssc = null
+    try {
+      ssc.stop(stopSparkContext = true)
+      ssc = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("user provided closures are actually cleaned") {
