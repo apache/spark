@@ -68,12 +68,10 @@ private[spark] class AppClient(
     // A thread pool for registering with masters. Because registering with a master is a blocking
     // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
     // time so that we can register with all masters.
-    private val registerMasterThreadPool = new ThreadPoolExecutor(
-      0,
-      masterRpcAddresses.length, // Make sure we can register with all masters at the same time
-      60L, TimeUnit.SECONDS,
-      new SynchronousQueue[Runnable](),
-      ThreadUtils.namedThreadFactory("appclient-register-master-threadpool"))
+    private val registerMasterThreadPool = ThreadUtils.newDaemonCachedThreadPool(
+      "appclient-register-master-threadpool",
+      masterRpcAddresses.length // Make sure we can register with all masters at the same time
+    )
 
     // A scheduled executor for scheduling the registration actions
     private val registrationRetryThread =
@@ -126,7 +124,7 @@ private[spark] class AppClient(
      */
     private def registerWithMaster(nthRetry: Int) {
       registerMasterFutures.set(tryRegisterAllMasters())
-      registrationRetryTimer.set(registrationRetryThread.scheduleAtFixedRate(new Runnable {
+      registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
           Utils.tryOrExit {
             if (registered.get) {
@@ -140,7 +138,7 @@ private[spark] class AppClient(
             }
           }
         }
-      }, REGISTRATION_TIMEOUT_SECONDS, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+      }, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
     }
 
     /**
