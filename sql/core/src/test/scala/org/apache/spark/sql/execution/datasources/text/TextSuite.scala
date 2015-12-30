@@ -33,8 +33,8 @@ class TextSuite extends QueryTest with SharedSQLContext {
     verifyFrame(sqlContext.read.text(testFile))
   }
 
-  test("writing") {
-    val df = sqlContext.read.text(testFile)
+  test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
+    val df = sqlContext.read.text(testFile).withColumnRenamed("value", "adwrasdf")
 
     val tempFile = Utils.createTempDir()
     tempFile.delete()
@@ -56,17 +56,6 @@ class TextSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       sqlContext.range(2).select(df("id"), df("id") + 1).write.text(tempFile.getCanonicalPath)
     }
-  }
-
-  test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
-    val df = sqlContext.read.text(testFile).withColumnRenamed("value", "col1")
-
-    val tempFile = Utils.createTempDir()
-    tempFile.delete()
-    df.write.text(tempFile.getCanonicalPath)
-    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
-
-    Utils.deleteRecursively(tempFile)
   }
 
   private def testFile: String = {
