@@ -529,7 +529,7 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val model: LinearRegressionModel,
-    val diagInvAtWA: Array[Double]) extends Serializable {
+    private val diagInvAtWA: Array[Double]) extends Serializable {
 
   @transient private val metrics = new RegressionMetrics(
     predictions

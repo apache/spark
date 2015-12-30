@@ -58,7 +58,7 @@ public class UnsafeExternalSorterSuite {
 
   final LinkedList<File> spillFilesCreated = new LinkedList<File>();
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
+    new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {

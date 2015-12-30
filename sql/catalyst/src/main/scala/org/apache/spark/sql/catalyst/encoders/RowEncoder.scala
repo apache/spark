@@ -55,27 +55,26 @@ object RowEncoder {
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
         Nil,
-        false,
         dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
       Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
     case TimestampType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         TimestampType,
         "fromJavaTimestamp",
         inputObject :: Nil)
 
     case DateType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         DateType,
         "fromJavaDate",
         inputObject :: Nil)
 
     case _: DecimalType =>
       StaticInvoke(
-        Decimal,
+        Decimal.getClass,
         DecimalType.SYSTEM_DEFAULT,
         "apply",
         inputObject :: Nil)
@@ -166,20 +165,19 @@ object RowEncoder {
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
         Nil,
-        false,
         dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Timestamp]),
         "toJavaTimestamp",
         input :: Nil)
 
     case DateType =>
       StaticInvoke(
-        DateTimeUtils,
+        DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Date]),
         "toJavaDate",
         input :: Nil)
@@ -193,11 +191,11 @@ object RowEncoder {
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
-          MapObjects(constructorFor, input, et),
+          MapObjects(constructorFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(
-        scala.collection.mutable.WrappedArray,
+        scala.collection.mutable.WrappedArray.getClass,
         ObjectType(classOf[Seq[_]]),
         "make",
         arrayData :: Nil)
@@ -210,7 +208,7 @@ object RowEncoder {
       val valueData = constructorFor(Invoke(input, "valueArray", valueArrayType))
 
       StaticInvoke(
-        ArrayBasedMapData,
+        ArrayBasedMapData.getClass,
         ObjectType(classOf[Map[_, _]]),
         "toScalaMap",
         keyData :: valueData :: Nil)

@@ -376,7 +376,14 @@ private[spark] class ApplicationMaster(
             case i: InterruptedException =>
             case e: Throwable => {
               failureCount += 1
-              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+              // this exception was introduced in hadoop 2.4 and this code would not compile
+              // with earlier versions if we refer it directly.
+              if ("org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException" ==
+                e.getClass().getName()) {
+                logError("Exception from Reporter thread.", e)
+                finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
+                  e.getMessage)
+              } else if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                     s"$failureCount time(s) from Reporter thread.")

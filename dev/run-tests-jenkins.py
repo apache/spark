@@ -124,6 +124,7 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_R_STYLE"]: 'R style tests',
         ERROR_CODES["BLOCK_DOCUMENTATION"]: 'to generate documentation',
         ERROR_CODES["BLOCK_BUILD"]: 'to build',
+        ERROR_CODES["BLOCK_BUILD_TESTS"]: 'build dependency tests',
         ERROR_CODES["BLOCK_MIMA"]: 'MiMa tests',
         ERROR_CODES["BLOCK_SPARK_UNIT_TESTS"]: 'Spark unit tests',
         ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: 'PySpark unit tests',
@@ -163,10 +164,6 @@ def main():
     if "test-maven" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_TOOL"] = "maven"
     # Switch the Hadoop profile based on the PR title:
-    if "test-hadoop1.0" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop1.0"
-    if "test-hadoop2.0" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.0"
     if "test-hadoop2.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.2"
     if "test-hadoop2.3" in ghprb_pull_title:
@@ -197,7 +194,6 @@ def main():
     pr_tests = [
         "pr_merge_ability",
         "pr_public_classes"
-        # DISABLED (pwendell) "pr_new_dependencies"
     ]
 
     # `bind_message_base` returns a function to generate messages for Github posting

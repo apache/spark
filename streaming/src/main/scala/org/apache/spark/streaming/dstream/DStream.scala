@@ -97,6 +97,8 @@ abstract class DStream[T: ClassTag] (
   private[streaming] val mustCheckpoint = false
   private[streaming] var checkpointDuration: Duration = null
   private[streaming] val checkpointData = new DStreamCheckpointData(this)
+  @transient
+  private var restoredFromCheckpointData = false
 
   // Reference to whole DStream graph
   private[streaming] var graph: DStreamGraph = null
@@ -507,11 +509,14 @@ abstract class DStream[T: ClassTag] (
    * override the updateCheckpointData() method would also need to override this method.
    */
   private[streaming] def restoreCheckpointData() {
-    // Create RDDs from the checkpoint data
-    logInfo("Restoring checkpoint data")
-    checkpointData.restore()
-    dependencies.foreach(_.restoreCheckpointData())
-    logInfo("Restored checkpoint data")
+    if (!restoredFromCheckpointData) {
+      // Create RDDs from the checkpoint data
+      logInfo("Restoring checkpoint data")
+      checkpointData.restore()
+      dependencies.foreach(_.restoreCheckpointData())
+      restoredFromCheckpointData = true
+      logInfo("Restored checkpoint data")
+    }
   }
 
   @throws(classOf[IOException])
