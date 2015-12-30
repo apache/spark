@@ -2113,6 +2113,23 @@
           <artifactId>maven-deploy-plugin</artifactId>
           <version>2.8.2</version>
         </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <executions>
+            <execution>
+              <id>default-cli</id>
+              <goals>
+                 <goal>build-classpath</goal>
+              </goals>
+              <configuration>
+                <!-- This includes dependencies with 'runtime' and 'compile' scopes;
+                     see the docs for includeScope for more details -->
+                <includeScope>runtime</includeScope>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
         <!-- This plugin's configuration is used to store Eclipse m2e settings only. -->
         <!-- It has no influence on the Maven build itself. -->
         <plugin>
