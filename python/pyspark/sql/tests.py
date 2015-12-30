@@ -353,6 +353,17 @@ class SQLTests(ReusedPySparkTestCase):
         df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
         self.assertEqual(10, df3.count())
 
+    def test_infer_schema_to_local(self):
+        input = [{"a": 1}, {"b": "coffee"}]
+        rdd = self.sc.parallelize(input)
+        df = self.sqlCtx.createDataFrame(input)
+        df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
+        self.assertEqual(df.schema, df2.schema)
+
+        rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
+        df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
+        self.assertEqual(10, df3.count())
+
     def test_serialize_nested_array_and_map(self):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
         rdd = self.sc.parallelize(d)
