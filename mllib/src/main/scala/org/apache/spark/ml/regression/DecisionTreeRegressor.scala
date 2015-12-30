@@ -75,7 +75,7 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
   /** @group setParam */
-  override def setVarianceCol(value: String): this.type = set(varianceCol, value)
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =

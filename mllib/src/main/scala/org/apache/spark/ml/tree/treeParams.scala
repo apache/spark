@@ -261,9 +261,6 @@ private[ml] object TreeRegressorParams {
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
 
-  /** @group setParam */
-  def setVarianceCol(value: String): this.type = set(varianceCol, value)
-
   /**
    * Validates and transforms the input schema with the provided param map.
    * @param schema input schema
