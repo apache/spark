@@ -545,7 +545,7 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
-      DeprecatedConfig("spark.rpc", "2.0.0", "Not used any more.")
+      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)

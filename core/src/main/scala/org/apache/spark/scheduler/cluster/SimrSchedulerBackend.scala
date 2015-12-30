@@ -18,10 +18,10 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.fs.{Path, FileSystem}
-import org.apache.spark.rpc.RpcEndpointAddress
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class SimrSchedulerBackend(
