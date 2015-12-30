@@ -119,6 +119,9 @@ final class DecisionTreeRegressionModel private[ml] (
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with Serializable {
 
+  /** @group setParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
+
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
