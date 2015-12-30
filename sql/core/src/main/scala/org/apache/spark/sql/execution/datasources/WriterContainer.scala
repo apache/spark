@@ -318,31 +318,31 @@ private[sql] class DynamicPartitionWriterContainer(
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
 
-  private def toAttribute(columnName: String) = inputSchema.find(_.name == columnName).get
-
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     val outputWriters = new java.util.HashMap[InternalRow, OutputWriter]
     executorSideSetup(taskContext)
 
     var outputWritersCleared = false
 
-    val getKey = if (bucketSpec.isEmpty) {
-      UnsafeProjection.create(partitionColumns, inputSchema)
+    val getKey: InternalRow => UnsafeRow = if (bucketSpec.isEmpty) {
+      val projection = UnsafeProjection.create(partitionColumns, inputSchema)
+      row => projection(row)
     } else {
-      val BucketSpec(numBuckets, bucketColumns, sortColumns) = bucketSpec.get
-      val bucketIdExpr = Pmod(Hash(bucketColumns.map(toAttribute)), Literal(numBuckets))
-      val sortingAttrs = sortColumns.map(_.map(toAttribute)).getOrElse(Nil)
-      UnsafeProjection.create(partitionColumns ++ (bucketIdExpr +: sortingAttrs), inputSchema)
+      val bucketColumns = bucketSpec.get.resolvedBucketingColumns(inputSchema)
+      val getBucketKey = UnsafeProjection.create(bucketColumns, inputSchema)
+      val getResultRow = UnsafeProjection.create(partitionColumns :+ Literal(-1), inputSchema)
+      row => {
+        val bucketId = math.abs(getBucketKey(row).hashCode()) % bucketSpec.get.numBuckets
+        val result = getResultRow(row)
+        result.setInt(partitionColumns.length, bucketId)
+        result
+      }
     }
 
     val keySchema = if (bucketSpec.isEmpty) {
       StructType.fromAttributes(partitionColumns)
     } else {
-      val sortingAttrs = bucketSpec.get.sortingColumns.map(_.map(toAttribute)).getOrElse(Nil)
-      val fields = StructType.fromAttributes(partitionColumns)
-        .add("bucketId", IntegerType).fields ++
-        StructType.fromAttributes(sortingAttrs).fields
-      StructType(fields)
+      StructType.fromAttributes(partitionColumns).add("bucketId", IntegerType, nullable = false)
     }
 
     def getBucketId(key: InternalRow): Option[Int] = if (bucketSpec.isDefined) {
@@ -370,74 +370,128 @@ private[sql] class DynamicPartitionWriterContainer(
 
     // If anything below fails, we should abort the task.
     try {
-      // This will be filled in if we have to fall back on sorting.
-      val alwaysSort = bucketSpec.isDefined && bucketSpec.get.sortingColumns.isDefined
-      var sorter: UnsafeKVExternalSorter = if (alwaysSort) {
-        new UnsafeKVExternalSorter(
-          keySchema,
+      val mustSort = bucketSpec.isDefined && bucketSpec.get.sortingColumns.isDefined
+      // TODO: remove duplicated code.
+      if (mustSort) {
+        val bucketColumns = bucketSpec.get.resolvedBucketingColumns(inputSchema)
+        val sortColumns = bucketSpec.get.resolvedSortingColumns(inputSchema)
+
+        val getSortingKey = {
+          val getBucketKey = UnsafeProjection.create(bucketColumns, inputSchema)
+          val getResultRow = UnsafeProjection.create(
+            (partitionColumns :+ Literal(-1)) ++ sortColumns, inputSchema)
+          (row: InternalRow) => {
+            val bucketId = math.abs(getBucketKey(row).hashCode()) % bucketSpec.get.numBuckets
+            val result = getResultRow(row)
+            result.setInt(partitionColumns.length, bucketId)
+            result
+          }
+        }
+
+        val sortingKeySchema = {
+          val fields = StructType.fromAttributes(partitionColumns)
+            .add("bucketId", IntegerType, nullable = false) ++
+            StructType.fromAttributes(sortColumns)
+          StructType(fields)
+        }
+
+        val sorter = new UnsafeKVExternalSorter(
+          sortingKeySchema,
           StructType.fromAttributes(dataColumns),
           SparkEnv.get.blockManager,
           TaskContext.get().taskMemoryManager().pageSizeBytes)
-      } else {
-        null
-      }
-      while (iterator.hasNext && sorter == null) {
-        val inputRow = iterator.next()
-        val currentKey = getKey(inputRow)
-        var currentWriter = outputWriters.get(currentKey)
 
-        if (currentWriter == null) {
-          if (outputWriters.size < maxOpenFiles) {
-            currentWriter = newOutputWriter(currentKey)
-            outputWriters.put(currentKey.copy(), currentWriter)
-            currentWriter.writeInternal(getOutputRow(inputRow))
-          } else {
-            logInfo(s"Maximum partitions reached, falling back on sorting.")
-            sorter = new UnsafeKVExternalSorter(
-              keySchema,
-              StructType.fromAttributes(dataColumns),
-              SparkEnv.get.blockManager,
-              TaskContext.get().taskMemoryManager().pageSizeBytes)
-            sorter.insertKV(currentKey, getOutputRow(inputRow))
-          }
-        } else {
-          currentWriter.writeInternal(getOutputRow(inputRow))
-        }
-      }
-
-      // If the sorter is not null that means that we reached the maxFiles above and need to finish
-      // using external sort.
-      if (sorter != null) {
         while (iterator.hasNext) {
           val currentRow = iterator.next()
-          sorter.insertKV(getKey(currentRow), getOutputRow(currentRow))
+          sorter.insertKV(getSortingKey(currentRow), getOutputRow(currentRow))
         }
 
         logInfo(s"Sorting complete. Writing out partition files one at a time.")
 
+        def sameBucket(row1: InternalRow, row2: InternalRow): Boolean = {
+          partitionColumns.map(_.dataType).zipWithIndex.forall { case (dt, index) =>
+            row1.get(index, dt) == row2.get(index, dt)
+          } && row1.getInt(partitionColumns.length) == row2.getInt(partitionColumns.length)
+        }
         val sortedIterator = sorter.sortedIterator()
         var currentKey: InternalRow = null
         var currentWriter: OutputWriter = null
         try {
           while (sortedIterator.next()) {
-            if (currentKey != sortedIterator.getKey) {
+            if (currentKey == null || !sameBucket(currentKey, sortedIterator.getKey)) {
               if (currentWriter != null) {
                 currentWriter.close()
               }
               currentKey = sortedIterator.getKey.copy()
               logDebug(s"Writing partition: $currentKey")
-
-              // Either use an existing file from before, or open a new one.
-              currentWriter = outputWriters.remove(currentKey)
-              if (currentWriter == null) {
-                currentWriter = newOutputWriter(currentKey)
-              }
+              currentWriter = newOutputWriter(currentKey)
             }
-
             currentWriter.writeInternal(sortedIterator.getValue)
           }
         } finally {
           if (currentWriter != null) { currentWriter.close() }
+        }
+      } else {
+        // This will be filled in if we have to fall back on sorting.
+        var sorter: UnsafeKVExternalSorter = null
+        while (iterator.hasNext && sorter == null) {
+          val inputRow = iterator.next()
+          val currentKey = getKey(inputRow)
+          var currentWriter = outputWriters.get(currentKey)
+
+          if (currentWriter == null) {
+            if (outputWriters.size < maxOpenFiles) {
+              currentWriter = newOutputWriter(currentKey)
+              outputWriters.put(currentKey.copy(), currentWriter)
+              currentWriter.writeInternal(getOutputRow(inputRow))
+            } else {
+              logInfo(s"Maximum partitions reached, falling back on sorting.")
+              sorter = new UnsafeKVExternalSorter(
+                keySchema,
+                StructType.fromAttributes(dataColumns),
+                SparkEnv.get.blockManager,
+                TaskContext.get().taskMemoryManager().pageSizeBytes)
+              sorter.insertKV(currentKey, getOutputRow(inputRow))
+            }
+          } else {
+            currentWriter.writeInternal(getOutputRow(inputRow))
+          }
+        }
+
+        // If the sorter is not null that means that we reached the maxFiles above and need to
+        // finish using external sort.
+        if (sorter != null) {
+          while (iterator.hasNext) {
+            val currentRow = iterator.next()
+            sorter.insertKV(getKey(currentRow), getOutputRow(currentRow))
+          }
+
+          logInfo(s"Sorting complete. Writing out partition files one at a time.")
+
+          val sortedIterator = sorter.sortedIterator()
+          var currentKey: InternalRow = null
+          var currentWriter: OutputWriter = null
+          try {
+            while (sortedIterator.next()) {
+              if (currentKey != sortedIterator.getKey) {
+                if (currentWriter != null) {
+                  currentWriter.close()
+                }
+                currentKey = sortedIterator.getKey.copy()
+                logDebug(s"Writing partition: $currentKey")
+
+                // Either use an existing file from before, or open a new one.
+                currentWriter = outputWriters.remove(currentKey)
+                if (currentWriter == null) {
+                  currentWriter = newOutputWriter(currentKey)
+                }
+              }
+
+              currentWriter.writeInternal(sortedIterator.getValue)
+            }
+          } finally {
+            if (currentWriter != null) { currentWriter.close() }
+          }
         }
       }
 
@@ -451,13 +505,14 @@ private[sql] class DynamicPartitionWriterContainer(
 
     /** Open and returns a new OutputWriter given a partition key. */
     def newOutputWriter(key: InternalRow): OutputWriter = {
+      val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
       val path = if (partitionColumns.nonEmpty) {
         val partitionPath = getPartitionString(key).getString(0)
-        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
         configuration.set(
           "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
         new Path(getWorkPath, partitionPath).toString
       } else {
+        configuration.set("spark.sql.sources.output.path", outputPath)
         getWorkPath
       }
       val bucketId = getBucketId(key)

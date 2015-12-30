@@ -17,7 +17,26 @@
 
 package org.apache.spark.sql.execution.datasources
 
-case class BucketSpec(
+import org.apache.spark.sql.catalyst.expressions.Attribute
+
+private[sql] case class BucketSpec(
     numBuckets: Int,
     bucketingColumns: Seq[String],
-    sortingColumns: Option[Seq[String]])
+    sortingColumns: Option[Seq[String]]) {
+
+  def resolvedBucketingColumns(inputSchema: Seq[Attribute]): Seq[Attribute] = {
+    bucketingColumns.map { col =>
+      inputSchema.find(_.name == col).get
+    }
+  }
+
+  def resolvedSortingColumns(inputSchema: Seq[Attribute]): Seq[Attribute] = {
+    if (sortingColumns.isDefined) {
+      sortingColumns.get.map { col =>
+        inputSchema.find(_.name == col).get
+      }
+    } else {
+      Nil
+    }
+  }
+}

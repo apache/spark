@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.File
+
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest}
@@ -51,17 +54,141 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[IllegalArgumentException](df.write.bucketBy(2, "i").insertInto("tt"))
   }
 
-  test("write bucketed data") {
-    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-    withTable("bucketedTable") {
-      df.write.partitionBy("i").bucketBy(8, "j").saveAsTable("bucketedTable")
+  private val parquetFileName = """.*-(\d+)\..*\.parquet""".r
+  private def getBucketId(fileName: String): Int = {
+    fileName match {
+      case parquetFileName(bucketId) => bucketId.toInt
     }
   }
 
-  test("write bucketed data without partitioning") {
-    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+  test("write bucketed data") {
+    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
     withTable("bucketedTable") {
-      df.write.bucketBy(8, "i").sortBy("j").saveAsTable("bucketedTable")
+      df.write
+        .format("parquet")
+        .partitionBy("i")
+        .bucketBy(8, "j", "k")
+        .saveAsTable("bucketedTable")
+
+      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      for (i <- 0 until 5) {
+        val allBucketFiles = new File(tableDir, s"i=$i").listFiles().filter(!_.isHidden)
+        val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+        assert(groupedBucketFiles.size <= 8)
+
+        for ((bucketId, bucketFiles) <- groupedBucketFiles) {
+          for (bucketFile <- bucketFiles) {
+            withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
+              val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
+              val rows = df.queryExecution.toRdd.map(_.copy()).collect()
+
+              for (row <- rows) {
+                assert(row.isInstanceOf[UnsafeRow])
+                val actualBucketId = math.abs(row.hashCode()) % 8
+                assert(actualBucketId == bucketId)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("write bucketed data with sortBy") {
+    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+    withTable("bucketedTable") {
+      df.write
+        .format("parquet")
+        .partitionBy("i")
+        .bucketBy(8, "j")
+        .sortBy("k")
+        .saveAsTable("bucketedTable")
+
+      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      for (i <- 0 until 5) {
+        val allBucketFiles = new File(tableDir, s"i=$i").listFiles()
+          .filter(_.getName.startsWith("part"))
+        val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+        assert(groupedBucketFiles.size <= 8)
+
+        for ((bucketId, bucketFiles) <- groupedBucketFiles) {
+          for (bucketFile <- bucketFiles) {
+            withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
+              val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
+              checkAnswer(df.sort("k"), df.collect())
+              val rows = df.select("j").queryExecution.toRdd.map(_.copy()).collect()
+
+              for (row <- rows) {
+                assert(row.isInstanceOf[UnsafeRow])
+                val actuaBucketId = math.abs(row.hashCode()) % 8
+                assert(actuaBucketId == bucketId)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("write bucketed data without partitionBy") {
+    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+    withTable("bucketedTable") {
+      df.write
+        .format("parquet")
+        .bucketBy(8, "i", "j")
+        .saveAsTable("bucketedTable")
+
+      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      val allBucketFiles = tableDir.listFiles().filter(_.getName.startsWith("part"))
+      val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+      assert(groupedBucketFiles.size <= 8)
+
+      for ((bucketId, bucketFiles) <- groupedBucketFiles) {
+        for (bucketFile <- bucketFiles) {
+          withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
+            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("i", "j")
+            val rows = df.queryExecution.toRdd.map(_.copy()).collect()
+
+            for (row <- rows) {
+              assert(row.isInstanceOf[UnsafeRow])
+              val actuaBucketId = math.abs(row.hashCode()) % 8
+              assert(actuaBucketId == bucketId)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("write bucketed data without partitionBy with sortBy") {
+    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+    withTable("bucketedTable") {
+      df.write
+        .format("parquet")
+        .bucketBy(8, "i", "j")
+        .sortBy("k")
+        .saveAsTable("bucketedTable")
+
+      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      val allBucketFiles = tableDir.listFiles().filter(_.getName.startsWith("part"))
+      val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+      assert(groupedBucketFiles.size <= 8)
+
+      for ((bucketId, bucketFiles) <- groupedBucketFiles) {
+        for (bucketFile <- bucketFiles) {
+          withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
+            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath)
+            checkAnswer(df.sort("k"), df.collect())
+            val rows = df.select("i", "j").queryExecution.toRdd.map(_.copy()).collect()
+
+            for (row <- rows) {
+              assert(row.isInstanceOf[UnsafeRow])
+              val actuaBucketId = math.abs(row.hashCode()) % 8
+              assert(actuaBucketId == bucketId)
+            }
+          }
+        }
+      }
     }
   }
 }

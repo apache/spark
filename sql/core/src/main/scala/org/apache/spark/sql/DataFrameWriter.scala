@@ -130,15 +130,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   @scala.annotation.varargs
-  def bucketBy(numBuckets: Int, colNames: String*): DataFrameWriter = {
-    this.numBuckets = Some(numBuckets)
-    this.bucketingColumns = Option(colNames)
+  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter = {
+    this.numBuckets = Option(numBuckets)
+    this.bucketingColumns = Option(colName +: colNames)
     this
   }
 
   @scala.annotation.varargs
-  def sortBy(colNames: String*): DataFrameWriter = {
-    this.sortingColumns = Option(colNames)
+  def sortBy(colName: String, colNames: String*): DataFrameWriter = {
+    this.sortingColumns = Option(colName +: colNames)
     this
   }
 
@@ -158,7 +158,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def save(): Unit = {
-    assertNoBucketing()
+    assertNotBucketed()
     ResolvedDataSource(
       df.sqlContext,
       source,
@@ -182,7 +182,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    assertNoBucketing()
+    assertNotBucketed()
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
@@ -219,7 +219,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private def getBucketSpec: Option[BucketSpec] = {
     if (numBuckets.isEmpty && sortingColumns.isDefined) {
-      throw new IllegalArgumentException("Specify numBuckets and bucketing columns first.")
+      throw new IllegalArgumentException(
+        "Specify bucketing information by bucketBy when use sortBy.")
     }
     if (numBuckets.isDefined && numBuckets.get <= 0) {
       throw new IllegalArgumentException("numBuckets must be greater than 0.")
@@ -239,7 +240,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
 
-  private def assertNoBucketing(): Unit = {
+  private def assertNotBucketed(): Unit = {
     if (numBuckets.isDefined || sortingColumns.isDefined) {
       throw new IllegalArgumentException(
         "Currently we don't support writing bucketed data to this data source.")
