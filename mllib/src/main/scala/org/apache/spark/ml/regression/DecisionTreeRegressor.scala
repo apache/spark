@@ -141,7 +141,7 @@ final class DecisionTreeRegressionModel private[ml] (
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val predictUDF = udf { (features: Vector) => predict(features) }
     val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
-    if (isDefined(varianceCol)) {
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
       dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
         .withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
     } else {

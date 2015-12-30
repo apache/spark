@@ -261,14 +261,6 @@ private[ml] object TreeRegressorParams {
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
 
-  /**
-   * Validates and transforms the input schema with the provided param map.
-   * @param schema input schema
-   * @param fitting whether this is in fitting
-   * @param featuresDataType SQL DataType for FeaturesType.
-   *                         E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
-   * @return output schema
-   */
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
