@@ -283,7 +283,17 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
-    expression[MonotonicallyIncreasingID]("monotonically_increasing_id")
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+
+    // window functions
+    expression[Lead]("lead"),
+    expression[Lag]("lag"),
+    expression[RowNumber]("row_number"),
+    expression[CumeDist]("cume_dist"),
+    expression[NTile]("ntile"),
+    expression[Rank]("rank"),
+    expression[DenseRank]("dense_rank"),
+    expression[PercentRank]("percent_rank")
   )
 
   val builtin: SimpleFunctionRegistry = {

@@ -35,13 +35,18 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
   private val batchDuration: Duration = Seconds(1)
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val conf = new SparkConf().setMaster("local").setAppName("test")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     ssc = new StreamingContext(new SparkContext(conf), batchDuration)
   }
 
   override def afterAll(): Unit = {
-    ssc.stop(stopSparkContext = true)
+    try {
+      ssc.stop(stopSparkContext = true)
+    } finally {
+      super.afterAll()
+    }
   }
 
   before { assertPropertiesNotSet() }

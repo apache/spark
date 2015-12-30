@@ -95,7 +95,7 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated meaning the code to evaluated has already been added
       // as a function and called in advance. Just use it.
-      val code = s"/* $this */"
+      val code = s"/* ${this.toCommentSafeString} */"
       GeneratedExpressionCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
@@ -103,7 +103,7 @@ abstract class Expression extends TreeNode[Expression] {
       val ve = GeneratedExpressionCode("", isNull, primitive)
       ve.code = genCode(ctx, ve)
       // Add `this` in the comment.
-      ve.copy(s"/* $this */\n" + ve.code.trim)
+      ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
     }
   }
 
@@ -207,13 +207,22 @@ abstract class Expression extends TreeNode[Expression] {
     }.toString
   }
 
-
   private def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
 
+  override def simpleString: String = toString
+
   override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
+
+  /**
+   * Returns the string representation of this expression that is safe to be put in
+   * code comments of generated code.
+   */
+  protected def toCommentSafeString: String = this.toString
+    .replace("*/", "\\*\\/")
+    .replace("\\u", "\\\\u")
 }
 
 
@@ -331,14 +340,21 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(eval.value)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        $resultCode
-      }
-    """
+    if (nullable) {
+      eval.code + s"""
+        boolean ${ev.isNull} = ${eval.isNull};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${eval.isNull}) {
+          ${f(eval.value)}
+        }
+      """
+    } else {
+      ev.isNull = "false"
+      eval.code + s"""
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${f(eval.value)}
+      """
+    }
   }
 }
 
@@ -415,19 +431,30 @@ abstract class BinaryExpression extends Expression {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val resultCode = f(eval1.value, eval2.value)
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval2.code}
-        if (!${eval2.isNull}) {
-          $resultCode
-        } else {
-          ${ev.isNull} = true;
+    if (nullable) {
+      s"""
+        ${eval1.code}
+        boolean ${ev.isNull} = ${eval1.isNull};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          ${eval2.code}
+          if (!${eval2.isNull}) {
+            $resultCode
+          } else {
+            ${ev.isNull} = true;
+          }
         }
-      }
-    """
+      """
+
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${eval1.code}
+        ${eval2.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
+    }
   }
 }
 
@@ -539,20 +566,31 @@ abstract class TernaryExpression extends Expression {
     f: (String, String, String) => String): String = {
     val evals = children.map(_.gen(ctx))
     val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
-    s"""
-      ${evals(0).code}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${evals(0).isNull}) {
-        ${evals(1).code}
-        if (!${evals(1).isNull}) {
-          ${evals(2).code}
-          if (!${evals(2).isNull}) {
-            ${ev.isNull} = false;  // resultCode could change nullability
-            $resultCode
+    if (nullable) {
+      s"""
+        ${evals(0).code}
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${evals(0).isNull}) {
+          ${evals(1).code}
+          if (!${evals(1).isNull}) {
+            ${evals(2).code}
+            if (!${evals(2).isNull}) {
+              ${ev.isNull} = false;  // resultCode could change nullability
+              $resultCode
+            }
           }
         }
-      }
-    """
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${evals(0).code}
+        ${evals(1).code}
+        ${evals(2).code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
+    }
   }
 }

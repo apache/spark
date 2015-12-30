@@ -65,6 +65,11 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   override def userClass: Class[MyDenseVector] = classOf[MyDenseVector]
 
   private[spark] override def asNullable: MyDenseVectorUDT = this
+
+  override def equals(other: Any): Boolean = other match {
+    case _: MyDenseVectorUDT => true
+    case _ => false
+  }
 }
 
 class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {

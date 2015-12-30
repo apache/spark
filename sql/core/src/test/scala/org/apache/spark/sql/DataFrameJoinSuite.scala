@@ -43,16 +43,28 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("join - join using multiple columns and specifying join type") {
-    val df = Seq(1, 2, 3).map(i => (i, i + 1, i.toString)).toDF("int", "int2", "str")
-    val df2 = Seq(1, 2, 3).map(i => (i, i + 1, (i + 1).toString)).toDF("int", "int2", "str")
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "inner"),
+      Row(1, "1", 2, 3) :: Nil)
 
     checkAnswer(
       df.join(df2, Seq("int", "str"), "left"),
-      Row(1, 2, "1", null) :: Row(2, 3, "2", null) :: Row(3, 4, "3", null) :: Nil)
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Nil)
 
     checkAnswer(
       df.join(df2, Seq("int", "str"), "right"),
-      Row(null, null, null, 2) :: Row(null, null, null, 3) :: Row(null, null, null, 4) :: Nil)
+      Row(1, "1", 2, 3) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "outer"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "left_semi"),
+      Row(1, "1", 2) :: Nil)
   }
 
   test("join - join using self join") {
@@ -120,5 +132,12 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
     // planner should not crash without a join
     broadcast(df1).queryExecution.executedPlan
+
+    // SPARK-12275: no physical plan for BroadcastHint in some condition
+    withTempPath { path =>
+      df1.write.parquet(path.getCanonicalPath)
+      val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
+      assert(df1.join(broadcast(pf1)).count() === 4)
+    }
   }
 }
