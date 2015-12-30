@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx
 
+import org.apache.spark.graphx.util.FrequencyDistribution
+
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -183,6 +185,36 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
     }
+  }
+
+  /**
+   * Compute the neighboring vertex degree distribution.
+   *
+   * @param edgeDirection the direction along which to compute
+   * the degree distribution.
+   *
+   * @param frequencyCounter the resolution to collect the
+   * number of degrees. You can select some of pre-defined resolution strategies.
+   * For more details, see utils.FrequencyDistribution.
+   *
+   * @return the distribution of vertex degrees
+   */
+  def collectDegreeDist(
+      edgeDirection: EdgeDirection,
+      frequencyCounter: FrequencyDistribution = FrequencyDistribution.split(10))
+    : Array[((Int, Int), Long)] = {
+    val vertexDegrees = edgeDirection match {
+      case EdgeDirection.Either =>
+        graph.vertices.leftJoin(degrees)((id, data, degree) => degree.getOrElse(0))
+      case EdgeDirection.In =>
+        graph.vertices.leftJoin(inDegrees)((id, data, degree) => degree.getOrElse(0))
+      case EdgeDirection.Out =>
+        graph.vertices.leftJoin(outDegrees)((id, data, degree) => degree.getOrElse(0))
+      case _ =>
+        throw new SparkException("collectDegreeDist does not support EdgeDirection.Both. Use" +
+          "EdgeDirection.Either instead.")
+    }
+    frequencyCounter.compute(vertexDegrees.values)
   }
 
   /**
