@@ -25,6 +25,10 @@ import org.apache.spark.JobExecutionStatus
 class ApplicationInfo private[spark](
     val id: String,
     val name: String,
+    val coresGranted: Option[Int],
+    val maxCores: Option[Int],
+    val coresPerExecutor: Option[Int],
+    val memoryPerExecutorMB: Option[Int],
     val attempts: Seq[ApplicationAttemptInfo])
 
 class ApplicationAttemptInfo private[spark](
@@ -116,6 +120,9 @@ class StageData private[spark](
     val numFailedTasks: Int,
 
     val executorRunTime: Long,
+    val submissionTime: Option[Date],
+    val firstTaskLaunchedTime: Option[Date],
+    val completionTime: Option[Date],
 
     val inputBytes: Long,
     val inputRecords: Long,

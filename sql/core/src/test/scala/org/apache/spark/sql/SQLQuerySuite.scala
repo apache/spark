@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.joins.{SortMergeJoin, CartesianProduct}
+import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -225,35 +225,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row("1"), Row("2")))
   }
 
+  test("SPARK-11226 Skip empty line in json file") {
+    sqlContext.read.json(
+      sparkContext.parallelize(
+        Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}", "")))
+      .registerTempTable("d")
+
+    checkAnswer(
+      sql("select count(1) from d"),
+      Seq(Row(3)))
+  }
+
   test("SPARK-8828 sum should return null if all input values are null") {
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "true") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-    }
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-    }
+    checkAnswer(
+      sql("select sum(a), avg(a) from allNulls"),
+      Seq(Row(null, null))
+    )
   }
 
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
@@ -274,8 +261,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("aggregation with codegen") {
-    val originalValue = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
       .unionAll(sqlContext.table("testData"))
@@ -329,13 +314,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       testCodeGen(
         "SELECT min(key) FROM testData3x",
         Row(1) :: Nil)
-      // STDDEV
-      testCodeGen(
-        "SELECT a, stddev(b), stddev_pop(b) FROM testData2 GROUP BY a",
-        (1 to 3).map(i => Row(i, math.sqrt(0.5), math.sqrt(0.25))))
-      testCodeGen(
-        "SELECT stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2",
-        Row(math.sqrt(1.5 / 5), math.sqrt(1.5 / 6), math.sqrt(1.5 / 5)) :: Nil)
       // Some combinations.
       testCodeGen(
         """
@@ -356,11 +334,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(100, 1, 50.5, 300, 100) :: Nil)
       // Aggregate with Code generation handling all null values
       testCodeGen(
-        "SELECT  sum('a'), avg('a'), stddev('a'), count(null) FROM testData",
-        Row(null, null, null, 0) :: Nil)
+        "SELECT  sum('a'), avg('a'), count(null) FROM testData",
+        Row(null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
     }
   }
 
@@ -496,35 +473,29 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("literal in agg grouping expressions") {
-    def literalInAggTest(): Unit = {
-      checkAnswer(
-        sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-      checkAnswer(
-        sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    checkAnswer(
+      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    checkAnswer(
+      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
 
-      checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-      checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-      checkAnswer(
-        sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-        sql("SELECT 1, 2, sum(b) FROM testData2"))
-    }
-
-    literalInAggTest()
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      literalInAggTest()
-    }
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+    checkAnswer(
+      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT 1, 2, sum(b) FROM testData2"))
   }
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(1, 3, 2, 1, 6, 3)
+      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
+        "AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
+      Row(0, -1.5, 1, 3, 2, 1.0, 1, 6, 3)
     )
   }
 
@@ -584,12 +555,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("external sorting") {
     sortTest()
-  }
-
-  test("SPARK-6927 external sorting with codegen on") {
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      sortTest()
-    }
   }
 
   test("limit") {
@@ -712,33 +677,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("select count(a) from t"),
         Row(0))
     }
-  }
-
-  test("stddev") {
-    checkAnswer(
-      sql("SELECT STDDEV(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
-    )
-  }
-
-  test("stddev_pop") {
-    checkAnswer(
-      sql("SELECT STDDEV_POP(a) FROM testData2"),
-      Row(math.sqrt(4/6.0))
-    )
-  }
-
-  test("stddev_samp") {
-    checkAnswer(
-      sql("SELECT STDDEV_SAMP(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
-    )
-  }
-
-  test("stddev agg") {
-    checkAnswer(
-      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
-      (1 to 3).map(i => Row(i, math.sqrt(1/2.0), math.sqrt(1/4.0), math.sqrt(1/2.0))))
   }
 
   test("inner join where, one match per row") {
@@ -1670,12 +1608,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("aggregation with codegen updates peak execution memory") {
-    withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "aggregation with codegen") {
-        testCodeGen(
-          "SELECT key, count(value) FROM testData GROUP BY key",
-          (1 to 100).map(i => Row(i, 1)))
-      }
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "aggregation with codegen") {
+      testCodeGen(
+        "SELECT key, count(value) FROM testData GROUP BY key",
+        (1 to 100).map(i => Row(i, 1)))
     }
   }
 
@@ -1828,10 +1764,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
     // This bug will be triggered when Tungsten is enabled and there are multiple
     // SortMergeJoin operators executed in the same task.
-    val confs =
-      SQLConf.SORTMERGE_JOIN.key -> "true" ::
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" ::
-        SQLConf.TUNGSTEN_ENABLED.key -> "true" :: Nil
+    val confs = SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" :: Nil
     withSQLConf(confs: _*) {
       val df1 = (1 to 50).map(i => (s"str_$i", i)).toDF("i", "j")
       val df2 =
@@ -1870,4 +1803,229 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       assert(sampled.count() == sampledOdd.count() + sampledEven.count())
     }
   }
+
+  test("Struct Star Expansion") {
+    val structDf = testData2.select("a", "b").as("record")
+
+    checkAnswer(
+      structDf.select($"record.a", $"record.b"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(
+      structDf.select($"record.*"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(
+      structDf.select($"record.*", $"record.*"),
+      Row(1, 1, 1, 1) :: Row(1, 2, 1, 2) :: Row(2, 1, 2, 1) :: Row(2, 2, 2, 2) ::
+        Row(3, 1, 3, 1) :: Row(3, 2, 3, 2) :: Nil)
+
+    checkAnswer(
+      sql("select struct(a, b) as r1, struct(b, a) as r2 from testData2").select($"r1.*", $"r2.*"),
+      Row(1, 1, 1, 1) :: Row(1, 2, 2, 1) :: Row(2, 1, 1, 2) :: Row(2, 2, 2, 2) ::
+        Row(3, 1, 1, 3) :: Row(3, 2, 2, 3) :: Nil)
+
+    // Try with a registered table.
+    sql("select struct(a, b) as record from testData2").registerTempTable("structTable")
+    checkAnswer(
+      sql("SELECT record.* FROM structTable"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(sql(
+      """
+        | SELECT min(struct(record.*)) FROM
+        |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin),
+      Row(Row(1, 1)) :: Nil)
+
+    // Try with an alias on the select list
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(record.*)) as r FROM
+        |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin).select($"r.*"),
+      Row(3, 2) :: Nil)
+
+    // With GROUP BY
+    checkAnswer(sql(
+      """
+        | SELECT min(struct(record.*)) FROM
+        |   (select a as a, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin),
+      Row(Row(1, 1)) :: Row(Row(2, 1)) :: Row(Row(3, 1)) :: Nil)
+
+    // With GROUP BY and alias
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(record.*)) as r FROM
+        |   (select a as a, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin).select($"r.*"),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil)
+
+    // With GROUP BY and alias and additional fields in the struct
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(a, record.*, b)) as r FROM
+        |   (select a as a, b as b, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin).select($"r.*"),
+      Row(1, 1, 2, 2) :: Row(2, 2, 2, 2) :: Row(3, 3, 2, 2) :: Nil)
+
+    // Create a data set that contains nested structs.
+    val nestedStructData = sql(
+      """
+        | SELECT struct(r1, r2) as record FROM
+        |   (SELECT struct(a, b) as r1, struct(b, a) as r2 FROM testData2) tmp
+      """.stripMargin)
+
+    checkAnswer(nestedStructData.select($"record.*"),
+      Row(Row(1, 1), Row(1, 1)) :: Row(Row(1, 2), Row(2, 1)) :: Row(Row(2, 1), Row(1, 2)) ::
+        Row(Row(2, 2), Row(2, 2)) :: Row(Row(3, 1), Row(1, 3)) :: Row(Row(3, 2), Row(2, 3)) :: Nil)
+    checkAnswer(nestedStructData.select($"record.r1"),
+      Row(Row(1, 1)) :: Row(Row(1, 2)) :: Row(Row(2, 1)) :: Row(Row(2, 2)) ::
+        Row(Row(3, 1)) :: Row(Row(3, 2)) :: Nil)
+    checkAnswer(
+      nestedStructData.select($"record.r1.*"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    // Try with a registered table
+    withTempTable("nestedStructTable") {
+      nestedStructData.registerTempTable("nestedStructTable")
+      checkAnswer(
+        sql("SELECT record.* FROM nestedStructTable"),
+        nestedStructData.select($"record.*"))
+      checkAnswer(
+        sql("SELECT record.r1 FROM nestedStructTable"),
+        nestedStructData.select($"record.r1"))
+      checkAnswer(
+        sql("SELECT record.r1.* FROM nestedStructTable"),
+        nestedStructData.select($"record.r1.*"))
+
+      // Try resolving something not there.
+      assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
+        .getMessage.contains("cannot resolve"))
+    }
+
+    // Create paths with unusual characters
+    val specialCharacterPath = sql(
+      """
+        | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
+        |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
+      """.stripMargin)
+    withTempTable("specialCharacterTable") {
+      specialCharacterPath.registerTempTable("specialCharacterTable")
+      checkAnswer(
+        specialCharacterPath.select($"`r&&b.c`.*"),
+        nestedStructData.select($"record.*"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+        nestedStructData.select($"record.r1"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
+        nestedStructData.select($"record.r2"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+        nestedStructData.select($"record.r1.*"))
+    }
+
+    // Try star expanding a scalar. This should fail.
+    assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
+      "Can only star expand struct data types."))
+  }
+
+  test("Struct Star Expansion - Name conflict") {
+    // Create a data set that contains a naming conflict
+    val nameConflict = sql("SELECT struct(a, b) as nameConflict, a as a FROM testData2")
+    withTempTable("nameConflict") {
+      nameConflict.registerTempTable("nameConflict")
+      // Unqualified should resolve to table.
+      checkAnswer(sql("SELECT nameConflict.* FROM nameConflict"),
+        Row(Row(1, 1), 1) :: Row(Row(1, 2), 1) :: Row(Row(2, 1), 2) :: Row(Row(2, 2), 2) ::
+          Row(Row(3, 1), 3) :: Row(Row(3, 2), 3) :: Nil)
+      // Qualify the struct type with the table name.
+      checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
+        Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+    }
+  }
+
+  test("Common subexpression elimination") {
+    // select from a table to prevent constant folding.
+    val df = sql("SELECT a, b from testData2 limit 1")
+    checkAnswer(df, Row(1, 1))
+
+    checkAnswer(df.selectExpr("a + 1", "a + 1"), Row(2, 2))
+    checkAnswer(df.selectExpr("a + 1", "a + 1 + 1"), Row(2, 3))
+
+    // This does not work because the expressions get grouped like (a + a) + 1
+    checkAnswer(df.selectExpr("a + 1", "a + a + 1"), Row(2, 3))
+    checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
+
+    // Identity udf that tracks the number of times it is called.
+    val countAcc = sparkContext.accumulator(0, "CallCount")
+    sqlContext.udf.register("testUdf", (x: Int) => {
+      countAcc.++=(1)
+      x
+    })
+
+    // Evaluates df, verifying it is equal to the expectedResult and the accumulator's value
+    // is correct.
+    def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
+      countAcc.setValue(0)
+      checkAnswer(df, expectedResult)
+      assert(countAcc.value == expectedCount)
+    }
+
+    verifyCallCount(df.selectExpr("testUdf(a)"), Row(1), 1)
+    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
+    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a + 1)"), Row(2, 2), 1)
+    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a)"), Row(2, 1), 2)
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 1)
+
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
+
+    // Would be nice if semantic equals for `+` understood commutative
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 2)
+
+    // Try disabling it via configuration.
+    sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "false")
+    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
+    sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "true")
+    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
+  }
+
+  test("SPARK-10707: nullability should be correctly propagated through set operations (1)") {
+    // This test produced an incorrect result of 1 before the SPARK-10707 fix because of the
+    // NullPropagation rule: COUNT(v) got replaced with COUNT(1) because the output column of
+    // UNION was incorrectly considered non-nullable:
+    checkAnswer(
+      sql("""SELECT count(v) FROM (
+            |  SELECT v FROM (
+            |    SELECT 'foo' AS v UNION ALL
+            |    SELECT NULL AS v
+            |  ) my_union WHERE isnull(v)
+            |) my_subview""".stripMargin),
+      Seq(Row(0)))
+  }
+
+  test("SPARK-10707: nullability should be correctly propagated through set operations (2)") {
+    // This test uses RAND() to stop column pruning for Union and checks the resulting isnull
+    // value. This would produce an incorrect result before the fix in SPARK-10707 because the "v"
+    // column of the union was considered non-nullable.
+    checkAnswer(
+      sql(
+        """
+          |SELECT a FROM (
+          |  SELECT ISNULL(v) AS a, RAND() FROM (
+          |    SELECT 'foo' AS v UNION ALL SELECT null AS v
+          |  ) my_union
+          |) my_view
+        """.stripMargin),
+      Row(false) :: Row(true) :: Nil)
+  }
+
 }

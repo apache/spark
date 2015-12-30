@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.services.kinesis.clientlibrary.types.UserRecord
 import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark._
@@ -69,26 +70,26 @@ class KinesisBackedBlockRDDPartition(
  */
 private[kinesis]
 class KinesisBackedBlockRDD[T: ClassTag](
-    @transient sc: SparkContext,
+    sc: SparkContext,
     val regionName: String,
     val endpointUrl: String,
-    @transient blockIds: Array[BlockId],
+    @transient private val _blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
-    @transient isBlockIdValid: Array[Boolean] = Array.empty,
+    @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
     val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
     val awsCredentialsOption: Option[SerializableAWSCredentials] = None
-  ) extends BlockRDD[T](sc, blockIds) {
+  ) extends BlockRDD[T](sc, _blockIds) {
 
-  require(blockIds.length == arrayOfseqNumberRanges.length,
+  require(_blockIds.length == arrayOfseqNumberRanges.length,
     "Number of blockIds is not equal to the number of sequence number ranges")
 
   override def isValid(): Boolean = true
 
   override def getPartitions: Array[Partition] = {
-    Array.tabulate(blockIds.length) { i =>
+    Array.tabulate(_blockIds.length) { i =>
       val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i)
-      new KinesisBackedBlockRDDPartition(i, blockIds(i), isValid, arrayOfseqNumberRanges(i))
+      new KinesisBackedBlockRDDPartition(i, _blockIds(i), isValid, arrayOfseqNumberRanges(i))
     }
   }
 
@@ -210,7 +211,10 @@ class KinesisSequenceRangeIterator(
       s"getting records using shard iterator") {
         client.getRecords(getRecordsRequest)
       }
-    (getRecordsResult.getRecords.iterator().asScala, getRecordsResult.getNextShardIterator)
+    // De-aggregate records, if KPL was used in producing the records. The KCL automatically
+    // handles de-aggregation during regular operation. This code path is used during recovery
+    val recordIterator = UserRecord.deaggregate(getRecordsResult.getRecords)
+    (recordIterator.iterator().asScala, getRecordsResult.getNextShardIterator)
   }
 
   /**

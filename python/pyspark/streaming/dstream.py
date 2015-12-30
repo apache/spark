@@ -208,10 +208,10 @@ class DStream(object):
     def cache(self):
         """
         Persist the RDDs of this DStream with the default storage level
-        (C{MEMORY_ONLY_SER}).
+        (C{MEMORY_ONLY}).
         """
         self.is_cached = True
-        self.persist(StorageLevel.MEMORY_ONLY_SER)
+        self.persist(StorageLevel.MEMORY_ONLY)
         return self
 
     def persist(self, storageLevel):
@@ -247,7 +247,7 @@ class DStream(object):
         Return a new DStream in which each RDD contains the counts of each
         distinct value in each RDD of this DStream.
         """
-        return self.map(lambda x: (x, None)).reduceByKey(lambda x, y: None).count()
+        return self.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x+y)
 
     def saveAsTextFiles(self, prefix, suffix=None):
         """
@@ -493,7 +493,7 @@ class DStream(object):
         keyed = self.map(lambda x: (x, 1))
         counted = keyed.reduceByKeyAndWindow(operator.add, operator.sub,
                                              windowDuration, slideDuration, numPartitions)
-        return counted.filter(lambda kv: kv[1] > 0).count()
+        return counted.filter(lambda kv: kv[1] > 0)
 
     def groupByKeyAndWindow(self, windowDuration, slideDuration, numPartitions=None):
         """
@@ -524,8 +524,8 @@ class DStream(object):
         `invFunc` can be None, then it will reduce all the RDDs in window, could be slower
         than having `invFunc`.
 
-        @param reduceFunc:     associative reduce function
-        @param invReduceFunc:  inverse function of `reduceFunc`
+        @param func:           associative reduce function
+        @param invFunc:        inverse function of `reduceFunc`
         @param windowDuration: width of the window; must be a multiple of this DStream's
                               batching interval
         @param slideDuration:  sliding interval of the window (i.e., the interval after which
@@ -542,33 +542,34 @@ class DStream(object):
 
         reduced = self.reduceByKey(func, numPartitions)
 
-        def reduceFunc(t, a, b):
-            b = b.reduceByKey(func, numPartitions)
-            r = a.union(b).reduceByKey(func, numPartitions) if a else b
-            if filterFunc:
-                r = r.filter(filterFunc)
-            return r
+        if invFunc:
+            def reduceFunc(t, a, b):
+                b = b.reduceByKey(func, numPartitions)
+                r = a.union(b).reduceByKey(func, numPartitions) if a else b
+                if filterFunc:
+                    r = r.filter(filterFunc)
+                return r
 
-        def invReduceFunc(t, a, b):
-            b = b.reduceByKey(func, numPartitions)
-            joined = a.leftOuterJoin(b, numPartitions)
-            return joined.mapValues(lambda kv: invFunc(kv[0], kv[1])
-                                    if kv[1] is not None else kv[0])
+            def invReduceFunc(t, a, b):
+                b = b.reduceByKey(func, numPartitions)
+                joined = a.leftOuterJoin(b, numPartitions)
+                return joined.mapValues(lambda kv: invFunc(kv[0], kv[1])
+                                        if kv[1] is not None else kv[0])
 
-        jreduceFunc = TransformFunction(self._sc, reduceFunc, reduced._jrdd_deserializer)
-        if invReduceFunc:
+            jreduceFunc = TransformFunction(self._sc, reduceFunc, reduced._jrdd_deserializer)
             jinvReduceFunc = TransformFunction(self._sc, invReduceFunc, reduced._jrdd_deserializer)
+            if slideDuration is None:
+                slideDuration = self._slideDuration
+            dstream = self._sc._jvm.PythonReducedWindowedDStream(
+                reduced._jdstream.dstream(),
+                jreduceFunc, jinvReduceFunc,
+                self._ssc._jduration(windowDuration),
+                self._ssc._jduration(slideDuration))
+            return DStream(dstream.asJavaDStream(), self._ssc, self._sc.serializer)
         else:
-            jinvReduceFunc = None
-        if slideDuration is None:
-            slideDuration = self._slideDuration
-        dstream = self._sc._jvm.PythonReducedWindowedDStream(reduced._jdstream.dstream(),
-                                                             jreduceFunc, jinvReduceFunc,
-                                                             self._ssc._jduration(windowDuration),
-                                                             self._ssc._jduration(slideDuration))
-        return DStream(dstream.asJavaDStream(), self._ssc, self._sc.serializer)
+            return reduced.window(windowDuration, slideDuration).reduceByKey(func, numPartitions)
 
-    def updateStateByKey(self, updateFunc, numPartitions=None):
+    def updateStateByKey(self, updateFunc, numPartitions=None, initialRDD=None):
         """
         Return a new "state" DStream where the state for each key is updated by applying
         the given function on the previous state of the key and the new values of the key.
@@ -578,6 +579,9 @@ class DStream(object):
         """
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism
+
+        if initialRDD and not isinstance(initialRDD, RDD):
+            initialRDD = self._sc.parallelize(initialRDD)
 
         def reduceFunc(t, a, b):
             if a is None:
@@ -590,7 +594,13 @@ class DStream(object):
 
         jreduceFunc = TransformFunction(self._sc, reduceFunc,
                                         self._sc.serializer, self._jrdd_deserializer)
-        dstream = self._sc._jvm.PythonStateDStream(self._jdstream.dstream(), jreduceFunc)
+        if initialRDD:
+            initialRDD = initialRDD._reserialize(self._jrdd_deserializer)
+            dstream = self._sc._jvm.PythonStateDStream(self._jdstream.dstream(), jreduceFunc,
+                                                       initialRDD._jrdd)
+        else:
+            dstream = self._sc._jvm.PythonStateDStream(self._jdstream.dstream(), jreduceFunc)
+
         return DStream(dstream.asJavaDStream(), self._ssc, self._sc.serializer)
 
 

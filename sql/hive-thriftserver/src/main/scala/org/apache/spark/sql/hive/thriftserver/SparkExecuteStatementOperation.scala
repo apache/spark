@@ -53,6 +53,18 @@ private[hive] class SparkExecuteStatementOperation(
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
+  private lazy val resultSchema: TableSchema = {
+    if (result == null || result.queryExecution.analyzed.output.size == 0) {
+      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
+    } else {
+      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
+      val schema = result.queryExecution.analyzed.output.map { attr =>
+        new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
+      }
+      new TableSchema(schema.asJava)
+    }
+  }
+
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
     hiveContext.sparkContext.clearJobGroup()
@@ -120,24 +132,14 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def getResultSetSchema: TableSchema = {
-    if (result == null || result.queryExecution.analyzed.output.size == 0) {
-      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
-    } else {
-      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
-      val schema = result.queryExecution.analyzed.output.map { attr =>
-        new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
-      }
-      new TableSchema(schema.asJava)
-    }
-  }
+  def getResultSetSchema: TableSchema = resultSchema
 
-  override def run(): Unit = {
+  override def runInternal(): Unit = {
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
-      runInternal()
+      execute()
     } else {
       val sparkServiceUGI = Utils.getUGI()
 
@@ -149,7 +151,7 @@ private[hive] class SparkExecuteStatementOperation(
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
               try {
-                runInternal()
+                execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
@@ -186,7 +188,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  override def runInternal(): Unit = {
+  private def execute(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)

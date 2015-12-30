@@ -282,7 +282,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Convert bi-directional edges into uni-directional ones.
    * Some graph algorithms (e.g., TriangleCount) assume that an input graph
    * has its edges in canonical direction.
-   * This function rewrites the vertex ids of edges so that srcIds are bigger
+   * This function rewrites the vertex ids of edges so that srcIds are smaller
    * than dstIds, and merges the duplicated edges.
    *
    * @param mergeFunc the user defined reduce function which should

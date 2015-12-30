@@ -119,6 +119,7 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_GENERAL"]: 'some tests',
         ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
         ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',
+        ERROR_CODES["BLOCK_JAVA_STYLE"]: 'Java style tests',
         ERROR_CODES["BLOCK_PYTHON_STYLE"]: 'Python style tests',
         ERROR_CODES["BLOCK_R_STYLE"]: 'R style tests',
         ERROR_CODES["BLOCK_DOCUMENTATION"]: 'to generate documentation',
@@ -162,10 +163,6 @@ def main():
     if "test-maven" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_TOOL"] = "maven"
     # Switch the Hadoop profile based on the PR title:
-    if "test-hadoop1.0" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop1.0"
-    if "test-hadoop2.2" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.0"
     if "test-hadoop2.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.2"
     if "test-hadoop2.3" in ghprb_pull_title:

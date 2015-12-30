@@ -111,6 +111,52 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    case Some((SQLConf.Deprecated.USE_SQL_AGGREGATE2, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} is deprecated and " +
+            s"will be ignored. ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} will " +
+            s"continue to be true.")
+        Seq(Row(SQLConf.Deprecated.USE_SQL_AGGREGATE2, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.TUNGSTEN_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.TUNGSTEN_ENABLED} is deprecated and " +
+            s"will be ignored. Tungsten will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.TUNGSTEN_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.CODEGEN_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.CODEGEN_ENABLED} is deprecated and " +
+            s"will be ignored. Codegen will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.CODEGEN_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.UNSAFE_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.UNSAFE_ENABLED} is deprecated and " +
+            s"will be ignored. Unsafe mode will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.UNSAFE_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
+            s"will be ignored. Sort merge join will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
@@ -156,7 +202,11 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sqlContext: SQLContext) => {
         val value =
           try {
-            sqlContext.getConf(key)
+            if (key == SQLConf.DIALECT.key) {
+              sqlContext.conf.dialect
+            } else {
+              sqlContext.getConf(key)
+            }
           } catch {
             case _: NoSuchElementException => "<undefined>"
           }
@@ -180,7 +230,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
-      Seq(AttributeReference("plan", StringType, nullable = false)()),
+      Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false)
   extends RunnableCommand {
 

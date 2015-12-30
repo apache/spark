@@ -148,7 +148,7 @@ def determine_java_executable():
     return java_exe if java_exe else which("java")
 
 
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch', 'update'])
+JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
 
 
 def determine_java_version(java_exe):
@@ -164,14 +164,13 @@ def determine_java_version(java_exe):
     # find raw version string, eg 'java version "1.8.0_25"'
     raw_version_str = next(x for x in raw_output_lines if " version " in x)
 
-    match = re.search('(\d+)\.(\d+)\.(\d+)_(\d+)', raw_version_str)
+    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
 
     major = int(match.group(1))
     minor = int(match.group(2))
     patch = int(match.group(3))
-    update = int(match.group(4))
 
-    return JavaVersion(major, minor, patch, update)
+    return JavaVersion(major, minor, patch)
 
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
@@ -196,6 +195,11 @@ def run_apache_rat_checks():
 def run_scala_style_checks():
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
+
+
+def run_java_style_checks():
+    set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
 
 
 def run_python_style_checks():
@@ -296,8 +300,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.2.1"],
-        "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
         "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
@@ -486,7 +488,7 @@ def main():
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = "hadoop2.3"
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.3")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
@@ -522,6 +524,9 @@ def main():
     # style checks
     if not changed_files or any(f.endswith(".scala") for f in changed_files):
         run_scala_style_checks()
+    if not changed_files or any(f.endswith(".java") for f in changed_files):
+        # run_java_style_checks()
+        pass
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R") for f in changed_files):

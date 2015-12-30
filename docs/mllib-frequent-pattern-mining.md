@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Frequent Pattern Mining - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Frequent Pattern Mining
+title: Frequent Pattern Mining - spark.mllib
+displayTitle: Frequent Pattern Mining - spark.mllib
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
@@ -9,7 +9,7 @@ first steps to analyze a large-scale dataset, which has been an active research 
 data mining for years.
 We refer users to Wikipedia's [association rule learning](http://en.wikipedia.org/wiki/Association_rule_learning)
 for more information.
-MLlib provides a parallel implementation of FP-growth,
+`spark.mllib` provides a parallel implementation of FP-growth,
 a popular algorithm to mining frequent itemsets.
 
 ## FP-growth
@@ -22,13 +22,13 @@ Different from [Apriori-like](http://en.wikipedia.org/wiki/Apriori_algorithm) al
 the second step of FP-growth uses a suffix tree (FP-tree) structure to encode transactions without generating candidate sets
 explicitly, which are usually expensive to generate.
 After the second step, the frequent itemsets can be extracted from the FP-tree.
-In MLlib, we implemented a parallel version of FP-growth called PFP,
+In `spark.mllib`, we implemented a parallel version of FP-growth called PFP,
 as described in [Li et al., PFP: Parallel FP-growth for query recommendation](http://dx.doi.org/10.1145/1454008.1454027).
 PFP distributes the work of growing FP-trees based on the suffices of transactions,
 and hence more scalable than a single-machine implementation.
 We refer users to the papers for more details.
 
-MLlib's FP-growth implementation takes the following (hyper-)parameters:
+`spark.mllib`'s FP-growth implementation takes the following (hyper-)parameters:
 
 * `minSupport`: the minimum support for an itemset to be identified as frequent.
   For example, if an item appears 3 out of 5 transactions, it has a support of 3/5=0.6.
@@ -52,31 +52,7 @@ details) from `transactions`.
 
 Refer to the [`FPGrowth` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.fpm.FPGrowth
-
-val data = sc.textFile("data/mllib/sample_fpgrowth.txt")
-
-val transactions: RDD[Array[String]] = data.map(s => s.trim.split(' '))
-
-val fpg = new FPGrowth()
-  .setMinSupport(0.2)
-  .setNumPartitions(10)
-val model = fpg.run(transactions)
-
-model.freqItemsets.collect().foreach { itemset =>
-  println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
-}
-
-val minConfidence = 0.8
-model.generateAssociationRules(minConfidence).collect().foreach { rule =>
-  println(
-    rule.antecedent.mkString("[", ",", "]")
-      + " => " + rule.consequent .mkString("[", ",", "]")
-      + ", " + rule.confidence)
-}
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/SimpleFPGrowth.scala %}
 
 </div>
 
@@ -95,46 +71,7 @@ details) from `transactions`.
 
 Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) for details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-import java.util.List;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.fpm.AssociationRules;
-import org.apache.spark.mllib.fpm.FPGrowth;
-import org.apache.spark.mllib.fpm.FPGrowthModel;
-
-SparkConf conf = new SparkConf().setAppName("FP-growth Example");
-JavaSparkContext sc = new JavaSparkContext(conf);
-
-JavaRDD<String> data = sc.textFile("data/mllib/sample_fpgrowth.txt");
-
-JavaRDD<List<String>> transactions = data.map(
-  new Function<String, List<String>>() {
-    public List<String> call(String line) {
-      String[] parts = line.split(" ");
-      return Arrays.asList(parts);
-    }
-  }
-);
-
-FPGrowth fpg = new FPGrowth()
-  .setMinSupport(0.2)
-  .setNumPartitions(10);
-FPGrowthModel<String> model = fpg.run(transactions);
-
-for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
-  System.out.println("[" + itemset.javaItems() + "], " + itemset.freq());
-}
-
-double minConfidence = 0.8;
-for (AssociationRules.Rule<String> rule
-    : model.generateAssociationRules(minConfidence).toJavaRDD().collect()) {
-  System.out.println(
-    rule.javaAntecedent() + " => " + rule.javaConsequent() + ", " + rule.confidence());
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaSimpleFPGrowth.java %}
 
 </div>
 
@@ -149,19 +86,7 @@ that stores the frequent itemsets with their frequencies.
 
 Refer to the [`FPGrowth` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowth) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.fpm import FPGrowth
-
-data = sc.textFile("data/mllib/sample_fpgrowth.txt")
-
-transactions = data.map(lambda line: line.strip().split(' '))
-
-model = FPGrowth.train(transactions, minSupport=0.2, numPartitions=10)
-
-result = model.freqItemsets().collect()
-for fi in result:
-    print(fi)
-{% endhighlight %}
+{% include_example python/mllib/fpgrowth_example.py %}
 
 </div>
 
@@ -177,27 +102,7 @@ that have a single item as the consequent.
 
 Refer to the [`AssociationRules` Scala docs](api/java/org/apache/spark/mllib/fpm/AssociationRules.html) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.fpm.AssociationRules
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
-
-val freqItemsets = sc.parallelize(Seq(
-  new FreqItemset(Array("a"), 15L),
-  new FreqItemset(Array("b"), 35L),
-  new FreqItemset(Array("a", "b"), 12L)
-));
-
-val ar = new AssociationRules()
-  .setMinConfidence(0.8)
-val results = ar.run(freqItemsets)
-
-results.collect().foreach { rule =>
-  println("[" + rule.antecedent.mkString(",")
-    + "=>"
-    + rule.consequent.mkString(",") + "]," + rule.confidence)
-}
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/AssociationRulesExample.scala %}
 
 </div>
 
@@ -208,29 +113,7 @@ that have a single item as the consequent.
 
 Refer to the [`AssociationRules` Java docs](api/java/org/apache/spark/mllib/fpm/AssociationRules.html) for details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.fpm.AssociationRules;
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
-
-JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Arrays.asList(
-  new FreqItemset<String>(new String[] {"a"}, 15L),
-  new FreqItemset<String>(new String[] {"b"}, 35L),
-  new FreqItemset<String>(new String[] {"a", "b"}, 12L)
-));
-
-AssociationRules arules = new AssociationRules()
-  .setMinConfidence(0.8);
-JavaRDD<AssociationRules.Rule<String>> results = arules.run(freqItemsets);
-
-for (AssociationRules.Rule<String> rule: results.collect()) {
-  System.out.println(
-    rule.javaAntecedent() + " => " + rule.javaConsequent() + ", " + rule.confidence());
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaAssociationRulesExample.java %}
 
 </div>
 </div>
@@ -243,7 +126,7 @@ PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
 the reader to the referenced paper for formalizing the sequential
 pattern mining problem.
 
-MLlib's PrefixSpan implementation takes the following parameters:
+`spark.mllib`'s PrefixSpan implementation takes the following parameters:
 
 * `minSupport`: the minimum support required to be considered a frequent
   sequential pattern.
@@ -278,24 +161,7 @@ that stores the frequent sequences with their frequencies.
 
 Refer to the [`PrefixSpan` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) and [`PrefixSpanModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.fpm.PrefixSpan
-
-val sequences = sc.parallelize(Seq(
-    Array(Array(1, 2), Array(3)),
-    Array(Array(1), Array(3, 2), Array(1, 2)),
-    Array(Array(1, 2), Array(5)),
-    Array(Array(6))
-  ), 2).cache()
-val prefixSpan = new PrefixSpan()
-  .setMinSupport(0.5)
-  .setMaxPatternLength(5)
-val model = prefixSpan.run(sequences)
-model.freqSequences.collect().foreach { freqSequence =>
-println(
-  freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]") + ", " + freqSequence.freq)
-}
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/PrefixSpanExample.scala %}
 
 </div>
 
@@ -309,27 +175,7 @@ that stores the frequent sequences with their frequencies.
 
 Refer to the [`PrefixSpan` Java docs](api/java/org/apache/spark/mllib/fpm/PrefixSpan.html) and [`PrefixSpanModel` Java docs](api/java/org/apache/spark/mllib/fpm/PrefixSpanModel.html) for details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-import java.util.List;
-
-import org.apache.spark.mllib.fpm.PrefixSpan;
-import org.apache.spark.mllib.fpm.PrefixSpanModel;
-
-JavaRDD<List<List<Integer>>> sequences = sc.parallelize(Arrays.asList(
-  Arrays.asList(Arrays.asList(1, 2), Arrays.asList(3)),
-  Arrays.asList(Arrays.asList(1), Arrays.asList(3, 2), Arrays.asList(1, 2)),
-  Arrays.asList(Arrays.asList(1, 2), Arrays.asList(5)),
-  Arrays.asList(Arrays.asList(6))
-), 2);
-PrefixSpan prefixSpan = new PrefixSpan()
-  .setMinSupport(0.5)
-  .setMaxPatternLength(5);
-PrefixSpanModel<Integer> model = prefixSpan.run(sequences);
-for (PrefixSpan.FreqSequence<Integer> freqSeq: model.freqSequences().toJavaRDD().collect()) {
-  System.out.println(freqSeq.javaSequence() + ", " + freqSeq.freq());
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaPrefixSpanExample.java %}
 
 </div>
 </div>

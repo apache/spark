@@ -608,7 +608,7 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Marks the task as successful and notifies the DAGScheduler that a task has ended.
+   * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
@@ -704,9 +704,10 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
-      case e: ExecutorLostFailure if e.isNormalExit =>
-        logInfo(s"Task $tid failed because while it was being computed, its executor" +
-          s" exited normally. Not marking the task as failed.")
+      case e: ExecutorLostFailure if !e.exitCausedByApp =>
+        logInfo(s"Task $tid failed because while it was being computed, its executor " +
+          "exited for a reason unrelated to the task. Not counting this failure towards the " +
+          "maximum number of failures for the task.")
         None
 
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
@@ -724,7 +725,7 @@ private[spark] class TaskSetManager(
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED
         && reason.isInstanceOf[TaskFailedReason]
-        && reason.asInstanceOf[TaskFailedReason].shouldEventuallyFailJob) {
+        && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
@@ -797,11 +798,13 @@ private[spark] class TaskSetManager(
       }
     }
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      val isNormalExit: Boolean = reason match {
-        case exited: ExecutorExited => exited.isNormalExit
-        case _ => false
+      val exitCausedByApp: Boolean = reason match {
+        case exited: ExecutorExited => exited.exitCausedByApp
+        case ExecutorKilled => false
+        case _ => true
       }
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
+      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp,
+        Some(reason.toString)))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()

@@ -38,6 +38,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.{AnalysisException, catalyst}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.{logical, _}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -352,6 +353,14 @@ private[hive] object HiveQl extends Logging {
   }
 
   /** Extractor for matching Hive's AST Tokens. */
+  private[hive] case class Token(name: String, children: Seq[ASTNode]) extends Node {
+    def getName(): String = name
+    def getChildren(): java.util.List[Node] = {
+      val col = new java.util.ArrayList[Node](children.size)
+      children.foreach(col.add(_))
+      col
+    }
+  }
   object Token {
     /** @return matches of the form (tokenName, children). */
     def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
@@ -359,6 +368,7 @@ private[hive] object HiveQl extends Logging {
         CurrentOrigin.setPosition(t.getLine, t.getCharPositionInLine)
         Some((t.getText,
           Option(t.getChildren).map(_.asScala.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
+      case t: Token => Some((t.name, t.children))
       case _ => None
     }
   }
@@ -1097,7 +1107,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         // (if there is a group by) or a script transformation.
         val withProject: LogicalPlan = transformation.getOrElse {
           val selectExpressions =
-            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias)
+            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias(_))
           Seq(
             groupByClause.map(e => e match {
               case Token("TOK_GROUPBY", children) =>
@@ -1505,12 +1515,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
-      UnresolvedStar(Some(name))
+      UnresolvedStar(Some(UnresolvedAttribute.parseAttributeName(name)))
 
     /* Aggregate Functions */
-    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
-    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
-    case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
+      Count(args.map(nodeToExpr)).toAggregateExpression(isDistinct = true)
+    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) =>
+      Count(Literal(1)).toAggregateExpression()
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
@@ -1615,17 +1626,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Window Functions */
-    case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>
-      val function = UnresolvedWindowFunction(name, args.map(nodeToExpr))
-      nodesToWindowSpecification(spec) match {
-        case reference: WindowSpecReference =>
-          UnresolvedWindowExpression(function, reference)
-        case definition: WindowSpecDefinition =>
-          WindowExpression(function, definition)
-      }
-    case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
-      // Safe to use Literal(1)?
-      val function = UnresolvedWindowFunction(name, Literal(1) :: Nil)
+    case Token(name, args :+ Token("TOK_WINDOWSPEC", spec)) =>
+      val function = nodeToExpr(Token(name, args))
       nodesToWindowSpecification(spec) match {
         case reference: WindowSpecReference =>
           UnresolvedWindowExpression(function, reference)
@@ -1819,6 +1821,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   val explode = "(?i)explode".r
+  val jsonTuple = "(?i)json_tuple".r
   def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
     val function = nodes.head
 
@@ -1830,6 +1833,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     function match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
         (Explode(nodeToExpr(child)), attributes)
+
+      case Token("TOK_FUNCTION", Token(jsonTuple(), Nil) :: children) =>
+        (JsonTuple(children.map(nodeToExpr)), attributes)
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         val functionInfo: FunctionInfo =

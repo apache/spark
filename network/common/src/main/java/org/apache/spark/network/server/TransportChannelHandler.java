@@ -55,16 +55,19 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportResponseHandler responseHandler;
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
+  private final boolean closeIdleConnections;
 
   public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
-      long requestTimeoutMs) {
+      long requestTimeoutMs,
+      boolean closeIdleConnections) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
+    this.closeIdleConnections = closeIdleConnections;
   }
 
   public TransportClient getClient() {
@@ -81,14 +84,29 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   }
 
   @Override
-  public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
     try {
-      requestHandler.channelUnregistered();
+      requestHandler.channelActive();
+    } catch (RuntimeException e) {
+      logger.error("Exception from request handler while registering channel", e);
+    }
+    try {
+      responseHandler.channelActive();
+    } catch (RuntimeException e) {
+      logger.error("Exception from response handler while registering channel", e);
+    }
+    super.channelRegistered(ctx);
+  }
+
+  @Override
+  public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    try {
+      requestHandler.channelInactive();
     } catch (RuntimeException e) {
       logger.error("Exception from request handler while unregistering channel", e);
     }
     try {
-      responseHandler.channelUnregistered();
+      responseHandler.channelInactive();
     } catch (RuntimeException e) {
       logger.error("Exception from response handler while unregistering channel", e);
     }
@@ -96,7 +114,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   }
 
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, Message request) {
+  public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
     if (request instanceof RequestMessage) {
       requestHandler.handle((RequestMessage) request);
     } else {
@@ -111,17 +129,35 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
       IdleStateEvent e = (IdleStateEvent) evt;
       // See class comment for timeout semantics. In addition to ensuring we only timeout while
       // there are outstanding requests, we also do a secondary consistency check to ensure
-      // there's no race between the idle timeout and incrementing the numOutstandingRequests.
-      boolean hasInFlightRequests = responseHandler.numOutstandingRequests() > 0;
-      boolean isActuallyOverdue =
-        System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
-      if (e.state() == IdleState.ALL_IDLE && hasInFlightRequests && isActuallyOverdue) {
-        String address = NettyUtils.getRemoteAddress(ctx.channel());
-        logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
-          "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
-          "is wrong.", address, requestTimeoutNs / 1000 / 1000);
-        ctx.close();
+      // there's no race between the idle timeout and incrementing the numOutstandingRequests
+      // (see SPARK-7003).
+      //
+      // To avoid a race between TransportClientFactory.createClient() and this code which could
+      // result in an inactive client being returned, this needs to run in a synchronized block.
+      synchronized (this) {
+        boolean isActuallyOverdue =
+          System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
+        if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
+          if (responseHandler.numOutstandingRequests() > 0) {
+            String address = NettyUtils.getRemoteAddress(ctx.channel());
+            logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
+              "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
+              "is wrong.", address, requestTimeoutNs / 1000 / 1000);
+            client.timeOut();
+            ctx.close();
+          } else if (closeIdleConnections) {
+            // While CloseIdleConnections is enable, we also close idle connection
+            client.timeOut();
+            ctx.close();
+          }
+        }
       }
     }
+    ctx.fireUserEventTriggered(evt);
   }
+
+  public TransportResponseHandler getResponseHandler() {
+    return responseHandler;
+  }
+
 }

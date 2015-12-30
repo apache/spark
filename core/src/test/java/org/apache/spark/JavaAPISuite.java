@@ -146,21 +146,29 @@ public class JavaAPISuite implements Serializable {
   public void sample() {
     List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     JavaRDD<Integer> rdd = sc.parallelize(ints);
-    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 3);
+    // the seeds here are "magic" to make this work out nicely
+    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 8);
     Assert.assertEquals(2, sample20.count());
-    JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 5);
+    JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 2);
     Assert.assertEquals(2, sample20WithoutReplacement.count());
   }
 
   @Test
   public void randomSplit() {
-    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    List<Integer> ints = new ArrayList<>(1000);
+    for (int i = 0; i < 1000; i++) {
+      ints.add(i);
+    }
     JavaRDD<Integer> rdd = sc.parallelize(ints);
     JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 31);
+    // the splits aren't perfect -- not enough data for them to be -- just check they're about right
     Assert.assertEquals(3, splits.length);
-    Assert.assertEquals(1, splits[0].count());
-    Assert.assertEquals(2, splits[1].count());
-    Assert.assertEquals(7, splits[2].count());
+    long s0 = splits[0].count();
+    long s1 = splits[1].count();
+    long s2 = splits[2].count();
+    Assert.assertTrue(s0 + " not within expected range", s0 > 150 && s0 < 250);
+    Assert.assertTrue(s1 + " not within expected range", s1 > 250 && s0 < 350);
+    Assert.assertTrue(s2 + " not within expected range", s2 > 430 && s2 < 570);
   }
 
   @Test
@@ -965,6 +973,19 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
   }
 
+  @Test
+  public void getNumPartitions(){
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaDoubleRDD rdd2 = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0), 2);
+    JavaPairRDD<String, Integer> rdd3 = sc.parallelizePairs(Arrays.asList(
+            new Tuple2<>("a", 1),
+            new Tuple2<>("aa", 2),
+            new Tuple2<>("aaa", 3)
+    ), 2);
+    Assert.assertEquals(3, rdd1.getNumPartitions());
+    Assert.assertEquals(2, rdd2.getNumPartitions());
+    Assert.assertEquals(2, rdd3.getNumPartitions());
+  }
 
   @Test
   public void repartition() {

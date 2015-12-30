@@ -108,6 +108,9 @@ private[parquet] class CatalystSchemaConverter(
     def typeString =
       if (originalType == null) s"$typeName" else s"$typeName ($originalType)"
 
+    def typeNotSupported() =
+      throw new AnalysisException(s"Parquet type not supported: $typeString")
+
     def typeNotImplemented() =
       throw new AnalysisException(s"Parquet type not yet supported: $typeString")
 
@@ -142,6 +145,9 @@ private[parquet] class CatalystSchemaConverter(
           case INT_32 | null => IntegerType
           case DATE => DateType
           case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT32)
+          case UINT_8 => typeNotSupported()
+          case UINT_16 => typeNotSupported()
+          case UINT_32 => typeNotSupported()
           case TIME_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -150,6 +156,7 @@ private[parquet] class CatalystSchemaConverter(
         originalType match {
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT64)
+          case UINT_64 => typeNotSupported()
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -163,9 +170,10 @@ private[parquet] class CatalystSchemaConverter(
 
       case BINARY =>
         originalType match {
-          case UTF8 | ENUM => StringType
+          case UTF8 | ENUM | JSON => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
+          case BSON => BinaryType
           case DECIMAL => makeDecimalType()
           case _ => illegalType()
         }

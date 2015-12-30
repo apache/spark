@@ -325,16 +325,16 @@ class HasNumFeatures(Params):
 
 class HasCheckpointInterval(Params):
     """
-    Mixin for param checkpointInterval: checkpoint interval (>= 1).
+    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
     """
 
     # a placeholder to make it appear in the generated doc
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1).")
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.")
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
-        #: param for checkpoint interval (>= 1).
-        self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1).")
+        #: param for set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+        self.checkpointInterval = Param(self, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.")
 
     def setCheckpointInterval(self, value):
         """
@@ -597,6 +597,34 @@ class HasWeightCol(Params):
         return self.getOrDefault(self.weightCol)
 
 
+class HasSolver(Params):
+    """
+    Mixin for param solver: the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+
+    def __init__(self):
+        super(HasSolver, self).__init__()
+        #: param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+        self.solver = Param(self, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+        self._setDefault(solver='auto')
+
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        self._paramMap[self.solver] = value
+        return self
+
+    def getSolver(self):
+        """
+        Gets the value of solver or its default value.
+        """
+        return self.getOrDefault(self.solver)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.
@@ -608,7 +636,7 @@ class DecisionTreeParams(Params):
     minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.")
     minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
     maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
-    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
+    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.")
     
 
     def __init__(self):
@@ -623,8 +651,8 @@ class DecisionTreeParams(Params):
         self.minInfoGain = Param(self, "minInfoGain", "Minimum information gain for a split to be considered at a tree node.")
         #: param for Maximum memory in MB allocated to histogram aggregation.
         self.maxMemoryInMB = Param(self, "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.")
-        #: param for If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.
-        self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees.")
+        #: param for If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.
+        self.cacheNodeIds = Param(self, "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.")
         
     def setMaxDepth(self, value):
         """
