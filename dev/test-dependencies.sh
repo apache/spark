@@ -41,11 +41,11 @@ OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Down
 TEMP_VERSION="spark-$(date +%s | tail -c6)"
 
 function reset_version {
-  # Restore the original version number:
-  $MVN -q versions:set -DnewVersion=$OLD_VERSION -DgenerateBackupPoms=false > /dev/null
-
   # Delete the temporary POMs that we wrote to the local Maven repo:
   find "$HOME/.m2/" | grep "$TEMP_VERSION" | xargs rm -rf
+
+  # Restore the original version number:
+  $MVN -q versions:set -DnewVersion=$OLD_VERSION -DgenerateBackupPoms=false > /dev/null
 }
 trap reset_version EXIT
 
