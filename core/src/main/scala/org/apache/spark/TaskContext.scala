@@ -196,10 +196,10 @@ abstract class TaskContext extends Serializable {
   /**
    * Set IDs of RDD and Split being computed. This is used by consistent accumulators.
    */
-  private[spark] def setComputeRDDSplit(rddId: Long, splitId: Long): Unit
+  private[spark] def setComputeRDDSplit(rddId: Int, splitId: Int): Unit
 
   /**
    * Return the IDs of RDD and Split being computed. This is used by consistent accumulators.
    */
-  private[spark] def getComputeRDDSplit(): (Long, Long)
+  private[spark] def getComputeRDDSplit(): (Int, Int)
 }

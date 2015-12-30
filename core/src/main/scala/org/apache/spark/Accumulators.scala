@@ -95,7 +95,6 @@ class Accumulable[R, T] private[spark] (
    * Merge two accumulable objects together
    *
    * Normally, a user will not want to use this version, but will instead call `+=`.
-   * Not supported with ConsistentAccumulators.
    * @param term the other `R` that will get merged with this
    */
   def ++= (term: R) { value_ = param.addInPlace(value_, term)}
@@ -104,7 +103,6 @@ class Accumulable[R, T] private[spark] (
    * Merge two accumulable objects together
    *
    * Normally, a user will not want to use this version, but will instead call `add`.
-   * Not supported with ConsistentAccumulators.
    * @param term the other `R` that will get merged with this
    */
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
@@ -273,12 +271,21 @@ class Accumulator[T] private[spark] (
   }
 }
 
-private[spark] case class UpdateTracking[T](processed: mutable.HashMap[Int, mutable.BitSet], var value: T) extends Serializable {
+/**
+ * Structure for keeping track of the values being accumulated.
+ * When collecting updates from the workers values are accumulated in pending hash map of (rddId, splitId) -> T
+ * When merging values on the driver the total is collected in value and
+ * before merging in each pending record, checked against processed.
+ */
+private[spark] case class UpdateTracking[T](
+  pending: mutable.HashMap[(Int, Int), T],
+  processed: mutable.HashMap[Int, mutable.BitSet],
+  var value: T) extends Serializable {
   def this(value: T) = {
-    this(new mutable.HashMap[Int, mutable.BitSet](), value)
+    this(new mutable.HashMap[(Int, Int), T](), new mutable.HashMap[Int, mutable.BitSet](), value)
   }
 }
-private[spark] case class UpdateInfo[T](rddId: Int, partitionId: Int, value: T)
+
 /**
  * A consistent version of [[Accumulator]] where the result will not be added to
  * multiple times for the same partition/rdd.
@@ -306,7 +313,7 @@ class ConsistentAccumulator[T] private[spark] (
     param: ConsistentAccumulatorParam[T],
     name: Option[String],
     internal: Boolean)
-  extends Accumulable[UpdateTracking[T], UpdateInfo[T]](initialValue, param, name, internal) {
+  extends Accumulable[UpdateTracking[T], T](initialValue, param, name, internal) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(new UpdateTracking(initialValue),
@@ -369,19 +376,45 @@ object AccumulatorParam {
  * @tparam T type of value to accumulate
  */
 class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
-    extends AccumulableParam[UpdateTracking[T], UpdateInfo[T]] {
-  def addAccumulator(r: UpdateTracking[T], t: UpdateInfo[T]): UpdateTracking[T] = {
-    val currentRDDBitSet = r.processed.getOrElseUpdate(t.rddId, new mutable.BitSet())
-    if (!currentRDDBitSet.contains(t.partitionId)) {
-      currentRDDBitSet += t.partitionId
-      r.value = accumulatorParam.addAccumulator(r.value, t.value)
-    }
+    extends AccumulableParam[UpdateTracking[T], T] {
+
+  /**
+   * Add additional value to the current accumulator. No consistency checking is perford at this
+   * stage as addAccumulator may be called multiple times inside
+   * the partition.
+   *
+   * @param r the current value of the accumulator
+   * @param t the data to be added to the accumulator
+   * @return the new value of the accumulator
+   */
+  def addAccumulator(r: UpdateTracking[T], t: T): UpdateTracking[T] = {
+    val tc = TaskContext.get()
+    val key = tc.getComputeRDDSplit()
+    val v = r.pending.get(key).map(
+      accumulatorParam.addAccumulator(_, t)
+    ).getOrElse(t)
+    r.pending(key) = v
     r
   }
 
-  def addInPlace(r1: UpdateTracking[T], r2: UpdateTracking[T]) = {
-    throw new UnsupportedOperationException("""Can't merge consistent accumulators,
-      |instead add element at a time (e.g. .add or +=).""".stripMargin)
+  /**
+   * Merge pending updates into the current accumulator.
+   * Checks to make sure that each pending update has not
+   * already been processed before updating.
+   *
+   * @param r1 local source of accumulated
+   * @param r2 set pending updates
+   * @return both data sets merged together
+   */
+  def addInPlace(r1: UpdateTracking[T], r2: UpdateTracking[T]): UpdateTracking[T] = {
+    r2.pending.foreach{case ((rddId, partitionId), v) =>
+      val partitions = r1.processed.getOrElseUpdate(rddId, new mutable.BitSet())
+      if (!partitions.contains(partitionId)) {
+        partitions += partitionId
+        r1.value = accumulatorParam.addInPlace(r1.value, v)
+      }
+    }
+    r1
   }
 
   def zero(initialValue: UpdateTracking[T]): UpdateTracking[T] = {
