@@ -95,6 +95,7 @@ class Accumulable[R, T] private[spark] (
    * Merge two accumulable objects together
    *
    * Normally, a user will not want to use this version, but will instead call `+=`.
+   * Not supported with ConsistentAccumulators.
    * @param term the other `R` that will get merged with this
    */
   def ++= (term: R) { value_ = param.addInPlace(value_, term)}
@@ -103,6 +104,7 @@ class Accumulable[R, T] private[spark] (
    * Merge two accumulable objects together
    *
    * Normally, a user will not want to use this version, but will instead call `add`.
+   * Not supported with ConsistentAccumulators.
    * @param term the other `R` that will get merged with this
    */
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
@@ -271,6 +273,52 @@ class Accumulator[T] private[spark] (
   }
 }
 
+private[spark] case class UpdateTracking[T](processed: mutable.HashMap[Int, mutable.BitSet], var value: T) extends Serializable {
+  def this(value: T) = {
+    this(new mutable.HashMap[Int, mutable.BitSet](), value)
+  }
+}
+private[spark] case class UpdateInfo[T](rddId: Int, partitionId: Int, value: T)
+/**
+ * A consistent version of [[Accumulator]] where the result will not be added to
+ * multiple times for the same partition/rdd.
+ *
+ * {{{
+ * scala> val accum = sc.consistentAccumulator(0)
+ * accum: spark.ConsistentAccumulator[Int] = 0
+ *
+ * scala> val rdd = sc.parallelize(Array(1, 2, 3, 4)).map(x => accum += x)
+ * scala> rdd.count()
+ * scala> rdd.count()
+ * ...
+ * 10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
+ *
+ * scala> accum.value
+ * res2: Int = 10
+ * }}}
+ *
+ * @param initialValue initial value of accumulator
+ * @param param helper object defining how to add elements of type `T`
+ * @tparam T result type
+ */
+class ConsistentAccumulator[T] private[spark] (
+    @transient private[spark] val initialValue: UpdateTracking[T],
+    param: ConsistentAccumulatorParam[T],
+    name: Option[String],
+    internal: Boolean)
+  extends Accumulable[UpdateTracking[T], UpdateInfo[T]](initialValue, param, name, internal) {
+
+  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
+    this(new UpdateTracking(initialValue),
+      new ConsistentAccumulatorParam(param), name, false)
+  }
+
+  def this(initialValue: T, param: AccumulatorParam[T]) = {
+    this(initialValue, param, None)
+  }
+}
+
+
 /**
  * A simpler version of [[org.apache.spark.AccumulableParam]] where the only data type you can add
  * in is the same type as the accumulated value. An implicit AccumulatorParam object needs to be
@@ -313,6 +361,34 @@ object AccumulatorParam {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 }
+
+/**
+ * A consistent wrapper of [[org.apache.spark.AccumulatorParam]] where we keep track of RDD/partitions
+ * which have already been processed
+ *
+ * @tparam T type of value to accumulate
+ */
+class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
+    extends AccumulableParam[UpdateTracking[T], UpdateInfo[T]] {
+  def addAccumulator(r: UpdateTracking[T], t: UpdateInfo[T]): UpdateTracking[T] = {
+    val currentRDDBitSet = r.processed.getOrElseUpdate(t.rddId, new mutable.BitSet())
+    if (!currentRDDBitSet.contains(t.partitionId)) {
+      currentRDDBitSet += t.partitionId
+      r.value = accumulatorParam.addAccumulator(r.value, t.value)
+    }
+    r
+  }
+
+  def addInPlace(r1: UpdateTracking[T], r2: UpdateTracking[T]) = {
+    throw new UnsupportedOperationException("""Can't merge consistent accumulators,
+      |instead add element at a time (e.g. .add or +=).""".stripMargin)
+  }
+
+  def zero(initialValue: UpdateTracking[T]): UpdateTracking[T] = {
+    new UpdateTracking(accumulatorParam.zero(initialValue.value))
+  }
+}
+
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
