@@ -1460,14 +1460,12 @@ class BaseOperator(object):
             logging.warning(
                 "start_date for {} isn't datetime.datetime".format(self))
         self.end_date = end_date
-        # could add "not callable(attr) "
-        all_triggers = [getattr(TriggerRule, attr) \
-                        for attr in dir(TriggerRule) if not attr.startswith("__")]
-        if trigger_rule not in all_triggers:
+        if not TriggerRule.is_valid(trigger_rule):
             raise AirflowException(
                 "The trigger_rule must be one of {all_triggers},"
-                "'{d}.{t}'; received '{tr}'.".format(all_triggers=all_triggers,
-                                                     d=dag.dag_id, t=task_id, tr = trigger_rule))
+                "'{d}.{t}'; received '{tr}'."
+                .format(all_triggers=TriggerRule.all_triggers,
+                        d=dag.dag_id, t=task_id, tr = trigger_rule))
 
         self.trigger_rule = trigger_rule
         self.depends_on_past = depends_on_past
