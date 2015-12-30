@@ -93,6 +93,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val in = new FileInputStream(dataFile)
     val firstByte = new Array[Byte](1)
     in.read(firstByte)
+    in.close()
     assert(firstByte(0) === 0)
 
     // remove data file
@@ -114,6 +115,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val in2 = new FileInputStream(dataFile)
     val firstByte2 = new Array[Byte](1)
     in2.read(firstByte2)
+    in2.close()
     assert(firstByte2(0) === 2)
   }
 }
