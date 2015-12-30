@@ -714,8 +714,8 @@ private[spark] object JsonProtocol {
     if (json == JNothing) {
       return TaskMetrics.empty
     }
-    val metrics = new TaskMetrics
-    metrics.setHostname((json \ "Host Name").extract[String])
+    val hostname = (json \ "Host Name").extract[String]
+    val metrics = new TaskMetrics(hostname)
     metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setResultSize((json \ "Result Size").extract[Long])
@@ -757,7 +757,7 @@ private[spark] object JsonProtocol {
     val metrics = new ShuffleWriteMetrics
     metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
     metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
-    metrics.setShuffleRecordsWritten((json \ "Shuffle Records Written")
+    metrics.incShuffleRecordsWritten((json \ "Shuffle Records Written")
       .extractOpt[Long].getOrElse(0))
     metrics
   }

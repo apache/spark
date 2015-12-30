@@ -764,8 +764,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
-    val t = new TaskMetrics
-    t.setHostname("localhost")
+    val t = new TaskMetrics("localhost")
     t.setExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)
@@ -797,7 +796,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       val sw = new ShuffleWriteMetrics
       sw.incShuffleBytesWritten(a + b + c)
       sw.incShuffleWriteTime(b + c + d)
-      sw.setShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
+      sw.incShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
       t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks

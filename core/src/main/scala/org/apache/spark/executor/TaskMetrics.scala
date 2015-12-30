@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.{IOException, ObjectInputStream}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
@@ -40,13 +39,12 @@ import org.apache.spark.util.Utils
  * shipping off at any time to consumers of the SparkListener interface.
  */
 @DeveloperApi
-class TaskMetrics extends Serializable {
-  /**
-   * Host's name the task runs on
-   */
-  private var _hostname: String = _
-  def hostname: String = _hostname
-  private[spark] def setHostname(value: String) = _hostname = value
+class TaskMetrics(val hostname: String) extends Serializable {
+
+  // Needed for Java
+  def this() {
+    this(TaskMetrics.getCachedHostName)
+  }
 
   /**
    * Time taken on the executor to deserialize this task
@@ -91,7 +89,6 @@ class TaskMetrics extends Serializable {
   private var _memoryBytesSpilled: Long = _
   def memoryBytesSpilled: Long = _memoryBytesSpilled
   private[spark] def incMemoryBytesSpilled(value: Long): Unit = _memoryBytesSpilled += value
-  private[spark] def decMemoryBytesSpilled(value: Long): Unit = _memoryBytesSpilled -= value
 
   /**
    * The number of on-disk bytes spilled by this task
@@ -99,7 +96,6 @@ class TaskMetrics extends Serializable {
   private var _diskBytesSpilled: Long = _
   def diskBytesSpilled: Long = _diskBytesSpilled
   private[spark] def incDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled += value
-  private[spark] def decDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled -= value
 
   /**
    * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
@@ -215,15 +211,6 @@ class TaskMetrics extends Serializable {
     inputMetrics.foreach(_.updateBytesRead())
   }
 
-  @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
-    // Get the hostname from cached data, since hostname is the order of number of nodes in
-    // cluster, so using cached hostname will decrease the object number and alleviate the GC
-    // overhead.
-    _hostname = TaskMetrics.getCachedHostName(_hostname)
-  }
-
   private var _accumulatorUpdates: Map[Long, Any] = Map.empty
   @transient private var _accumulatorsUpdater: () => Map[Long, Any] = null
 
@@ -246,7 +233,12 @@ private[spark] object TaskMetrics {
 
   def empty: TaskMetrics = new TaskMetrics
 
-  def getCachedHostName(host: String): String = {
+  /**
+   * Get the hostname from cached data, since hostname is the order of number of nodes in cluster,
+   * so using cached hostname will decrease the object number and alleviate the GC overhead.
+   */
+  def getCachedHostName: String = {
+    val host = Utils.localHostName()
     val canonicalHost = hostNameCache.putIfAbsent(host, host)
     if (canonicalHost != null) canonicalHost else host
   }
@@ -350,7 +342,6 @@ class ShuffleReadMetrics extends Serializable {
   private var _remoteBlocksFetched: Int = _
   def remoteBlocksFetched: Int = _remoteBlocksFetched
   private[spark] def incRemoteBlocksFetched(value: Int) = _remoteBlocksFetched += value
-  private[spark] def decRemoteBlocksFetched(value: Int) = _remoteBlocksFetched -= value
 
   /**
    * Number of local blocks fetched in this shuffle by this task
@@ -358,7 +349,6 @@ class ShuffleReadMetrics extends Serializable {
   private var _localBlocksFetched: Int = _
   def localBlocksFetched: Int = _localBlocksFetched
   private[spark] def incLocalBlocksFetched(value: Int) = _localBlocksFetched += value
-  private[spark] def decLocalBlocksFetched(value: Int) = _localBlocksFetched -= value
 
   /**
    * Time the task spent waiting for remote shuffle blocks. This only includes the time
@@ -368,7 +358,6 @@ class ShuffleReadMetrics extends Serializable {
   private var _fetchWaitTime: Long = _
   def fetchWaitTime: Long = _fetchWaitTime
   private[spark] def incFetchWaitTime(value: Long) = _fetchWaitTime += value
-  private[spark] def decFetchWaitTime(value: Long) = _fetchWaitTime -= value
 
   /**
    * Total number of remote bytes read from the shuffle by this task
@@ -376,7 +365,6 @@ class ShuffleReadMetrics extends Serializable {
   private var _remoteBytesRead: Long = _
   def remoteBytesRead: Long = _remoteBytesRead
   private[spark] def incRemoteBytesRead(value: Long) = _remoteBytesRead += value
-  private[spark] def decRemoteBytesRead(value: Long) = _remoteBytesRead -= value
 
   /**
    * Shuffle data that was read from the local disk (as opposed to from a remote executor).
@@ -401,7 +389,6 @@ class ShuffleReadMetrics extends Serializable {
   private var _recordsRead: Long = _
   def recordsRead: Long = _recordsRead
   private[spark] def incRecordsRead(value: Long) = _recordsRead += value
-  private[spark] def decRecordsRead(value: Long) = _recordsRead -= value
 }
 
 /**
@@ -424,7 +411,6 @@ class ShuffleWriteMetrics extends Serializable {
   @volatile private var _shuffleWriteTime: Long = _
   def shuffleWriteTime: Long = _shuffleWriteTime
   private[spark] def incShuffleWriteTime(value: Long) = _shuffleWriteTime += value
-  private[spark] def decShuffleWriteTime(value: Long) = _shuffleWriteTime -= value
 
   /**
    * Total number of records written to the shuffle by this task
@@ -433,5 +419,4 @@ class ShuffleWriteMetrics extends Serializable {
   def shuffleRecordsWritten: Long = _shuffleRecordsWritten
   private[spark] def incShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten += value
   private[spark] def decShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten -= value
-  private[spark] def setShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten = value
 }
