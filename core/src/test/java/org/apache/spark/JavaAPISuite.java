@@ -24,6 +24,7 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
+import scala.Option;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -35,7 +36,6 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
-import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
@@ -221,7 +221,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<Integer, Integer> repartitioned =
         rdd.repartitionAndSortWithinPartitions(partitioner);
-    Assert.assertTrue(repartitioned.partitioner().isPresent());
+    Assert.assertTrue(repartitioned.partitioner().isDefined());
     Assert.assertEquals(repartitioned.partitioner().get(), partitioner);
     List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
     Assert.assertEquals(partitions.get(0),
@@ -491,15 +491,15 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<>(2, 'z'),
       new Tuple2<>(4, 'w')
     ));
-    List<Tuple2<Integer,Tuple2<Integer,Optional<Character>>>> joined =
+    List<Tuple2<Integer, Tuple2<Integer, Option<Character>>>> joined =
       rdd1.leftOuterJoin(rdd2).collect();
     Assert.assertEquals(5, joined.size());
-    Tuple2<Integer,Tuple2<Integer,Optional<Character>>> firstUnmatched =
+    Tuple2<Integer,Tuple2<Integer, Option<Character>>> firstUnmatched =
       rdd1.leftOuterJoin(rdd2).filter(
-        new Function<Tuple2<Integer, Tuple2<Integer, Optional<Character>>>, Boolean>() {
+        new Function<Tuple2<Integer, Tuple2<Integer, Option<Character>>>, Boolean>() {
           @Override
-          public Boolean call(Tuple2<Integer, Tuple2<Integer, Optional<Character>>> tup) {
-            return !tup._2()._2().isPresent();
+          public Boolean call(Tuple2<Integer, Tuple2<Integer, Option<Character>>> tup) {
+            return !tup._2()._2().isDefined();
           }
       }).first();
     Assert.assertEquals(3, firstUnmatched._1().intValue());
@@ -1456,7 +1456,7 @@ public class JavaAPISuite implements Serializable {
     rdd.count(); // Forces the DAG to cause a checkpoint
     Assert.assertTrue(rdd.isCheckpointed());
 
-    Assert.assertTrue(rdd.getCheckpointFile().isPresent());
+    Assert.assertTrue(rdd.getCheckpointFile().isDefined());
     JavaRDD<Integer> recovered = sc.checkpointFile(rdd.getCheckpointFile().get());
     Assert.assertEquals(Arrays.asList(1, 2, 3, 4, 5), recovered.collect());
   }
@@ -1790,32 +1790,6 @@ public class JavaAPISuite implements Serializable {
       Assert.assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
     }
     Assert.assertTrue(future.isDone());
-  }
-
-
-  /**
-   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
-   * since that's the only artifact where Guava classes have been relocated.
-   */
-  @Test
-  public void testGuavaOptional() {
-    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
-    // assembly.
-    sc.stop();
-    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,1024]", "JavaAPISuite");
-    try {
-      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
-      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
-        new Function<Integer, Optional<Integer>>() {
-          @Override
-          public Optional<Integer> call(Integer i) {
-            return Optional.fromNullable(i);
-          }
-        });
-      rdd2.collect();
-    } finally {
-      localCluster.stop();
-    }
   }
 
   static class Class1 {}

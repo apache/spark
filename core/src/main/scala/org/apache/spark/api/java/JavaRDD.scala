@@ -17,8 +17,6 @@
 
 package org.apache.spark.api.java
 
-import java.util.Comparator
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 

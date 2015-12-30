@@ -24,7 +24,6 @@ import java.util.{Comparator, List => JList, Iterator => JIterator}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark._
@@ -68,7 +67,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def getNumPartitions: Int = rdd.getNumPartitions
 
   /** The partitioner of this RDD. */
-  def partitioner: Optional[Partitioner] = JavaUtils.optionToOptional(rdd.partitioner)
+  def partitioner: Option[Partitioner] = rdd.partitioner
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
@@ -550,9 +549,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
-  def getCheckpointFile(): Optional[String] = {
-    JavaUtils.optionToOptional(rdd.getCheckpointFile)
-  }
+  def getCheckpointFile(): Option[String] = rdd.getCheckpointFile
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString(): String = {

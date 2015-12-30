@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.input.PortableDataStream
 import org.apache.hadoop.mapred.{InputFormat, JobConf}
@@ -650,7 +649,7 @@ class JavaSparkContext(val sc: SparkContext)
    * or the spark.home Java property, or the SPARK_HOME environment variable
    * (in that order of preference). If neither of these is set, return None.
    */
-  def getSparkHome(): Optional[String] = JavaUtils.optionToOptional(sc.getSparkHome())
+  def getSparkHome(): Option[String] = sc.getSparkHome()
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -707,7 +706,7 @@ class JavaSparkContext(val sc: SparkContext)
     sc.setCheckpointDir(dir)
   }
 
-  def getCheckpointDir: Optional[String] = JavaUtils.optionToOptional(sc.getCheckpointDir)
+  def getCheckpointDir: Option[String] = sc.getCheckpointDir
 
   protected def checkpointFile[T](path: String): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
