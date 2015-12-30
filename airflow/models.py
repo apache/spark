@@ -940,7 +940,8 @@ class TaskInstance(Base):
                 self.try_number += 1
             else:
                 self.try_number = 1
-            if not force and (self.pool or self.task.dag.concurrency_reached):
+            if self.state != State.QUEUED and (
+                    self.pool or self.task.dag.concurrency_reached):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
