@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql
+package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, GenericInternalRow, Attribute}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.{Row, Strategy, QueryTest}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.unsafe.types.UTF8String
 
 case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
 
@@ -34,6 +32,7 @@ case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
     sparkContext.parallelize(Seq(row))
   }
 
+  override def producedAttributes: AttributeSet = outputSet
   override def children: Seq[SparkPlan] = Nil
 }
 

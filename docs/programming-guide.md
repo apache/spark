@@ -34,8 +34,7 @@ To write a Spark application, you need to add a Maven dependency on Spark. Spark
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -66,8 +65,7 @@ To write a Spark application in Java, you need to add a dependency on Spark. Spa
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -93,8 +91,7 @@ This script will load Spark's Java/Scala libraries and allow you to submit appli
 You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
-to your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+to your version of HDFS.
 [Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
@@ -809,7 +806,7 @@ However, in `cluster` mode, what happens is more complicated, and the above may 
 
 What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only see the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
 
-To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#AccumLink). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
+To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#accumulators). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
 
 In general, closures - constructs like loops or locally defined methods, should not be used to mutate some global state. Spark does not define or guarantee the behavior of mutations to objects referenced from outside of closures. Some code that does this may work in local mode, but that's just by accident and such code will not behave as expected in distributed mode. Use an Accumulator instead if some global aggregation is needed.
 
@@ -1094,7 +1091,7 @@ for details.
 </tr>
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
-  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#AccumLink">Accumulator</a> or interacting with external storage systems.
+  <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#accumulators">Accumulator</a> or interacting with external storage systems.
   <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
 </tr>
 </table>
@@ -1199,14 +1196,14 @@ storage levels is:
     partitions that don't fit on disk, and read them from there when they're needed. </td>
 </tr>
 <tr>
-  <td> MEMORY_ONLY_SER </td>
+  <td> MEMORY_ONLY_SER <br /> (Java and Scala) </td>
   <td> Store RDD as <i>serialized</i> Java objects (one byte array per partition).
     This is generally more space-efficient than deserialized objects, especially when using a
     <a href="tuning.html">fast serializer</a>, but more CPU-intensive to read.
   </td>
 </tr>
 <tr>
-  <td> MEMORY_AND_DISK_SER </td>
+  <td> MEMORY_AND_DISK_SER <br /> (Java and Scala) </td>
   <td> Similar to MEMORY_ONLY_SER, but spill partitions that don't fit in memory to disk instead of
     recomputing them on the fly each time they're needed. </td>
 </tr>
@@ -1233,7 +1230,9 @@ storage levels is:
 </tr>
 </table>
 
-**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, so it does not matter whether you choose a serialized level.*
+**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, 
+so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`, 
+`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, `DISK_ONLY_2` and `OFF_HEAP`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
 
@@ -1246,7 +1245,7 @@ efficiency. We recommend going through the following process to select one:
   This is the most CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
 
 * If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to
-make the objects much more space-efficient, but still reasonably fast to access.
+make the objects much more space-efficient, but still reasonably fast to access. (Java and Scala)
 
 * Don't spill to disk unless the functions that computed your datasets are expensive, or they filter
 a large amount of the data. Otherwise, recomputing a partition may be as fast as reading it from
@@ -1339,7 +1338,7 @@ run on the cluster so that `v` is not shipped to the nodes more than once. In ad
 `v` should not be modified after it is broadcast in order to ensure that all nodes get the same
 value of the broadcast variable (e.g. if the variable is shipped to a new node later).
 
-## Accumulators <a name="AccumLink"></a>
+## Accumulators
 
 Accumulators are variables that are only "added" to through an associative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in

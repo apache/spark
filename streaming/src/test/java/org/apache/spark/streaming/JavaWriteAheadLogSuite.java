@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -27,6 +26,7 @@ import java.util.List;
 import com.google.common.base.Function;
 import com.google.common.collect.Iterators;
 import org.apache.spark.SparkConf;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.streaming.util.WriteAheadLog;
 import org.apache.spark.streaming.util.WriteAheadLogRecordHandle;
 import org.apache.spark.streaming.util.WriteAheadLogUtils;
@@ -108,23 +108,23 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
   public void testCustomWAL() {
     SparkConf conf = new SparkConf();
     conf.set("spark.streaming.driver.writeAheadLog.class", JavaWriteAheadLogSuite.class.getName());
+    conf.set("spark.streaming.driver.writeAheadLog.allowBatching", "false");
     WriteAheadLog wal = WriteAheadLogUtils.createLogForDriver(conf, null, null);
 
     String data1 = "data1";
-    WriteAheadLogRecordHandle handle =
-        wal.write(ByteBuffer.wrap(data1.getBytes(StandardCharsets.UTF_8)), 1234);
+    WriteAheadLogRecordHandle handle = wal.write(JavaUtils.stringToBytes(data1), 1234);
     Assert.assertTrue(handle instanceof JavaWriteAheadLogSuiteHandle);
-    Assert.assertEquals(new String(wal.read(handle).array(), StandardCharsets.UTF_8), data1);
+    Assert.assertEquals(JavaUtils.bytesToString(wal.read(handle)), data1);
 
-    wal.write(ByteBuffer.wrap("data2".getBytes(StandardCharsets.UTF_8)), 1235);
-    wal.write(ByteBuffer.wrap("data3".getBytes(StandardCharsets.UTF_8)), 1236);
-    wal.write(ByteBuffer.wrap("data4".getBytes(StandardCharsets.UTF_8)), 1237);
+    wal.write(JavaUtils.stringToBytes("data2"), 1235);
+    wal.write(JavaUtils.stringToBytes("data3"), 1236);
+    wal.write(JavaUtils.stringToBytes("data4"), 1237);
     wal.clean(1236, false);
 
     Iterator<ByteBuffer> dataIterator = wal.readAll();
     List<String> readData = new ArrayList<>();
     while (dataIterator.hasNext()) {
-      readData.add(new String(dataIterator.next().array(), StandardCharsets.UTF_8));
+      readData.add(JavaUtils.bytesToString(dataIterator.next()));
     }
     Assert.assertEquals(readData, Arrays.asList("data3", "data4"));
   }

@@ -33,7 +33,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.AccumulatorParam._
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
@@ -266,8 +265,6 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaPairRDD(sc.binaryFiles(path, minPartitions))
 
   /**
-   * :: Experimental ::
-   *
    * Read a directory of binary files from HDFS, a local file system (available on all nodes),
    * or any Hadoop-supported file system URI as a byte array. Each file is read as a single
    * record and returned in a key-value pair, where the key is the path of each file,
@@ -294,19 +291,15 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * @note Small files are preferred; very large files but may cause bad performance.
    */
-  @Experimental
   def binaryFiles(path: String): JavaPairRDD[String, PortableDataStream] =
     new JavaPairRDD(sc.binaryFiles(path, defaultMinPartitions))
 
   /**
-   * :: Experimental ::
-   *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
    * @param path Directory to the input data files
    * @return An RDD of data with values, represented as byte arrays
    */
-  @Experimental
   def binaryRecords(path: String, recordLength: Int): JavaRDD[Array[Byte]] = {
     new JavaRDD(sc.binaryRecords(path, recordLength))
   }

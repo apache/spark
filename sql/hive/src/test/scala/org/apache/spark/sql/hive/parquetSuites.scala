@@ -620,7 +620,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
         val conf = Seq(
           HiveContext.CONVERT_METASTORE_PARQUET.key -> "false",
           SQLConf.PARQUET_BINARY_AS_STRING.key -> "true",
-          SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key -> "true")
+          SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false")
 
         withSQLConf(conf: _*) {
           sql(
@@ -869,8 +869,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
         (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 
-    // Re-enable this after SPARK-5508 is fixed
-    ignore(s"SPARK-5775 read array from $table") {
+    test(s"SPARK-5775 read array from $table") {
       checkAnswer(
         sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
         (1 to 10).map(i => Row(1 to i, 1)))

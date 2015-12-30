@@ -30,6 +30,7 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayBasedMapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 

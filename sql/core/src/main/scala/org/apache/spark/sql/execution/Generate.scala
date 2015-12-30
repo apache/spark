@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -35,7 +34,6 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
 }
 
 /**
- * :: DeveloperApi ::
  * Applies a [[Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
@@ -48,7 +46,6 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * @param output the output attributes of this node, which constructed in analysis phase,
  *               and we can not change it, as the parent node bound with it already.
  */
-@DeveloperApi
 case class Generate(
     generator: Generator,
     join: Boolean,
@@ -57,12 +54,14 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
+  override def expressions: Seq[Expression] = generator :: Nil
+
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     if (join) {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         val generatorNullRow = InternalRow.fromSeq(Seq.fill[Any](generator.elementTypes.size)(null))
         val joinedRow = new JoinedRow
 
@@ -82,7 +81,7 @@ case class Generate(
         }
       }
     } else {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         iter.flatMap(row => boundGenerator.eval(row)) ++
         LazyIterator(() => boundGenerator.terminate())
       }

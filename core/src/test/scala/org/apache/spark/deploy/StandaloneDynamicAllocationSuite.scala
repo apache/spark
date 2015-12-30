@@ -17,10 +17,11 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
@@ -29,6 +30,7 @@ import org.apache.spark.deploy.master.ApplicationInfo
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
+import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 
@@ -38,7 +40,8 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterE
 class StandaloneDynamicAllocationSuite
   extends SparkFunSuite
   with LocalSparkContext
-  with BeforeAndAfterAll {
+  with BeforeAndAfterAll
+  with PrivateMethodTester {
 
   private val numWorkers = 2
   private val conf = new SparkConf()
@@ -68,15 +71,18 @@ class StandaloneDynamicAllocationSuite
   }
 
   override def afterAll(): Unit = {
-    masterRpcEnv.shutdown()
-    workerRpcEnvs.foreach(_.shutdown())
-    master.stop()
-    workers.foreach(_.stop())
-    masterRpcEnv = null
-    workerRpcEnvs = null
-    master = null
-    workers = null
-    super.afterAll()
+    try {
+      masterRpcEnv.shutdown()
+      workerRpcEnvs.foreach(_.shutdown())
+      master.stop()
+      workers.foreach(_.stop())
+      masterRpcEnv = null
+      workerRpcEnvs = null
+      master = null
+      workers = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("dynamic allocation default behavior") {
@@ -362,11 +368,86 @@ class StandaloneDynamicAllocationSuite
     val executors = getExecutorIds(sc)
     assert(executors.size === 2)
     assert(sc.killExecutor(executors.head))
-    assert(sc.killExecutor(executors.head))
+    assert(!sc.killExecutor(executors.head))
     val apps = getApplications()
     assert(apps.head.executors.size === 1)
     // The limit should not be lowered twice
     assert(apps.head.getExecutorLimit === 1)
+  }
+
+  test("the pending replacement executors should not be lost (SPARK-10515)") {
+    sc = new SparkContext(appConf)
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === 2)
+      assert(apps.head.getExecutorLimit === Int.MaxValue)
+    }
+    // sync executors between the Master and the driver, needed because
+    // the driver refuses to kill executors it does not know about
+    syncExecutors(sc)
+    val executors = getExecutorIds(sc)
+    val executorIdsBefore = executors.toSet
+    assert(executors.size === 2)
+    // kill and replace an executor
+    assert(sc.killAndReplaceExecutor(executors.head))
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.head.executors.size === 2)
+      val executorIdsAfter = getExecutorIds(sc).toSet
+      // make sure the executor was killed and replaced
+      assert(executorIdsBefore != executorIdsAfter)
+    }
+
+    // kill old executor (which is killedAndReplaced) should fail
+    assert(!sc.killExecutor(executors.head))
+
+    // refresh executors list
+    val newExecutors = getExecutorIds(sc)
+    syncExecutors(sc)
+
+    // kill newly created executor and do not replace it
+    assert(sc.killExecutor(newExecutors(1)))
+    val apps = getApplications()
+    assert(apps.head.executors.size === 1)
+    assert(apps.head.getExecutorLimit === 1)
+  }
+
+  test("disable force kill for busy executors (SPARK-9552)") {
+    sc = new SparkContext(appConf)
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === 2)
+      assert(apps.head.getExecutorLimit === Int.MaxValue)
+    }
+    var apps = getApplications()
+    // sync executors between the Master and the driver, needed because
+    // the driver refuses to kill executors it does not know about
+    syncExecutors(sc)
+    val executors = getExecutorIds(sc)
+    assert(executors.size === 2)
+
+    // simulate running a task on the executor
+    val getMap = PrivateMethod[mutable.HashMap[String, Int]]('executorIdToTaskCount)
+    val taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+    val executorIdToTaskCount = taskScheduler invokePrivate getMap()
+    executorIdToTaskCount(executors.head) = 1
+    // kill the busy executor without force; this should fail
+    assert(!killExecutor(sc, executors.head, force = false))
+    apps = getApplications()
+    assert(apps.head.executors.size === 2)
+
+    // force kill busy executor
+    assert(killExecutor(sc, executors.head, force = true))
+    apps = getApplications()
+    // kill executor successfully
+    assert(apps.head.executors.size === 1)
+
   }
 
   // ===============================
@@ -418,6 +499,16 @@ class StandaloneDynamicAllocationSuite
   private def killNExecutors(sc: SparkContext, n: Int): Boolean = {
     syncExecutors(sc)
     sc.killExecutors(getExecutorIds(sc).take(n))
+  }
+
+  /** Kill the given executor, specifying whether to force kill it. */
+  private def killExecutor(sc: SparkContext, executorId: String, force: Boolean): Boolean = {
+    syncExecutors(sc)
+    sc.schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutors(Seq(executorId), replace = false, force)
+      case _ => fail("expected coarse grained scheduler")
+    }
   }
 
   /**

@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution
 import java.util.NoSuchElementException
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{ExpressionDescription, Expression, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -74,10 +73,7 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
   override def argString: String = cmd.toString
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
@@ -112,6 +108,52 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
           s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
             s"External sort will continue to be used.")
         Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.USE_SQL_AGGREGATE2, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} is deprecated and " +
+            s"will be ignored. ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} will " +
+            s"continue to be true.")
+        Seq(Row(SQLConf.Deprecated.USE_SQL_AGGREGATE2, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.TUNGSTEN_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.TUNGSTEN_ENABLED} is deprecated and " +
+            s"will be ignored. Tungsten will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.TUNGSTEN_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.CODEGEN_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.CODEGEN_ENABLED} is deprecated and " +
+            s"will be ignored. Codegen will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.CODEGEN_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.UNSAFE_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.UNSAFE_ENABLED} is deprecated and " +
+            s"will be ignored. Unsafe mode will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.UNSAFE_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
+            s"will be ignored. Sort merge join will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
       }
       (keyValueOutput, runFunc)
 
@@ -160,7 +202,11 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sqlContext: SQLContext) => {
         val value =
           try {
-            sqlContext.getConf(key)
+            if (key == SQLConf.DIALECT.key) {
+              sqlContext.conf.dialect
+            } else {
+              sqlContext.getConf(key)
+            }
           } catch {
             case _: NoSuchElementException => "<undefined>"
           }
@@ -180,14 +226,11 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
  *
  * Note that this command takes in a logical plan, runs the optimizer on the logical plan
  * (but do NOT actually execute it).
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
-      Seq(AttributeReference("plan", StringType, nullable = false)()),
+      Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false)
   extends RunnableCommand {
 
@@ -203,10 +246,7 @@ case class ExplainCommand(
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class CacheTableCommand(
     tableName: String,
     plan: Option[LogicalPlan],
@@ -231,10 +271,6 @@ case class CacheTableCommand(
 }
 
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -246,10 +282,8 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 }
 
 /**
- * :: DeveloperApi ::
  * Clear all cached data from the in-memory cache.
  */
-@DeveloperApi
 case object ClearCacheCommand extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -260,10 +294,7 @@ case object ClearCacheCommand extends RunnableCommand {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class DescribeCommand(
     child: SparkPlan,
     override val output: Seq[Attribute],
@@ -286,9 +317,7 @@ case class DescribeCommand(
  * {{{
  *    SHOW TABLES [IN databaseName]
  * }}}
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.

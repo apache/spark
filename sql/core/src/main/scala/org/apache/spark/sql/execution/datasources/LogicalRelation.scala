@@ -28,7 +28,7 @@ import org.apache.spark.sql.sources.BaseRelation
  * changing the output attributes' IDs.  The `expectedOutputAttributes` parameter is used for
  * this purpose.  See https://issues.apache.org/jira/browse/SPARK-10741 for more details.
  */
-private[sql] case class LogicalRelation(
+case class LogicalRelation(
     relation: BaseRelation,
     expectedOutputAttributes: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {
@@ -61,6 +61,11 @@ private[sql] case class LogicalRelation(
     case LogicalRelation(otherRelation, _) => relation == otherRelation
     case _ => false
   }
+
+  // When comparing two LogicalRelations from within LogicalPlan.sameResult, we only need
+  // LogicalRelation.cleanArgs to return Seq(relation), since expectedOutputAttribute's
+  // expId can be different but the relation is still the same.
+  override lazy val cleanArgs: Seq[Any] = Seq(relation)
 
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = BigInt(relation.sizeInBytes)

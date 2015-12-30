@@ -63,7 +63,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val childCode = child.child.gen(ctx)
-    val input = childCode.primitive
+    val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
 
@@ -97,10 +97,10 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
     childCode.code +
     s"""
-      |long ${ev.primitive} = ${nullValue}L;
+      |long ${ev.value} = ${nullValue}L;
       |boolean ${ev.isNull} = false;
       |if (!${childCode.isNull}) {
-      |  ${ev.primitive} = $prefixCode;
+      |  ${ev.value} = $prefixCode;
       |}
     """.stripMargin
   }

@@ -25,6 +25,7 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{TableIdentifier, AbstractSparkSQLParser}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
 
 
@@ -65,15 +66,15 @@ class DDLParser(parseQuery: String => LogicalPlan)
   protected def start: Parser[LogicalPlan] = ddl
 
   /**
-   * `CREATE [TEMPORARY] TABLE avroTable [IF NOT EXISTS]
+   * `CREATE [TEMPORARY] TABLE [IF NOT EXISTS] avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE [TEMPORARY] TABLE avroTable(intField int, stringField string...) [IF NOT EXISTS]
+   * `CREATE [TEMPORARY] TABLE [IF NOT EXISTS] avroTable(intField int, stringField string...)
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE [TEMPORARY] TABLE avroTable [IF NOT EXISTS]
+   * `CREATE [TEMPORARY] TABLE [IF NOT EXISTS] avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * AS SELECT ...
@@ -140,7 +141,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ tableIdentifier ^^ {
       case e ~ tableIdent =>
-        DescribeCommand(UnresolvedRelation(tableIdent.toSeq, None), e.isDefined)
+        DescribeCommand(UnresolvedRelation(tableIdent, None), e.isDefined)
     }
 
   protected lazy val refreshTable: Parser[LogicalPlan] =

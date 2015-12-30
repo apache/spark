@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.sasl;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 
@@ -28,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -70,11 +73,12 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
 
       while (!saslClient.isComplete()) {
         SaslMessage msg = new SaslMessage(appId, payload);
-        ByteBuf buf = Unpooled.buffer(msg.encodedLength());
+        ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
         msg.encode(buf);
+        buf.writeBytes(msg.body().nioByteBuffer());
 
-        byte[] response = client.sendRpcSync(buf.array(), conf.saslRTTimeoutMs());
-        payload = saslClient.response(response);
+        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.saslRTTimeoutMs());
+        payload = saslClient.response(JavaUtils.bufferToArray(response));
       }
 
       client.setClientId(appId);
@@ -88,6 +92,8 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         saslClient = null;
         logger.debug("Channel {} configured for SASL encryption.", client);
       }
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
     } finally {
       if (saslClient != null) {
         try {

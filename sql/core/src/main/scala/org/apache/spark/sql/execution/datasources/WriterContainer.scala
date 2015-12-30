@@ -124,6 +124,24 @@ private[sql] abstract class BaseWriterContainer(
     }
   }
 
+  protected def newOutputWriter(path: String): OutputWriter = {
+    try {
+      outputWriterFactory.newInstance(path, dataSchema, taskAttemptContext)
+    } catch {
+      case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
+        if (outputCommitter.isInstanceOf[parquet.DirectParquetOutputCommitter]) {
+          // Spark-11382: DirectParquetOutputCommitter is not idempotent, meaning on retry
+          // attempts, the task will fail because the output file is created from a prior attempt.
+          // This often means the most visible error to the user is misleading. Augment the error
+          // to tell the user to look for the actual error.
+          throw new SparkException("The output file already exists but this could be due to a " +
+            "failure from an earlier attempt. Look through the earlier logs or stage page for " +
+            "the first error.\n  File exists error: " + e)
+        }
+        throw e
+    }
+  }
+
   private def newOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
     val defaultOutputCommitter = outputFormatClass.newInstance().getOutputCommitter(context)
 
@@ -234,7 +252,7 @@ private[sql] class DefaultWriterContainer(
     executorSideSetup(taskContext)
     val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
     configuration.set("spark.sql.sources.output.path", outputPath)
-    val writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
+    val writer = newOutputWriter(getWorkPath)
     writer.initConverter(dataSchema)
 
     var writerClosed = false
@@ -314,7 +332,10 @@ private[sql] class DynamicPartitionWriterContainer(
     val partitionStringExpression = partitionColumns.zipWithIndex.flatMap { case (c, i) =>
       val escaped =
         ScalaUDF(
-          PartitioningUtils.escapePathName _, StringType, Seq(Cast(c, StringType)), Seq(StringType))
+          PartitioningUtils.escapePathName _,
+          StringType,
+          Seq(Cast(c, StringType)),
+          Seq(StringType))
       val str = If(IsNull(c), Literal(defaultPartitionName), escaped)
       val partitionName = Literal(c.name + "=") :: str :: Nil
       if (i == 0) partitionName else Literal(Path.SEPARATOR) :: partitionName
@@ -344,8 +365,7 @@ private[sql] class DynamicPartitionWriterContainer(
               StructType.fromAttributes(partitionColumns),
               StructType.fromAttributes(dataColumns),
               SparkEnv.get.blockManager,
-              SparkEnv.get.shuffleMemoryManager,
-              SparkEnv.get.shuffleMemoryManager.pageSizeBytes)
+              TaskContext.get().taskMemoryManager().pageSizeBytes)
             sorter.insertKV(currentKey, getOutputRow(inputRow))
           }
         } else {
@@ -404,7 +424,7 @@ private[sql] class DynamicPartitionWriterContainer(
       val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
       configuration.set(
         "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
-      val newWriter = outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
+      val newWriter = super.newOutputWriter(path.toString)
       newWriter.initConverter(dataSchema)
       newWriter
     }

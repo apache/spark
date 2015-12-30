@@ -50,6 +50,7 @@ spark-tests.log
 streaming-tests.log
 dependency-reduced-pom.xml
 .ensime
+.ensime_cache/
 .ensime_lucene
 checkpoint
 derby.log
@@ -74,3 +75,7 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+
+# For R session data
+.RHistory
+.RData

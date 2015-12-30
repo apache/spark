@@ -23,8 +23,10 @@ if sys.version >= '3':
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
+from pyspark.sql import utils
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -107,7 +109,7 @@ class DataFrameReader(object):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads data from a data source and returns it as a :class`DataFrame`.
 
-        :param path: optional string for file-system backed data sources.
+        :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
@@ -116,6 +118,11 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+
+        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
+        ...     'python/test_support/sql/people1.json'])
+        >>> df.dtypes
+        [('age', 'bigint'), ('aka', 'string'), ('name', 'string')]
         """
         if format is not None:
             self.format(format)
@@ -123,7 +130,11 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            return self._df(self._jreader.load(path))
+            if type(path) == list:
+                return self._df(
+                    self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+            else:
+                return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
 
@@ -140,6 +151,16 @@ class DataFrameReader(object):
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
+        You can set the following JSON-specific options to deal with non-standard JSON files:
+            * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
+                type
+            * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
+            * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
+            * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
+                quotes
+            * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
+                (e.g. 00012)
+
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
         [('age', 'bigint'), ('name', 'string')]
@@ -153,6 +174,8 @@ class DataFrameReader(object):
             self.schema(schema)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
+        elif type(path) == list:
+            return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             return self._df(self._jreader.json(path._jrdd))
         else:
@@ -181,10 +204,26 @@ class DataFrameReader(object):
         """
         return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
 
+    @ignore_unicode_prefix
+    @since(1.6)
+    def text(self, paths):
+        """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+
+        Each line in the text file is a new row in the resulting DataFrame.
+
+        :param paths: string, or list of strings, for input path(s).
+
+        >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
+        >>> df.collect()
+        [Row(value=u'hello'), Row(value=u'this')]
+        """
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+
     @since(1.5)
     def orc(self, path):
-        """
-        Loads an ORC file, returning the result as a :class:`DataFrame`.
+        """Loads an ORC file, returning the result as a :class:`DataFrame`.
 
         ::Note: Currently ORC support is only available together with
         :class:`HiveContext`.
@@ -234,8 +273,9 @@ class DataFrameReader(object):
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
-            arr = self._sqlContext._sc._jvm.PythonUtils.toArray(predicates)
-            return self._df(self._jreader.jdbc(url, table, arr, jprop))
+            gateway = self._sqlContext._sc._gateway
+            jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
+            return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 
 
@@ -420,6 +460,16 @@ class DataFrameWriter(object):
             self.partitionBy(partitionBy)
         self._jwrite.parquet(path)
 
+    @since(1.6)
+    def text(self, path):
+        """Saves the content of the DataFrame in a text file at the specified path.
+
+        The DataFrame must have only one column that is of string type.
+        Each row becomes a new line in the output file.
+        """
+        self._jwrite.text(path)
+
+    @since(1.5)
     def orc(self, path, mode=None, partitionBy=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 

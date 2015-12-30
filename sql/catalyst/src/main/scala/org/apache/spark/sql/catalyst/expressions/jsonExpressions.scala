@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{StringWriter, ByteArrayOutputStream}
+import java.io.{ByteArrayOutputStream, StringWriter}
+
+import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{StructField, StructType, StringType, DataType}
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
-
-import scala.util.parsing.combinator.RegexParsers
+import org.apache.spark.util.Utils
 
 private[this] sealed trait PathInstruction
 private[this] object PathInstruction {
@@ -107,15 +109,17 @@ private[this] object SharedFactory {
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
-  import SharedFactory._
-  import PathInstruction._
-  import WriteStyle._
   import com.fasterxml.jackson.core.JsonToken._
+
+  import PathInstruction._
+  import SharedFactory._
+  import WriteStyle._
 
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
@@ -134,16 +138,18 @@ case class GetJsonObject(json: Expression, path: Expression)
 
     if (parsed.isDefined) {
       try {
-        val parser = jsonFactory.createParser(jsonStr.getBytes)
-        val output = new ByteArrayOutputStream()
-        val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
-        parser.nextToken()
-        val matched = evaluatePath(parser, generator, RawStyle, parsed.get)
-        generator.close()
-        if (matched) {
-          UTF8String.fromBytes(output.toByteArray)
-        } else {
-          null
+        Utils.tryWithResource(jsonFactory.createParser(jsonStr.getBytes)) { parser =>
+          val output = new ByteArrayOutputStream()
+          val matched = Utils.tryWithResource(
+            jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
+            parser.nextToken()
+            evaluatePath(parser, generator, RawStyle, parsed.get)
+          }
+          if (matched) {
+            UTF8String.fromBytes(output.toByteArray)
+          } else {
+            null
+          }
         }
       } catch {
         case _: JsonProcessingException => null
@@ -250,17 +256,18 @@ case class GetJsonObject(json: Expression, path: Expression)
         // temporarily buffer child matches, the emitted json will need to be
         // modified slightly if there is only a single element written
         val buffer = new StringWriter()
-        val flattenGenerator = jsonFactory.createGenerator(buffer)
-        flattenGenerator.writeStartArray()
 
         var dirty = 0
-        while (p.nextToken() != END_ARRAY) {
-          // track the number of array elements and only emit an outer array if
-          // we've written more than one element, this matches Hive's behavior
-          dirty += (if (evaluatePath(p, flattenGenerator, nextStyle, xs)) 1 else 0)
+        Utils.tryWithResource(jsonFactory.createGenerator(buffer)) { flattenGenerator =>
+          flattenGenerator.writeStartArray()
+
+          while (p.nextToken() != END_ARRAY) {
+            // track the number of array elements and only emit an outer array if
+            // we've written more than one element, this matches Hive's behavior
+            dirty += (if (evaluatePath(p, flattenGenerator, nextStyle, xs)) 1 else 0)
+          }
+          flattenGenerator.writeEndArray()
         }
-        flattenGenerator.writeEndArray()
-        flattenGenerator.close()
 
         val buf = buffer.getBuffer
         if (dirty > 1) {
@@ -294,8 +301,11 @@ case class GetJsonObject(json: Expression, path: Expression)
 
       case (FIELD_NAME, Named(name) :: xs) if p.getCurrentName == name =>
         // exact field match
-        p.nextToken()
-        evaluatePath(p, g, style, xs)
+        if (p.nextToken() != JsonToken.VALUE_NULL) {
+          evaluatePath(p, g, style, xs)
+        } else {
+          false
+        }
 
       case (FIELD_NAME, Wildcard :: xs) =>
         // wildcard field match
@@ -310,7 +320,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 }
 
 case class JsonTuple(children: Seq[Expression])
-  extends Expression with CodegenFallback {
+  extends Generator with CodegenFallback {
 
   import SharedFactory._
 
@@ -320,8 +330,8 @@ case class JsonTuple(children: Seq[Expression])
   }
 
   // if processing fails this shared value will be returned
-  @transient private lazy val nullRow: InternalRow =
-    new GenericInternalRow(Array.ofDim[Any](fieldExpressions.length))
+  @transient private lazy val nullRow: Seq[InternalRow] =
+    new GenericInternalRow(Array.ofDim[Any](fieldExpressions.length)) :: Nil
 
   // the json body is the first child
   @transient private lazy val jsonExpr: Expression = children.head
@@ -340,15 +350,8 @@ case class JsonTuple(children: Seq[Expression])
   // and count the number of foldable fields, we'll use this later to optimize evaluation
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
-  override lazy val dataType: StructType = {
-    val fields = fieldExpressions.zipWithIndex.map {
-      case (_, idx) => StructField(
-        name = s"c$idx", // mirroring GenericUDTFJSONTuple.initialize
-        dataType = StringType,
-        nullable = true)
-    }
-
-    StructType(fields)
+  override def elementTypes: Seq[(DataType, Boolean, String)] = fieldExpressions.zipWithIndex.map {
+    case (_, idx) => (StringType, true, s"c$idx")
   }
 
   override def prettyName: String = "json_tuple"
@@ -363,19 +366,15 @@ case class JsonTuple(children: Seq[Expression])
     }
   }
 
-  override def eval(input: InternalRow): InternalRow = {
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
     if (json == null) {
       return nullRow
     }
 
     try {
-      val parser = jsonFactory.createParser(json.getBytes)
-
-      try {
-        parseRow(parser, input)
-      } finally {
-        parser.close()
+      Utils.tryWithResource(jsonFactory.createParser(json.getBytes)) {
+        parser => parseRow(parser, input)
       }
     } catch {
       case _: JsonProcessingException =>
@@ -383,7 +382,7 @@ case class JsonTuple(children: Seq[Expression])
     }
   }
 
-  private def parseRow(parser: JsonParser, input: InternalRow): InternalRow = {
+  private def parseRow(parser: JsonParser, input: InternalRow): Seq[InternalRow] = {
     // only objects are supported
     if (parser.nextToken() != JsonToken.START_OBJECT) {
       return nullRow
@@ -420,12 +419,8 @@ case class JsonTuple(children: Seq[Expression])
 
           // write the output directly to UTF8 encoded byte array
           if (parser.nextToken() != JsonToken.VALUE_NULL) {
-            val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
-
-            try {
-              copyCurrentStructure(generator, parser)
-            } finally {
-              generator.close()
+            Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+              generator => copyCurrentStructure(generator, parser)
             }
 
             row(idx) = UTF8String.fromBytes(output.toByteArray)
@@ -437,7 +432,7 @@ case class JsonTuple(children: Seq[Expression])
       parser.skipChildren()
     }
 
-    new GenericInternalRow(row)
+    new GenericInternalRow(row) :: Nil
   }
 
   private def copyCurrentStructure(generator: JsonGenerator, parser: JsonParser): Unit = {

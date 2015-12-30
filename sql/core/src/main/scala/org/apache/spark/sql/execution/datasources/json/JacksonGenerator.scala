@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{MapData, ArrayData, DateTimeUtils}
 
 import scala.collection.Map
 

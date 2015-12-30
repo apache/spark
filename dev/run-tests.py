@@ -27,9 +27,10 @@ import sys
 import subprocess
 from collections import namedtuple
 
-from sparktestsupport import SPARK_HOME, USER_HOME
+from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 import sparktestsupport.modules as modules
+
 
 # -------------------------------------------------------------------------------------------------
 # Functions for traversing module dependency graph
@@ -118,22 +119,17 @@ def determine_modules_to_test(changed_modules):
     return modules_to_test.union(set(changed_modules))
 
 
+def determine_tags_to_exclude(changed_modules):
+    tags = []
+    for m in modules.all_modules:
+        if m not in changed_modules:
+            tags += m.test_tags
+    return tags
+
+
 # -------------------------------------------------------------------------------------------------
 # Functions for working with subprocesses and shell tools
 # -------------------------------------------------------------------------------------------------
-
-def get_error_codes(err_code_file):
-    """Function to retrieve all block numbers from the `run-tests-codes.sh`
-    file to maintain backwards compatibility with the `run-tests-jenkins`
-    script"""
-
-    with open(err_code_file, 'r') as f:
-        err_codes = [e.split()[1].strip().split('=')
-                     for e in f if e.startswith("readonly")]
-        return dict(err_codes)
-
-
-ERROR_CODES = get_error_codes(os.path.join(SPARK_HOME, "dev/run-tests-codes.sh"))
 
 
 def determine_java_executable():
@@ -152,7 +148,7 @@ def determine_java_executable():
     return java_exe if java_exe else which("java")
 
 
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch', 'update'])
+JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
 
 
 def determine_java_version(java_exe):
@@ -168,17 +164,13 @@ def determine_java_version(java_exe):
     # find raw version string, eg 'java version "1.8.0_25"'
     raw_version_str = next(x for x in raw_output_lines if " version " in x)
 
-    version_str = raw_version_str.split()[-1].strip('"')  # eg '1.8.0_25'
-    version, update = version_str.split('_')  # eg ['1.8.0', '25']
+    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
 
-    # map over the values and convert them to integers
-    version_info = [int(x) for x in version.split('.') + [update]]
+    major = int(match.group(1))
+    minor = int(match.group(2))
+    patch = int(match.group(3))
 
-    return JavaVersion(major=version_info[0],
-                       minor=version_info[1],
-                       patch=version_info[2],
-                       update=version_info[3])
-
+    return JavaVersion(major, minor, patch)
 
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
@@ -186,7 +178,7 @@ def determine_java_version(java_exe):
 
 
 def set_title_and_block(title, err_block):
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES[err_block]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES[err_block])
     line_str = '=' * 72
 
     print('')
@@ -203,6 +195,11 @@ def run_apache_rat_checks():
 def run_scala_style_checks():
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
+
+
+def run_java_style_checks():
+    set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
 
 
 def run_python_style_checks():
@@ -303,8 +300,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.2.1"],
-        "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
         "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
@@ -369,6 +364,7 @@ def detect_binary_inop_with_mima():
 
 def run_scala_tests_maven(test_profiles):
     mvn_test_goals = ["test", "--fail-at-end"]
+
     profiles_and_goals = test_profiles + mvn_test_goals
 
     print("[info] Running Spark tests using Maven with these arguments: ",
@@ -392,7 +388,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, hadoop_version, test_modules):
+def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
@@ -401,6 +397,10 @@ def run_scala_tests(build_tool, hadoop_version, test_modules):
 
     test_profiles = get_hadoop_profiles(hadoop_version) + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
+
+    if excluded_tags:
+        test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
+
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
     else:
@@ -457,7 +457,7 @@ def main():
     rm_r(os.path.join(USER_HOME, ".ivy2", "local", "org.apache.spark"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "cache", "org.apache.spark"))
 
-    os.environ["CURRENT_BLOCK"] = ERROR_CODES["BLOCK_GENERAL"]
+    os.environ["CURRENT_BLOCK"] = str(ERROR_CODES["BLOCK_GENERAL"])
 
     java_exe = determine_java_executable()
 
@@ -488,7 +488,7 @@ def main():
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = "hadoop2.3"
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.3")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
@@ -500,8 +500,10 @@ def main():
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
+        excluded_tags = determine_tags_to_exclude(changed_modules)
     if not changed_modules:
         changed_modules = [modules.root]
+        excluded_tags = []
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
 
@@ -522,6 +524,9 @@ def main():
     # style checks
     if not changed_files or any(f.endswith(".scala") for f in changed_files):
         run_scala_style_checks()
+    if not changed_files or any(f.endswith(".java") for f in changed_files):
+        # run_java_style_checks()
+        pass
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R") for f in changed_files):
@@ -541,7 +546,7 @@ def main():
         detect_binary_inop_with_mima()
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules)
+    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
