@@ -1624,7 +1624,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to batch write ahead logs on the driver to write. When using S3 for checkpointing, write
     operations on the driver usually take too long. Enabling batching write ahead logs will improve
-    the performance of write operations.
+    the performance of write operations. Moreover, it's also very helpful to scale to a large number
+    of receivers.
   </td>
 </tr>
 </table>
