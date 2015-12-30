@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.{ScalaReflection, SimpleCatalystConf, CatalystConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -190,7 +190,7 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(r: Rollup): Seq[Int] = {
-      Seq.tabulate(r.groupByExprs.length + 1)(idx => {(1 << idx) - 1})
+      Seq.tabulate(r.children.length + 1)(idx => {(1 << idx) - 1})
     }
 
     /*
@@ -203,15 +203,15 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(c: Cube): Seq[Int] = {
-      Seq.tabulate(1 << c.groupByExprs.length)(i => i)
+      Seq.tabulate(1 << c.children.length)(i => i)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
-      case a: Cube =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
-      case a: Rollup =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case Aggregate(Seq(c @ Cube(children)), aggregateExpressions, child) =>
+        GroupingSets(bitmasks(c), children, child, aggregateExpressions)
+      case Aggregate(Seq(r @ Rollup(children)), aggregateExpressions, child) =>
+        GroupingSets(bitmasks(r), children, child, aggregateExpressions)
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
