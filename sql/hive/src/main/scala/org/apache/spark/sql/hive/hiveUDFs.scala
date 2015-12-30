@@ -237,7 +237,9 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
       funcWrapper.functionClassName ==
         other.asInstanceOf[HiveGenericUDF].funcWrapper.functionClassName
 
-     val isEqual = eqClass && children.zip(other.asInstanceOf[HiveGenericUDF].children).forall {
+     val isEqual = eqClass &&
+       children.length == other.asInstanceOf[HiveGenericUDF].children.length &&
+       children.zip(other.asInstanceOf[HiveGenericUDF].children).forall {
       case (e1: Expression, e2: Expression) => e1 semanticEquals e2
       case (i1, i2) => i1 == i2
     }

@@ -31,10 +31,5 @@ class UDFSuite extends QueryTest with TestHiveSingleton {
     assert(hiveContext.sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
     assert(hiveContext.sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
     assert(hiveContext.sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
-
-    assert(hiveContext.sql(
-      "select date(cast('1997-01-01 10:10:10' as timestamp)) from src" +
-        " group by date(cast('1997-01-01 10:10:10' as timestamp))")
-      .head().getDate(0).toString == "1997-01-01")
   }
 }
