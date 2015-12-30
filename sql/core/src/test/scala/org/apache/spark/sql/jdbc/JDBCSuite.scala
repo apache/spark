@@ -190,7 +190,7 @@ class JDBCSuite extends SparkFunSuite
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
       .collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
-      .collect().size === 2)
+      .collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
       .collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
@@ -473,6 +473,7 @@ class JDBCSuite extends SparkFunSuite
       === "(NOT (col1 IN ('mno', 'pqr')))")
     assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
     assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
+    assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def"))) === "")
   }
 
   test("Dialect unregister") {

@@ -318,17 +318,21 @@ private[sql] class JDBCRDD(
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
-  private val filterWhereClause: Seq[Option[String]] = filters.map(JDBCRDD.compileFilter)
+  private val filterWhereClause: String =
+    filters.map(JDBCRDD.compileFilter).flatten.mkString(" AND ")
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.
    */
   private def getWhereClause(part: JDBCPartition): String = {
-    val w = filterWhereClause.+:(Option(part.whereClause)).flatten.mkString(" AND ")
-    if (!w.isEmpty) {
-      "WHERE " + w
+    if (part.whereClause != null && filterWhereClause.length > 0) {
+      "WHERE " + filterWhereClause + " AND " + part.whereClause
+    } else if (part.whereClause != null) {
+      "WHERE " + part.whereClause
+    } else if (filterWhereClause.length > 0) {
+      "WHERE " + filterWhereClause
     } else {
-      w
+      ""
     }
   }
 
