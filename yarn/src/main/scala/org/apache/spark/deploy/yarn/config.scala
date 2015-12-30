@@ -26,23 +26,20 @@ package object config {
 
   /* Common app configuration. */
 
-  private[spark] val MAX_APP_ATTEMPTS = intConf("spark.yarn.maxAppAttempts",
-    doc = "Maximum number of AM attempts before failing the app.")
+  private[spark] val APPLICATION_TAGS = stringSeqConf("spark.yarn.tags",
+    doc = "Comma-separated list of strings to pass through as YARN application tags appearing " +
+      "in YARN Application Reports, which can be used for filtering when querying YARN.")
     .optional
 
   private[spark] val ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
-    timeConf("spark.yarn.am.attemptFailuresValidityInterprivate[spark] val",
+    timeConf("spark.yarn.am.attemptFailuresValidityInterval",
       unit = TimeUnit.MILLISECONDS,
-      doc = "Interprivate[spark] val after which AM failures will be considered independent and " +
+      doc = "Interval after which AM failures will be considered independent and " +
         "not accumulate towards the attempt count.")
       .optional
 
-  private[spark] val AM_NODE_LABEL_EXPRESSION = stringConf("spark.yarn.am.nodeLabelExpression",
-    doc = "Node label expression for the AM.")
-    .optional
-
-  private[spark] val SPARK_JAR = stringConf("spark.yarn.jar",
-    doc = "Location of the Spark jar to use.")
+  private[spark] val MAX_APP_ATTEMPTS = intConf("spark.yarn.maxAppAttempts",
+    doc = "Maximum number of AM attempts before failing the app.")
     .optional
 
   private[spark] val USER_CLASS_PATH_FIRST = booleanConf("spark.yarn.user.classpath.first",
@@ -59,19 +56,60 @@ package object config {
     doc = s"Path to use as a replacement for ${GATEWAY_ROOT_PATH.key} when launching processes " +
       "in the YARN cluster.")
 
-  private[spark] val APPLICATION_TAGS = stringSeqConf("spark.yarn.tags",
-    doc = "Comma-separated list of strings to pass through as YARN application tags appearing " +
-      "in YARN Application Reports, which can be used for filtering when querying YARN.")
-    .optional
-
   private[spark] val QUEUE_NAME = stringConf("spark.yarn.queue",
     defaultValue = Some("default"))
 
-  private[spark] val FILES_TO_DISTRIBUTE = stringConf("spark.yarn.dist.files").optional
+  private[spark] val HISTORY_SERVER_ADDRESS = stringConf("spark.yarn.historyServer.address")
+    .optional
+
+  /* File distribution. */
+
+  private[spark] val SPARK_JAR = stringConf("spark.yarn.jar",
+    doc = "Location of the Spark jar to use.")
+    .optional
 
   private[spark] val ARCHIVES_TO_DISTRIBUTE = stringConf("spark.yarn.dist.archives").optional
 
+  private[spark] val FILES_TO_DISTRIBUTE = stringConf("spark.yarn.dist.files").optional
+
+  private[spark] val PRESERVE_STAGING_FILES = booleanConf("spark.yarn.preserve.staging.files",
+    defaultValue = Some(false),
+    doc = "Whether to preserve temporary files created by the job in HDFS.")
+
+  private[spark] val STAGING_FILE_REPLICATION = intConf("spark.yarn.submit.file.replication",
+    doc = "Replication factor for files uploaded by Spark to HDFS.")
+    .optional
+
+  /* Cluster-mode launcher configuration. */
+
+  private[spark] val WAIT_FOR_APP_COMPLETION = booleanConf("spark.yarn.submit.waitAppCompletion",
+    defaultValue = Some(true),
+    doc = "In cluster mode, whether to wait for the application to finishe before exiting the " +
+      "launcher process.")
+
+  private[spark] val REPORT_INTERVAL = timeConf("spark.yarn.report.interval",
+    unit = TimeUnit.MILLISECONDS,
+    defaultValue = Some("1s"),
+    doc = "Interval between reports of the current app status in cluster mode.")
+
+  /* Shared Client-mode AM / Driver configuration. */
+
+  private[spark] val AM_MAX_WAIT_TIME = timeConf("spark.yarn.am.waitTime",
+    unit = TimeUnit.MILLISECONDS,
+    defaultValue = Some("100s"))
+
+  private[spark] val AM_NODE_LABEL_EXPRESSION = stringConf("spark.yarn.am.nodeLabelExpression",
+    doc = "Node label expression for the AM.")
+    .optional
+
+  private[spark] val CONTAINER_LAUNCH_MAX_THREADS =
+    intConf("spark.yarn.containerLauncherMaxThreads", defaultValue = Some(25))
+
   private[spark] val MAX_EXECUTOR_FAILURES = intConf("spark.yarn.max.executor.failures").optional
+
+  private[spark] val MAX_REPORTER_THREAD_FAILURES =
+    intConf("spark.yarn.scheduler.reporterThread.maxFailures",
+      defaultValue = Some(5))
 
   private[spark] val RM_HEARTBEAT_INTERVAL = timeConf("spark.yarn.scheduler.heartbeat.interval-ms",
     unit = TimeUnit.MILLISECONDS,
@@ -82,45 +120,14 @@ package object config {
       unit = TimeUnit.MILLISECONDS,
       defaultValue = Some("200ms"))
 
-  private[spark] val HISTORY_SERVER_ADDRESS = stringConf("spark.yarn.historyServer.address")
-    .optional
-
-  private[spark] val MAX_REPORTER_THREAD_FAILURES =
-    intConf("spark.yarn.scheduler.reporterThread.maxFailures",
-      defaultValue = Some(5))
-
-  private[spark] val AM_MAX_WAIT_TIME = timeConf("spark.yarn.am.waitTime",
-    unit = TimeUnit.MILLISECONDS,
-    defaultValue = Some("100s"))
-
   private[spark] val SCHEDULER_SERVICES = stringSeqConf("spark.yarn.services",
     defaultValue = Some(Nil),
     doc = "A comma-separated list of class names of services to add to the scheduler.")
 
-  private[spark] val CONTAINER_LAUNCH_MAX_THREADS =
-    intConf("spark.yarn.containerLauncherMaxThreads", defaultValue = Some(25))
-
-  /* Client configuration. */
-
-  private[spark] val WAIT_FOR_APP_COMPLETION = booleanConf("spark.yarn.submit.waitAppCompletion",
-    defaultValue = Some(true),
-    doc = "In cluster mode, whether to wait for the application to finishe before exiting the " +
-      "launcher process.")
-
-  private[spark] val PRESERVE_STAGING_FILES = booleanConf("spark.yarn.preserve.staging.files",
-    defaultValue = Some(false),
-    doc = "Whether to preserve temporary files created by the job in HDFS.")
-
-  private[spark] val STAGING_FILE_REPLICATION = intConf("spark.yarn.submit.file.replication",
-    doc = "Replication factor for files uploaded by Spark to HDFS.")
-    .optional
-
-  private[spark] val REPORT_INTERVAL = timeConf("spark.yarn.report.interprivate[spark] val",
-    unit = TimeUnit.MILLISECONDS,
-    defaultValue = Some("1s"),
-    doc = "Interprivate[spark] val between reports of the current app status in cluster mode.")
-
   /* Client-mode AM configuration. */
+
+  private[spark] val AM_CORES = intConf("spark.yarn.am.cores",
+    defaultValue = Some(1))
 
   private[spark] val AM_JAVA_OPTIONS = stringConf("spark.yarn.am.extraJavaOptions",
     doc = "Extra Java options for the client-mode AM.")
@@ -138,22 +145,19 @@ package object config {
     unit = ByteUnit.MiB,
     defaultValue = Some("512m"))
 
-  private[spark] val AM_CORES = intConf("spark.yarn.am.cores",
-    defaultValue = Some(1))
-
   /* Driver configuration. */
+
+  private[spark] val DRIVER_CORES = intConf("spark.driver.cores")
 
   private[spark] val DRIVER_MEMORY_OVERHEAD = bytesConf("spark.yarn.driver.memoryOverhead",
     unit = ByteUnit.MiB)
     .optional
 
+  /* Executor configuration. */
+
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = bytesConf("spark.yarn.executor.memoryOverhead",
     unit = ByteUnit.MiB)
     .optional
-
-  private[spark] val DRIVER_CORES = intConf("spark.driver.cores")
-
-  /* Executor configuration. */
 
   private[spark] val EXECUTOR_NODE_LABEL_EXPRESSION =
     stringConf("spark.yarn.executor.nodeLabelExpression",
@@ -162,20 +166,20 @@ package object config {
 
   /* Security configuration. */
 
-  private[spark] val TOKEN_RENEWAL_INTERVAL = timeConf("spark.yarn.token.renewal.interval",
-    unit = TimeUnit.MILLISECONDS,
-    isPublic = false)
+  private[spark] val CREDENTIAL_FILE_MAX_COUNT =
+    intConf("spark.yarn.credentials.file.retention.count", defaultValue = Some(5))
+
+  private[spark] val CREDENTIALS_FILE_MAX_RETENTION =
+    intConf("spark.yarn.credentials.file.retention.days", defaultValue = Some(5))
 
   private[spark] val NAMENODES_TO_ACCESS = stringSeqConf("spark.yarn.access.namenodes",
     defaultValue = Some(Nil),
     doc = "Extra NameNode URLs for which to request delegation tokens. The NameNode that hosts " +
       "fs.defaultFS does not need to be listed here.")
 
-  private[spark] val CREDENTIALS_FILE_MAX_RETENTION =
-    intConf("spark.yarn.credentials.file.retention.days", defaultValue = Some(5))
-
-  private[spark] val CREDENTIAL_FILE_MAX_COUNT =
-    intConf("spark.yarn.credentials.file.retention.count", defaultValue = Some(5))
+  private[spark] val TOKEN_RENEWAL_INTERVAL = timeConf("spark.yarn.token.renewal.interval",
+    unit = TimeUnit.MILLISECONDS,
+    isPublic = false)
 
   /* Private configs. */
 
