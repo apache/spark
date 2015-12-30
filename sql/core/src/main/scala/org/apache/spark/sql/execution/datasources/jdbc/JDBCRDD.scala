@@ -187,7 +187,7 @@ private[sql] object JDBCRDD extends Logging {
    */
   private def compileFilter(f: Filter): String = f match {
     case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
-    case Not(f) => s"NOT (${compileFilter(f)})"
+    case Not(f) => s"(NOT (${compileFilter(f)}))"
     case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
     case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
     case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
