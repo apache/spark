@@ -63,15 +63,18 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
   }
 
   override def afterAll(): Unit = {
-    workerRpcEnvs.foreach(_.shutdown())
-    masterRpcEnv.shutdown()
-    workers.foreach(_.stop())
-    master.stop()
-    workerRpcEnvs = null
-    masterRpcEnv = null
-    workers = null
-    master = null
-    super.afterAll()
+    try {
+      workerRpcEnvs.foreach(_.shutdown())
+      masterRpcEnv.shutdown()
+      workers.foreach(_.stop())
+      master.stop()
+      workerRpcEnvs = null
+      masterRpcEnv = null
+      workers = null
+      master = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("interface methods of AppClient using local Master") {

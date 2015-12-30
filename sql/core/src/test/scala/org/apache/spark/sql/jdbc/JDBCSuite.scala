@@ -18,18 +18,22 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.DriverManager
+import java.sql.{Date, DriverManager, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+class JDBCSuite extends SparkFunSuite
+  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -176,12 +180,14 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size === 0)
-    assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
   }
 
   test("SELECT * WHERE (quoted strings)") {
@@ -427,6 +433,22 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(DerbyColumns === Seq(""""abc"""", """"key""""))
   }
 
+  test("compile filters") {
+    val compileFilter = PrivateMethod[String]('compileFilter)
+    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f)
+    assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "col1 != 'abc'")
+    assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
+    assert(doCompileFilter(LessThan("col3",
+      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === "col3 < '1995-11-21 00:00:00.0'")
+    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04"))) === "col4 < '1983-08-04'")
+    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === "col0 <= 5")
+    assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
+    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
+    assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
+    assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
+  }
+
   test("Dialect unregister") {
     JdbcDialects.registerDialect(testH2Dialect)
     JdbcDialects.unregisterDialect(testH2Dialect)
@@ -460,6 +482,10 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    val errMsg = intercept[IllegalArgumentException] {
+      Postgres.getJDBCType(ByteType)
+    }
+    assert(errMsg.getMessage contains "Unsupported type in postgresql: ByteType")
   }
 
   test("DerbyDialect jdbc type mapping") {

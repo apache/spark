@@ -389,9 +389,10 @@ class LogisticRegression @Since("1.2.0") (
     if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LogisticRegressionModel(uid, coefficients, intercept))
+    val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
     val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
-      model.transform(dataset),
-      $(probabilityCol),
+      summaryModel.transform(dataset),
+      probabilityColName,
       $(labelCol),
       $(featuresCol),
       objectiveHistory)
@@ -467,6 +468,21 @@ class LogisticRegressionModel private[ml] (
       throw new SparkException(
         "No training summary available for this LogisticRegressionModel",
         new NullPointerException())
+  }
+
+  /**
+   * If the probability column is set returns the current model and probability column,
+   * otherwise generates a new column and sets it as the probability column on a new copy
+   * of the current model.
+   */
+  private[classification] def findSummaryModelAndProbabilityCol():
+      (LogisticRegressionModel, String) = {
+    $(probabilityCol) match {
+      case "" =>
+        val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString()
+        (copy(ParamMap.empty).setProbabilityCol(probabilityColName), probabilityColName)
+      case p => (this, p)
+    }
   }
 
   private[classification] def setSummary(

@@ -66,6 +66,7 @@ class HeartbeatReceiverSuite
    * that uses a manual clock.
    */
   override def beforeEach(): Unit = {
+    super.beforeEach()
     val conf = new SparkConf()
       .setMaster("local[2]")
       .setAppName("test")

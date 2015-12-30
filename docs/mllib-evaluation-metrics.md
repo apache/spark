@@ -1,20 +1,20 @@
 ---
 layout: global
-title: Evaluation Metrics - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Evaluation Metrics
+title: Evaluation Metrics - spark.mllib
+displayTitle: Evaluation Metrics - spark.mllib
 ---
 
 * Table of contents
 {:toc}
 
-Spark's MLlib comes with a number of machine learning algorithms that can be used to learn from and make predictions
+`spark.mllib` comes with a number of machine learning algorithms that can be used to learn from and make predictions
 on data. When these algorithms are applied to build machine learning models, there is a need to evaluate the performance
-of the model on some criteria, which depends on the application and its requirements. Spark's MLlib also provides a
+of the model on some criteria, which depends on the application and its requirements. `spark.mllib` also provides a
 suite of metrics for the purpose of evaluating the performance of machine learning models.
 
 Specific machine learning algorithms fall under broader types of machine learning applications like classification,
 regression, clustering, etc. Each of these types have well established metrics for performance evaluation and those
-metrics that are currently available in Spark's MLlib are detailed in this section.
+metrics that are currently available in `spark.mllib` are detailed in this section.
 
 ## Classification model evaluation
 
