@@ -384,7 +384,6 @@ object SQL {
 }
 
 object Hive {
-  import sbtantlr.SbtAntlrPlugin._
   lazy val settings = Seq(
     javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
@@ -411,19 +410,55 @@ object Hive {
         |import org.apache.spark.sql.hive.test.TestHive.implicits._
         |import org.apache.spark.sql.types._""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
-    logLevel in Compile := Level.Debug,
-    sourceGenerators in Compile <+= Def.task {
-      // This is quite a hack.
-      val pkg = (sourceManaged in Compile).value / "org" / "apache" / "spark" / "sql" / "parser"
-      val names = Seq("SparkSqlLexer", "SparkSqlParser", "SparkSqlParser_FromClauseParser", "SparkSqlParser_IdentifiersParser", "SparkSqlParser_SelectClauseParser")
-      names.map(name => pkg / (name + ".java"))
-    },
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
-    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
-  ) ++ antlrSettings
+    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") },
+    // ANTLR code-generation step.
+    //
+    // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
+    // build errors in the current plugin.
+    logLevel in Compile := Level.Debug,
+    // Create Parser from ANTLR grammar files.
+    sourceGenerators in Compile <+= Def.task {
+      val log = streams.value.log
 
+      val grammarFileNames = Seq(
+        "SparkSqlLexer.g",
+        "SparkSqlParser.g")
+      val sourceDir = (sourceDirectory in Compile).value / "antlr3"
+      val targetDir = (sourceManaged in Compile).value
+
+      // Create default ANTLR Tool.
+      val antlr = new org.antlr.Tool
+
+      // Setup input and output directories.
+      antlr.setInputDirectory(sourceDir.getPath)
+      antlr.setOutputDirectory(targetDir.getPath)
+      antlr.setForceRelativeOutput(true)
+      antlr.setMake(true)
+
+      // Add grammar files.
+      grammarFileNames.flatMap(g => (sourceDir ** g).get).foreach { g =>
+        val relPath = (g relativeTo sourceDir).get.getPath
+        log.info("ANTLR: Grammar file '%s' detected.".format(relPath))
+        antlr.addGrammarFile(relPath)
+      }
+
+      // Generate the parser.
+      antlr.process
+      if (antlr.getNumErrors > 0) {
+        log.error("ANTLR: Caught %d build errors.".format(antlr.getNumErrors))
+      }
+
+      // Return all generated java files.
+      (targetDir ** "*.java").get.toSeq
+    },
+    // Include ANTLR token files.
+    resourceGenerators in Compile <+= Def.task {
+      ((sourceManaged in Compile).value ** "*.token").get.toSeq
+    }
+  )
 }
 
 object Assembly {
