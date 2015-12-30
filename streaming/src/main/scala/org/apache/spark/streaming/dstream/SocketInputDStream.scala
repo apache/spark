@@ -60,29 +60,27 @@ class SocketReceiver[T: ClassTag](
       logInfo(s"Connecting to $host:$port")
       socket = new Socket(host, port)
       logInfo(s"Connected to $host:$port")
-
-      // Start the thread that receives data over a connection
-      new Thread("Socket Receiver") {
-        setDaemon(true)
-        override def run() { receive() }
-      }.start()
     } catch {
       case e: ConnectException =>
         restart(s"Error connecting to $host:$port", e)
-      case NonFatal(e) =>
-        logWarning("Error receiving data", e)
-        restart("Error receiving data", e)
     } finally {
       onStop()
     }
+    // Start the thread that receives data over a connection
+    new Thread("Socket Receiver") {
+      setDaemon(true)
+      override def run() { receive() }
+    }.start()
   }
 
   def onStop() {
     //in case restart thread close it twice
-    if (socket != null) {
-      socket.close()
-      socket = null
-      logInfo(s"Closed socket to $host:$port")
+    synchronized {
+      if (socket != null) {
+        socket.close()
+        socket = null
+        logInfo(s"Closed socket to $host:$port")
+      }
     }
   }
 
