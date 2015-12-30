@@ -93,7 +93,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   /**
    * Returns the limited number of rows to be returned.
    *
-   * Any operator that a Limit can be pushed passed should override this function.
+   * Any operator that a Limit can be pushed passed should override this function. (e.g., Union)
+   * Any operator that can push through a Limit should override this function. (e.g., Project)
    */
   def maxRows: Option[Expression] = None
 
