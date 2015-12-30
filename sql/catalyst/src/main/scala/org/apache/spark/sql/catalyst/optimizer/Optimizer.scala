@@ -103,8 +103,8 @@ object PushDownLimit extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     // Adding extra Limit below UNION ALL iff both left and right childs are not Limit or
-    // do not have Limit descendants. This heuristic is valid assuming there does not exist
-    // any Limit push-down rule that is unable to infer the value of maxRows.
+    // do not have Limit descendants whose maxRow is larger. This heuristic is valid assuming
+    // there does not exist any Limit push-down rule that is unable to infer the value of maxRows.
     // Note, right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
     // safe to pushdown Limit through it. Once we add UNION DISTINCT, we will not be able to
     // pushdown Limit.
