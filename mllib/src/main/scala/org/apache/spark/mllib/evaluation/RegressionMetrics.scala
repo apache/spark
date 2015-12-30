@@ -28,11 +28,12 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for regression.
  *
  * @param predictionAndObservations an RDD of (prediction, observation) pairs,
- * @param regThroughOrigin true if intercept is not included in linear regression model
+ * @param throughOrigin True if the regression is through the origin. For example, in linear
+ *                      regression, it will be true without fitting intercept.
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("1.2.0") (
-    predictionAndObservations: RDD[(Double, Double)], regThroughOrigin: Boolean)
+    predictionAndObservations: RDD[(Double, Double)], throughOrigin: Boolean)
     extends Logging {
 
   def this(predictionAndObservations: RDD[(Double, Double)]) =
@@ -58,6 +59,7 @@ class RegressionMetrics @Since("1.2.0") (
       )
     summary
   }
+
   private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
   private lazy val SStot = summary.variance(0) * (summary.count - 1)
@@ -67,6 +69,7 @@ class RegressionMetrics @Since("1.2.0") (
       case (prediction, _) => math.pow(prediction - yMean, 2)
     }.sum()
   }
+
   /**
    * Returns the variance explained by regression.
    * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
@@ -113,7 +116,7 @@ class RegressionMetrics @Since("1.2.0") (
    */
   @Since("1.2.0")
   def r2: Double = {
-    if (regThroughOrigin) {
+    if (throughOrigin) {
       1 - SSerr / SSy
     } else {
       1 - SSerr / SStot
