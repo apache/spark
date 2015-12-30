@@ -549,7 +549,6 @@ def main():
     # spark build
     build_apache_spark(build_tool, hadoop_version)
 
-
     # backwards compatibility checks
     if build_tool == "sbt":
         # Note: compatiblity tests only supported in sbt for now
