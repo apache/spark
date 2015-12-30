@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{Row, RandomDataGenerator}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -38,7 +38,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val futures = (1 to 20).map { _ =>
       future {
         GeneratePredicate.generate(EqualTo(Literal(1), Literal(1)))
-        GenerateProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
         GenerateMutableProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
         GenerateOrdering.generate(Add(Literal(1), Literal(1)).asc :: Nil)
       }

@@ -26,17 +26,13 @@ import org.apache.spark.util.Utils
 private[spark]
 trait SparkHadoopMapReduceUtil {
   def newJobContext(conf: Configuration, jobId: JobID): JobContext = {
-    val klass = firstAvailableClass(
-        "org.apache.hadoop.mapreduce.task.JobContextImpl",  // hadoop2, hadoop2-yarn
-        "org.apache.hadoop.mapreduce.JobContext")           // hadoop1
+    val klass = Utils.classForName("org.apache.hadoop.mapreduce.task.JobContextImpl")
     val ctor = klass.getDeclaredConstructor(classOf[Configuration], classOf[JobID])
     ctor.newInstance(conf, jobId).asInstanceOf[JobContext]
   }
 
   def newTaskAttemptContext(conf: Configuration, attemptId: TaskAttemptID): TaskAttemptContext = {
-    val klass = firstAvailableClass(
-        "org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl",  // hadoop2, hadoop2-yarn
-        "org.apache.hadoop.mapreduce.TaskAttemptContext")           // hadoop1
+    val klass = Utils.classForName("org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl")
     val ctor = klass.getDeclaredConstructor(classOf[Configuration], classOf[TaskAttemptID])
     ctor.newInstance(conf, attemptId).asInstanceOf[TaskAttemptContext]
   }
@@ -67,15 +63,6 @@ trait SparkHadoopMapReduceUtil {
         ctor.newInstance(jtIdentifier, new JInteger(jobId), taskType, new JInteger(taskId),
           new JInteger(attemptId)).asInstanceOf[TaskAttemptID]
       }
-    }
-  }
-
-  private def firstAvailableClass(first: String, second: String): Class[_] = {
-    try {
-      Utils.classForName(first)
-    } catch {
-      case e: ClassNotFoundException =>
-        Utils.classForName(second)
     }
   }
 }
