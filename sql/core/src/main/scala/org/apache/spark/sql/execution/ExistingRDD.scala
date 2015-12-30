@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.sources.{HadoopFsRelation, BaseRelation}
+import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
 
@@ -74,9 +74,7 @@ private[sql] case class LogicalRDD(
 
   override def children: Seq[LogicalPlan] = Nil
 
-  override protected final def otherCopyArgs: Seq[AnyRef] = {
-    sqlContext :: Nil
-  }
+  override protected final def otherCopyArgs: Seq[AnyRef] = sqlContext :: Nil
 
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
@@ -85,6 +83,8 @@ private[sql] case class LogicalRDD(
     case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
     case _ => false
   }
+
+  override def producedAttributes: AttributeSet = outputSet
 
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
@@ -97,22 +97,31 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    extraInformation: String,
+    override val nodeName: String,
+    override val metadata: Map[String, String] = Map.empty,
     override val outputsUnsafeRows: Boolean = false)
   extends LeafNode {
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
-  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
+  override def simpleString: String = {
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
+    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+  }
 }
 
 private[sql] object PhysicalRDD {
+  // Metadata keys
+  val INPUT_PATHS = "InputPaths"
+  val PUSHED_FILTERS = "PushedFilters"
+
   def createFromDataSource(
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      extraInformation: String = ""): PhysicalRDD = {
-    PhysicalRDD(output, rdd, relation.toString + extraInformation,
-      relation.isInstanceOf[HadoopFsRelation])
+      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
+    // All HadoopFsRelations output UnsafeRows
+    val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
+    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
   }
 }

@@ -47,6 +47,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
   override def dataType: DataType = DecimalType(precision, scale)
+  override def nullable: Boolean = true
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
   protected override def nullSafeEval(input: Any): Any =

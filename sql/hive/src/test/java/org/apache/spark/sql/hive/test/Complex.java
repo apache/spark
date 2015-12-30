@@ -489,6 +489,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       }
       break;
 
+    default:
     }
   }
 
@@ -512,6 +513,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
     case M_STRING_STRING:
       return getMStringString();
 
+    default:
     }
     throw new IllegalStateException();
   }
@@ -535,75 +537,91 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       return isSetLintString();
     case M_STRING_STRING:
       return isSetMStringString();
+    default:
     }
     throw new IllegalStateException();
   }
 
   @Override
   public boolean equals(Object that) {
-    if (that == null)
+    if (that == null) {
       return false;
-    if (that instanceof Complex)
+    }
+    if (that instanceof Complex) {
       return this.equals((Complex)that);
+    }
     return false;
   }
 
   public boolean equals(Complex that) {
-    if (that == null)
+    if (that == null) {
       return false;
+    }
 
     boolean this_present_aint = true;
     boolean that_present_aint = true;
     if (this_present_aint || that_present_aint) {
-      if (!(this_present_aint && that_present_aint))
+      if (!(this_present_aint && that_present_aint)) {
         return false;
-      if (this.aint != that.aint)
+      }
+      if (this.aint != that.aint) {
         return false;
+      }
     }
 
     boolean this_present_aString = true && this.isSetAString();
     boolean that_present_aString = true && that.isSetAString();
     if (this_present_aString || that_present_aString) {
-      if (!(this_present_aString && that_present_aString))
+      if (!(this_present_aString && that_present_aString)) {
         return false;
-      if (!this.aString.equals(that.aString))
+      }
+      if (!this.aString.equals(that.aString)) {
         return false;
+      }
     }
 
     boolean this_present_lint = true && this.isSetLint();
     boolean that_present_lint = true && that.isSetLint();
     if (this_present_lint || that_present_lint) {
-      if (!(this_present_lint && that_present_lint))
+      if (!(this_present_lint && that_present_lint)) {
         return false;
-      if (!this.lint.equals(that.lint))
+      }
+      if (!this.lint.equals(that.lint)) {
         return false;
+      }
     }
 
     boolean this_present_lString = true && this.isSetLString();
     boolean that_present_lString = true && that.isSetLString();
     if (this_present_lString || that_present_lString) {
-      if (!(this_present_lString && that_present_lString))
+      if (!(this_present_lString && that_present_lString)) {
         return false;
-      if (!this.lString.equals(that.lString))
+      }
+      if (!this.lString.equals(that.lString)) {
         return false;
+      }
     }
 
     boolean this_present_lintString = true && this.isSetLintString();
     boolean that_present_lintString = true && that.isSetLintString();
     if (this_present_lintString || that_present_lintString) {
-      if (!(this_present_lintString && that_present_lintString))
+      if (!(this_present_lintString && that_present_lintString)) {
         return false;
-      if (!this.lintString.equals(that.lintString))
+      }
+      if (!this.lintString.equals(that.lintString)) {
         return false;
+      }
     }
 
     boolean this_present_mStringString = true && this.isSetMStringString();
     boolean that_present_mStringString = true && that.isSetMStringString();
     if (this_present_mStringString || that_present_mStringString) {
-      if (!(this_present_mStringString && that_present_mStringString))
+      if (!(this_present_mStringString && that_present_mStringString)) {
         return false;
-      if (!this.mStringString.equals(that.mStringString))
+      }
+      if (!this.mStringString.equals(that.mStringString)) {
         return false;
+      }
     }
 
     return true;
@@ -615,33 +633,39 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
 
     boolean present_aint = true;
     builder.append(present_aint);
-    if (present_aint)
+    if (present_aint) {
       builder.append(aint);
+    }
 
     boolean present_aString = true && (isSetAString());
     builder.append(present_aString);
-    if (present_aString)
+    if (present_aString) {
       builder.append(aString);
+    }
 
     boolean present_lint = true && (isSetLint());
     builder.append(present_lint);
-    if (present_lint)
+    if (present_lint) {
       builder.append(lint);
+    }
 
     boolean present_lString = true && (isSetLString());
     builder.append(present_lString);
-    if (present_lString)
+    if (present_lString) {
       builder.append(lString);
+    }
 
     boolean present_lintString = true && (isSetLintString());
     builder.append(present_lintString);
-    if (present_lintString)
+    if (present_lintString) {
       builder.append(lintString);
+    }
 
     boolean present_mStringString = true && (isSetMStringString());
     builder.append(present_mStringString);
-    if (present_mStringString)
+    if (present_mStringString) {
       builder.append(mStringString);
+    }
 
     return builder.toHashCode();
   }
@@ -737,7 +761,9 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
     sb.append("aint:");
     sb.append(this.aint);
     first = false;
-    if (!first) sb.append(", ");
+    if (!first) {
+      sb.append(", ");
+    }
     sb.append("aString:");
     if (this.aString == null) {
       sb.append("null");
@@ -745,7 +771,9 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       sb.append(this.aString);
     }
     first = false;
-    if (!first) sb.append(", ");
+    if (!first) {
+      sb.append(", ");
+    }
     sb.append("lint:");
     if (this.lint == null) {
       sb.append("null");
@@ -753,7 +781,9 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       sb.append(this.lint);
     }
     first = false;
-    if (!first) sb.append(", ");
+    if (!first) {
+      sb.append(", ");
+    }
     sb.append("lString:");
     if (this.lString == null) {
       sb.append("null");
@@ -761,7 +791,9 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       sb.append(this.lString);
     }
     first = false;
-    if (!first) sb.append(", ");
+    if (!first) {
+      sb.append(", ");
+    }
     sb.append("lintString:");
     if (this.lintString == null) {
       sb.append("null");
@@ -769,7 +801,9 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       sb.append(this.lintString);
     }
     first = false;
-    if (!first) sb.append(", ");
+    if (!first) {
+      sb.append(", ");
+    }
     sb.append("mStringString:");
     if (this.mStringString == null) {
       sb.append("null");

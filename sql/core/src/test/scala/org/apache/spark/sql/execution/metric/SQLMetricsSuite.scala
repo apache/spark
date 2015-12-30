@@ -26,6 +26,7 @@ import org.apache.xbean.asm5.Opcodes._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -82,7 +83,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
-      val actualMetrics = SparkPlanGraph(df.queryExecution.executedPlan).nodes.filter { node =>
+      val actualMetrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
+        df.queryExecution.executedPlan)).nodes.filter { node =>
         expectedMetrics.contains(node.id)
       }.map { node =>
         val nodeMetrics = node.metrics.map { metric =>
@@ -114,7 +116,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
     val df = person.select('name)
     testSparkPlanMetrics(df, 1, Map(
-      0L ->("Project", Map(
+      0L -> ("Project", Map(
         "number of rows" -> 2L)))
     )
   }

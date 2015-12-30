@@ -428,8 +428,10 @@ private[spark] object RestSubmissionClient {
    * Filter non-spark environment variables from any environment.
    */
   private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
-    env.filter { case (k, _) =>
-      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED") || k.startsWith("MESOS_")
+    env.filterKeys { k =>
+      // SPARK_HOME is filtered out because it is usually wrong on the remote machine (SPARK-12345)
+      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED" && k != "SPARK_HOME") ||
+        k.startsWith("MESOS_")
     }
   }
 }

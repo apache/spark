@@ -353,6 +353,14 @@ private[hive] object HiveQl extends Logging {
   }
 
   /** Extractor for matching Hive's AST Tokens. */
+  private[hive] case class Token(name: String, children: Seq[ASTNode]) extends Node {
+    def getName(): String = name
+    def getChildren(): java.util.List[Node] = {
+      val col = new java.util.ArrayList[Node](children.size)
+      children.foreach(col.add(_))
+      col
+    }
+  }
   object Token {
     /** @return matches of the form (tokenName, children). */
     def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
@@ -360,6 +368,7 @@ private[hive] object HiveQl extends Logging {
         CurrentOrigin.setPosition(t.getLine, t.getCharPositionInLine)
         Some((t.getText,
           Option(t.getChildren).map(_.asScala.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
+      case t: Token => Some((t.name, t.children))
       case _ => None
     }
   }
@@ -1098,7 +1107,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         // (if there is a group by) or a script transformation.
         val withProject: LogicalPlan = transformation.getOrElse {
           val selectExpressions =
-            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias)
+            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias(_))
           Seq(
             groupByClause.map(e => e match {
               case Token("TOK_GROUPBY", children) =>
@@ -1617,17 +1626,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Window Functions */
-    case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>
-      val function = UnresolvedWindowFunction(name, args.map(nodeToExpr))
-      nodesToWindowSpecification(spec) match {
-        case reference: WindowSpecReference =>
-          UnresolvedWindowExpression(function, reference)
-        case definition: WindowSpecDefinition =>
-          WindowExpression(function, definition)
-      }
-    case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
-      // Safe to use Literal(1)?
-      val function = UnresolvedWindowFunction(name, Literal(1) :: Nil)
+    case Token(name, args :+ Token("TOK_WINDOWSPEC", spec)) =>
+      val function = nodeToExpr(Token(name, args))
       nodesToWindowSpecification(spec) match {
         case reference: WindowSpecReference =>
           UnresolvedWindowExpression(function, reference)

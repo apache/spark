@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution._
@@ -785,9 +785,20 @@ class SQLContext private[sql](
    */
   @Experimental
   def range(start: Long, end: Long): DataFrame = {
-    createDataFrame(
-      sparkContext.range(start, end).map(Row(_)),
-      StructType(StructField("id", LongType, nullable = false) :: Nil))
+    range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
+  }
+
+  /**
+    * :: Experimental ::
+    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+    * in an range from `start` to `end` (exclusive) with an step value.
+    *
+    * @since 2.0.0
+    * @group dataframe
+    */
+  @Experimental
+  def range(start: Long, end: Long, step: Long): DataFrame = {
+    range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
@@ -801,9 +812,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    createDataFrame(
-      sparkContext.range(start, end, step, numPartitions).map(Row(_)),
-      StructType(StructField("id", LongType, nullable = false) :: Nil))
+    DataFrame(this, Range(start, end, step, numPartitions))
   }
 
   /**
@@ -1245,6 +1254,7 @@ class SQLContext private[sql](
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       SQLContext.clearInstantiatedContext()
+      SQLContext.clearSqlListener()
     }
   })
 
@@ -1271,6 +1281,8 @@ object SQLContext {
    * Reference to the created SQLContext.
    */
   @transient private val instantiatedContext = new AtomicReference[SQLContext]()
+
+  @transient private val sqlListener = new AtomicReference[SQLListener]()
 
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
@@ -1314,6 +1326,10 @@ object SQLContext {
 
   private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
     Option(instantiatedContext.get())
+  }
+
+  private[sql] def clearSqlListener(): Unit = {
+    sqlListener.set(null)
   }
 
   /**
@@ -1364,9 +1380,13 @@ object SQLContext {
    * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
    */
   private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    val listener = new SQLListener(sc.conf)
-    sc.addSparkListener(listener)
-    sc.ui.foreach(new SQLTab(listener, _))
-    listener
+    if (sqlListener.get() == null) {
+      val listener = new SQLListener(sc.conf)
+      if (sqlListener.compareAndSet(null, listener)) {
+        sc.addSparkListener(listener)
+        sc.ui.foreach(new SQLTab(listener, _))
+      }
+    }
+    sqlListener.get()
   }
 }

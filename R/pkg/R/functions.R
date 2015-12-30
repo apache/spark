@@ -37,7 +37,7 @@ setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lit",
-                              ifelse(class(x) == "Column", x@jc, x))
+                              if (class(x) == "Column") { x@jc } else { x })
             column(jc)
           })
 
@@ -259,6 +259,21 @@ setMethod("column",
           function(x) {
             col(x)
           })
+#' corr
+#'
+#' Computes the Pearson Correlation Coefficient for two Columns.
+#'
+#' @rdname corr
+#' @name corr
+#' @family math_funcs
+#' @export
+#' @examples \dontrun{corr(df$c, df$d)}
+setMethod("corr", signature(x = "Column"),
+          function(x, col2) {
+            stopifnot(class(col2) == "Column")
+            jc <- callJStatic("org.apache.spark.sql.functions", "corr", x@jc, col2@jc)
+            column(jc)
+          })
 
 #' cos
 #'
@@ -354,6 +369,40 @@ setMethod("dayofyear",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "dayofyear", x@jc)
+            column(jc)
+          })
+
+#' decode
+#'
+#' Computes the first argument into a string from a binary using the provided character set
+#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#'
+#' @rdname decode
+#' @name decode
+#' @family string_funcs
+#' @export
+#' @examples \dontrun{decode(df$c, "UTF-8")}
+setMethod("decode",
+          signature(x = "Column", charset = "character"),
+          function(x, charset) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "decode", x@jc, charset)
+            column(jc)
+          })
+
+#' encode
+#'
+#' Computes the first argument into a binary from a string using the provided character set
+#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#'
+#' @rdname encode
+#' @name encode
+#' @family string_funcs
+#' @export
+#' @examples \dontrun{encode(df$c, "UTF-8")}
+setMethod("encode",
+          signature(x = "Column", charset = "character"),
+          function(x, charset) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "encode", x@jc, charset)
             column(jc)
           })
 
@@ -488,19 +537,31 @@ setMethod("initcap",
             column(jc)
           })
 
-#' isNaN
+#' is.nan
 #'
-#' Return true iff the column is NaN.
+#' Return true if the column is NaN, alias for \link{isnan}
 #'
-#' @rdname isNaN
-#' @name isNaN
+#' @rdname is.nan
+#' @name is.nan
 #' @family normal_funcs
 #' @export
-#' @examples \dontrun{isNaN(df$c)}
-setMethod("isNaN",
+#' @examples
+#' \dontrun{
+#' is.nan(df$c)
+#' isnan(df$c)
+#' }
+setMethod("is.nan",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "isNaN", x@jc)
+            isnan(x)
+          })
+
+#' @rdname is.nan
+#' @name isnan
+setMethod("isnan",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "isnan", x@jc)
             column(jc)
           })
 
@@ -1036,6 +1097,31 @@ setMethod("stddev_samp",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "stddev_samp", x@jc)
+            column(jc)
+          })
+
+#' struct
+#'
+#' Creates a new struct column that composes multiple input columns.
+#'
+#' @rdname struct
+#' @name struct
+#' @family normal_funcs
+#' @export
+#' @examples
+#' \dontrun{
+#' struct(df$c, df$d)
+#' struct("col1", "col2")
+#' }
+setMethod("struct",
+          signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "Column") {
+              jcols <- lapply(list(x, ...), function(x) { x@jc })
+              jc <- callJStatic("org.apache.spark.sql.functions", "struct", jcols)
+            } else {
+              jc <- callJStatic("org.apache.spark.sql.functions", "struct", x, list(...))
+            }
             column(jc)
           })
 
@@ -2176,7 +2262,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
-              value <- ifelse(class(value) == "Column", value@jc, value)
+              value <- if (class(value) == "Column") { value@jc } else { value }
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
@@ -2191,13 +2277,16 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' @name ifelse
 #' @seealso \link{when}
 #' @export
-#' @examples \dontrun{ifelse(df$a > 1 & df$b > 2, 0, 1)}
+#' @examples \dontrun{
+#' ifelse(df$a > 1 & df$b > 2, 0, 1)
+#' ifelse(df$a > 1, df$a, 1)
+#' }
 setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
               test <- test@jc
-              yes <- ifelse(class(yes) == "Column", yes@jc, yes)
-              no <- ifelse(class(no) == "Column", no@jc, no)
+              yes <- if (class(yes) == "Column") { yes@jc } else { yes }
+              no <- if (class(no) == "Column") { no@jc } else { no }
               jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
                                             "when",
                                             test, yes),
