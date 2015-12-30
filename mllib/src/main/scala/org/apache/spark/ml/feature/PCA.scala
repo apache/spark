@@ -180,7 +180,7 @@ object PCAModel extends MLReadable[PCAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       // explainedVariance field is not present in Spark <= 1.6
-      val versionRegex = "([0-9]+)\\.([0-9])+.*".r
+      val versionRegex = "([0-9]+)\\.([0-9]+).*".r
       val hasExplainedVariance = metadata.sparkVersion match {
         case versionRegex(major, minor) =>
           (major.toInt >= 2 || (major.toInt == 1 && minor.toInt > 6))
