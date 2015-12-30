@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util.testing
 
 import _root_.io.netty.util.internal.logging.{Slf4JLoggerFactory, InternalLoggerFactory}
 import org.scalatest.BeforeAndAfterAll

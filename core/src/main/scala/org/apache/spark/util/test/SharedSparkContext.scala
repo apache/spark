@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util.testing
+
+import org.apache.spark._
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.Suite
@@ -27,11 +29,13 @@ trait SharedSparkContext extends BeforeAndAfterAll { self: Suite =>
 
   def sc: SparkContext = _sc
 
-  var conf = new SparkConf(false)
+  var conf = new SparkConf(false).
+    setMaster("local[4]").
+    setAppName("test")
 
   override def beforeAll() {
     super.beforeAll()
-    _sc = new SparkContext("local[4]", "test", conf)
+    _sc = new SparkContext(conf)
   }
 
   override def afterAll() {
