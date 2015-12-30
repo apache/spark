@@ -224,6 +224,10 @@ case class Limit(limit: Int, child: SparkPlan)
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
 
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -262,6 +266,15 @@ case class TakeOrderedAndProject(
     projectOutput.getOrElse(child.output)
   }
 
+  override def outputsUnsafeRows: Boolean = if (projectList.isDefined) {
+    true
+  } else {
+    child.outputsUnsafeRows
+  }
+
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   override def outputPartitioning: Partitioning = SinglePartition
 
   // We need to use an interpreted ordering here because generated orderings cannot be serialized
@@ -269,11 +282,15 @@ case class TakeOrderedAndProject(
   private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
 
   // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
-  @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
+  @transient private val projection = projectList.map(UnsafeProjection.create(_, child.output))
 
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    projection.map(data.map(_)).getOrElse(data)
+    if (projection.isDefined) {
+      projection.map(p => data.map(p(_).copy().asInstanceOf[InternalRow])).get
+    } else {
+      data
+    }
   }
 
   override def executeCollect(): Array[InternalRow] = {
