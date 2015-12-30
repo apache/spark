@@ -37,8 +37,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
-    conn.setCatalog("foo")
+    conn.prepareStatement("CREATE DATABASE pgtest").executeUpdate()
+    conn.setCatalog("pgtest")
     conn.prepareStatement("CREATE TABLE bar (c0 text, c1 integer, c2 double precision, c3 bigint, "
       + "c4 bit(1), c5 bit(10), c6 bytea, c7 boolean, c8 inet, c9 cidr, "
       + "c10 integer[], c11 text[])").executeUpdate()
@@ -49,8 +49,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE foo (c0 text, c1 integer)").executeUpdate()
     conn.prepareStatement("INSERT INTO foo VALUES ('abc', 0)").executeUpdate()
     conn.prepareStatement("INSERT INTO foo VALUES ('def', 1)").executeUpdate()
-    conn.prepareStatement("CREATE TABLE FOO (c0 text, c1 integer)").executeUpdate()
-    conn.prepareStatement("INSERT INTO FOO VALUES ('ghi', 2)").executeUpdate()
+    conn.prepareStatement("""CREATE TABLE "FOO" (c0 text, c1 integer)""").executeUpdate()
+    conn.prepareStatement("""INSERT INTO "FOO" VALUES ('ghi', 2)""").executeUpdate()
   }
 
   test("Type mapping for various types") {
