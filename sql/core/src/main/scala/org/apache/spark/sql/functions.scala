@@ -577,7 +577,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
-  def cume_dist(): Column = withExpr { UnresolvedWindowFunction("cume_dist", Nil) }
+  def cume_dist(): Column = withExpr { new CumeDist }
 
   /**
    * @group window_funcs
@@ -597,7 +597,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
-  def dense_rank(): Column = withExpr { UnresolvedWindowFunction("dense_rank", Nil) }
+  def dense_rank(): Column = withExpr { new DenseRank }
 
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
@@ -648,7 +648,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    UnresolvedWindowFunction("lag", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    Lag(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**
@@ -700,7 +700,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    UnresolvedWindowFunction("lead", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    Lead(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**
@@ -713,7 +713,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def ntile(n: Int): Column = withExpr { UnresolvedWindowFunction("ntile", lit(n).expr :: Nil) }
+  def ntile(n: Int): Column = withExpr { new NTile(Literal(n)) }
 
   /**
    * @group window_funcs
@@ -735,7 +735,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
-  def percent_rank(): Column = withExpr { UnresolvedWindowFunction("percent_rank", Nil) }
+  def percent_rank(): Column = withExpr { new PercentRank }
 
   /**
    * Window function: returns the rank of rows within a window partition.
@@ -750,7 +750,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def rank(): Column = withExpr { UnresolvedWindowFunction("rank", Nil) }
+  def rank(): Column = withExpr { new Rank }
 
   /**
    * @group window_funcs
@@ -765,7 +765,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
-  def row_number(): Column = withExpr { UnresolvedWindowFunction("row_number", Nil) }
+  def row_number(): Column = withExpr { RowNumber() }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
@@ -2512,7 +2512,8 @@ object functions extends LegacyFunctions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
-  // scalastyle:off
+  // scalastyle:off line.size.limit
+  // scalastyle:off parameter.number
 
   /* Use the following code to generate:
   (0 to 10).map { x =>
@@ -2839,7 +2840,8 @@ object functions extends LegacyFunctions {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
 
-  // scalastyle:on
+  // scalastyle:on parameter.number
+  // scalastyle:on line.size.limit
 
   /**
    * Call an user-defined function.

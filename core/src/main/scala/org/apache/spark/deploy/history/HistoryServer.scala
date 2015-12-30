@@ -23,14 +23,12 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
-  UIRoot}
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{ShutdownHookManager, SignalLogger, Utils}
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -104,7 +102,9 @@ class HistoryServer(
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
-      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
+      // Also, make sure that the redirect url contains the query string present in the request.
+      val requestURI = req.getRequestURI + Option(req.getQueryString).map("?" + _).getOrElse("")
+      res.sendRedirect(res.encodeRedirectURL(requestURI))
     }
 
     // SPARK-5983 ensure TRACE is not supported
@@ -221,8 +221,8 @@ object HistoryServer extends Logging {
 
   val UI_PATH_PREFIX = "/history"
 
-  def main(argStrings: Array[String]): Unit = try {
-    SignalLogger.register(log)
+  def main(argStrings: Array[String]): Unit = {
+    Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
     val securityManager = new SecurityManager(conf)
@@ -243,8 +243,6 @@ object HistoryServer extends Logging {
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
-  } catch {
-    case e: Throwable => e.printStackTrace()
   }
 
   def initSecurity() {

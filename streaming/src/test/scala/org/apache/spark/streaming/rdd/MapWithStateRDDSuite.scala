@@ -30,23 +30,28 @@ import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
 import org.apache.spark.streaming.{State, Time}
 import org.apache.spark.util.Utils
 
-class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with BeforeAndAfterAll {
+class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with BeforeAndAfterAll {
 
   private var sc: SparkContext = null
   private var checkpointDir: File = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     sc = new SparkContext(
-      new SparkConf().setMaster("local").setAppName("TrackStateRDDSuite"))
+      new SparkConf().setMaster("local").setAppName("MapWithStateRDDSuite"))
     checkpointDir = Utils.createTempDir()
     sc.setCheckpointDir(checkpointDir.toString)
   }
 
   override def afterAll(): Unit = {
-    if (sc != null) {
-      sc.stop()
+    try {
+      if (sc != null) {
+        sc.stop()
+      }
+      Utils.deleteRecursively(checkpointDir)
+    } finally {
+      super.afterAll()
     }
-    Utils.deleteRecursively(checkpointDir)
   }
 
   override def sparkContext: SparkContext = sc
@@ -54,7 +59,7 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
   test("creation from pair RDD") {
     val data = Seq((1, "1"), (2, "2"), (3, "3"))
     val partitioner = new HashPartitioner(10)
-    val rdd = TrackStateRDD.createFromPairRDD[Int, Int, String, Int](
+    val rdd = MapWithStateRDD.createFromPairRDD[Int, Int, String, Int](
       sc.parallelize(data), partitioner, Time(123))
     assertRDD[Int, Int, String, Int](rdd, data.map { x => (x._1, x._2, 123)}.toSet, Set.empty)
     assert(rdd.partitions.size === partitioner.numPartitions)
@@ -62,7 +67,7 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
     assert(rdd.partitioner === Some(partitioner))
   }
 
-  test("updating state and generating emitted data in TrackStateRecord") {
+  test("updating state and generating mapped data in MapWithStateRDDRecord") {
 
     val initialTime = 1000L
     val updatedTime = 2000L
@@ -71,7 +76,7 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
 
     /**
      * Assert that applying given data on a prior record generates correct updated record, with
-     * correct state map and emitted data
+     * correct state map and mapped data
      */
     def assertRecordUpdate(
         initStates: Iterable[Int],
@@ -86,18 +91,18 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
       val initialStateMap = new OpenHashMapBasedStateMap[String, Int]()
       initStates.foreach { s => initialStateMap.put("key", s, initialTime) }
       functionCalled = false
-      val record = TrackStateRDDRecord[String, Int, Int](initialStateMap, Seq.empty)
+      val record = MapWithStateRDDRecord[String, Int, Int](initialStateMap, Seq.empty)
       val dataIterator = data.map { v => ("key", v) }.iterator
       val removedStates = new ArrayBuffer[Int]
       val timingOutStates = new ArrayBuffer[Int]
       /**
-       * Tracking function that updates/removes state based on instructions in the data, and
+       * Mapping function that updates/removes state based on instructions in the data, and
        * return state (when instructed or when state is timing out).
        */
       def testFunc(t: Time, key: String, data: Option[String], state: State[Int]): Option[Int] = {
         functionCalled = true
 
-        assert(t.milliseconds === updatedTime, "tracking func called with wrong time")
+        assert(t.milliseconds === updatedTime, "mapping func called with wrong time")
 
         data match {
           case Some("noop") =>
@@ -120,22 +125,22 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
         }
       }
 
-      val updatedRecord = TrackStateRDDRecord.updateRecordWithData[String, String, Int, Int](
+      val updatedRecord = MapWithStateRDDRecord.updateRecordWithData[String, String, Int, Int](
         Some(record), dataIterator, testFunc,
         Time(updatedTime), timeoutThreshold, removeTimedoutData)
 
       val updatedStateData = updatedRecord.stateMap.getAll().map { x => (x._2, x._3) }
       assert(updatedStateData.toSet === expectedStates.toSet,
-        "states do not match after updating the TrackStateRecord")
+        "states do not match after updating the MapWithStateRDDRecord")
 
-      assert(updatedRecord.emittedRecords.toSet === expectedOutput.toSet,
-        "emitted data do not match after updating the TrackStateRecord")
+      assert(updatedRecord.mappedData.toSet === expectedOutput.toSet,
+        "mapped data do not match after updating the MapWithStateRDDRecord")
 
       assert(timingOutStates.toSet === expectedTimingOutStates.toSet, "timing out states do not " +
-        "match those that were expected to do so while updating the TrackStateRecord")
+        "match those that were expected to do so while updating the MapWithStateRDDRecord")
 
       assert(removedStates.toSet === expectedRemovedStates.toSet, "removed states do not " +
-        "match those that were expected to do so while updating the TrackStateRecord")
+        "match those that were expected to do so while updating the MapWithStateRDDRecord")
 
     }
 
@@ -187,12 +192,12 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
 
   }
 
-  test("states generated by TrackStateRDD") {
+  test("states generated by MapWithStateRDD") {
     val initStates = Seq(("k1", 0), ("k2", 0))
     val initTime = 123
     val initStateWthTime = initStates.map { x => (x._1, x._2, initTime) }.toSet
     val partitioner = new HashPartitioner(2)
-    val initStateRDD = TrackStateRDD.createFromPairRDD[String, Int, Int, Int](
+    val initStateRDD = MapWithStateRDD.createFromPairRDD[String, Int, Int, Int](
       sc.parallelize(initStates), partitioner, Time(initTime)).persist()
     assertRDD(initStateRDD, initStateWthTime, Set.empty)
 
@@ -203,21 +208,21 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
      * creates a new state RDD with expected states
      */
     def testStateUpdates(
-        testStateRDD: TrackStateRDD[String, Int, Int, Int],
+        testStateRDD: MapWithStateRDD[String, Int, Int, Int],
         testData: Seq[(String, Int)],
-        expectedStates: Set[(String, Int, Int)]): TrackStateRDD[String, Int, Int, Int] = {
+        expectedStates: Set[(String, Int, Int)]): MapWithStateRDD[String, Int, Int, Int] = {
 
-      // Persist the test TrackStateRDD so that its not recomputed while doing the next operation.
-      // This is to make sure that we only track which state keys are being touched in the next op.
+      // Persist the test MapWithStateRDD so that its not recomputed while doing the next operation.
+      // This is to make sure that we only touch which state keys are being touched in the next op.
       testStateRDD.persist().count()
 
       // To track which keys are being touched
-      TrackStateRDDSuite.touchedStateKeys.clear()
+      MapWithStateRDDSuite.touchedStateKeys.clear()
 
-      val trackingFunc = (time: Time, key: String, data: Option[Int], state: State[Int]) => {
+      val mappingFunction = (time: Time, key: String, data: Option[Int], state: State[Int]) => {
 
         // Track the key that has been touched
-        TrackStateRDDSuite.touchedStateKeys += key
+        MapWithStateRDDSuite.touchedStateKeys += key
 
         // If the data is 0, do not do anything with the state
         // else if the data is 1, increment the state if it exists, or set new state to 0
@@ -236,12 +241,12 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
 
       // Assert that the new state RDD has expected state data
       val newStateRDD = assertOperation(
-        testStateRDD, newDataRDD, trackingFunc, updateTime, expectedStates, Set.empty)
+        testStateRDD, newDataRDD, mappingFunction, updateTime, expectedStates, Set.empty)
 
       // Assert that the function was called only for the keys present in the data
-      assert(TrackStateRDDSuite.touchedStateKeys.size === testData.size,
+      assert(MapWithStateRDDSuite.touchedStateKeys.size === testData.size,
         "More number of keys are being touched than that is expected")
-      assert(TrackStateRDDSuite.touchedStateKeys.toSet === testData.toMap.keys,
+      assert(MapWithStateRDDSuite.touchedStateKeys.toSet === testData.toMap.keys,
         "Keys not in the data are being touched unexpectedly")
 
       // Assert that the test RDD's data has not changed
@@ -289,19 +294,19 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
 
   test("checkpointing") {
     /**
-     * This tests whether the TrackStateRDD correctly truncates any references to its parent RDDs -
-     * the data RDD and the parent TrackStateRDD.
+     * This tests whether the MapWithStateRDD correctly truncates any references to its parent RDDs
+     * - the data RDD and the parent MapWithStateRDD.
      */
-    def rddCollectFunc(rdd: RDD[TrackStateRDDRecord[Int, Int, Int]])
+    def rddCollectFunc(rdd: RDD[MapWithStateRDDRecord[Int, Int, Int]])
       : Set[(List[(Int, Int, Long)], List[Int])] = {
-      rdd.map { record => (record.stateMap.getAll().toList, record.emittedRecords.toList) }
+      rdd.map { record => (record.stateMap.getAll().toList, record.mappedData.toList) }
          .collect.toSet
     }
 
-    /** Generate TrackStateRDD with data RDD having a long lineage */
+    /** Generate MapWithStateRDD with data RDD having a long lineage */
     def makeStateRDDWithLongLineageDataRDD(longLineageRDD: RDD[Int])
-      : TrackStateRDD[Int, Int, Int, Int] = {
-      TrackStateRDD.createFromPairRDD(longLineageRDD.map { _ -> 1}, partitioner, Time(0))
+      : MapWithStateRDD[Int, Int, Int, Int] = {
+      MapWithStateRDD.createFromPairRDD(longLineageRDD.map { _ -> 1}, partitioner, Time(0))
     }
 
     testRDD(
@@ -309,15 +314,15 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
     testRDDPartitions(
       makeStateRDDWithLongLineageDataRDD, reliableCheckpoint = true, rddCollectFunc _)
 
-    /** Generate TrackStateRDD with parent state RDD having a long lineage */
+    /** Generate MapWithStateRDD with parent state RDD having a long lineage */
     def makeStateRDDWithLongLineageParenttateRDD(
-        longLineageRDD: RDD[Int]): TrackStateRDD[Int, Int, Int, Int] = {
+        longLineageRDD: RDD[Int]): MapWithStateRDD[Int, Int, Int, Int] = {
 
-      // Create a TrackStateRDD that has a long lineage using the data RDD with a long lineage
+      // Create a MapWithStateRDD that has a long lineage using the data RDD with a long lineage
       val stateRDDWithLongLineage = makeStateRDDWithLongLineageDataRDD(longLineageRDD)
 
-      // Create a new TrackStateRDD, with the lineage lineage TrackStateRDD as the parent
-      new TrackStateRDD[Int, Int, Int, Int](
+      // Create a new MapWithStateRDD, with the lineage lineage MapWithStateRDD as the parent
+      new MapWithStateRDD[Int, Int, Int, Int](
         stateRDDWithLongLineage,
         stateRDDWithLongLineage.sparkContext.emptyRDD[(Int, Int)].partitionBy(partitioner),
         (time: Time, key: Int, value: Option[Int], state: State[Int]) => None,
@@ -333,25 +338,25 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
   }
 
   test("checkpointing empty state RDD") {
-    val emptyStateRDD = TrackStateRDD.createFromPairRDD[Int, Int, Int, Int](
+    val emptyStateRDD = MapWithStateRDD.createFromPairRDD[Int, Int, Int, Int](
       sc.emptyRDD[(Int, Int)], new HashPartitioner(10), Time(0))
     emptyStateRDD.checkpoint()
     assert(emptyStateRDD.flatMap { _.stateMap.getAll() }.collect().isEmpty)
-    val cpRDD = sc.checkpointFile[TrackStateRDDRecord[Int, Int, Int]](
+    val cpRDD = sc.checkpointFile[MapWithStateRDDRecord[Int, Int, Int]](
       emptyStateRDD.getCheckpointFile.get)
     assert(cpRDD.flatMap { _.stateMap.getAll() }.collect().isEmpty)
   }
 
-  /** Assert whether the `trackStateByKey` operation generates expected results */
+  /** Assert whether the `mapWithState` operation generates expected results */
   private def assertOperation[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
-      testStateRDD: TrackStateRDD[K, V, S, T],
+      testStateRDD: MapWithStateRDD[K, V, S, T],
       newDataRDD: RDD[(K, V)],
-      trackStateFunc: (Time, K, Option[V], State[S]) => Option[T],
+      mappingFunction: (Time, K, Option[V], State[S]) => Option[T],
       currentTime: Long,
       expectedStates: Set[(K, S, Int)],
-      expectedEmittedRecords: Set[T],
+      expectedMappedData: Set[T],
       doFullScan: Boolean = false
-    ): TrackStateRDD[K, V, S, T] = {
+    ): MapWithStateRDD[K, V, S, T] = {
 
     val partitionedNewDataRDD = if (newDataRDD.partitioner != testStateRDD.partitioner) {
       newDataRDD.partitionBy(testStateRDD.partitioner.get)
@@ -359,31 +364,31 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
       newDataRDD
     }
 
-    val newStateRDD = new TrackStateRDD[K, V, S, T](
-      testStateRDD, newDataRDD, trackStateFunc, Time(currentTime), None)
+    val newStateRDD = new MapWithStateRDD[K, V, S, T](
+      testStateRDD, newDataRDD, mappingFunction, Time(currentTime), None)
     if (doFullScan) newStateRDD.setFullScan()
 
     // Persist to make sure that it gets computed only once and we can track precisely how many
     // state keys the computing touched
     newStateRDD.persist().count()
-    assertRDD(newStateRDD, expectedStates, expectedEmittedRecords)
+    assertRDD(newStateRDD, expectedStates, expectedMappedData)
     newStateRDD
   }
 
-  /** Assert whether the [[TrackStateRDD]] has the expected state ad emitted records */
+  /** Assert whether the [[MapWithStateRDD]] has the expected state and mapped data */
   private def assertRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
-      trackStateRDD: TrackStateRDD[K, V, S, T],
+      stateRDD: MapWithStateRDD[K, V, S, T],
       expectedStates: Set[(K, S, Int)],
-      expectedEmittedRecords: Set[T]): Unit = {
-    val states = trackStateRDD.flatMap { _.stateMap.getAll() }.collect().toSet
-    val emittedRecords = trackStateRDD.flatMap { _.emittedRecords }.collect().toSet
+      expectedMappedData: Set[T]): Unit = {
+    val states = stateRDD.flatMap { _.stateMap.getAll() }.collect().toSet
+    val mappedData = stateRDD.flatMap { _.mappedData }.collect().toSet
     assert(states === expectedStates,
-      "states after track state operation were not as expected")
-    assert(emittedRecords === expectedEmittedRecords,
-      "emitted records after track state operation were not as expected")
+      "states after mapWithState operation were not as expected")
+    assert(mappedData === expectedMappedData,
+      "mapped data after mapWithState operation were not as expected")
   }
 }
 
-object TrackStateRDDSuite {
+object MapWithStateRDDSuite {
   private val touchedStateKeys = new ArrayBuffer[String]()
 }

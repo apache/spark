@@ -26,7 +26,7 @@ import org.apache.spark.rpc.RpcAddress
  * The `rpcAddress` may be null, in which case the endpoint is registered via a client-only
  * connection and can only be reached via the client that sent the endpoint reference.
  *
- * @param rpcAddress The socket address of the endpint.
+ * @param rpcAddress The socket address of the endpoint.
  * @param name Name of the endpoint.
  */
 private[netty] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val name: String) {

@@ -67,6 +67,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   def main(args: Array[String]) {
+    Utils.initDaemon(log)
     val optionsProcessor = new HiveServerServerOptionsProcessor("HiveThriftServer2")
     if (!optionsProcessor.process(args)) {
       System.exit(-1)
