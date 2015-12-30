@@ -257,7 +257,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
-   * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
+   * <li>`allowBackslashEscapingAnyCharacter` (default `true`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
    *
    * @since 1.6.0
