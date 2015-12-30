@@ -443,5 +443,6 @@ root = Module(
         "test",
     ],
     python_test_goals=list(itertools.chain.from_iterable(m.python_test_goals for m in all_modules)),
-    should_run_r_tests=True
+    should_run_r_tests=True,
+    should_run_build_tests=True
 )
