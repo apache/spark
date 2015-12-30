@@ -22,6 +22,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.Suite
 
+import org.apache.spark.SparkContext
+
 /** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test. */
 trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
 
