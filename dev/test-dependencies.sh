@@ -85,7 +85,12 @@ fi
 
 for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   set +e
-  dep_diff="$(diff dev/pr-deps/spark-deps-$HADOOP_PROFILE dev/deps/spark-deps-$HADOOP_PROFILE)"
+  dep_diff="$(
+    git diff \
+    --no-index \
+    dev/deps/spark-deps-$HADOOP_PROFILE \
+    dev/pr-deps/spark-deps-$HADOOP_PROFILE \
+  )"
   set -e
   if [ "$dep_diff" != "" ]; then
     echo "Spark's published dependencies DO NOT MATCH the manifest file (dev/spark-deps)."
