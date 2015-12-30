@@ -1233,7 +1233,8 @@ private[ui] class TaskPagedTable(
 
   override def tableId: String = "task-table"
 
-  override def tableCssClass: String = "table table-bordered table-condensed table-striped"
+  override def tableCssClass: String =
+    "table table-bordered table-condensed table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "task.pageSize"
 
