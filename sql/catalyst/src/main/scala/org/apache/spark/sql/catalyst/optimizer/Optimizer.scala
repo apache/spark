@@ -90,6 +90,16 @@ object DefaultOptimizer extends Optimizer
  */
 object PushDownLimit extends Rule[LogicalPlan] {
 
+  private def buildUnionChild (limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+    (limitExp, plan.maxRows) match {
+      case (IntegerLiteral(maxRow), Some(IntegerLiteral(childMaxRows))) if maxRow < childMaxRows =>
+        Limit(limitExp, plan)
+      case (_, None) =>
+        Limit(limitExp, plan)
+      case _ => plan
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     // Adding extra Limit below UNION ALL iff both left and right childs are not Limit or
@@ -98,12 +108,8 @@ object PushDownLimit extends Rule[LogicalPlan] {
     // Note, right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
     // safe to pushdown Limit through it. Once we add UNION DISTINCT, we will not be able to
     // pushdown Limit.
-    case Limit(exp, Union(left, right))
-      if left.maxRows.isEmpty || right.maxRows.isEmpty =>
-      Limit(exp,
-        Union(
-          Limit(exp, left),
-          Limit(exp, right)))
+    case Limit(exp, Union(left, right)) =>
+      Limit(exp, Union(buildUnionChild(exp, left), buildUnionChild(exp, right)))
   }
 }
 
