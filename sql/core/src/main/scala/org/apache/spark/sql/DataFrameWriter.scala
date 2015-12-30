@@ -119,8 +119,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme.
    *
-   * This is only applicable for Parquet at the moment.
-   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -129,6 +127,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     this
   }
 
+  /**
+   * Buckets the output by the given columns on the file system. If specified, the output is
+   * laid out on the file system similar to Hive's bucketing scheme.
+   *
+   * @since 2.0
+   */
   @scala.annotation.varargs
   def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter = {
     this.numBuckets = Option(numBuckets)
@@ -136,6 +140,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     this
   }
 
+  /**
+   * Sorts the bucketed output by the given columns.
+   *
+   * @since 2.0
+   */
   @scala.annotation.varargs
   def sortBy(colName: String, colNames: String*): DataFrameWriter = {
     this.sortingColumns = Option(colName +: colNames)

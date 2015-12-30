@@ -327,9 +327,10 @@ private[sql] class DynamicPartitionWriterContainer(
     val getKey: InternalRow => UnsafeRow = if (bucketSpec.isEmpty) {
       val projection = UnsafeProjection.create(partitionColumns, inputSchema)
       row => projection(row)
-    } else {
+    } else { // If it's bucketed, we should also consider bucket id as part of the key.
       val bucketColumns = bucketSpec.get.resolvedBucketingColumns(inputSchema)
       val getBucketKey = UnsafeProjection.create(bucketColumns, inputSchema)
+      // Leave an empty int slot at the last of the result row, so that we can set bucket id later.
       val getResultRow = UnsafeProjection.create(partitionColumns :+ Literal(-1), inputSchema)
       row => {
         val bucketId = math.abs(getBucketKey(row).hashCode()) % bucketSpec.get.numBuckets
@@ -341,7 +342,7 @@ private[sql] class DynamicPartitionWriterContainer(
 
     val keySchema = if (bucketSpec.isEmpty) {
       StructType.fromAttributes(partitionColumns)
-    } else {
+    } else { // If it's bucketed, we should also consider bucket id as part of the key.
       StructType.fromAttributes(partitionColumns).add("bucketId", IntegerType, nullable = false)
     }
 
