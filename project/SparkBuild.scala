@@ -384,7 +384,7 @@ object SQL {
 }
 
 object Hive {
-
+  import sbtantlr.SbtAntlrPlugin._
   lazy val settings = Seq(
     javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
@@ -412,11 +412,17 @@ object Hive {
         |import org.apache.spark.sql.types._""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
     logLevel in Compile := Level.Debug,
+    sourceGenerators in Compile <+= Def.task {
+      // This is quite a hack.
+      val pkg = (sourceManaged in Compile).value / "org" / "apache" / "spark" / "sql" / "parser"
+      val names = Seq("SparkSqlLexer", "SparkSqlParser", "SparkSqlParser_FromClauseParser", "SparkSqlParser_IdentifiersParser", "SparkSqlParser_SelectClauseParser")
+      names.map(name => pkg / (name + ".java"))
+    },
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
     fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
-  ) ++ sbtantlr.SbtAntlrPlugin.antlrSettings
+  ) ++ antlrSettings
 
 }
 
