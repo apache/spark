@@ -414,6 +414,11 @@ def run_python_tests(test_modules, parallelism):
     run_cmd(command)
 
 
+def run_build_tests():
+    set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
+
+
 def run_sparkr_tests():
     set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
 
@@ -530,6 +535,9 @@ def main():
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
+
+    if any(m.should_run_build_tests for m in test_modules):
+        run_build_tests()
 
     # spark build
     build_apache_spark(build_tool, hadoop_version)
