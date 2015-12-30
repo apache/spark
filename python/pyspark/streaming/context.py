@@ -99,7 +99,26 @@ class StreamingContext(object):
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
         if cls._transformerSerializer is None:
-            cls._transformerSerializer = TransformFunctionSerializer(
+            transformer_serializer = TransformFunctionSerializer()
+            transformer_serializer.init(
+                SparkContext._active_spark_context, CloudPickleSerializer(), gw)
+            # SPARK-12511 streaming driver with checkpointing unable to finalize leading to OOM
+            # There is an issue that Py4J's PythonProxyHandler.finalize blocks forever.
+            # (https://github.com/bartdag/py4j/pull/184)
+            #
+            # Py4j will create a PythonProxyHandler in Java for "transformer_serializer" when
+            # calling "registerSerializer". If we call "registerSerializer" twice, the second
+            # PythonProxyHandler will override the first one, then the first one will be GCed and
+            # trigger "PythonProxyHandler.finalize". To avoid that, we should not call
+            # "registerSerializer" more than once, so that "PythonProxyHandler" in Java side won't
+            # be GCed.
+            #
+            # TODO Once Py4J fixes this issue, we should upgrade Py4j to the latest version.
+            transformer_serializer.gateway.jvm.PythonDStream.registerSerializer(
+                transformer_serializer)
+            cls._transformerSerializer = transformer_serializer
+        else:
+            cls._transformerSerializer.init(
                 SparkContext._active_spark_context, CloudPickleSerializer(), gw)
 
     @classmethod
