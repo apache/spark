@@ -20,7 +20,6 @@ package org.apache.spark.mllib.fpm
 import java.{util => ju}
 import java.lang.{Iterable => JavaIterable}
 
-import org.apache.spark.mllib.util.Loader._
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -80,11 +79,11 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
     private val thisFormatVersion = "1.0"
 
-    private[fpm] val thisClassName = "org.apache.spark.mllib.fpm.FPGrowthModel"
+    private val thisClassName = "org.apache.spark.mllib.fpm.FPGrowthModel"
 
     def save[Item: ClassTag: TypeTag](model: FPGrowthModel[Item], path: String): Unit = {
       val sc = model.freqItemsets.sparkContext
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
@@ -101,13 +100,13 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
     }
 
     def inferItemType(sc: SparkContext, path: String): FreqItemset[_] = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
-      val itemsetType = freqItemsets.schema(0).dataType
-      val freqType = freqItemsets.schema(1).dataType
+      val itemsetType = freqItemsets.schema("items").dataType
+      val freqType = freqItemsets.schema("freq").dataType
       require(itemsetType.isInstanceOf[ArrayType],
-        s"items should be ArrayType, but get $itemsetType")
-      require(freqType.isInstanceOf[LongType], s"freq should be LongType, but get $freqType")
+        s"items should be ArrayType, but got $itemsetType")
+      require(freqType.isInstanceOf[LongType], s"freq should be LongType, but got $freqType")
       val itemType = itemsetType.asInstanceOf[ArrayType].elementType
       val result = itemType match {
         case BooleanType => new FreqItemset(Array[Boolean](), 0L)
@@ -136,14 +135,14 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
         path: String,
         inferredItemset: FreqItemset[Item]): FPGrowthModel[Item] = {
       implicit val formats = DefaultFormats
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
 
-      val (className, formatVersion, metadata) = loadMetadata(sc, path)
+      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
 
       val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
-      val freqItemsetsRDD = freqItemsets.map { x =>
+      val freqItemsetsRDD = freqItemsets.select("items", "freq").map { x =>
         val items = x.getAs[Seq[Item]](0).toArray
         val freq = x.getLong(1)
         new FreqItemset(items, freq)
