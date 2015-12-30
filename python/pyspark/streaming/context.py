@@ -136,16 +136,13 @@ class StreamingContext(object):
         gw = SparkContext._gateway
 
         # Check whether valid checkpoint information exists in the given path
-        if gw.jvm.CheckpointReader.read(checkpointPath).isEmpty():
+        ssc_option = gw.jvm.StreamingContextPythonHelper().tryRecoverFromCheckpoint(checkpointPath)
+        if ssc_option.isEmpty():
             ssc = setupFunc()
             ssc.checkpoint(checkpointPath)
             return ssc
 
-        try:
-            jssc = gw.jvm.JavaStreamingContext(checkpointPath)
-        except Exception:
-            print("failed to load StreamingContext from checkpoint", file=sys.stderr)
-            raise
+        jssc = gw.jvm.JavaStreamingContext(ssc_option.get())
 
         # If there is already an active instance of Python SparkContext use it, or create a new one
         if not SparkContext._active_spark_context:
