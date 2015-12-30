@@ -663,16 +663,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // For testing.
   private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
-    val hadoop1Class = "org.apache.hadoop.hdfs.protocol.FSConstants$SafeModeAction"
     val hadoop2Class = "org.apache.hadoop.hdfs.protocol.HdfsConstants$SafeModeAction"
-    val actionClass: Class[_] =
-      try {
-        getClass().getClassLoader().loadClass(hadoop2Class)
-      } catch {
-        case _: ClassNotFoundException =>
-          getClass().getClassLoader().loadClass(hadoop1Class)
-      }
-
+    val actionClass: Class[_] = getClass().getClassLoader().loadClass(hadoop2Class)
     val action = actionClass.getField("SAFEMODE_GET").get(null)
     val method = dfs.getClass().getMethod("setSafeMode", action.getClass())
     method.invoke(dfs, action).asInstanceOf[Boolean]
