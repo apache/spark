@@ -29,6 +29,11 @@ trait SharedSparkContext extends BeforeAndAfterAll { self: Suite =>
 
   def sc: SparkContext = _sc
 
+  /**
+   * SparkConf used to create the SparkContext for testing.
+   * Override to change the master, application name, disable web ui
+   * or other changes.
+   */
   var conf = new SparkConf(false).
     setMaster("local[4]").
     setAppName("test")

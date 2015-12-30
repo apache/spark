@@ -24,7 +24,8 @@ import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
 
-/** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test. */
+/** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test.
+ * This is useful for tests which make change state inside the `sc` {@link SparkContext} variable. */
 trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
 
   @transient var sc: SparkContext = _
@@ -49,6 +50,10 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
 
 }
 
+/**
+ * Object for cleanly shutting down a SparkContext in tests where the SparkContext may be re-created
+ * again right after the test
+ */
 object LocalSparkContext {
   def stop(sc: SparkContext) {
     if (sc != null) {
