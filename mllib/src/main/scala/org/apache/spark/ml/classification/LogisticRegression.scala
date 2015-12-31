@@ -247,13 +247,34 @@ class LogisticRegression @Since("1.2.0") (
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
-  override protected def train(dataset: DataFrame): LogisticRegressionModel = {
-    // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
+  private var optInitialWeights: Option[Vector] = None
+  /** @group setParam */
+  private[spark] def setInitialWeights(value: Vector): this.type = {
+    this.optInitialWeights = Some(value)
+    this
+  }
+
+  /** Validate the initial weights, return an Option, if not the expected size return None
+   * and log a warning.
+   */
+  private def validateWeights(vectorOpt: Option[Vector], numFeatures: Int): Option[Vector] = {
+    vectorOpt.flatMap(vec =>
+      if (vec.size == numFeatures) {
+        Some(vec)
+      } else {
+        logWarning(
+          s"""Initial weights provided (${vec})did not match the expected size ${numFeatures}""")
+        None
+      })
+  }
+
+  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
+    val instances = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
       case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
     }
+
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -322,10 +343,12 @@ class LogisticRegression @Since("1.2.0") (
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
     }
 
-    val initialCoefficientsWithIntercept =
-      Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
+    val numFeaturesWithIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
+    val userSuppliedWeights = validateWeights(optInitialWeights, numFeaturesWithIntercept)
+    val initialCoefficientsWithIntercept = userSuppliedWeights.getOrElse(
+      Vectors.zeros(numFeaturesWithIntercept))
 
-    if ($(fitIntercept)) {
+    if ($(fitIntercept) && !userSuppliedWeights.isDefined) {
       /*
          For binary logistic regression, when we initialize the coefficients as zeros,
          it will converge faster if we initialize the intercept such that
