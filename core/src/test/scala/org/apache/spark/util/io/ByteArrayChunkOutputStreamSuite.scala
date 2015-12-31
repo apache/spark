@@ -21,7 +21,6 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 
-
 class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
 
   test("empty output") {
@@ -105,5 +104,31 @@ class ByteArrayChunkOutputStreamSuite extends SparkFunSuite {
     assert(arrays(0).toSeq === ref.slice(0, 10))
     assert(arrays(1).toSeq === ref.slice(10, 20))
     assert(arrays(2).toSeq === ref.slice(20, 30))
+  }
+
+  test("slice") {
+    val ref = new Array[Byte](30)
+    Random.nextBytes(ref)
+    val o = new ByteArrayChunkOutputStream(5)
+    o.write(ref)
+
+    for {
+      start <- (0 until 30)
+      end <- (start to 30)
+    } {
+      withClue(s"start = $start; end = $end") {
+        try {
+          assert(o.slice(start, end).toSeq === ref.slice(start, end))
+        } catch {
+          case ex => fail(ex)
+        }
+      }
+    }
+
+    // errors on bad bounds
+    intercept[IllegalArgumentException] { o.slice(31, 31) }
+    intercept[IllegalArgumentException] { o.slice(-1, 10) }
+    intercept[IllegalArgumentException] { o.slice(10, 5) }
+    intercept[IllegalArgumentException] { o.slice(10, 35) }
   }
 }
