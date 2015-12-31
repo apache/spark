@@ -157,6 +157,7 @@ private[spark] object JettyUtils extends Logging {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
         val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
+        logDebug(s"Redirecting ${request.getRequestURL} to $newUrl")
         response.sendRedirect(newUrl)
       }
       // SPARK-5983 ensure TRACE is not supported
