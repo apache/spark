@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.File
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
@@ -583,6 +584,24 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.memoryStore.contains(rdd(0, 4)), "rdd_0_4 was in store")
     assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
     assert(store.memoryStore.contains(rdd(0, 3)), "rdd_0_3 was not in store")
+  }
+
+  test("hdfs storage") {
+    conf.set(ExternalBlockStore.BLOCK_MANAGER_NAME, "org.apache.spark.storage.HDFSBlockManager")
+    conf.set(ExternalBlockStore.FOLD_NAME, "spark-hdfs")
+    var tmpDir = File.createTempFile("tmp_spark", "")
+    tmpDir.delete()
+    conf.set(ExternalBlockStore.BASE_DIR, tmpDir.getCanonicalPath)
+    store = makeBlockManager(1200)
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    val a3 = new Array[Byte](400)
+    store.putSingle("a1", a1, StorageLevel.OFF_HEAP)
+    store.putSingle("a2", a2, StorageLevel.OFF_HEAP)
+    store.putSingle("a3", a3, StorageLevel.OFF_HEAP)
+    assert(store.getSingle("a3").isDefined, "a3 was in store")
+    assert(store.getSingle("a2").isDefined, "a2 was in store")
+    assert(store.getSingle("a1").isDefined, "a1 was in store")
   }
 
   test("tachyon storage") {
