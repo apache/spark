@@ -105,7 +105,6 @@ public class JavaFPGrowthSuite implements Serializable {
         // Test return types.
         List<String> items = itemset.javaItems();
         long freq = itemset.freq();
-        System.out.println(items + "   " + freq);
       }
 
       Utils.deleteRecursively(tempDir);
