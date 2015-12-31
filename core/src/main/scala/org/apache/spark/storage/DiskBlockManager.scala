@@ -121,7 +121,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         }
       }
 
-      if (availableFile != null) {
+      if (availableFile == null) {
         throw new IOException(s"No enough disk space.")
       }
       availableFile
