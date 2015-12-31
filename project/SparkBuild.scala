@@ -384,6 +384,7 @@ object SQL {
 }
 
 object Hive {
+
   lazy val settings = Seq(
     javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
@@ -418,9 +419,8 @@ object Hive {
     //
     // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
     // build errors in the current plugin.
-    logLevel in Compile := Level.Debug,
     // Create Parser from ANTLR grammar files.
-    sourceGenerators in Compile <+= Def.task {
+    sourceGenerators in Compile += Def.task {
       val log = streams.value.log
 
       val grammarFileNames = Seq(
@@ -439,10 +439,10 @@ object Hive {
       antlr.setMake(true)
 
       // Add grammar files.
-      grammarFileNames.flatMap(g => (sourceDir ** g).get).foreach { g =>
-        val relPath = (g relativeTo sourceDir).get.getPath
-        log.info("ANTLR: Grammar file '%s' detected.".format(relPath))
-        antlr.addGrammarFile(relPath)
+      grammarFileNames.flatMap(gFileName => (sourceDir ** gFileName).get).foreach { gFilePath =>
+        val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
+        log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
+        antlr.addGrammarFile(relGFilePath)
       }
 
       // Generate the parser.
@@ -453,11 +453,11 @@ object Hive {
 
       // Return all generated java files.
       (targetDir ** "*.java").get.toSeq
-    },
+    }.taskValue,
     // Include ANTLR tokens files.
-    resourceGenerators in Compile <+= Def.task {
+    resourceGenerators in Compile += Def.task {
       ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
-    }
+    }.taskValue
   )
 }
 
