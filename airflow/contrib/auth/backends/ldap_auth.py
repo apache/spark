@@ -97,10 +97,9 @@ class LdapUser(models.User):
             "BASE": BASE
         }
 
-        search_scope = search_scopes.get(configuration.get("ldap", "search_scope").upper(), None) \
-            if configuration.has_option("ldap", "search_scope") else LEVEL
-
-        LOG.info("Search scope is: %s " % search_scope)
+        search_scope = LEVEL
+        if configuration.has_option("ldap", "search_scope"):
+            search_scope = SUBTREE if configuration.get("ldap", "search_scope") == "SUBTREE" else LEVEL
 
         # todo: BASE or ONELEVEL?
 
@@ -206,7 +205,7 @@ def login(self, request):
 
         return redirect(request.args.get("next") or url_for("admin.index"))
     except (LdapException, AuthenticationError) as e:
-        if e:
+        if type(e) == LdapException:
             flash(e, "error")
         else:
             flash("Incorrect login details")
