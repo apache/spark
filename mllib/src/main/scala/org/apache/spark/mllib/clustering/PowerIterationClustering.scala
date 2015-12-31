@@ -265,7 +265,7 @@ object PowerIterationClustering extends Logging {
     GraphImpl.fromExistingRDDs(vD, graph.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
-        TripletFields.Src)
+        TripletFields.All)
   }
 
   /**
@@ -385,7 +385,6 @@ object PowerIterationClustering extends Logging {
     val points = v.mapValues(x => Vectors.dense(x)).cache()
     val model = new KMeans()
       .setK(k)
-      .setRuns(5)
       .setSeed(0L)
       .run(points.values)
     points.mapValues(p => model.predict(p)).cache()
