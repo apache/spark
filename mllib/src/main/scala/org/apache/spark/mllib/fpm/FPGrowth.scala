@@ -61,6 +61,21 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
     associationRules.run(freqItemsets)
   }
 
+  /**
+   * Save this model to the given path.
+   * It only works for Item datatypes supported by DataFrames.
+   *
+   * This saves:
+   *  - human-readable (JSON) model metadata to path/metadata/
+   *  - Parquet formatted data to path/data/
+   *
+   * The model may be loaded using [[FPGrowthModel.load]].
+   *
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("2.0.0")
   override def save(sc: SparkContext, path: String): Unit = {
     FPGrowthModel.SaveLoadV1_0.save(this, path)
   }
@@ -68,8 +83,10 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
   override protected val formatVersion: String = "1.0"
 }
 
+@Since("2.0.0")
 object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
+  @Since("2.0.0")
   override def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
     val inferredItemset = FPGrowthModel.SaveLoadV1_0.inferItemType(sc, path)
     FPGrowthModel.SaveLoadV1_0.load(sc, path, inferredItemset)
