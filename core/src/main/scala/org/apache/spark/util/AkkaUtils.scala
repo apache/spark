@@ -19,14 +19,11 @@ package org.apache.spark.util
 
 import scala.collection.JavaConverters._
 
-import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
-import akka.pattern.ask
-
+import akka.actor.{ActorSystem, ExtendedActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
-import org.apache.spark.rpc.RpcTimeout
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * Various utility classes for working with Akka.
@@ -138,105 +135,5 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
   val reservedSizeBytes = 200 * 1024
-
-  /**
-   * Send a message to the given actor and get its result within a default timeout, or
-   * throw a SparkException if this fails.
-   */
-  def askWithReply[T](
-      message: Any,
-      actor: ActorRef,
-      timeout: RpcTimeout): T = {
-    askWithReply[T](message, actor, maxAttempts = 1, retryInterval = Int.MaxValue, timeout)
-  }
-
-  /**
-   * Send a message to the given actor and get its result within a default timeout, or
-   * throw a SparkException if this fails even after the specified number of retries.
-   */
-  def askWithReply[T](
-      message: Any,
-      actor: ActorRef,
-      maxAttempts: Int,
-      retryInterval: Long,
-      timeout: RpcTimeout): T = {
-    // TODO: Consider removing multiple attempts
-    if (actor == null) {
-      throw new SparkException(s"Error sending message [message = $message]" +
-        " as actor is null ")
-    }
-    var attempts = 0
-    var lastException: Exception = null
-    while (attempts < maxAttempts) {
-      attempts += 1
-      try {
-        val future = actor.ask(message)(timeout.duration)
-        val result = timeout.awaitResult(future)
-        if (result == null) {
-          throw new SparkException("Actor returned null")
-        }
-        return result.asInstanceOf[T]
-      } catch {
-        case ie: InterruptedException => throw ie
-        case e: Exception =>
-          lastException = e
-          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
-      }
-      if (attempts < maxAttempts) {
-        Thread.sleep(retryInterval)
-      }
-    }
-
-    throw new SparkException(
-      s"Error sending message [message = $message]", lastException)
-  }
-
-  def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {
-    val driverActorSystemName = SparkEnv.driverActorSystemName
-    val driverHost: String = conf.get("spark.driver.host", "localhost")
-    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
-    Utils.checkHost(driverHost, "Expected hostname")
-    val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
-    val timeout = RpcUtils.lookupRpcTimeout(conf)
-    logInfo(s"Connecting to $name: $url")
-    timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
-  }
-
-  def makeExecutorRef(
-      name: String,
-      conf: SparkConf,
-      host: String,
-      port: Int,
-      actorSystem: ActorSystem): ActorRef = {
-    val executorActorSystemName = SparkEnv.executorActorSystemName
-    Utils.checkHost(host, "Expected hostname")
-    val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
-    val timeout = RpcUtils.lookupRpcTimeout(conf)
-    logInfo(s"Connecting to $name: $url")
-    timeout.awaitResult(actorSystem.actorSelection(url).resolveOne(timeout.duration))
-  }
-
-  def protocol(actorSystem: ActorSystem): String = {
-    val akkaConf = actorSystem.settings.config
-    val sslProp = "akka.remote.netty.tcp.enable-ssl"
-    protocol(akkaConf.hasPath(sslProp) && akkaConf.getBoolean(sslProp))
-  }
-
-  def protocol(ssl: Boolean = false): String = {
-    if (ssl) {
-      "akka.ssl.tcp"
-    } else {
-      "akka.tcp"
-    }
-  }
-
-  def address(
-      protocol: String,
-      systemName: String,
-      host: String,
-      port: Int,
-      actorName: String): String = {
-    s"$protocol://$systemName@$host:$port/user/$actorName"
-  }
 
 }

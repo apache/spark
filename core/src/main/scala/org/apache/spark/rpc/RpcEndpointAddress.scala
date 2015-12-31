@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc.netty
+package org.apache.spark.rpc
 
 import org.apache.spark.SparkException
-import org.apache.spark.rpc.RpcAddress
 
 /**
  * An address identifier for an RPC endpoint.
@@ -29,7 +28,7 @@ import org.apache.spark.rpc.RpcAddress
  * @param rpcAddress The socket address of the endpoint.
  * @param name Name of the endpoint.
  */
-private[netty] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val name: String) {
+private[spark] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val name: String) {
 
   require(name != null, "RpcEndpoint name must be provided.")
 
@@ -44,7 +43,11 @@ private[netty] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val nam
     }
 }
 
-private[netty] object RpcEndpointAddress {
+private[spark] object RpcEndpointAddress {
+
+  def apply(host: String, port: Int, name: String): RpcEndpointAddress = {
+    new RpcEndpointAddress(host, port, name)
+  }
 
   def apply(sparkUrl: String): RpcEndpointAddress = {
     try {
