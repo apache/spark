@@ -54,6 +54,8 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
+  override def expressions: Seq[Expression] = generator :: Nil
+
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = {

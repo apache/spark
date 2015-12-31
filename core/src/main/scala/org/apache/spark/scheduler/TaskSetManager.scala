@@ -608,7 +608,7 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Marks the task as successful and notifies the DAGScheduler that a task has ended.
+   * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
@@ -705,7 +705,7 @@ private[spark] class TaskSetManager(
         ef.exception
 
       case e: ExecutorLostFailure if !e.exitCausedByApp =>
-        logInfo(s"Task $tid failed because while it was being computed, its executor" +
+        logInfo(s"Task $tid failed because while it was being computed, its executor " +
           "exited for a reason unrelated to the task. Not counting this failure towards the " +
           "maximum number of failures for the task.")
         None
