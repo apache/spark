@@ -79,6 +79,7 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setImpurity("variance")
       .setMaxDepth(2)
       .setMaxBins(100)
+      .setPredictionCol("")
       .setVarianceCol("variance")
     val categoricalFeatures = Map(0 -> 2, 1 -> 2)
 
