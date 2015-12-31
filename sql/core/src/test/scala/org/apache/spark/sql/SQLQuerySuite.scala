@@ -2028,4 +2028,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(false) :: Row(true) :: Nil)
   }
 
+  test("murmur3 hash function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempTable("tbl") {
+      df.registerTempTable("tbl")
+      checkAnswer(
+        df.select(murmur3_hash($"i", $"j")),
+        sql("SELECT murmur3_hash(i, j) from tbl")
+      )
+    }
+  }
 }
