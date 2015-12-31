@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.stat
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.{Row, Column, DataFrame}
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast, AttributeReference}
+import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -31,6 +32,31 @@ private[sql] object StatFunctions extends Logging {
   private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols)
     counts.Ck / math.sqrt(counts.MkX * counts.MkY)
+  }
+
+  /** Calculate the Pearson Correlation matrix for given DataFrame */
+  private[sql] def pearsonCorrelation(df: DataFrame): DataFrame = {
+    val fieldNames = df.schema.fieldNames
+    val dfStructAttrs = ArrayBuffer[AttributeReference](
+              AttributeReference("FieldName", StringType, true)())
+    val rows = fieldNames.map{fname => val countsRow = new GenericMutableRow(fieldNames.length + 1)
+        countsRow.update(0, UTF8String.fromString(fname))
+        countsRow
+    }.toSeq
+    // generates field types of the output DataFrame
+    for(field <- fieldNames) dfStructAttrs += AttributeReference(field, DoubleType, true)()
+
+    // fills the correlation matrix by computing column-by-column correlations
+    for (i <- 0 to fieldNames.length - 1){
+      for (j <- 0 to i){
+          val corr = pearsonCorrelation(df, Seq(fieldNames(i), fieldNames(j)))
+          rows(i).setDouble(j + 1, corr)
+          rows(j).setDouble(i + 1, corr)
+      }
+      rows(i).setDouble(i + 1, 1.0)
+    }
+
+    new DataFrame(df.sqlContext, new LocalRelation(dfStructAttrs, rows))
   }
 
   /** Helper class to simplify tracking and merging counts. */
@@ -100,6 +126,34 @@ private[sql] object StatFunctions extends Logging {
   private[sql] def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols)
     counts.cov
+  }
+
+ /**
+   * Calculate the covariance of two numerical columns of a DataFrame.
+   * @param df The DataFrame
+   * @return the covariance matrix.
+   */
+  private[sql] def calculateCov(df: DataFrame): DataFrame = {
+    val fieldNames = df.schema.fieldNames
+    val dfStructAttrs = ArrayBuffer[AttributeReference](
+             AttributeReference("FieldName", StringType, true)())
+    val rows = fieldNames.map{fname => val countsRow = new GenericMutableRow(fieldNames.length + 1)
+        countsRow.update(0, UTF8String.fromString(fname))
+        countsRow
+    }.toSeq
+    // generates field types of the output DataFrame
+    for(field <- fieldNames) dfStructAttrs += AttributeReference(field, DoubleType, true)()
+
+    // fills the covariance matrix by computing column-by-column covariances
+    for (i <- 0 to fieldNames.length-1){
+      for (j <- 0 to i){
+          val cov = calculateCov(df, Seq(fieldNames(i), fieldNames(j)))
+          rows(i).setDouble(j + 1, cov)
+          rows(j).setDouble(i + 1, cov)
+      }
+    }
+
+    new DataFrame(df.sqlContext, new LocalRelation(dfStructAttrs, rows))
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
