@@ -71,15 +71,18 @@ class StandaloneDynamicAllocationSuite
   }
 
   override def afterAll(): Unit = {
-    masterRpcEnv.shutdown()
-    workerRpcEnvs.foreach(_.shutdown())
-    master.stop()
-    workers.foreach(_.stop())
-    masterRpcEnv = null
-    workerRpcEnvs = null
-    master = null
-    workers = null
-    super.afterAll()
+    try {
+      masterRpcEnv.shutdown()
+      workerRpcEnvs.foreach(_.shutdown())
+      master.stop()
+      workers.foreach(_.stop())
+      masterRpcEnv = null
+      workerRpcEnvs = null
+      master = null
+      workers = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("dynamic allocation default behavior") {

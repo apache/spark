@@ -45,9 +45,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEndpointRef"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.ErrorMonitor"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaMessage")
-      ) ++
-      Seq(
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD")
+      ) ++ Seq(
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
         ) ++
       // When 1.6 is officially released, update this exclusion list.
       Seq(

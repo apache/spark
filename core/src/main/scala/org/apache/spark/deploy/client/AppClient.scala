@@ -123,7 +123,7 @@ private[spark] class AppClient(
      */
     private def registerWithMaster(nthRetry: Int) {
       registerMasterFutures.set(tryRegisterAllMasters())
-      registrationRetryTimer.set(registrationRetryThread.scheduleAtFixedRate(new Runnable {
+      registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
           Utils.tryOrExit {
             if (registered.get) {
@@ -137,7 +137,7 @@ private[spark] class AppClient(
             }
           }
         }
-      }, REGISTRATION_TIMEOUT_SECONDS, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+      }, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
     }
 
     /**
