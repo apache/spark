@@ -1081,10 +1081,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Reserve
     assert(reserveUnrollMemoryForThisTask(100))
+    memoryStore.reservePendingUnrollMemoryForThisTask()
     assert(memoryStore.currentUnrollMemoryForThisTask === 100)
     assert(reserveUnrollMemoryForThisTask(200))
+    memoryStore.reservePendingUnrollMemoryForThisTask()
     assert(memoryStore.currentUnrollMemoryForThisTask === 300)
     assert(reserveUnrollMemoryForThisTask(500))
+    memoryStore.reservePendingUnrollMemoryForThisTask()
     assert(memoryStore.currentUnrollMemoryForThisTask === 800)
     assert(!reserveUnrollMemoryForThisTask(1000000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 800) // not granted
@@ -1095,6 +1098,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(memoryStore.currentUnrollMemoryForThisTask === 600)
     // Reserve again
     assert(reserveUnrollMemoryForThisTask(4400))
+    memoryStore.reservePendingUnrollMemoryForThisTask()
     assert(memoryStore.currentUnrollMemoryForThisTask === 5000)
     assert(!reserveUnrollMemoryForThisTask(20000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 5000) // not granted
@@ -1138,19 +1142,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Unroll with all the space in the world. This should succeed and return an array.
     var unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator, droppedBlocks)
     verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+    assert(memoryStore.currentUnrollMemoryForThisTask !== 0)
     memoryStore.releasePendingUnrollMemoryForThisTask()
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Unroll with not enough space. This should succeed after kicking out someBlock1.
     store.putIterator("someBlock1", smallList.iterator, StorageLevel.MEMORY_ONLY)
     store.putIterator("someBlock2", smallList.iterator, StorageLevel.MEMORY_ONLY)
     unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator, droppedBlocks)
     verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+    assert(memoryStore.currentUnrollMemoryForThisTask !== 0)
     assert(droppedBlocks.size === 1)
     assert(droppedBlocks.head._1 === TestBlockId("someBlock1"))
     droppedBlocks.clear()
     memoryStore.releasePendingUnrollMemoryForThisTask()
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
     // 4800 bytes, there is still not enough room to unroll this block. This returns an iterator.
@@ -1162,6 +1168,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(droppedBlocks.size === 1)
     assert(droppedBlocks.head._1 === TestBlockId("someBlock2"))
     droppedBlocks.clear()
+    memoryStore.reservePendingUnrollMemoryForThisTask()
+    assert(memoryStore.currentUnrollMemoryForThisTask > 0)
   }
 
   test("safely unroll blocks through putIterator") {
@@ -1259,7 +1267,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(diskStore.contains("b2"))
     assert(!diskStore.contains("b3"))
     assert(diskStore.contains("b4"))
-    assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0) // we returned an iterator
   }
 
   test("multiple unrolls by the same thread") {
