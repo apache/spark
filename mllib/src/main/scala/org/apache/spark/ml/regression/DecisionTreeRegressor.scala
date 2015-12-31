@@ -141,15 +141,22 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).impurityStats.calculate()
   }
 
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    transformImpl(dataset)
+  }
+
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val predictUDF = udf { (features: Vector) => predict(features) }
     val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
-    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
-        .withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
-    } else {
-      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    var output = dataset
+    if ($(predictionCol).nonEmpty) {
+      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
     }
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      output = output.withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
+    }
+    output
   }
 
   @Since("1.4.0")
