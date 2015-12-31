@@ -110,4 +110,9 @@ private[sql] case class JDBCRelation(
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
       .jdbc(url, table, properties)
   }
+
+  override def toString: String = {
+    // credentials should not be included in the plan output, table information is sufficient.
+    s"JDBCRelation(${table})"
+  }
 }
