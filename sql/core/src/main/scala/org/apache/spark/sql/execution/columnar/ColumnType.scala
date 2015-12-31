@@ -574,11 +574,10 @@ private[columnar] case class STRUCT(dataType: StructType)
     assert(buffer.hasArray)
     val cursor = buffer.position()
     buffer.position(cursor + sizeInBytes)
-    val unsafeRow = new UnsafeRow
+    val unsafeRow = new UnsafeRow(numOfFields)
     unsafeRow.pointTo(
       buffer.array(),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
-      numOfFields,
       sizeInBytes)
     unsafeRow
   }

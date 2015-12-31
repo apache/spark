@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.io.OutputStream;
+import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -30,26 +26,12 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.spark.sql.types.ArrayType;
-import org.apache.spark.sql.types.BinaryType;
-import org.apache.spark.sql.types.BooleanType;
-import org.apache.spark.sql.types.ByteType;
-import org.apache.spark.sql.types.CalendarIntervalType;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DateType;
-import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.sql.types.DecimalType;
-import org.apache.spark.sql.types.DoubleType;
-import org.apache.spark.sql.types.FloatType;
-import org.apache.spark.sql.types.IntegerType;
-import org.apache.spark.sql.types.LongType;
-import org.apache.spark.sql.types.MapType;
-import org.apache.spark.sql.types.NullType;
-import org.apache.spark.sql.types.ShortType;
-import org.apache.spark.sql.types.StringType;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.TimestampType;
-import org.apache.spark.sql.types.UserDefinedType;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
@@ -57,22 +39,8 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.sql.types.DataTypes.BooleanType;
-import static org.apache.spark.sql.types.DataTypes.ByteType;
-import static org.apache.spark.sql.types.DataTypes.DateType;
-import static org.apache.spark.sql.types.DataTypes.DoubleType;
-import static org.apache.spark.sql.types.DataTypes.FloatType;
-import static org.apache.spark.sql.types.DataTypes.IntegerType;
-import static org.apache.spark.sql.types.DataTypes.LongType;
-import static org.apache.spark.sql.types.DataTypes.NullType;
-import static org.apache.spark.sql.types.DataTypes.ShortType;
-import static org.apache.spark.sql.types.DataTypes.TimestampType;
+import static org.apache.spark.sql.types.DataTypes.*;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.KryoSerializable;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
@@ -167,8 +135,16 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   /**
    * Construct a new UnsafeRow. The resulting row won't be usable until `pointTo()` has been called,
    * since the value returned by this constructor is equivalent to a null pointer.
+   *
+   * @param numFields the number of fields in this row
    */
-  public UnsafeRow() { }
+  public UnsafeRow(int numFields) {
+    this.numFields = numFields;
+    this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
+  }
+
+  // for serializer
+  public UnsafeRow() {}
 
   public Object getBaseObject() { return baseObject; }
   public long getBaseOffset() { return baseOffset; }
@@ -182,15 +158,12 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    *
    * @param baseObject the base object
    * @param baseOffset the offset within the base object
-   * @param numFields the number of fields in this row
    * @param sizeInBytes the size of this row's backing data, in bytes
    */
-  public void pointTo(Object baseObject, long baseOffset, int numFields, int sizeInBytes) {
+  public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
-    this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
-    this.numFields = numFields;
     this.sizeInBytes = sizeInBytes;
   }
 
@@ -198,22 +171,11 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    * Update this UnsafeRow to point to the underlying byte array.
    *
    * @param buf byte array to point to
-   * @param numFields the number of fields in this row
-   * @param sizeInBytes the number of bytes valid in the byte array
-   */
-  public void pointTo(byte[] buf, int numFields, int sizeInBytes) {
-    pointTo(buf, Platform.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
-  }
-
-  /**
-   * Updates this UnsafeRow preserving the number of fields.
-   * @param buf byte array to point to
    * @param sizeInBytes the number of bytes valid in the byte array
    */
   public void pointTo(byte[] buf, int sizeInBytes) {
-    pointTo(buf, numFields, sizeInBytes);
+    pointTo(buf, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
   }
-
 
   public void setNotNullAt(int i) {
     assertIndexIsValid(i);
@@ -489,8 +451,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) offsetAndSize;
-      final UnsafeRow row = new UnsafeRow();
-      row.pointTo(baseObject, baseOffset + offset, numFields, size);
+      final UnsafeRow row = new UnsafeRow(numFields);
+      row.pointTo(baseObject, baseOffset + offset, size);
       return row;
     }
   }
@@ -529,7 +491,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   @Override
   public UnsafeRow copy() {
-    UnsafeRow rowCopy = new UnsafeRow();
+    UnsafeRow rowCopy = new UnsafeRow(numFields);
     final byte[] rowDataCopy = new byte[sizeInBytes];
     Platform.copyMemory(
       baseObject,
@@ -538,7 +500,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       Platform.BYTE_ARRAY_OFFSET,
       sizeInBytes
     );
-    rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
+    rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return rowCopy;
   }
 
@@ -547,8 +509,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    * The returned row is invalid until we call copyFrom on it.
    */
   public static UnsafeRow createFromByteArray(int numBytes, int numFields) {
-    final UnsafeRow row = new UnsafeRow();
-    row.pointTo(new byte[numBytes], numFields, numBytes);
+    final UnsafeRow row = new UnsafeRow(numFields);
+    row.pointTo(new byte[numBytes], numBytes);
     return row;
   }
 

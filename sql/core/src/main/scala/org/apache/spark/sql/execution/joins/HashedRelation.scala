@@ -245,8 +245,8 @@ private[joins] final class UnsafeHashedRelation(
           val sizeInBytes = Platform.getInt(base, offset + 4)
           offset += 8
 
-          val row = new UnsafeRow
-          row.pointTo(base, offset, numFields, sizeInBytes)
+          val row = new UnsafeRow(numFields)
+          row.pointTo(base, offset, sizeInBytes)
           buffer += row
           offset += sizeInBytes
         }
