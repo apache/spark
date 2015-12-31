@@ -75,7 +75,7 @@ private[spark] class BlockManager(
 
   val diskBlockManager = new DiskBlockManager(this, conf)
 
-  private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
+  private val blockInfo = new HashMap[BlockId, BlockInfo]
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
@@ -146,11 +146,6 @@ private[spark] class BlockManager(
   // Accesses should synchronize on asyncReregisterLock.
   private var asyncReregisterTask: Future[Unit] = null
   private val asyncReregisterLock = new Object
-
-  private val metadataCleaner = new MetadataCleaner(
-    MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
-  private val broadcastCleaner = new MetadataCleaner(
-    MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks, conf)
 
   // Field related to peer block managers that are necessary for block replication
   @volatile private var cachedPeers: Seq[BlockManagerId] = _
@@ -1141,36 +1136,6 @@ private[spark] class BlockManager(
     }
   }
 
-  private def dropOldNonBroadcastBlocks(cleanupTime: Long): Unit = {
-    logInfo(s"Dropping non broadcast blocks older than $cleanupTime")
-    dropOldBlocks(cleanupTime, !_.isBroadcast)
-  }
-
-  private def dropOldBroadcastBlocks(cleanupTime: Long): Unit = {
-    logInfo(s"Dropping broadcast blocks older than $cleanupTime")
-    dropOldBlocks(cleanupTime, _.isBroadcast)
-  }
-
-  private def dropOldBlocks(cleanupTime: Long, shouldDrop: (BlockId => Boolean)): Unit = {
-    val iterator = blockInfo.getEntrySet.iterator
-    while (iterator.hasNext) {
-      val entry = iterator.next()
-      val (id, info, time) = (entry.getKey, entry.getValue.value, entry.getValue.timestamp)
-      if (time < cleanupTime && shouldDrop(id)) {
-        info.synchronized {
-          val level = info.level
-          if (level.useMemory) { memoryStore.remove(id) }
-          if (level.useDisk) { diskStore.remove(id) }
-          if (level.useOffHeap) { externalBlockStore.remove(id) }
-          iterator.remove()
-          logInfo(s"Dropped block $id")
-        }
-        val status = getCurrentBlockStatus(id, info)
-        reportBlockStatus(id, info, status)
-      }
-    }
-  }
-
   private def shouldCompress(blockId: BlockId): Boolean = {
     blockId match {
       case _: ShuffleBlockId => compressShuffle
@@ -1248,8 +1213,6 @@ private[spark] class BlockManager(
     if (externalBlockStoreInitialized) {
       externalBlockStore.clear()
     }
-    metadataCleaner.cancel()
-    broadcastCleaner.cancel()
     futureExecutionContext.shutdownNow()
     logInfo("BlockManager stopped")
   }
