@@ -29,8 +29,7 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv,
-  SparkException, SparkUserAppException}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.rpc._
@@ -281,10 +280,10 @@ private[spark] class ApplicationMaster(
         .getOrElse("")
 
     val _sparkConf = if (sc != null) sc.getConf else sparkConf
-    val driverUrl = _rpcEnv.uriOf(
-        SparkEnv.driverActorSystemName,
-        RpcAddress(_sparkConf.get("spark.driver.host"), _sparkConf.get("spark.driver.port").toInt),
-        CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    val driverUrl = RpcEndpointAddress(
+      _sparkConf.get("spark.driver.host"),
+      _sparkConf.get("spark.driver.port").toInt,
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     allocator = client.register(driverUrl,
       driverRef,
       yarnConf,
@@ -310,7 +309,6 @@ private[spark] class ApplicationMaster(
       port: String,
       isClusterMode: Boolean): RpcEndpointRef = {
     val driverEndpoint = rpcEnv.setupEndpointRef(
-      SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
     amEndpoint =
