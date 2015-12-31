@@ -25,8 +25,8 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.ui.StreamingJobProgressListener.{OutputOpId, SparkJobId}
-import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.jobs.UIData.JobUIData
 
 private[ui] case class SparkJobIdWithUIData(sparkJobId: SparkJobId, jobUIData: Option[JobUIData])
 

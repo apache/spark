@@ -20,7 +20,7 @@ package org.apache.spark.streaming.dstream
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Time, StreamingContext}
+import org.apache.spark.streaming.{StreamingContext, Time}
 
 /**
  * An input stream that always returns the same RDD on each timestep. Useful for testing.

@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming
 
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
 import scala.collection.mutable.ArrayBuffer
-import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
+
 import org.apache.spark.Logging
+import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.streaming.dstream.{DStream, ReceiverInputDStream, InputDStream}
 import org.apache.spark.util.Utils
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {

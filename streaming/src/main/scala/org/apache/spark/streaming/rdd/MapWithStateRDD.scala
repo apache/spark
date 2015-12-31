@@ -22,11 +22,11 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
+import org.apache.spark._
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD}
-import org.apache.spark.streaming.{Time, StateImpl, State}
+import org.apache.spark.streaming.{State, StateImpl, Time}
 import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
 import org.apache.spark.util.Utils
-import org.apache.spark._
 
 /**
  * Record storing the keyed-state [[MapWithStateRDD]]. Each record contains a [[StateMap]] and a

@@ -17,7 +17,7 @@
 
 package org.apache.spark.repl
 
-import java.io.{FilterInputStream, ByteArrayOutputStream, InputStream, IOException}
+import java.io.{ByteArrayOutputStream, FilterInputStream, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
 import java.nio.channels.Channels
 
@@ -27,10 +27,9 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.xbean.asm5._
 import org.apache.xbean.asm5.Opcodes._
 
-import org.apache.spark.{SparkConf, SparkEnv, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
-import org.apache.spark.util.ParentClassLoader
+import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
