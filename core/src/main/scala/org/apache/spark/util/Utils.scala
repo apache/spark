@@ -1722,9 +1722,8 @@ private[spark] object Utils extends Logging {
       case NonFatal(e) =>
         if (!e.isInstanceOf[NoSuchMethodException]) {
           logWarning("Exception when attempting to kill process", e)
-        } else {
-          process.destroy()
         }
+        process.destroy()
     }
     if (waitForProcess(process, timeoutMs)) {
       Option(process.exitValue())
