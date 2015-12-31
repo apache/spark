@@ -45,7 +45,7 @@ import org.apache.spark.util.io.ByteArrayChunkOutputStream
  * BlockManager, ready for other executors to fetch from.
  *
  * This prevents the driver from being the bottleneck in sending out multiple copies of the
- * broadcast data (one per executor) as done by the [[org.apache.spark.broadcast.HttpBroadcast]].
+ * broadcast data (one per executor).
  *
  * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
  *

@@ -35,7 +35,8 @@ object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("2.0") =>
       Seq(
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD")
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
         ) ++
       // When 1.6 is officially released, update this exclusion list.
       Seq(
