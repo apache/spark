@@ -67,6 +67,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val arrayOfString = ArrayType(StringType)
   private val arrayOfNull = ArrayType(NullType)
   private val mapOfString = MapType(StringType, StringType)
+  private val arrayOfUDT = ArrayType(new ExamplePointUDT, false)
 
   testMurmur3Hash(
     new StructType()
@@ -92,7 +93,8 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("arrayOfArrayOfString", ArrayType(arrayOfString))
       .add("arrayOfArrayOfInt", ArrayType(ArrayType(IntegerType)))
       .add("arrayOfMap", ArrayType(mapOfString))
-      .add("arrayOfStruct", ArrayType(structOfString)))
+      .add("arrayOfStruct", ArrayType(structOfString))
+      .add("arrayOfUDT", arrayOfUDT))
 
   testMurmur3Hash(
     new StructType()

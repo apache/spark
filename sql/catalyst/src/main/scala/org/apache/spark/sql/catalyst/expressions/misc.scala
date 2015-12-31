@@ -181,7 +181,8 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
 }
 
 /**
- * A function that calculates hash value for a group of expressions.
+ * A function that calculates hash value for a group of expressions.  Note that the `seed` argument
+ * is not exposed to users and should only be set inside spark SQL.
  *
  * Internally this function will write arguments into an [[UnsafeRow]], and calculate hash code of
  * the unsafe row using murmur3 hasher with a seed.
