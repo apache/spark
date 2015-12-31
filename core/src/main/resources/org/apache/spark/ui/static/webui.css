@@ -226,3 +226,12 @@ a.expandbutton {
   color: white;
   cursor:pointer;
 }
+
+.table-head-clickable th a, .table-head-clickable th a:hover {
+  /* Make the entire header clickable, not just the text label */
+  display: block;
+  width: 100%;
+  /* Suppress the default link styling */
+  color: #333;
+  text-decoration: none;
+}

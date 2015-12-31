@@ -33,7 +33,11 @@ import org.apache.spark.{SparkConf, SparkEnv}
 class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
-    StreamingContext.getActive().map { _.stop() }
+    try {
+      StreamingContext.getActive().map { _.stop() }
+    } finally {
+      super.afterAll()
+    }
   }
 
   testWithoutWAL("createBlockRDD creates empty BlockRDD when no block info") { receiverStream =>
