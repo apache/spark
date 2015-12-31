@@ -835,7 +835,4 @@ object JavaSparkContext {
    */
   private[spark]
   def fakeClassTag[T]: ClassTag[T] = ClassTag.AnyRef.asInstanceOf[ClassTag[T]]
-
-  private[spark]
-  def fakeTypeTag[T]: TypeTag[T] = TypeTag.AnyRef.asInstanceOf[TypeTag[T]]
 }

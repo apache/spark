@@ -32,7 +32,7 @@ import scala.reflect.runtime.universe._
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.java.JavaSparkContext.{fakeClassTag, fakeTypeTag}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.fpm.FPGrowth._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * @tparam Item item type
  */
 @Since("1.3.0")
-class FPGrowthModel[Item: ClassTag: TypeTag] @Since("1.3.0") (
+class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
     @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]])
   extends Saveable with Serializable {
   /**
@@ -81,7 +81,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
     private val thisClassName = "org.apache.spark.mllib.fpm.FPGrowthModel"
 
-    def save[Item: ClassTag: TypeTag](model: FPGrowthModel[Item], path: String): Unit = {
+    def save[Item: ClassTag](model: FPGrowthModel[Item], path: String): Unit = {
       val sc = model.freqItemsets.sparkContext
       val sqlContext = SQLContext.getOrCreate(sc)
 
@@ -136,7 +136,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       result
     }
 
-    def load[Item: ClassTag: TypeTag](
+    def load[Item: ClassTag](
         sc: SparkContext,
         path: String,
         inferredItemset: FreqItemset[Item]): FPGrowthModel[Item] = {
@@ -214,7 +214,7 @@ class FPGrowth private (
    *
    */
   @Since("1.3.0")
-  def run[Item: ClassTag: TypeTag](data: RDD[Array[Item]]): FPGrowthModel[Item] = {
+  def run[Item: ClassTag](data: RDD[Array[Item]]): FPGrowthModel[Item] = {
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
@@ -231,7 +231,6 @@ class FPGrowth private (
   @Since("1.3.0")
   def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
     implicit val tag = fakeClassTag[Item]
-    implicit val typeTag = fakeTypeTag[Item]
     run(data.rdd.map(_.asScala.toArray))
   }
 
