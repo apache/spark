@@ -499,7 +499,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
       partitioner: Partitioner,
       rememberPartitioner: Boolean,
       initialRDD: RDD[(K, S)]
-    ): DStream[(K, S)] = ssc.withScope {
+    ): DumpableDStream[K, S] = ssc.withScope {
      new StateDStream(self, ssc.sc.clean(updateFunc), partitioner,
        rememberPartitioner, Some(initialRDD))
   }
