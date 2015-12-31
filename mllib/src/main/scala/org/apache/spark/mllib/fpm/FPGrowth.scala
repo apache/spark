@@ -22,12 +22,12 @@ import java.lang.{Iterable => JavaIterable}
 
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe._
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -89,7 +89,13 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val itemType = ScalaReflection.schemaFor[Item].dataType
+      // Get the type of item class
+      val sample = model.freqItemsets.take(1)(0).items(0)
+      val className = sample.getClass.getCanonicalName
+      val classSymbol = runtimeMirror(getClass.getClassLoader).staticClass(className)
+      val tpe = classSymbol.selfType
+
+      val itemType = ScalaReflection.schemaFor(tpe).dataType
       val fields = Array(StructField("items", ArrayType(itemType)),
         StructField("freq", LongType))
       val schema = StructType(fields)
