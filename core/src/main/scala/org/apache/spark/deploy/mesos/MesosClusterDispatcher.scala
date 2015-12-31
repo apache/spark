@@ -22,7 +22,7 @@ import java.util.concurrent.CountDownLatch
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.scheduler.cluster.mesos._
-import org.apache.spark.util.{ShutdownHookManager, SignalLogger}
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /*
@@ -92,7 +92,7 @@ private[mesos] class MesosClusterDispatcher(
 
 private[mesos] object MesosClusterDispatcher extends Logging {
   def main(args: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     val conf = new SparkConf
     val dispatcherArgs = new MesosClusterDispatcherArguments(args, conf)
     conf.setMaster(dispatcherArgs.masterUrl)

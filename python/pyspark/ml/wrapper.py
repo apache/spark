@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
@@ -110,6 +110,7 @@ class JavaEstimator(Estimator, JavaWrapper):
 
     __metaclass__ = ABCMeta
 
+    @abstractmethod
     def _create_model(self, java_model):
         """
         Creates a model from the input Java model reference.

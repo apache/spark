@@ -386,9 +386,9 @@ private[tree] object LearningNode {
     var levelsToGo = indexToLevel(nodeIndex)
     while (levelsToGo > 0) {
       if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
-        tmpNode = tmpNode.leftChild.asInstanceOf[LearningNode]
+        tmpNode = tmpNode.leftChild.get
       } else {
-        tmpNode = tmpNode.rightChild.asInstanceOf[LearningNode]
+        tmpNode = tmpNode.rightChild.get
       }
       levelsToGo -= 1
     }

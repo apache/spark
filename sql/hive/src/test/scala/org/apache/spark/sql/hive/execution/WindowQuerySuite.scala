@@ -227,4 +227,19 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row("Manufacturer#5", "almond azure blanched chiffon midnight", 23, 315.9225931564038, 315.9225931564038, 46, 99807.08486666666, -0.9978877469246935, -5664.856666666666)))
       // scalastyle:on
   }
+
+  test("null arguments") {
+    checkAnswer(sql("""
+        |select  p_mfgr, p_name, p_size,
+        |sum(null) over(distribute by p_mfgr sort by p_name) as sum,
+        |avg(null) over(distribute by p_mfgr sort by p_name) as avg
+        |from part
+      """.stripMargin),
+      sql("""
+        |select  p_mfgr, p_name, p_size,
+        |null as sum,
+        |null as avg
+        |from part
+        """.stripMargin))
+  }
 }

@@ -122,30 +122,35 @@ private[sql] object JDBCRDD extends Logging {
     val dialect = JdbcDialects.get(url)
     val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
     try {
-      val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
+      val statement = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0")
       try {
-        val rsmd = rs.getMetaData
-        val ncols = rsmd.getColumnCount
-        val fields = new Array[StructField](ncols)
-        var i = 0
-        while (i < ncols) {
-          val columnName = rsmd.getColumnLabel(i + 1)
-          val dataType = rsmd.getColumnType(i + 1)
-          val typeName = rsmd.getColumnTypeName(i + 1)
-          val fieldSize = rsmd.getPrecision(i + 1)
-          val fieldScale = rsmd.getScale(i + 1)
-          val isSigned = rsmd.isSigned(i + 1)
-          val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-          val metadata = new MetadataBuilder().putString("name", columnName)
-          val columnType =
-            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-          fields(i) = StructField(columnName, columnType, nullable, metadata.build())
-          i = i + 1
+        val rs = statement.executeQuery()
+        try {
+          val rsmd = rs.getMetaData
+          val ncols = rsmd.getColumnCount
+          val fields = new Array[StructField](ncols)
+          var i = 0
+          while (i < ncols) {
+            val columnName = rsmd.getColumnLabel(i + 1)
+            val dataType = rsmd.getColumnType(i + 1)
+            val typeName = rsmd.getColumnTypeName(i + 1)
+            val fieldSize = rsmd.getPrecision(i + 1)
+            val fieldScale = rsmd.getScale(i + 1)
+            val isSigned = rsmd.isSigned(i + 1)
+            val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+            val metadata = new MetadataBuilder().putString("name", columnName)
+            val columnType =
+              dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+                getCatalystType(dataType, fieldSize, fieldScale, isSigned))
+            fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+            i = i + 1
+          }
+          return new StructType(fields)
+        } finally {
+          rs.close()
         }
-        return new StructType(fields)
       } finally {
-        rs.close()
+        statement.close()
       }
     } finally {
       conn.close()
@@ -163,8 +168,44 @@ private[sql] object JDBCRDD extends Logging {
    * @return A Catalyst schema corresponding to columns in the given order.
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields map { x => x.metadata.getString("name") -> x }: _*)
-    new StructType(columns map { name => fieldMap(name) })
+    val fieldMap = Map(schema.fields.map(x => x.metadata.getString("name") -> x): _*)
+    new StructType(columns.map(name => fieldMap(name)))
+  }
+
+  /**
+   * Converts value to SQL expression.
+   */
+  private def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case dateValue: Date => "'" + dateValue + "'"
+    case arrayValue: Array[Object] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
+  }
+
+  private def escapeSql(value: String): String =
+    if (value == null) null else StringUtils.replace(value, "'", "''")
+
+  /**
+   * Turns a single Filter into a String representing a SQL expression.
+   * Returns null for an unhandled filter.
+   */
+  private def compileFilter(f: Filter): String = f match {
+    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    case Not(f) => s"(NOT (${compileFilter(f)}))"
+    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
+    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
+    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
+    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
+    case StringStartsWith(attr, value) => s"${attr} LIKE '${value}%'"
+    case StringEndsWith(attr, value) => s"${attr} LIKE '%${value}'"
+    case StringContains(attr, value) => s"${attr} LIKE '%${value}%'"
+    case IsNull(attr) => s"$attr IS NULL"
+    case IsNotNull(attr) => s"$attr IS NOT NULL"
+    case In(attr, value) => s"$attr IN (${compileValue(value)})"
+    case Or(f1, f2) => s"(${compileFilter(f1)}) OR (${compileFilter(f2)})"
+    case And(f1, f2) => s"(${compileFilter(f1)}) AND (${compileFilter(f2)})"
+    case _ => null
   }
 
   /**
@@ -262,40 +303,12 @@ private[sql] class JDBCRDD(
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
-  /**
-   * Converts value to SQL expression.
-   */
-  private def compileValue(value: Any): Any = value match {
-    case stringValue: String => s"'${escapeSql(stringValue)}'"
-    case timestampValue: Timestamp => "'" + timestampValue + "'"
-    case dateValue: Date => "'" + dateValue + "'"
-    case _ => value
-  }
-
-  private def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
-
-  /**
-   * Turns a single Filter into a String representing a SQL expression.
-   * Returns null for an unhandled filter.
-   */
-  private def compileFilter(f: Filter): String = f match {
-    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
-    case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
-    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
-    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
-    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
-    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
-    case IsNull(attr) => s"$attr IS NULL"
-    case IsNotNull(attr) => s"$attr IS NOT NULL"
-    case _ => null
-  }
 
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String = {
-    val filterStrings = filters map compileFilter filter (_ != null)
+    val filterStrings = filters.map(JDBCRDD.compileFilter).filter(_ != null)
     if (filterStrings.size > 0) {
       val sb = new StringBuilder("WHERE ")
       filterStrings.foreach(x => sb.append(x).append(" AND "))
