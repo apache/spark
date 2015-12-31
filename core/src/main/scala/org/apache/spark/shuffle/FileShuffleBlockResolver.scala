@@ -26,7 +26,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
@@ -63,10 +63,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
 
-  private val shuffleStates = new TimeStampedHashMap[ShuffleId, ShuffleState]
-
-  private val metadataCleaner =
-    new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
+  private val shuffleStates = new scala.collection.mutable.HashMap[ShuffleId, ShuffleState]
 
   /**
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
@@ -75,9 +72,8 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   def forMapTask(shuffleId: Int, mapId: Int, numReducers: Int, serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numReducers))
-      private val shuffleState = shuffleStates(shuffleId)
-
+      private val shuffleState =
+        shuffleStates.getOrElseUpdate(shuffleId, new ShuffleState(numReducers))
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
       val writers: Array[DiskBlockObjectWriter] = {
@@ -131,11 +127,5 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     }
   }
 
-  private def cleanup(cleanupTime: Long) {
-    shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffleBlocks(shuffleId))
-  }
-
-  override def stop() {
-    metadataCleaner.cancel()
-  }
+  override def stop(): Unit = {}
 }

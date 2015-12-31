@@ -27,7 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkException, SparkConf, Logging}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.{MetadataCleaner, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.streaming.scheduler.JobGenerator
 
 
@@ -41,7 +41,6 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDir = ssc.checkpointDir
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
-  val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConfPairs = ssc.conf.getAll
 
   def createSparkConf(): SparkConf = {

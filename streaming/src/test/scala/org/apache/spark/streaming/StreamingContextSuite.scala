@@ -81,6 +81,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("from conf with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
+    // TODO(josh): Update these exmaples to use a different configuration.
     myConf.set("spark.cleaner.ttl", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
     assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)

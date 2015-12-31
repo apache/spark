@@ -19,7 +19,9 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.{ByteBuffer, MappedByteBuffer}
+import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -75,7 +77,7 @@ private[spark] class BlockManager(
 
   val diskBlockManager = new DiskBlockManager(this, conf)
 
-  private val blockInfo = new HashMap[BlockId, BlockInfo]
+  private val blockInfo = new ConcurrentHashMap[BlockId, BlockInfo]
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
@@ -227,7 +229,7 @@ private[spark] class BlockManager(
    */
   private def reportAllBlocks(): Unit = {
     logInfo(s"Reporting ${blockInfo.size} blocks to the master.")
-    for ((blockId, info) <- blockInfo) {
+    for ((blockId, info) <- blockInfo.asScala) {
       val status = getCurrentBlockStatus(blockId, info)
       if (!tryToReportBlockStatus(blockId, info, status)) {
         logError(s"Failed to report $blockId to master; giving up.")
@@ -308,7 +310,7 @@ private[spark] class BlockManager(
    * NOTE: This is mainly for testing, and it doesn't fetch information from external block store.
    */
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
-    blockInfo.get(blockId).map { info =>
+    blockInfo.asScala.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
       val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
       // Assume that block is not in external block store
@@ -322,7 +324,7 @@ private[spark] class BlockManager(
    * may not know of).
    */
   def getMatchingBlockIds(filter: BlockId => Boolean): Seq[BlockId] = {
-    (blockInfo.keys ++ diskBlockManager.getAllBlocks()).filter(filter).toSeq
+    (blockInfo.asScala.keys ++ diskBlockManager.getAllBlocks()).filter(filter).toSeq
   }
 
   /**
@@ -434,7 +436,7 @@ private[spark] class BlockManager(
   }
 
   private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
-    val info = blockInfo.get(blockId).orNull
+    val info = blockInfo.get(blockId)
     if (info != null) {
       info.synchronized {
         // Double check to make sure the block is still there. There is a small chance that the
@@ -442,7 +444,7 @@ private[spark] class BlockManager(
         // Note that this only checks metadata tracking. If user intentionally deleted the block
         // on disk or from off heap storage without using removeBlock, this conditional check will
         // still pass but eventually we will get an exception because we can't find the block.
-        if (blockInfo.get(blockId).isEmpty) {
+        if (blockInfo.asScala.get(blockId).isEmpty) {
           logWarning(s"Block $blockId had been removed")
           return None
         }
@@ -726,7 +728,7 @@ private[spark] class BlockManager(
     val putBlockInfo = {
       val tinfo = new BlockInfo(level, tellMaster)
       // Do atomically !
-      val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
+      val oldBlockOpt = Option(blockInfo.putIfAbsent(blockId, tinfo))
       if (oldBlockOpt.isDefined) {
         if (oldBlockOpt.get.waitForReady()) {
           logWarning(s"Block $blockId already exists on this machine; not re-adding it")
@@ -1027,7 +1029,7 @@ private[spark] class BlockManager(
       data: () => Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
 
     logInfo(s"Dropping block $blockId from memory")
-    val info = blockInfo.get(blockId).orNull
+    val info = blockInfo.get(blockId)
 
     // If the block has not already been dropped
     if (info != null) {
@@ -1038,7 +1040,7 @@ private[spark] class BlockManager(
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure. Nothing to drop")
           return None
-        } else if (blockInfo.get(blockId).isEmpty) {
+        } else if (blockInfo.asScala.get(blockId).isEmpty) {
           logWarning(s"Block $blockId was already dropped.")
           return None
         }
@@ -1090,7 +1092,7 @@ private[spark] class BlockManager(
   def removeRdd(rddId: Int): Int = {
     // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo(s"Removing RDD $rddId")
-    val blocksToRemove = blockInfo.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+    val blocksToRemove = blockInfo.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
   }
@@ -1100,7 +1102,7 @@ private[spark] class BlockManager(
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
     logDebug(s"Removing broadcast $broadcastId")
-    val blocksToRemove = blockInfo.keys.collect {
+    val blocksToRemove = blockInfo.asScala.keys.collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
@@ -1112,7 +1114,7 @@ private[spark] class BlockManager(
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
     logDebug(s"Removing block $blockId")
-    val info = blockInfo.get(blockId).orNull
+    val info = blockInfo.get(blockId)
     if (info != null) {
       info.synchronized {
         // Removals are idempotent in disk store and memory store. At worst, we get a warning.
