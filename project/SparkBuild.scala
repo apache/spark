@@ -454,9 +454,9 @@ object Hive {
       // Return all generated java files.
       (targetDir ** "*.java").get.toSeq
     },
-    // Include ANTLR token files.
+    // Include ANTLR tokens files.
     resourceGenerators in Compile <+= Def.task {
-      ((sourceManaged in Compile).value ** "*.token").get.toSeq
+      ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
     }
   )
 }
