@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.math3.distribution.PoissonDistribution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.InterruptibleIterator
 
 /**
  * :: DeveloperApi ::
@@ -233,10 +234,13 @@ class GapSamplingIterator[T: ClassTag](
   private val iterDrop: Int => Unit = {
     val arrayClass = Array.empty[T].iterator.getClass
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
+    val interruptibleIteratorClass = classOf[InterruptibleIterator[T]]
     data.getClass match {
       case `arrayClass` =>
         (n: Int) => { data = data.drop(n) }
       case `arrayBufferClass` =>
+        (n: Int) => { data = data.drop(n) }
+      case `interruptibleIteratorClass` =>
         (n: Int) => { data = data.drop(n) }
       case _ =>
         (n: Int) => {
@@ -287,10 +291,13 @@ class GapSamplingReplacementIterator[T: ClassTag](
   private val iterDrop: Int => Unit = {
     val arrayClass = Array.empty[T].iterator.getClass
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
+    val interruptibleIteratorClass = classOf[InterruptibleIterator[T]]
     data.getClass match {
       case `arrayClass` =>
         (n: Int) => { data = data.drop(n) }
       case `arrayBufferClass` =>
+        (n: Int) => { data = data.drop(n) }
+      case `interruptibleIteratorClass` =>
         (n: Int) => { data = data.drop(n) }
       case _ =>
         (n: Int) => {

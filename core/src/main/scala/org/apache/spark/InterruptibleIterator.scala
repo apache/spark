@@ -19,6 +19,9 @@ package org.apache.spark
 
 import org.apache.spark.annotation.DeveloperApi
 
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 /**
  * :: DeveloperApi ::
  * An iterator that wraps around an existing iterator to provide task killing functionality.
@@ -41,4 +44,23 @@ class InterruptibleIterator[+T](val context: TaskContext, val delegate: Iterator
   }
 
   def next(): T = delegate.next()
+
+  /** implement efficient linear-sequence drop until scala includes fix for jira SI-8835. */
+  override def drop(n: Int): Iterator[T] = {
+    implicit val ctag: ClassTag[T] = ClassTag.AnyRef.asInstanceOf[ClassTag[T]]
+    val arrayClass = Array.empty[T].iterator.getClass
+    val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
+    delegate.getClass match {
+      case `arrayClass` => new InterruptibleIterator(context, delegate.drop(n))
+      case `arrayBufferClass` => new InterruptibleIterator(context, delegate.drop(n))
+      case _ => {
+        var j = 0
+        while (j < n && this.hasNext) {
+          this.next()
+          j += 1
+        }
+        this
+      }
+    }
+  }
 }
