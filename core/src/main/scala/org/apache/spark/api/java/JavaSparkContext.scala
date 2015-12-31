@@ -24,7 +24,6 @@ import java.util.{Map => JMap}
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
