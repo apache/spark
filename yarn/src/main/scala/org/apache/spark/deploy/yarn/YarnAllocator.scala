@@ -24,7 +24,7 @@ import java.util.regex.Pattern
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConverters._
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -482,7 +482,7 @@ private[yarn] class YarnAllocator(
       assert(container.getResource.getMemory >= resource.getMemory)
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
 
-      def updateInternalState(): Unit = {
+      def updateInternalState(): Unit = synchronized {
         numExecutorsRunning += 1
         assert(numExecutorsRunning <= targetNumExecutors)
         executorIdToContainer(executorId) = container
@@ -514,20 +514,20 @@ private[yarn] class YarnAllocator(
             .run()
         }
 
-        future onSuccess {
+        future.onSuccess {
           case _ =>
             // Only change the state when executor is successfully launched.
             updateInternalState()
-        }
+        }(ThreadUtils.sameThread)
 
-        future onFailure {
+        future.onFailure {
           case NonFatal(e) =>
             logError(s"Failed to launch executor $executorId on container $containerId", e)
             // Assigned container should be released immediately to avoid unnecessary resource
             // occupation.
             amClient.releaseAssignedContainer(containerId)
           case t => throw t
-        }
+        }(ThreadUtils.sameThread)
       } else {
         // For test only
         updateInternalState()
