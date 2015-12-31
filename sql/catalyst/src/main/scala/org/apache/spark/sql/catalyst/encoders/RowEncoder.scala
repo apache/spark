@@ -92,7 +92,6 @@ object RowEncoder {
         NewInstance(
           classOf[GenericArrayData],
           inputObject :: Nil,
-          propagateNull = true,
           dataType = t)
       case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeFor(et))
     }
@@ -115,7 +114,6 @@ object RowEncoder {
       NewInstance(
         classOf[ArrayBasedMapData],
         convertedKeys :: convertedValues :: Nil,
-        propagateNull = true,
         dataType = t)
 
     case StructType(fields) =>
