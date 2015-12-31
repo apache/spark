@@ -29,7 +29,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
+import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData, ScalaReflection}
 import org.apache.spark.sql.types.{StructType, ArrayType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
@@ -237,6 +237,16 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     val intEnc = ExpressionEncoder[Int]
     val longEnc = ExpressionEncoder[Long]
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
+  }
+
+  test("user type with ScalaReflection") {
+    val point = (new ExamplePoint(0.1, 0.2), new ExamplePoint(0.3, 0.4))
+    val schema = ScalaReflection.schemaFor[Tuple2[ExamplePoint, ExamplePoint]]
+      .dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    val boundEncoder = encoderFor[Tuple2[ExamplePoint, ExamplePoint]]
+      .resolve(attributeSeq, outers).bind(attributeSeq)
+    assert(boundEncoder.fromRow(boundEncoder.toRow(point)) === point)
   }
 
   test("nullable of encoder schema") {

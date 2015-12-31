@@ -27,11 +27,7 @@ import scala.reflect.runtime.universe.TypeTag
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
-import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -100,27 +96,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
 
   private val outers: ConcurrentMap[String, AnyRef] = new MapMaker().weakValues().makeMap()
   outers.put(getClass.getName, this)
-
-  test("user type with ScalaReflection") {
-    val points = Seq(
-      MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
-      MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
-
-    val schema = ScalaReflection.schemaFor[MyLabeledPoint].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-
-    val pointEncoder = encoderFor[MyLabeledPoint]
-    val unsafeRows = points.map(pointEncoder.toRow(_).copy())
-    val df = DataFrame(sqlContext, LocalRelation(attributeSeq, unsafeRows))
-    val decodedPoints = df.collect()
-    points.zip(decodedPoints).foreach { case (p, p2) =>
-      assert(p.label == p2(0) && p.features == p2(1))
-    }
-
-    val boundEncoder = pointEncoder.resolve(attributeSeq, outers).bind(attributeSeq)
-    val point = MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0)))
-    assert(boundEncoder.fromRow(boundEncoder.toRow(point)) === point)
-  }
 
   test("UDTs and UDFs") {
     sqlContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
