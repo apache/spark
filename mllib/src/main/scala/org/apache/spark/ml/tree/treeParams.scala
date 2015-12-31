@@ -265,14 +265,12 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
-    if (fitting) {
-      SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
+    } else {
+      newSchema
     }
-    if (isDefined(varianceCol)) {
-      SchemaUtils.appendColumn(schema, $(varianceCol), DoubleType)
-    }
-    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
 }
 
