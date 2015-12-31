@@ -179,6 +179,7 @@ private[sql] object JDBCRDD extends Logging {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
     case dateValue: Date => "'" + dateValue + "'"
+    case arrayValue: Array[Object] => arrayValue.map(compileValue).mkString(", ")
     case _ => value
   }
 
@@ -191,13 +192,19 @@ private[sql] object JDBCRDD extends Logging {
    */
   private def compileFilter(f: Filter): String = f match {
     case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
-    case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
+    case Not(f) => s"(NOT (${compileFilter(f)}))"
     case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
     case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
     case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
     case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
+    case StringStartsWith(attr, value) => s"${attr} LIKE '${value}%'"
+    case StringEndsWith(attr, value) => s"${attr} LIKE '%${value}'"
+    case StringContains(attr, value) => s"${attr} LIKE '%${value}%'"
     case IsNull(attr) => s"$attr IS NULL"
     case IsNotNull(attr) => s"$attr IS NOT NULL"
+    case In(attr, value) => s"$attr IN (${compileValue(value)})"
+    case Or(f1, f2) => s"(${compileFilter(f1)}) OR (${compileFilter(f2)})"
+    case And(f1, f2) => s"(${compileFilter(f1)}) AND (${compileFilter(f2)})"
     case _ => null
   }
 
