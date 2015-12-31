@@ -22,12 +22,13 @@ import java.io.{BufferedInputStream, BufferedOutputStream}
 import java.net.{URL, URLConnection, URI}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * A [[org.apache.spark.broadcast.Broadcast]] implementation that uses HTTP server
@@ -112,10 +113,9 @@ private[broadcast] object HttpBroadcast extends Logging {
   private var securityManager: SecurityManager = null
 
   // TODO: This shouldn't be a global variable so that multiple SparkContexts can coexist
-  private val files = new TimeStampedHashSet[File]
+  private val files = new mutable.HashSet[File]
   private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt
   private var compressionCodec: CompressionCodec = null
-  private var cleaner: MetadataCleaner = null
 
   def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
     synchronized {
@@ -128,7 +128,6 @@ private[broadcast] object HttpBroadcast extends Logging {
           conf.set("spark.httpBroadcast.uri", serverUri)
         }
         serverUri = conf.get("spark.httpBroadcast.uri")
-        cleaner = new MetadataCleaner(MetadataCleanerType.HTTP_BROADCAST, cleanup, conf)
         compressionCodec = CompressionCodec.createCodec(conf)
         initialized = true
       }
@@ -140,10 +139,6 @@ private[broadcast] object HttpBroadcast extends Logging {
       if (server != null) {
         server.stop()
         server = null
-      }
-      if (cleaner != null) {
-        cleaner.cancel()
-        cleaner = null
       }
       compressionCodec = null
       initialized = false
@@ -233,22 +228,6 @@ private[broadcast] object HttpBroadcast extends Logging {
       val file = getFile(id)
       files.remove(file)
       deleteBroadcastFile(file)
-    }
-  }
-
-  /**
-   * Periodically clean up old broadcasts by removing the associated map entries and
-   * deleting the associated files.
-   */
-  private def cleanup(cleanupTime: Long) {
-    val iterator = files.internalMap.entrySet().iterator()
-    while(iterator.hasNext) {
-      val entry = iterator.next()
-      val (file, time) = (entry.getKey, entry.getValue)
-      if (time < cleanupTime) {
-        iterator.remove()
-        deleteBroadcastFile(file)
-      }
     }
   }
 
