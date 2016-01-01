@@ -44,10 +44,6 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  override def outputsUnsafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = false
-
   protected def buildSideKeyGenerator: Projection =
     UnsafeProjection.create(buildKeys, buildPlan.output)
 
