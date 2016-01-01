@@ -17,12 +17,11 @@
 
 package org.apache.spark.streaming.dstream
 
-import scala.reflect.ClassTag
-import scala.util.control.NonFatal
-
-
 import java.io._
 import java.net.Socket
+
+import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
@@ -32,12 +31,12 @@ import org.apache.spark.util.NextIterator
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
-                                       ssc_ : StreamingContext,
-                                       host: String,
-                                       port: Int,
-                                       bytesToObjects: InputStream => Iterator[T],
-                                       storageLevel: StorageLevel
-                                       ) extends ReceiverInputDStream[T](ssc_) {
+    ssc_ : StreamingContext,
+    host: String,
+    port: Int,
+    bytesToObjects: InputStream => Iterator[T],
+    storageLevel: StorageLevel
+  ) extends ReceiverInputDStream[T](ssc_) {
 
   def getReceiver(): Receiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)
@@ -46,11 +45,11 @@ class SocketInputDStream[T: ClassTag](
 
 private[streaming]
 class SocketReceiver[T: ClassTag](
-                                   host: String,
-                                   port: Int,
-                                   bytesToObjects: InputStream => Iterator[T],
-                                   storageLevel: StorageLevel
-                                   ) extends Receiver[T](storageLevel) with Logging {
+    host: String,
+    port: Int,
+    bytesToObjects: InputStream => Iterator[T],
+    storageLevel: StorageLevel
+  ) extends Receiver[T](storageLevel) with Logging {
 
   private var socket: Socket = _
 
@@ -84,11 +83,14 @@ class SocketReceiver[T: ClassTag](
     }
   }
 
-  /** Receive data until receiver is stopped */
+  /** Create a socket connection and receive data until receiver is stopped */
   def receive() {
     try {
+      logInfo("Connecting to " + host + ":" + port)
+      socket = new Socket(host, port)
+      logInfo("Connected to " + host + ":" + port)
       val iterator = bytesToObjects(socket.getInputStream)
-      while (!isStopped && iterator.hasNext) {
+      while(!isStopped && iterator.hasNext) {
         store(iterator.next())
       }
       if (!isStopped()) {
@@ -107,7 +109,7 @@ class SocketReceiver[T: ClassTag](
 }
 
 private[streaming]
-object SocketReceiver {
+object SocketReceiver  {
 
   /**
    * This methods translates the data from an inputstream (say, from a socket)
