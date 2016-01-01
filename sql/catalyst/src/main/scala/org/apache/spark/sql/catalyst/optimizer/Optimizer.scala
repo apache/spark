@@ -778,6 +778,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - right outer -> inner if the left side has such local predicates
  * - full outer -> left outer if only the left side has such local predicates
  * - full outer -> right outer if only the right side has such local predicates
+ *
+ * This rule should be executed before pushing down the Filter
  */
 object OuterJoinConversion extends Rule[LogicalPlan] with PredicateHelper {
 
