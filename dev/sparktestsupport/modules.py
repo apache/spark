@@ -402,7 +402,8 @@ build = Module(
     source_file_regexes=[
         ".*pom.xml",
         "dev/test-dependencies.sh",
-    ]
+    ],
+    should_run_build_tests=True
 )
 
 ec2 = Module(
