@@ -21,6 +21,8 @@ import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import scala.util.control.NonFatal
+
 import com.google.common.cache._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -113,7 +115,17 @@ class HistoryServer(
   }
 
   def getSparkUI(appKey: String): Option[SparkUI] = {
-    Option(appCache.get(appKey))
+    try {
+      val ui = appCache.get(appKey)
+      Some(ui)
+    } catch {
+      case NonFatal(e) => e.getCause() match {
+        case nsee: NoSuchElementException =>
+          None
+
+        case cause: Exception => throw cause
+      }
+    }
   }
 
   initialize()
@@ -193,7 +205,7 @@ class HistoryServer(
       appCache.get(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
       true
     } catch {
-      case e: Exception => e.getCause() match {
+      case NonFatal(e) => e.getCause() match {
         case nsee: NoSuchElementException =>
           false
 
