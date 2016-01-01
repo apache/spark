@@ -100,3 +100,5 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
     exit 1
   fi
 done
+
+exit 0
