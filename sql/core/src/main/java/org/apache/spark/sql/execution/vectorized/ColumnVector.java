@@ -111,7 +111,7 @@ public abstract class ColumnVector {
   public abstract void putInts(int rowId, int count, int[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
    * The data in src must be 4-byte little endian ints.
    */
   public abstract void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex);
@@ -138,7 +138,7 @@ public abstract class ColumnVector {
   public abstract void putDoubles(int rowId, int count, double[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
    * The data in src must be ieee formated doubles.
    */
   public abstract void putDoubles(int rowId, int count, byte[] src, int srcIndex);
