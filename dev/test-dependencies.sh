@@ -22,6 +22,10 @@ set -e
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
+# Explicitly set locale in order to make `sort` output consistent across machines.
+# See https://stackoverflow.com/questions/28881 for more details.
+export LC_ALL=C
+
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
 MVN="build/mvn --force"
@@ -38,7 +42,7 @@ HADOOP_PROFILES=(
 # resolve Spark's internal submodule dependencies.
 
 # See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
-OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
+OLD_VERSION=$($MVN help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
 TEMP_VERSION="spark-$(date +%s | tail -c6)"
 
 function reset_version {
@@ -108,3 +112,5 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
     exit 1
   fi
 done
+
+exit 0
