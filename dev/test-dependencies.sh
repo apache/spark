@@ -72,7 +72,12 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   mkdir -p dev/pr-deps
   $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
     | grep "Building Spark Project Assembly" -A 5 \
-    | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
+    | tail -n 1 \
+    | tr ":" "\n" \
+    | rev \
+    | cut -d "/" -f 1 \
+    | rev \
+    | sort \
     | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
 done
 
