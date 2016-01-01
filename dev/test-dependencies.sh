@@ -37,7 +37,7 @@ HADOOP_PROFILES=(
 # resolve Spark's internal submodule dependencies.
 
 # See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
-OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
+OLD_VERSION=$($MVN help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
 TEMP_VERSION="spark-$(date +%s | tail -c6)"
 
 function reset_version {
