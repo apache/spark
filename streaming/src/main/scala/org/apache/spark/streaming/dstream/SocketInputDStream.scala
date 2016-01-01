@@ -32,12 +32,12 @@ import org.apache.spark.util.NextIterator
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
-    ssc_ : StreamingContext,
-    host: String,
-    port: Int,
-    bytesToObjects: InputStream => Iterator[T],
-    storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[T](ssc_) {
+                                       ssc_ : StreamingContext,
+                                       host: String,
+                                       port: Int,
+                                       bytesToObjects: InputStream => Iterator[T],
+                                       storageLevel: StorageLevel
+                                       ) extends ReceiverInputDStream[T](ssc_) {
 
   def getReceiver(): Receiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)
@@ -46,16 +46,15 @@ class SocketInputDStream[T: ClassTag](
 
 private[streaming]
 class SocketReceiver[T: ClassTag](
-    host: String,
-    port: Int,
-    bytesToObjects: InputStream => Iterator[T],
-    storageLevel: StorageLevel
-  ) extends Receiver[T](storageLevel) with Logging {
+                                   host: String,
+                                   port: Int,
+                                   bytesToObjects: InputStream => Iterator[T],
+                                   storageLevel: StorageLevel
+                                   ) extends Receiver[T](storageLevel) with Logging {
 
   private var socket: Socket = _
 
   def onStart() {
-
     try {
       logInfo(s"Connecting to $host:$port")
       socket = new Socket(host, port)
@@ -63,14 +62,15 @@ class SocketReceiver[T: ClassTag](
     } catch {
       case NonFatal(e) =>
         restart(s"Error connecting to $host:$port", e)
-    } finally {
-      onStop()
     }
-    // Start the thread that receives data over a connection
-    new Thread("Socket Receiver") {
-      setDaemon(true)
-      override def run() { receive() }
-    }.start()
+
+    if (socket != null && socket.isConnected) {
+      // Start the thread that receives data over a connection
+      new Thread("Socket Receiver") {
+        setDaemon(true)
+        override def run() { receive() }
+      }.start()
+    }
   }
 
   def onStop() {
@@ -87,16 +87,14 @@ class SocketReceiver[T: ClassTag](
   /** Receive data until receiver is stopped */
   def receive() {
     try {
-      if (socket.isConnected) {
-        val iterator = bytesToObjects(socket.getInputStream)
-        while (!isStopped && iterator.hasNext) {
-          store(iterator.next())
-        }
-        if (!isStopped()) {
-          restart("Socket data stream had no more data")
-        } else {
-          logInfo("Stopped receiving")
-        }
+      val iterator = bytesToObjects(socket.getInputStream)
+      while (!isStopped && iterator.hasNext) {
+        store(iterator.next())
+      }
+      if (!isStopped()) {
+        restart("Socket data stream had no more data")
+      } else {
+        logInfo("Stopped receiving")
       }
     } catch {
       case NonFatal(e) =>
@@ -109,7 +107,7 @@ class SocketReceiver[T: ClassTag](
 }
 
 private[streaming]
-object SocketReceiver  {
+object SocketReceiver {
 
   /**
    * This methods translates the data from an inputstream (say, from a socket)
