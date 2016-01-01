@@ -22,6 +22,10 @@ set -e
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
+# Explicitly set locale in order to make `sort` output consistent across machines.
+# See https://stackoverflow.com/questions/28881 for more details.
+export LC_ALL=C
+
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
 # NOTE: These should match those in the release publishing script
