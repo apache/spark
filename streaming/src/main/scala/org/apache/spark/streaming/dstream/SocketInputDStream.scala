@@ -86,9 +86,6 @@ class SocketReceiver[T: ClassTag](
   /** Create a socket connection and receive data until receiver is stopped */
   def receive() {
     try {
-      logInfo("Connecting to " + host + ":" + port)
-      socket = new Socket(host, port)
-      logInfo("Connected to " + host + ":" + port)
       val iterator = bytesToObjects(socket.getInputStream)
       while(!isStopped && iterator.hasNext) {
         store(iterator.next())
