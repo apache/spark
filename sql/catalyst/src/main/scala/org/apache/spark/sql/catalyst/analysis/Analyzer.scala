@@ -302,7 +302,7 @@ class Analyzer(
       try {
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
-        case _: NoSuchTableException =>
+        case _: AnalysisException =>
           u.failAnalysis(s"Table not found: ${u.tableName}")
       }
     }
