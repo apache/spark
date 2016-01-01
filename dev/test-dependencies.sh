@@ -77,7 +77,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
     | rev \
     | cut -d "/" -f 1 \
     | rev \
-    | sort \
+    | LC_ALL=C sort `# The LC_ALL here is necessary for portability` \
     | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
 done
 
