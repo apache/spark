@@ -23,7 +23,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Since, DeveloperApi}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
 

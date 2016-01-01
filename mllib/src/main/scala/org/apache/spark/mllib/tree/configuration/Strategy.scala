@@ -21,9 +21,9 @@ import scala.beans.BeanProperty
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.tree.impurity.{Variance, Entropy, Gini, Impurity}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
 
 /**
  * Stores all the configuration options for tree construction

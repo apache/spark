@@ -20,15 +20,15 @@ package org.apache.spark.ml.clustering
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
-import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Common params for KMeans and KMeansModel

@@ -31,7 +31,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._

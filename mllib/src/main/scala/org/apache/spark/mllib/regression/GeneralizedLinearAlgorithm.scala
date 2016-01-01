@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.feature.StandardScaler
-import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
