@@ -45,7 +45,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SetOperationPushDown,
       SamplePushDown,
       ReorderJoin,
-      OuterJoinConversion,
+      OuterJoinElimination,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -770,7 +770,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Conversion of outer joins, if the local predicates can restrict the result sets so that
+ * Elimination of outer joins, if the local predicates can restrict the result sets so that
  * all null-supplying rows are eliminated
  *
  * - full outer -> inner if both sides have such local predicates
@@ -781,7 +781,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This rule should be executed before pushing down the Filter
  */
-object OuterJoinConversion extends Rule[LogicalPlan] with PredicateHelper {
+object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
   // Todo: is it complete?
   private def hasNonNullPredicate(condition: Seq[Expression], child: LogicalPlan): Boolean = {
