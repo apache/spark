@@ -178,19 +178,19 @@ object JavaTypeInference {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath
 
       case c if c == classOf[java.lang.Short] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Integer] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Long] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Double] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Byte] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Float] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Boolean] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
 
       case c if c == classOf[java.sql.Date] =>
         StaticInvoke(
@@ -288,10 +288,17 @@ object JavaTypeInference {
         val setters = properties.map { p =>
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
-          p.getWriteMethod.getName -> constructorFor(fieldType, Some(addToPath(fieldName)))
+          val (_, nullable) = inferDataType(fieldType)
+          val constructor = constructorFor(fieldType, Some(addToPath(fieldName)))
+          val setter = if (nullable) {
+            constructor
+          } else {
+            AssertNotNull(constructor, other.getName, fieldName, fieldType.toString)
+          }
+          p.getWriteMethod.getName -> setter
         }.toMap
 
-        val newInstance = NewInstance(other, Nil, propagateNull = false, ObjectType(other))
+        val newInstance = NewInstance(other, Nil, ObjectType(other), propagateNull = false)
         val result = InitializeJavaBean(newInstance, setters)
 
         if (path.nonEmpty) {

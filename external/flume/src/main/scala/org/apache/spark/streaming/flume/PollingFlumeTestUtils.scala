@@ -17,8 +17,8 @@
 
 package org.apache.spark.streaming.flume
 
-import java.util.concurrent._
 import java.util.{Collections, List => JList, Map => JMap}
+import java.util.concurrent._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -28,7 +28,7 @@ import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.conf.Configurables
 
-import org.apache.spark.streaming.flume.sink.{SparkSinkConfig, SparkSink}
+import org.apache.spark.streaming.flume.sink.{SparkSink, SparkSinkConfig}
 
 /**
  * Share codes for Scala and Python unit tests
