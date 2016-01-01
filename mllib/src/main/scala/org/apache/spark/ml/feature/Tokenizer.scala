@@ -21,6 +21,8 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.UserDefinedFunction
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -35,8 +37,10 @@ class Tokenizer(override val uid: String)
 
   def this() = this(Identifiable.randomUID("tok"))
 
-  override protected def createTransformFunc: String => Seq[String] = {
-    _.toLowerCase.split("\\s")
+  override protected def transformFunc: UserDefinedFunction = {
+    udf { input: String =>
+      input.toLowerCase.split("\\s")
+    }
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
@@ -124,12 +128,14 @@ class RegexTokenizer(override val uid: String)
 
   setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)
 
-  override protected def createTransformFunc: String => Seq[String] = { originStr =>
-    val re = $(pattern).r
-    val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
-    val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
-    val minLength = $(minTokenLength)
-    tokens.filter(_.length >= minLength)
+  override protected def transformFunc: UserDefinedFunction = {
+    udf { input: String =>
+      val re = $(pattern).r
+      val str = if ($(toLowercase)) input.toLowerCase() else input
+      val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
+      val minLength = $(minTokenLength)
+      tokens.filter(_.length >= minLength)
+    }
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {

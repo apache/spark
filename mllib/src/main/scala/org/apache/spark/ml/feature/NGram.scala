@@ -21,6 +21,8 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.UserDefinedFunction
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -56,8 +58,10 @@ class NGram(override val uid: String)
 
   setDefault(n -> 2)
 
-  override protected def createTransformFunc: Seq[String] => Seq[String] = {
-    _.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
+  override protected def transformFunc: UserDefinedFunction = {
+    udf { input: Seq[String] =>
+      input.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
+    }
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {

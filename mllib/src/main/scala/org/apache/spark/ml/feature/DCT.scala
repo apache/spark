@@ -24,6 +24,8 @@ import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.UserDefinedFunction
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -57,11 +59,13 @@ class DCT(override val uid: String)
 
   setDefault(inverse -> false)
 
-  override protected def createTransformFunc: Vector => Vector = { vec =>
-    val result = vec.toArray
-    val jTransformer = new DoubleDCT_1D(result.length)
-    if ($(inverse)) jTransformer.inverse(result, true) else jTransformer.forward(result, true)
-    Vectors.dense(result)
+  override protected def transformFunc: UserDefinedFunction = {
+    udf { input: Vector =>
+      val result = input.toArray
+      val jTransformer = new DoubleDCT_1D(result.length)
+      if ($(inverse)) jTransformer.inverse(result, true) else jTransformer.forward(result, true)
+      Vectors.dense(result)
+    }
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
