@@ -191,7 +191,7 @@ class JDBCSuite extends SparkFunSuite
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
       .collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
-      .collect().size === 2)
+      .collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
       .collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
@@ -454,8 +454,8 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[String]('compileFilter)
-    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f)
+    val compileFilter = PrivateMethod[Option[String]]('compileFilter)
+    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
     assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "(NOT (col1 = 'abc'))")
     assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
@@ -474,6 +474,7 @@ class JDBCSuite extends SparkFunSuite
       === "(NOT (col1 IN ('mno', 'pqr')))")
     assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
     assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
+    assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def"))) === "")
   }
 
   test("Dialect unregister") {
