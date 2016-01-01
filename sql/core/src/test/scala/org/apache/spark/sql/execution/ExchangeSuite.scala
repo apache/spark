@@ -28,7 +28,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val input = (1 to 1000).map(Tuple1.apply)
     checkAnswer(
       input.toDF(),
-      plan => ConvertToSafe(Exchange(SinglePartition, ConvertToUnsafe(plan))),
+      plan => Exchange(SinglePartition, plan),
       input.map(Row.fromTuple)
     )
   }
