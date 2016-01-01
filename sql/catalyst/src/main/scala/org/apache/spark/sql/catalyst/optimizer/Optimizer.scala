@@ -45,6 +45,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SetOperationPushDown,
       SamplePushDown,
       ReorderJoin,
+      OuterJoinConversion,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -765,6 +766,61 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     case j @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       createOrderedJoin(input, conditions)
+  }
+}
+
+/**
+ * Conversion of outer joins, if the local predicates can restrict the result sets so that
+ * all null-supplying rows are eliminated
+ *
+ * - full outer -> inner if both sides have such local predicates
+ * - left outer -> inner if the right side has such local predicates
+ * - right outer -> inner if the left side has such local predicates
+ * - full outer -> left outer if only the left side has such local predicates
+ * - full outer -> right outer if only the right side has such local predicates
+ */
+object OuterJoinConversion extends Rule[LogicalPlan] with PredicateHelper {
+
+  // Todo: is it complete?
+  private def hasNonNullPredicate(condition: Seq[Expression], child: LogicalPlan): Boolean = {
+    val localCondition = condition.filter(_.references subsetOf child.outputSet)
+    localCondition.exists(_.collect {
+      case EqualTo(ar: AttributeReference, l: Literal) => true
+      case EqualTo(l: Literal, ar: AttributeReference) => true
+      case EqualNullSafe(ar: AttributeReference, l: Literal) => true
+      case EqualNullSafe(l: Literal, ar: AttributeReference) => true
+      case GreaterThan(ar: AttributeReference, l: Literal) => true
+      case GreaterThan(l: Literal, ar: AttributeReference) => true
+      case GreaterThanOrEqual(ar: AttributeReference, l: Literal) => true
+      case GreaterThanOrEqual(l: Literal, ar: AttributeReference) => true
+      case LessThan(ar: AttributeReference, l: Literal) => true
+      case LessThan(l: Literal, ar: AttributeReference) => true
+      case LessThanOrEqual(ar: AttributeReference, l: Literal) => true
+      case LessThanOrEqual(l: Literal, ar: AttributeReference) => true
+      case In(ar: AttributeReference, l) => true
+      case IsNotNull(ar: AttributeReference) => true
+    }.nonEmpty)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) =>
+      val leftHasNonNullPredicate =
+        hasNonNullPredicate(splitConjunctivePredicates(filterCondition), left)
+      val rightHasNonNullPredicate =
+        hasNonNullPredicate(splitConjunctivePredicates(filterCondition), right)
+      joinType match {
+        case RightOuter if leftHasNonNullPredicate =>
+          Filter(filterCondition, Join(left, right, Inner, joinCondition))
+        case LeftOuter if rightHasNonNullPredicate =>
+          Filter(filterCondition, Join(left, right, Inner, joinCondition))
+        case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate =>
+          Filter(filterCondition, Join(left, right, Inner, joinCondition))
+        case FullOuter if leftHasNonNullPredicate =>
+          Filter(filterCondition, Join(left, right, LeftOuter, joinCondition))
+        case FullOuter if rightHasNonNullPredicate =>
+          Filter(filterCondition, Join(left, right, RightOuter, joinCondition))
+        case _ => f
+      }
   }
 }
 
