@@ -54,22 +54,22 @@ class SocketReceiver[T: ClassTag](
   private var socket: Socket = _
 
   def onStart() {
+
+    logInfo(s"Connecting to $host:$port")
     try {
-      logInfo(s"Connecting to $host:$port")
       socket = new Socket(host, port)
-      logInfo(s"Connected to $host:$port")
     } catch {
       case NonFatal(e) =>
         restart(s"Error connecting to $host:$port", e)
+        return
     }
+    logInfo(s"Connected to $host:$port")
 
-    if (socket != null && socket.isConnected) {
-      // Start the thread that receives data over a connection
-      new Thread("Socket Receiver") {
-        setDaemon(true)
-        override def run() { receive() }
-      }.start()
-    }
+    // Start the thread that receives data over a connection
+    new Thread("Socket Receiver") {
+      setDaemon(true)
+      override def run() { receive() }
+    }.start()
   }
 
   def onStop() {
@@ -86,7 +86,7 @@ class SocketReceiver[T: ClassTag](
   /** Create a socket connection and receive data until receiver is stopped */
   def receive() {
     try {
-      val iterator = bytesToObjects(socket.getInputStream)
+      val iterator = bytesToObjects(socket.getInputStream())
       while(!isStopped && iterator.hasNext) {
         store(iterator.next())
       }
