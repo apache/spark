@@ -45,7 +45,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SetOperationPushDown,
       SamplePushDown,
       ReorderInnerJoin,
-      ReorderOuterInnerJoins,
+      ReorderOuterInnerJoin,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -772,42 +772,32 @@ object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
 
 /**
  * Reorder the adjacent outer and inner joins and push inner join through left/right outer join.
- *
- * TODO: improve the checking conditions to cover out-of-order cases.
  */
-object ReorderOuterInnerJoins extends Rule[LogicalPlan] {
+object ReorderOuterInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     case j @ Join(left @ Join(ll, lr, LeftOuter|RightOuter, lCond), right, Inner, condition) =>
-      val leftJoinKey = j match {
+      val leftJoinKey: Seq[Expression] = j match {
         case ExtractEquiJoinKeys(_, leftKeys, _, _, _, _) => leftKeys
-      }
-      val (leftLeftJoinKey, leftRightJoinKey) = left match {
-        case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
-          (leftKeys, rightKeys)
       }
 
       left.joinType match {
-        case LeftOuter if leftJoinKey == leftLeftJoinKey =>
+        case LeftOuter if leftJoinKey.forall(canEvaluate(_, ll)) =>
           Join(Join(ll, right, Inner, condition), lr, LeftOuter, lCond)
-        case RightOuter if leftJoinKey == leftRightJoinKey =>
+        case RightOuter if leftJoinKey.forall(canEvaluate(_, lr)) =>
           Join(ll, Join(lr, right, Inner, condition), RightOuter, lCond)
         case _ => j
       }
 
     case j @ Join(left, right @ Join(rl, rr, LeftOuter|RightOuter, rCond), Inner, condition) =>
-      val rightJoinKey = j match {
+      val rightJoinKey: Seq[Expression] = j match {
         case ExtractEquiJoinKeys(_, _, rightKey, _, _, _) => rightKey
-      }
-      val (rightLeftJoinKey, rightRightJoinKey) = right match {
-        case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
-          (leftKeys, rightKeys)
       }
 
       right.joinType match {
-        case LeftOuter if rightJoinKey == rightLeftJoinKey =>
+        case LeftOuter if rightJoinKey.forall(canEvaluate(_, rl)) =>
           Join(Join(rl, left, Inner, condition), rr, LeftOuter, rCond)
-        case RightOuter if rightJoinKey == rightRightJoinKey =>
+        case RightOuter if rightJoinKey.forall(canEvaluate(_, rr)) =>
           Join(rl, Join(left, rr, Inner, condition), RightOuter, rCond)
         case _ => j
       }

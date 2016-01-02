@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -39,6 +39,7 @@ class JoinOrderSuite extends PlanTest {
         PushPredicateThroughProject,
         BooleanSimplification,
         ReorderInnerJoin,
+        ReorderOuterInnerJoin,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
@@ -91,4 +92,79 @@ class JoinOrderSuite extends PlanTest {
 
     comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
+
+  test("reorder left and inner joins # 1") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = testRelation.subquery('z)
+
+    val originalQuery = {
+      x.join(y, LeftOuter, Some("x.b".attr === "y.b".attr && "x.a".attr === "y.a".attr))
+        .join(z, Inner, Some("x.b".attr === "z.b".attr && "x.a".attr === "z.a".attr))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      x.join(z, Inner, Some("x.b".attr === "z.b".attr && "x.a".attr === "z.a".attr))
+        .join(y, LeftOuter, Some("x.b".attr === "y.b".attr && "x.a".attr === "y.a".attr))
+        .analyze
+
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+  }
+
+  test("reorder left and inner joins # 2") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = testRelation.subquery('z)
+
+    val originalQuery = {
+      val right = x.join(y, LeftOuter,
+        Some("x.c".attr === "y.c".attr && "x.b".attr === "y.b".attr))
+      z.join(right, Inner, Some("z.b".attr === "x.b".attr && "z.a".attr === "x.a".attr))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      x.join(y, Inner, Some("x.b".attr === "y.b".attr && "x.a".attr === "y.a".attr))
+        .join(z, LeftOuter, Some("z.c".attr === "x.c".attr && "z.b".attr === "x.b".attr)).analyze
+
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+  }
+
+  test("reorder right and inner joins # 1") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = testRelation.subquery('z)
+
+    val originalQuery = {
+      x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
+        .join(z, Inner, Some("z.c".attr === "y.c".attr))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      y.join(x.join(z, Inner, Some("z.c".attr === "x.c".attr)),
+        RightOuter, Some("x.a".attr === "y.a".attr)).analyze
+
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+  }
+
+  test("reorder right and inner joins # 2") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = testRelation.subquery('z)
+
+    val originalQuery = {
+      val right = x.join(y, RightOuter, Some("x.b".attr === "y.b".attr))
+      z.join(right, Inner, Some("z.c".attr === "y.c".attr))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      x.join(z.join(y, Inner, Some("z.c".attr === "y.c".attr)),
+        RightOuter, Some("x.b".attr === "y.b".attr)).analyze
+
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+  }
+
 }

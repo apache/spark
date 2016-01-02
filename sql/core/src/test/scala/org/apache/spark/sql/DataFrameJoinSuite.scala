@@ -147,11 +147,11 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
   test("join - left outer + inner reordering # 2") {
     val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
-    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df2 = Seq((1, 2, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
     val df3 = Seq((1, 3, "1"), (3, 6, "5")).toDF("int", "int2", "str").as("c")
 
     // Left Then Inner -> Inner Then Left
-    val right = df.join(df2, $"a.int" === $"b.int", "left")
+    val right = df.join(df2, $"a.int" === $"b.int" && $"a.int2" === $"b.int2", "left")
     val leftInnerJoin = df3.join(right, $"c.int" === $"a.int", "inner")
       .select($"a.*", $"b.*", $"c.*")
 
@@ -167,7 +167,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       leftInnerJoin,
-      Row(1, 2, "1", 1, 3, "1", 1, 3, "1") ::
+      Row(1, 2, "1", 1, 2, "1", 1, 3, "1") ::
       Row(3, 4, "3", null, null, null, 3, 6, "5") :: Nil)
   }
 
@@ -195,12 +195,12 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("join - right outer + inner reordering #2") {
-    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
-    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df = Seq((0, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 2, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
     val df3 = Seq((1, 9, "8"), (5, 0, "4")).toDF("int", "int2", "str").as("c")
 
     // Right Then Inner -> Inner Then Right
-    val right = df.join(df2, $"a.int" === $"b.int", "right")
+    val right = df.join(df2, $"a.int2" === $"b.int2", "right")
     val rightInnerJoin = df3.join(right, $"c.int" === $"b.int", "inner")
       .select($"a.*", $"b.*", $"c.*")
 
@@ -214,7 +214,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       rightInnerJoin,
-      Row(1, 2, "1", 1, 3, "1", 1, 9, "8") ::
+      Row(0, 2, "1", 1, 2, "1", 1, 9, "8") ::
       Row(null, null, null, 5, 6, "5", 5, 0, "4") :: Nil)
   }
 
