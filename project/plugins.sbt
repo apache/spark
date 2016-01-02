@@ -27,3 +27,5 @@ addSbtPlugin("io.spray" % "sbt-revolver" % "0.7.2")
 libraryDependencies += "org.ow2.asm"  % "asm" % "5.0.3"
 
 libraryDependencies += "org.ow2.asm"  % "asm-commons" % "5.0.3"
+
+libraryDependencies += "org.antlr" % "antlr" % "3.5.2"
