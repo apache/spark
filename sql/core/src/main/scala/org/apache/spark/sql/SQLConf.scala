@@ -329,8 +329,8 @@ private[spark] object SQLConf {
     doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
-    defaultValue = Some(false),
-    doc = "When true, enable filter pushdown for ORC files.")
+    defaultValue = Some(true),
+    doc = "When false, disables filter pushdown for ORC files.")
 
   val HIVE_VERIFY_PARTITION_PATH = booleanConf("spark.sql.hive.verifyPartitionPath",
     defaultValue = Some(false),
