@@ -778,7 +778,7 @@ object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
 object ReorderOuterInnerJoins extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
-    case j @ Join(left @ Join(ll, lr, joinType, lCondition), right, Inner, condition) =>
+    case j @ Join(left @ Join(ll, lr, LeftOuter|RightOuter, lCond), right, Inner, condition) =>
       val leftJoinKey = j match {
         case ExtractEquiJoinKeys(_, leftKeys, _, _, _, _) => leftKeys
       }
@@ -787,15 +787,15 @@ object ReorderOuterInnerJoins extends Rule[LogicalPlan] {
           (leftKeys, rightKeys)
       }
 
-      joinType match {
+      left.joinType match {
         case LeftOuter if leftJoinKey == leftLeftJoinKey =>
-          Join(Join(ll, right, Inner, condition), lr, LeftOuter, lCondition)
+          Join(Join(ll, right, Inner, condition), lr, LeftOuter, lCond)
         case RightOuter if leftJoinKey == leftRightJoinKey =>
-          Join(ll, Join(lr, right, Inner, condition), RightOuter, lCondition)
+          Join(ll, Join(lr, right, Inner, condition), RightOuter, lCond)
         case _ => j
       }
 
-    case j @ Join(left, right @ Join(rl, rr, joinType, rCondition), Inner, condition) =>
+    case j @ Join(left, right @ Join(rl, rr, LeftOuter|RightOuter, rCond), Inner, condition) =>
       val rightJoinKey = j match {
         case ExtractEquiJoinKeys(_, _, rightKey, _, _, _) => rightKey
       }
@@ -804,11 +804,11 @@ object ReorderOuterInnerJoins extends Rule[LogicalPlan] {
           (leftKeys, rightKeys)
       }
 
-      joinType match {
+      right.joinType match {
         case LeftOuter if rightJoinKey == rightLeftJoinKey =>
-          Join(Join(rl, left, Inner, condition), rr, LeftOuter, rCondition)
+          Join(Join(rl, left, Inner, condition), rr, LeftOuter, rCond)
         case RightOuter if rightJoinKey == rightRightJoinKey =>
-          Join(rl, Join(left, rr, Inner, condition), RightOuter, rCondition)
+          Join(rl, Join(left, rr, Inner, condition), RightOuter, rCond)
         case _ => j
       }
   }
