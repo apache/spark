@@ -113,7 +113,7 @@ private[spark] class SizeBasedRollingPolicy(
 
   /** Should rollover if the next set of bytes is going to exceed the size limit */
   def shouldRollover(bytesToBeWritten: Long): Boolean = {
-    logInfo(s"$bytesToBeWritten + $bytesWrittenSinceRollover > $rolloverSizeBytes")
+    logDebug(s"$bytesToBeWritten + $bytesWrittenSinceRollover > $rolloverSizeBytes")
     bytesToBeWritten + bytesWrittenSinceRollover > rolloverSizeBytes
   }
 
