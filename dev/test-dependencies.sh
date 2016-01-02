@@ -42,7 +42,7 @@ HADOOP_PROFILES=(
 
 # See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
 OLD_VERSION=$($MVN help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
-TEMP_VERSION="spark-$(date +%s | tail -c6)"
+TEMP_VERSION="spark-$(python -S -c "import random; print random.randrange(100000, 999999)")"
 
 function reset_version {
   # Delete the temporary POMs that we wrote to the local Maven repo:
