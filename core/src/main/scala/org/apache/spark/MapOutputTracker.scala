@@ -291,8 +291,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 
   // HashMaps for storing mapStatuses and cached serialized statuses in the driver.
   // Statuses are dropped only by explicit de-registering.
-  protected val mapStatuses = new HashMap[Int, Array[MapStatus]]()
-  private val cachedSerializedStatuses = new HashMap[Int, Array[Byte]]()
+  protected val mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
+  private val cachedSerializedStatuses = new ConcurrentHashMap[Int, Array[Byte]]().asScala
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
     if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.collection.JavaConverters._
 
@@ -63,7 +63,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
 
-  private val shuffleStates = new scala.collection.mutable.HashMap[ShuffleId, ShuffleState]
+  private val shuffleStates = new ConcurrentHashMap[ShuffleId, ShuffleState]
 
   /**
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
@@ -72,8 +72,12 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   def forMapTask(shuffleId: Int, mapId: Int, numReducers: Int, serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      private val shuffleState =
-        shuffleStates.getOrElseUpdate(shuffleId, new ShuffleState(numReducers))
+      private val shuffleState: ShuffleState = {
+        // Note: we do _not_ want to just wrap this java ConcurrentHashMap into a Scala map and use
+        // .getOrElseUpdate() because that's actually NOT atomic.
+        shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numReducers))
+        shuffleStates.get(shuffleId)
+      }
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
       val writers: Array[DiskBlockObjectWriter] = {
@@ -110,7 +114,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
 
   /** Remove all the blocks / files related to a particular shuffle. */
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
-    shuffleStates.get(shuffleId) match {
+    Option(shuffleStates.get(shuffleId)) match {
       case Some(state) =>
         for (mapId <- state.completedMapTasks.asScala; reduceId <- 0 until state.numReducers) {
           val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
