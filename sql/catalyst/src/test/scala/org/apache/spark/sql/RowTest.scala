@@ -106,9 +106,9 @@ class RowTest extends FunSpec with Matchers {
   }
 
   describe("row immutability") {
-    val values = Array(1, 2, "3", "IV", 6L)
-    val externalRow = Row(values.clone(): _*)
-    val internalRow = InternalRow(values.clone(): _*)
+    val values = Seq(1, 2, "3", "IV", 6L)
+    val externalRow = Row(values)
+    val internalRow = InternalRow.fromSeq(values)
 
     def modifyValues(values: Seq[Any]): Seq[Any] = {
       val array = values.toArray
