@@ -212,6 +212,8 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     True
     >>> labels[4]==labels[5]
     True
+    >>> model.predict([-0.01,-0.1])
+    2
 
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
@@ -287,8 +289,8 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
             return cluster_labels
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            z = self.predictSoft(x)
+            return z.index(max(z))
 
     @since('1.3.0')
     def predictSoft(self, x):
@@ -304,8 +306,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
                                               _convert_to_vector(self.weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            return self.call("predictSoft", _convert_to_vector(x))
 
     @classmethod
     @since('1.5.0')
