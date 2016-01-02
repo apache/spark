@@ -39,7 +39,7 @@ import org.apache.hadoop.hive.ql.Context;
  */
 public class ParseDriver {
 
-  private static final Logger LOG = LoggerFactory.getLogger("hive.ql.parse.ParseDriver");
+  private static final Logger LOG = LoggerFactory.getLogger("spark.sql.parser.ParseDriver");
 
   /**
    * ANTLRNoCaseStringStream.
