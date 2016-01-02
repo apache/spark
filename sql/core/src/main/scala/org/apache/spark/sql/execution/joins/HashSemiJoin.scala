@@ -33,6 +33,10 @@ trait HashSemiJoin {
 
   override def output: Seq[Attribute] = left.output
 
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
+
   protected def leftKeyGenerator: Projection =
     UnsafeProjection.create(leftKeys, left.output)
 

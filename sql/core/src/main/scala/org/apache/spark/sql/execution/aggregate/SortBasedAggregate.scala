@@ -49,6 +49,10 @@ case class SortBasedAggregate(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = false
+  override def canProcessSafeRows: Boolean = true
+
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
   override def requiredChildDistribution: List[Distribution] = {

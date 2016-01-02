@@ -64,6 +64,10 @@ trait HashOuterJoin {
         s"HashOuterJoin should not take $x as the JoinType")
   }
 
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
+
   protected def buildKeyGenerator: Projection =
     UnsafeProjection.create(buildKeys, buildPlan.output)
 

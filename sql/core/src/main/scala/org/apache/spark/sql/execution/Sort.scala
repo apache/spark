@@ -39,6 +39,10 @@ case class Sort(
     testSpillFrequency: Int = 0)
   extends UnaryNode {
 
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
+
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] = sortOrder

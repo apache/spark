@@ -213,8 +213,7 @@ case class ScriptTransformation(
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
-        val proj = UnsafeProjection.create(schema)
-        processIterator(iter).map(proj)
+        processIterator(iter)
       } else {
         // If the input iterator has no rows then do not launch the external script.
         Iterator.empty

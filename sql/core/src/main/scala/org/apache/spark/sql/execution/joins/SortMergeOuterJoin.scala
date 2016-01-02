@@ -89,6 +89,10 @@ case class SortMergeOuterJoin(
     keys.map(SortOrder(_, Ascending))
   }
 
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
+
   private def createLeftKeyGenerator(): Projection =
     UnsafeProjection.create(leftKeys, left.output)
 
