@@ -13,6 +13,8 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+   This file is an adaptation of Hive's org/apache/hadoop/hive/ql/HiveParser.g grammar.
 */
 parser grammar SparkSqlParser;
 
@@ -374,8 +376,7 @@ package org.apache.spark.sql.parser;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.spark.sql.parser.ParserConf;
 }
 
 
@@ -654,15 +655,15 @@ import org.apache.hadoop.hive.conf.HiveConf;
   private CommonTree throwColumnNameException() throws RecognitionException {
     throw new FailedPredicateException(input, Arrays.toString(excludedCharForColumnName) + " can not be used in column name in create table statement.", "");
   }
-  private Configuration hiveConf;
-  public void setHiveConf(Configuration hiveConf) {
-    this.hiveConf = hiveConf;
+  private ParserConf parserConf;
+  public void setParserConf(ParserConf parserConf) {
+    this.parserConf = parserConf;
   }
   protected boolean useSQL11ReservedKeywordsForIdentifier() {
-    if(hiveConf==null){
-      return false;
+    if (parserConf == null) {
+      return true;
     }
-    return !HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS);
+    return !parserConf.supportSQL11ReservedKeywords();
   }
 }
 

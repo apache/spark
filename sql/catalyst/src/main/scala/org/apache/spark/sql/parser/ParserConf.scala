@@ -14,22 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.parser
 
-package org.apache.spark.sql.catalyst
-
-private[spark] trait CatalystConf {
-  def caseSensitiveAnalysis: Boolean
+trait ParserConf {
+  def supportQuotedId: String
+  def supportSQL11ReservedKeywords: Boolean
 }
 
-/**
- * A trivial conf that is empty.  Used for testing when all
- * relations are already filled in and the analyser needs only to resolve attribute references.
- */
-object EmptyConf extends CatalystConf {
-  override def caseSensitiveAnalysis: Boolean =
-    throw new UnsupportedOperationException
-}
-
-/** A CatalystConf that can be used for local testing. */
-case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf {
-}
+case class SimpleParserConf(
+    supportQuotedId: String = "column",
+    supportSQL11ReservedKeywords: Boolean = false) extends ParserConf

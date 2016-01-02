@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.parser.ParserConf
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -451,6 +452,19 @@ private[spark] object SQLConf {
     doc = "When true, we could use `datasource`.`path` as table in SQL query"
   )
 
+  val PARSER_SUPPORT_QUOTEDID = stringConf("spark.sql.parser.supportQuotedIdentifiers",
+    defaultValue = Some("column"),
+    isPublic = false,
+    doc = "Whether to use quoted identifier. 'none' or 'column' can be used." +
+      "\n  none: default(past) behavior. Implies only alphaNumeric and underscore are valid " +
+      "characters in identifiers.\n  column: implies column names can contain any character.")
+
+  val PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS = booleanConf(
+    "spark.sql.parser.supportSQL11ReservedKeywords",
+    defaultValue = Some(false),
+    isPublic = false,
+    doc = "This flag should be set to true to enable support for SQL2011 reserved keywords.")
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -471,7 +485,7 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf {
+private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -568,6 +582,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  def supportQuotedId: String = getConf(PARSER_SUPPORT_QUOTEDID)
+
+  def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -247,6 +247,9 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
+  /* Catalyst ANTLR generation settings */
+  enable(Catalyst.settings)(catalyst)
+
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
 
@@ -357,6 +360,54 @@ object OldDeps {
   )
 }
 
+object Catalyst {
+  lazy val settings = Seq(
+    // ANTLR code-generation step.
+    //
+    // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
+    // build errors in the current plugin.
+    // Create Parser from ANTLR grammar files.
+    sourceGenerators in Compile += Def.task {
+      val log = streams.value.log
+
+      val grammarFileNames = Seq(
+        "SparkSqlLexer.g",
+        "SparkSqlParser.g")
+      val sourceDir = (sourceDirectory in Compile).value / "antlr3"
+      val targetDir = (sourceManaged in Compile).value
+
+      // Create default ANTLR Tool.
+      val antlr = new org.antlr.Tool
+
+      // Setup input and output directories.
+      antlr.setInputDirectory(sourceDir.getPath)
+      antlr.setOutputDirectory(targetDir.getPath)
+      antlr.setForceRelativeOutput(true)
+      antlr.setMake(true)
+
+      // Add grammar files.
+      grammarFileNames.flatMap(gFileName => (sourceDir ** gFileName).get).foreach { gFilePath =>
+        val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
+        log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
+        antlr.addGrammarFile(relGFilePath)
+      }
+
+      // Generate the parser.
+      antlr.process
+      if (antlr.getNumErrors > 0) {
+        log.error("ANTLR: Caught %d build errors.".format(antlr.getNumErrors))
+      }
+
+      // Return all generated java files.
+      (targetDir ** "*.java").get.toSeq
+    }.taskValue,
+    // Include ANTLR tokens files.
+    resourceGenerators in Compile += Def.task {
+      ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
+    }.taskValue
+  )
+}
+
 object SQL {
   lazy val settings = Seq(
     initialCommands in console :=
@@ -414,50 +465,7 @@ object Hive {
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
-    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") },
-    // ANTLR code-generation step.
-    //
-    // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
-    // build errors in the current plugin.
-    // Create Parser from ANTLR grammar files.
-    sourceGenerators in Compile += Def.task {
-      val log = streams.value.log
-
-      val grammarFileNames = Seq(
-        "SparkSqlLexer.g",
-        "SparkSqlParser.g")
-      val sourceDir = (sourceDirectory in Compile).value / "antlr3"
-      val targetDir = (sourceManaged in Compile).value
-
-      // Create default ANTLR Tool.
-      val antlr = new org.antlr.Tool
-
-      // Setup input and output directories.
-      antlr.setInputDirectory(sourceDir.getPath)
-      antlr.setOutputDirectory(targetDir.getPath)
-      antlr.setForceRelativeOutput(true)
-      antlr.setMake(true)
-
-      // Add grammar files.
-      grammarFileNames.flatMap(gFileName => (sourceDir ** gFileName).get).foreach { gFilePath =>
-        val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
-        log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
-        antlr.addGrammarFile(relGFilePath)
-      }
-
-      // Generate the parser.
-      antlr.process
-      if (antlr.getNumErrors > 0) {
-        log.error("ANTLR: Caught %d build errors.".format(antlr.getNumErrors))
-      }
-
-      // Return all generated java files.
-      (targetDir ** "*.java").get.toSeq
-    }.taskValue,
-    // Include ANTLR tokens files.
-    resourceGenerators in Compile += Def.task {
-      ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
-    }.taskValue
+    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
   )
 }
 

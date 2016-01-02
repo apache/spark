@@ -587,6 +587,13 @@ class Analyzer(
                 case other => other
               }
             }
+          case u @ UnresolvedGenerator(name, children) =>
+            withPosition(u) {
+              registry.lookupFunction(name, children) match {
+                case g: Generator => g
+                case other => failAnalysis(s"$other is not a Generator.")
+              }
+            }
         }
     }
   }

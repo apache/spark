@@ -13,26 +13,35 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+   This file is an adaptation of Hive's org/apache/hadoop/hive/ql/HiveLexer.g grammar.
 */
 lexer grammar SparkSqlLexer;
 
 @lexer::header {
 package org.apache.spark.sql.parser;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.spark.sql.parser.ParserConf;
 }
 
 @lexer::members {
-  private Configuration hiveConf;
+  ArrayList<ParseError> errors = new ArrayList<ParseError>();
+  private ParserConf parserConf;
   
-  public void setHiveConf(Configuration hiveConf) {
-    this.hiveConf = hiveConf;
+  public void setParserConf(ParserConf parserConf) {
+    this.parserConf = parserConf;
   }
   
   protected boolean allowQuotedId() {
-    String supportedQIds = HiveConf.getVar(hiveConf, HiveConf.ConfVars.HIVE_QUOTEDID_SUPPORT);
-    return !"none".equals(supportedQIds);
+    if (parserConf == null) {
+      return true;
+    }
+    return !"none".equals(parserConf.supportQuotedId());
+  }
+
+  @Override
+  public void displayRecognitionError(String[] tokenNames, RecognitionException e) {
+    errors.add(new ParseError(this, e, tokenNames));
   }
 }
 

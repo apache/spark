@@ -118,7 +118,7 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
    */
   def positionTest(name: String, query: String, token: String): Unit = {
     def parseTree =
-      Try(quietly(HiveQl.dumpTree(HiveQl.getAst(query)))).getOrElse("<failed to parse>")
+      Try(quietly(HiveQl.getAst(query).treeString)).getOrElse("<failed to parse>")
 
     test(name) {
       val error = intercept[AnalysisException] {
@@ -142,7 +142,7 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
       val actualStart = error.startPosition.getOrElse {
         fail(
           s"start not returned for error on token $token\n" +
-            HiveQl.dumpTree(HiveQl.getAst(query))
+            HiveQl.getAst(query).treeString
         )
       }
       assert(expectedStart === actualStart,
