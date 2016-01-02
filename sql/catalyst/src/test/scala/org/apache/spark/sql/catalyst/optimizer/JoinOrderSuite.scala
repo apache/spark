@@ -143,8 +143,8 @@ class JoinOrderSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
-      y.join(x.join(z, Inner, Some("z.c".attr === "x.c".attr)),
-        RightOuter, Some("x.a".attr === "y.a".attr)).analyze
+      x.join(z, Inner, Some("z.c".attr === "x.c".attr))
+        .join(y, LeftOuter, Some("x.a".attr === "y.a".attr)).analyze
 
     comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
@@ -161,8 +161,8 @@ class JoinOrderSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
-      x.join(z.join(y, Inner, Some("z.c".attr === "y.c".attr)),
-        RightOuter, Some("x.b".attr === "y.b".attr)).analyze
+      z.join(y, Inner, Some("z.c".attr === "y.c".attr))
+        .join(x, LeftOuter, Some("x.b".attr === "y.b".attr)).analyze
 
     comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }

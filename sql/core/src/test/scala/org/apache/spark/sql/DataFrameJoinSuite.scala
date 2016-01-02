@@ -184,9 +184,9 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     assert(rightInnerJoin.queryExecution.analyzed.collect {
       case j @ Join(Join(_, _, RightOuter, _), _, Inner, _) => j }.size === 1)
 
-    // The order after reordering: Inner Then Right
+    // The order after reordering: Inner Then Left
     assert(rightInnerJoin.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, Join(_, _, Inner, _), RightOuter, _) => j }.size === 1)
+      case j @ Join(Join(_, _, Inner, _), _, LeftOuter, _) => j }.size === 1)
 
     checkAnswer(
       rightInnerJoin,
@@ -208,9 +208,9 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     assert(rightInnerJoin.queryExecution.analyzed.collect {
       case j @ Join(_, Join(_, _, RightOuter, _), Inner, _) => j }.size === 1)
 
-    // The order after reordering: Inner Then Right
+    // The order after reordering: Inner Then Left
     assert(rightInnerJoin.queryExecution.optimizedPlan.collect {
-      case j @ Join(_, Join(_, _, Inner, _), RightOuter, _) => j }.size === 1)
+      case j @ Join(Join(_, _, Inner, _), _, LeftOuter, _) => j }.size === 1)
 
     checkAnswer(
       rightInnerJoin,

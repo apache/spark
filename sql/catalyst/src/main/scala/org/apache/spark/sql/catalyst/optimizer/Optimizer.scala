@@ -772,6 +772,14 @@ object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
 
 /**
  * Reorder the adjacent outer and inner joins and push inner join through left/right outer join.
+ *
+ * Basic rules are based on associativity of outer and inner joins:
+ *   1. (R1 left R2 on p12) inner R3 on p13 = (R1 inner R3 on p13) left R2 on p12
+ *   2. (R1 right R2 on p12) inner R3 on p23 = R1 right (R2 inner R3 on p23) on p12
+ *      = (R2 inner R3 on p23) left R1 on p1 (<-- left deep tree is preferred)
+ *   3. R1 inner (R2 left R3 on p23) on p12 = (R1 inner R2 on p12) left R3 on p23
+ *   4. R1 inner (R2 right R3 on p23) on p13 = R2 right (R1 inner R3 on p13) on p23
+ *      = (R1 inner R3 on p13) left R2 on p23 (<-- left deep tree is preferred)
  */
 object ReorderOuterInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -785,7 +793,7 @@ object ReorderOuterInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
         case LeftOuter if leftJoinKey.forall(canEvaluate(_, ll)) =>
           Join(Join(ll, right, Inner, condition), lr, LeftOuter, lCond)
         case RightOuter if leftJoinKey.forall(canEvaluate(_, lr)) =>
-          Join(ll, Join(lr, right, Inner, condition), RightOuter, lCond)
+          Join(Join(lr, right, Inner, condition), ll, LeftOuter, lCond)
         case _ => j
       }
 
@@ -798,7 +806,7 @@ object ReorderOuterInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
         case LeftOuter if rightJoinKey.forall(canEvaluate(_, rl)) =>
           Join(Join(rl, left, Inner, condition), rr, LeftOuter, rCond)
         case RightOuter if rightJoinKey.forall(canEvaluate(_, rr)) =>
-          Join(rl, Join(left, rr, Inner, condition), RightOuter, rCond)
+          Join(Join(left, rr, Inner, condition), rl, LeftOuter, rCond)
         case _ => j
       }
   }
