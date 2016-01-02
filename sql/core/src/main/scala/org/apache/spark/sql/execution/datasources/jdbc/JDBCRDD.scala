@@ -193,6 +193,9 @@ private[sql] object JDBCRDD extends Logging {
   private def compileFilter(f: Filter): Option[String] = {
     Option(f match {
       case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+      case EqualNullSafe(attr, value) =>
+        s"(NOT ($attr != ${compileValue(value)} OR $attr IS NULL OR " +
+          s"${compileValue(value)} IS NULL) OR ($attr IS NULL AND ${compileValue(value)} IS NULL))"
       case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
       case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
       case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
@@ -319,7 +322,6 @@ private[sql] class JDBCRDD(
     columns.foreach(x => sb.append(",").append(x))
     if (sb.length == 0) "1" else sb.substring(1)
   }
-
 
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
