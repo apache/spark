@@ -23,6 +23,8 @@ import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.UserDefinedFunction
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -50,9 +52,11 @@ class Normalizer(override val uid: String)
   /** @group setParam */
   def setP(value: Double): this.type = set(p, value)
 
-  override protected def createTransformFunc: Vector => Vector = {
-    val normalizer = new feature.Normalizer($(p))
-    normalizer.transform
+  override protected def transformFunc: UserDefinedFunction = {
+    udf { input: Vector =>
+      val normalizer = new feature.Normalizer($(p))
+      normalizer.transform(input)
+    }
   }
 
   override protected def outputDataType: DataType = new VectorUDT()

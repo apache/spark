@@ -24,7 +24,9 @@ import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.UserDefinedFunction
 
 /**
  * :: Experimental ::
@@ -56,8 +58,10 @@ class PolynomialExpansion(override val uid: String)
   /** @group setParam */
   def setDegree(value: Int): this.type = set(degree, value)
 
-  override protected def createTransformFunc: Vector => Vector = { v =>
-    PolynomialExpansion.expand(v, $(degree))
+  override protected def transformFunc: UserDefinedFunction = {
+    udf { input: Vector =>
+      PolynomialExpansion.expand(input, $(degree))
+    }
   }
 
   override protected def outputDataType: DataType = new VectorUDT()

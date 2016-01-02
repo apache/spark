@@ -23,6 +23,8 @@ import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.UserDefinedFunction
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -49,10 +51,12 @@ class ElementwiseProduct(override val uid: String)
   /** @group getParam */
   def getScalingVec: Vector = getOrDefault(scalingVec)
 
-  override protected def createTransformFunc: Vector => Vector = {
+  override protected def transformFunc: UserDefinedFunction = {
     require(params.contains(scalingVec), s"transformation requires a weight vector")
-    val elemScaler = new feature.ElementwiseProduct($(scalingVec))
-    elemScaler.transform
+    udf { input: Vector =>
+      val elemScaler = new feature.ElementwiseProduct($(scalingVec))
+      elemScaler.transform(input)
+    }
   }
 
   override protected def outputDataType: DataType = new VectorUDT()

@@ -25,6 +25,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.UserDefinedFunction
 import org.apache.spark.sql.types._
 
 /**
@@ -90,7 +91,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
    * account of the embedded param map. So the param values should be determined solely by the input
    * param map.
    */
-  protected def createTransformFunc: IN => OUT
+  protected def transformFunc: UserDefinedFunction
 
   /**
    * Returns the data type of the output column.
@@ -115,8 +116,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    dataset.withColumn($(outputCol),
-      callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
+    dataset.withColumn($(outputCol), this.transformFunc(col($(inputCol))))
   }
 
   override def copy(extra: ParamMap): T = defaultCopy(extra)
