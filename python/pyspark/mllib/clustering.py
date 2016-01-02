@@ -290,7 +290,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
             return cluster_labels
         else:
             z = self.predictSoft(x)
-            return z.index(max(z))
+            return z.argmax()
 
     @since('1.3.0')
     def predictSoft(self, x):
@@ -306,7 +306,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
                                               _convert_to_vector(self.weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
         else:
-            return self.call("predictSoft", _convert_to_vector(x))
+            return self.call("predictSoft", _convert_to_vector(x)).toArray()
 
     @classmethod
     @since('1.5.0')
