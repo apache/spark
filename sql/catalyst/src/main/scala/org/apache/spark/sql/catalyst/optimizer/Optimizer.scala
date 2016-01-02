@@ -45,7 +45,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SetOperationPushDown,
       SamplePushDown,
       ReorderInnerJoin,
-      ReorderOuterInner,
+      ReorderOuterInnerJoins,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -771,11 +771,11 @@ object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
- * Reorder the adjacent outer and inner joins and push inner join below left/right outer join.
+ * Reorder the adjacent outer and inner joins and push inner join through left/right outer join.
  *
  * TODO: improve the checking conditions to cover out-of-order cases.
  */
-object ReorderOuterInner extends Rule[LogicalPlan] {
+object ReorderOuterInnerJoins extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     case j @ Join(left @ Join(ll, lr, joinType, lCondition), right, Inner, condition) =>
