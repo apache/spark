@@ -104,4 +104,34 @@ class RowTest extends FunSpec with Matchers {
       internalRow shouldEqual internalRow2
     }
   }
+
+  describe("row immutability") {
+    val values = Array(1, 2, "3", "IV", 6L)
+    val externalRow = Row(values.clone(): _*)
+    val internalRow = InternalRow(values.clone(): _*)
+
+    def modifyValues(values: Seq[Any]): Seq[Any] = {
+      val array = values.toArray
+      array(2) = "42"
+      array
+    }
+
+    it("copy should return same ref for external rows") {
+      externalRow should be theSameInstanceAs externalRow.copy()
+    }
+
+    it("copy should return same ref for interal rows") {
+      internalRow should be theSameInstanceAs internalRow.copy()
+    }
+
+    it("toSeq should not expose internal state for external rows") {
+      val modifiedValues = modifyValues(externalRow.toSeq)
+      externalRow.toSeq should not equal modifiedValues
+    }
+
+    it("toSeq should not expose internal state for internal rows") {
+      val modifiedValues = modifyValues(internalRow.toSeq(Seq.empty))
+      internalRow.toSeq(Seq.empty) should not equal modifiedValues
+    }
+  }
 }
