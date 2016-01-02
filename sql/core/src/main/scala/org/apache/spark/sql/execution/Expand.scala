@@ -41,11 +41,20 @@ case class Expand(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  private[this] val projection =
-    (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
+  private[this] val projection = {
+    if (outputsUnsafeRows) {
+      (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
+    } else {
+      (exprs: Seq[Expression]) => newMutableProjection(exprs, child.output)()
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>

@@ -132,17 +132,11 @@ case class HiveTableScan(
     }
   }
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    val rdd = if (!relation.hiveQlTable.isPartitioned) {
-      hadoopReader.makeRDDForTable(relation.hiveQlTable)
-    } else {
-      hadoopReader.makeRDDForPartitionedTable(
-        prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
-    }
-    rdd.mapPartitionsInternal { iter =>
-      val proj = UnsafeProjection.create(schema)
-      iter.map(proj)
-    }
+  protected override def doExecute(): RDD[InternalRow] = if (!relation.hiveQlTable.isPartitioned) {
+    hadoopReader.makeRDDForTable(relation.hiveQlTable)
+  } else {
+    hadoopReader.makeRDDForPartitionedTable(
+      prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
   }
 
   override def output: Seq[Attribute] = attributes
