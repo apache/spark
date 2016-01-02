@@ -1246,7 +1246,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<IntWritable, Text> output = sc.newAPIHadoopFile(outputDir,
         org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat.class,
-        IntWritable.class, Text.class, new Job().getConfiguration());
+        IntWritable.class, Text.class, Job.getInstance().getConfiguration());
     Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>, String>() {
       @Override
       public String call(Tuple2<IntWritable, Text> x) {

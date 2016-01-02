@@ -16,7 +16,6 @@
  */
 
 // scalastyle:off println
-// scalastyle:off jobcontext
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -59,7 +58,7 @@ object CassandraTest {
     val sc = new SparkContext(sparkConf)
 
     // Build the job configuration with ConfigHelper provided by Cassandra
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[ColumnFamilyInputFormat])
 
     val host: String = args(1)
@@ -131,7 +130,6 @@ object CassandraTest {
   }
 }
 // scalastyle:on println
-// scalastyle:on jobcontext
 
 /*
 create keyspace casDemo;

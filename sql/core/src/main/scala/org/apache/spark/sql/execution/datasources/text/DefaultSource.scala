@@ -26,8 +26,6 @@ import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -88,8 +86,8 @@ private[sql] class TextRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = job.getConfiguration
     val paths = inputPaths.map(_.getPath).sortBy(_.toUri)
 
     if (paths.nonEmpty) {
@@ -138,17 +136,16 @@ private[sql] class TextRelation(
 }
 
 class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
-  extends OutputWriter
-  with SparkHadoopMapRedUtil {
+  extends OutputWriter {
 
   private[this] val buffer = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+        val configuration = context.getConfiguration
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
-        val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+        val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
       }
