@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.dstream
 
 import java.io._
-import java.net.Socket
+import java.net.{Socket,ConnectException}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -59,7 +59,7 @@ class SocketReceiver[T: ClassTag](
     try {
       socket = new Socket(host, port)
     } catch {
-      case NonFatal(e) =>
+      case e: ConnectException =>
         restart(s"Error connecting to $host:$port", e)
         return
     }
