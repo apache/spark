@@ -22,7 +22,7 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -44,7 +44,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
-      ReorderJoin,
+      ReorderInnerJoin,
+      ReorderOuterInner,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -727,7 +728,7 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
   *
   * The order of joins will not be changed if all of them already have at least one condition.
   */
-object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
+object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
     * Join a list of plans together and push down the conditions into them.
@@ -765,6 +766,51 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     case j @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       createOrderedJoin(input, conditions)
+  }
+}
+
+
+/**
+ * Reorder the adjacent outer and inner joins and push inner join below left/right outer join.
+ *
+ * TODO: improve the checking conditions to cover out-of-order cases.
+ */
+object ReorderOuterInner extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    case j @ Join(left @ Join(ll, lr, joinType, lCondition), right, Inner, condition) =>
+      val leftJoinKey = j match {
+        case ExtractEquiJoinKeys(_, leftKeys, _, _, _, _) => leftKeys
+      }
+      val (leftLeftJoinKey, leftRightJoinKey) = left match {
+        case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
+          (leftKeys, rightKeys)
+      }
+
+      joinType match {
+        case LeftOuter if leftJoinKey == leftLeftJoinKey =>
+          Join(Join(ll, right, Inner, condition), lr, LeftOuter, lCondition)
+        case RightOuter if leftJoinKey == leftRightJoinKey =>
+          Join(ll, Join(lr, right, Inner, condition), RightOuter, lCondition)
+        case _ => j
+      }
+
+    case j @ Join(left, right @ Join(rl, rr, joinType, rCondition), Inner, condition) =>
+      val rightJoinKey = j match {
+        case ExtractEquiJoinKeys(_, _, rightKey, _, _, _) => rightKey
+      }
+      val (rightLeftJoinKey, rightRightJoinKey) = right match {
+        case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
+          (leftKeys, rightKeys)
+      }
+
+      joinType match {
+        case LeftOuter if rightJoinKey == rightLeftJoinKey =>
+          Join(Join(rl, left, Inner, condition), rr, LeftOuter, rCondition)
+        case RightOuter if rightJoinKey == rightRightJoinKey =>
+          Join(rl, Join(left, rr, Inner, condition), RightOuter, rCondition)
+        case _ => j
+      }
   }
 }
 

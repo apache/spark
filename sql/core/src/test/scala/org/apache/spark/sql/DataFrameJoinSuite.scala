@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.{Inner, RightOuter, LeftOuter}
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -116,6 +118,104 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       left.join(right, left("key") === right("key")),
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
+  }
+
+  test("join - left outer + inner reordering # 1") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 3, "1"), (3, 6, "5")).toDF("int", "int2", "str").as("c")
+
+    // Left Then Inner -> Inner Then Left
+    val leftInnerJoin = df.join(df2, $"a.int" === $"b.int", "left")
+      .join(df3, $"c.int" === $"a.int", "inner").select($"a.*", $"b.*", $"c.*")
+
+    // The order before reordering: Left Then Inner
+    assert(leftInnerJoin.queryExecution.analyzed.collect {
+      case j@Join(Join(_, _, LeftOuter, _), _, Inner, _) => j
+    }.size === 1)
+
+    // The order after reordering: Inner Then Left
+    assert(leftInnerJoin.queryExecution.optimizedPlan.collect {
+      case j@Join(Join(_, _, Inner, _), _, LeftOuter, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      leftInnerJoin,
+      Row(1, 2, "1", 1, 3, "1", 1, 3, "1") ::
+      Row(3, 4, "3", null, null, null, 3, 6, "5") :: Nil)
+  }
+
+  test("join - left outer + inner reordering # 2") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 3, "1"), (3, 6, "5")).toDF("int", "int2", "str").as("c")
+
+    // Left Then Inner -> Inner Then Left
+    val right = df.join(df2, $"a.int" === $"b.int", "left")
+    val leftInnerJoin = df3.join(right, $"c.int" === $"a.int", "inner")
+      .select($"a.*", $"b.*", $"c.*")
+
+    // The order before reordering: Left Then Inner
+    assert(leftInnerJoin.queryExecution.analyzed.collect {
+      case j@Join(_, Join(_, _, LeftOuter, _), Inner, _) => j
+    }.size === 1)
+
+    // The order after reordering: Inner Then Left
+    assert(leftInnerJoin.queryExecution.optimizedPlan.collect {
+      case j@Join(Join(_, _, Inner, _), _, LeftOuter, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      leftInnerJoin,
+      Row(1, 2, "1", 1, 3, "1", 1, 3, "1") ::
+      Row(3, 4, "3", null, null, null, 3, 6, "5") :: Nil)
+  }
+
+  test("join - right outer + inner reordering # 1") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 9, "8"), (5, 0, "4")).toDF("int", "int2", "str").as("c")
+
+    // Right Then Inner -> Inner Then Right
+    val rightInnerJoin = df.join(df2, $"a.int" === $"b.int", "right")
+      .join(df3, $"c.int" === $"b.int", "inner").select($"a.*", $"b.*", $"c.*")
+
+    // The order before reordering: Right Then Inner
+    assert(rightInnerJoin.queryExecution.analyzed.collect {
+      case j @ Join(Join(_, _, RightOuter, _), _, Inner, _) => j }.size === 1)
+
+    // The order after reordering: Inner Then Right
+    assert(rightInnerJoin.queryExecution.optimizedPlan.collect {
+      case j @ Join(_, Join(_, _, Inner, _), RightOuter, _) => j }.size === 1)
+
+    checkAnswer(
+      rightInnerJoin,
+      Row(1, 2, "1", 1, 3, "1", 1, 9, "8") ::
+      Row(null, null, null, 5, 6, "5", 5, 0, "4") :: Nil)
+  }
+
+  test("join - right outer + inner reordering #2") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 9, "8"), (5, 0, "4")).toDF("int", "int2", "str").as("c")
+
+    // Right Then Inner -> Inner Then Right
+    val right = df.join(df2, $"a.int" === $"b.int", "right")
+    val rightInnerJoin = df3.join(right, $"c.int" === $"b.int", "inner")
+      .select($"a.*", $"b.*", $"c.*")
+
+    // The order before reordering: Right Then Inner
+    assert(rightInnerJoin.queryExecution.analyzed.collect {
+      case j @ Join(_, Join(_, _, RightOuter, _), Inner, _) => j }.size === 1)
+
+    // The order after reordering: Inner Then Right
+    assert(rightInnerJoin.queryExecution.optimizedPlan.collect {
+      case j @ Join(_, Join(_, _, Inner, _), RightOuter, _) => j }.size === 1)
+
+    checkAnswer(
+      rightInnerJoin,
+      Row(1, 2, "1", 1, 3, "1", 1, 9, "8") ::
+      Row(null, null, null, 5, 6, "5", 5, 0, "4") :: Nil)
   }
 
   test("broadcast join hint") {

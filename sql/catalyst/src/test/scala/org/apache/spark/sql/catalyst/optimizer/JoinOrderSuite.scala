@@ -38,13 +38,12 @@ class JoinOrderSuite extends PlanTest {
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
-        ReorderJoin,
+        ReorderInnerJoin,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
         ColumnPruning,
         ProjectCollapsing) :: Nil
-
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
