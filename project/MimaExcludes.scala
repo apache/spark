@@ -35,8 +35,25 @@ object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("2.0") =>
       Seq(
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD")
+        // SPARK-7995 Remove AkkaRpcEnv
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaFailure"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaFailure$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEndpointRef$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEnvFactory"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEnv"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaMessage$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaRpcEndpointRef"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.ErrorMonitor"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rpc.akka.AkkaMessage")
+      ) ++ Seq(
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
         ) ++
+      Seq(
+        // SPARK-12481
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+          "org.apache.spark.mapred.SparkHadoopMapRedUtil")
+      ) ++
       // When 1.6 is officially released, update this exclusion list.
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
