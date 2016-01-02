@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.AnalysisException
+
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.PhysicalRDD
 
