@@ -27,6 +27,15 @@ import scala.collection.JavaConverters._
 import org.apache.spark._
 import org.apache.spark.util.{RedirectThread, Utils}
 
+
+class SocketPair(val primary: Socket, val secondary: Socket) {
+  def close(): Unit = {
+    primary.close()
+    secondary.close()
+  }
+}
+
+
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
   extends Logging {
 
@@ -41,19 +50,19 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
   var daemonPort: Int = 0
-  val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
-  val idleWorkers = new mutable.Queue[Socket]()
+  val daemonWorkers = new mutable.WeakHashMap[SocketPair, Int]()
+  val idleWorkers = new mutable.Queue[SocketPair]()
   var lastActivity = 0L
   new MonitorThread().start()
 
-  var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
+  var simpleWorkers = new mutable.WeakHashMap[SocketPair, Process]()
 
   val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
-  def create(): Socket = {
+  def create(): SocketPair = {
     if (useDaemon) {
       synchronized {
         if (idleWorkers.size > 0) {
@@ -66,20 +75,57 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
+
+  /**
+    * Launch a secondary socket on the same socket channel.
+    *
+    * @param socket
+    * @return
+    */
+  private def createSecondSocket(socket: Socket): Socket = {
+    var serverSocket: ServerSocket = null
+    var secondary: Socket = null
+    try {
+      serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
+
+      // Tell the worker our port
+      val out = new DataOutputStream(socket.getOutputStream)
+      out.writeInt(serverSocket.getLocalPort)
+      out.flush()
+      // Wait for it to connect to our socket
+      serverSocket.setSoTimeout(10000)
+      try {
+        secondary = serverSocket.accept()
+      } catch {
+        case e: Exception =>
+          throw new SparkException(
+            "Python worker did not connect back to second socket in time", e)
+      }
+    } finally {
+      if (serverSocket != null) {
+        serverSocket.close()
+      }
+    }
+    secondary
+  }
+
+
   /**
    * Connect to a worker launched through pyspark/daemon.py, which forks python processes itself
    * to avoid the high cost of forking from Java. This currently only works on UNIX-based systems.
    */
-  private def createThroughDaemon(): Socket = {
+  private def createThroughDaemon(): SocketPair = {
 
-    def createSocket(): Socket = {
+    def createSocket(): SocketPair = {
       val socket = new Socket(daemonHost, daemonPort)
       val pid = new DataInputStream(socket.getInputStream).readInt()
       if (pid < 0) {
         throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
-      daemonWorkers.put(socket, pid)
-      socket
+      val secondary = createSecondSocket(socket)
+      val socketPair = new SocketPair(socket, secondary)
+      daemonWorkers.put(socketPair, pid)
+      socketPair
     }
 
     synchronized {
@@ -103,7 +149,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Launch a worker by executing worker.py directly and telling it to connect to us.
    */
-  private def createSimpleWorker(): Socket = {
+  private def createSimpleWorker(): SocketPair = {
     var serverSocket: ServerSocket = null
     try {
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
@@ -128,9 +174,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       // Wait for it to connect to our socket
       serverSocket.setSoTimeout(10000)
       try {
-        val socket = serverSocket.accept()
-        simpleWorkers.put(socket, worker)
-        return socket
+        val primary = serverSocket.accept()
+        val secondary = createSecondSocket(primary)
+        val socketPair = new SocketPair(primary, secondary)
+        simpleWorkers.put(socketPair, worker)
+        return socketPair
       } catch {
         case e: Exception =>
           throw new SparkException("Python worker did not connect back in time", e)
@@ -267,7 +315,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     stopDaemon()
   }
 
-  def stopWorker(worker: Socket) {
+  def stopWorker(worker: SocketPair) {
     synchronized {
       if (useDaemon) {
         if (daemon != null) {
@@ -286,7 +334,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     worker.close()
   }
 
-  def releaseWorker(worker: Socket) {
+  def releaseWorker(worker: SocketPair) {
     if (useDaemon) {
       synchronized {
         lastActivity = System.currentTimeMillis()

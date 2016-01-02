@@ -27,7 +27,7 @@ import akka.actor.ActorSystem
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.python.PythonWorkerFactory
+import org.apache.spark.api.python.{SocketPair, PythonWorkerFactory}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
@@ -128,7 +128,7 @@ class SparkEnv (
   }
 
   private[spark]
-  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
+  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): SocketPair = {
     synchronized {
       val key = (pythonExec, envVars)
       pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
@@ -136,7 +136,7 @@ class SparkEnv (
   }
 
   private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String], worker: SocketPair) {
     synchronized {
       val key = (pythonExec, envVars)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
@@ -144,7 +144,7 @@ class SparkEnv (
   }
 
   private[spark]
-  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: SocketPair) {
     synchronized {
       val key = (pythonExec, envVars)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))

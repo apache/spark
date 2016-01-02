@@ -40,7 +40,7 @@ def compute_real_exit_code(exit_code):
         return 1
 
 
-def worker(sock):
+def worker(sock, sock2):
     """
     Called by a worker process after the fork().
     """
@@ -54,11 +54,12 @@ def worker(sock):
     # Read the socket using fdopen instead of socket.makefile() because the latter
     # seems to be very slow; note that we need to dup() the file descriptor because
     # otherwise writes also cause a seek that makes us miss data on the read side.
-    infile = os.fdopen(os.dup(sock.fileno()), "rb", 65536)
-    outfile = os.fdopen(os.dup(sock.fileno()), "wb", 65536)
+    infile1 = os.fdopen(os.dup(sock.fileno()),  "rb", 65536)
+    infile2 = os.fdopen(os.dup(sock2.fileno()), "rb", 65536)
+    outfile = os.fdopen(os.dup(sock.fileno()),  "wb", 65536)
     exit_code = 0
     try:
-        worker_main(infile, outfile)
+        worker_main(infile1, infile2, outfile)
     except SystemExit as exc:
         exit_code = compute_real_exit_code(exc.code)
     finally:
@@ -149,12 +150,17 @@ def manager():
                     listen_sock.close()
                     try:
                         # Acknowledge that the fork was successful
-                        outfile = sock.makefile(mode="wb")
-                        write_int(os.getpid(), outfile)
-                        outfile.flush()
-                        outfile.close()
+                        tmpfile = sock.makefile(mode="rwb")
+                        write_int(os.getpid(), tmpfile)
+                        tmpfile.flush()
+                        second_port = read_int(tmpfile)
+                        tmpfile.close()
+                        second_socket = socket.socket(socket.AF_INET,
+                                                      socket.SOCK_STREAM)
+                        second_socket.connect(("127.0.0.1", second_port))
+
                         while True:
-                            code = worker(sock)
+                            code = worker(sock, second_socket)
                             if not reuse or code:
                                 # wait for closing
                                 try:

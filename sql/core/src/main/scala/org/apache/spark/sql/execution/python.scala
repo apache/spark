@@ -395,7 +395,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
         udf.accumulator,
         bufferSize,
         reuseWorker
-      ).compute(inputIterator, context.partitionId(), context)
+      ).compute(inputIterator, inputIterator2 = null, context.partitionId(), context)
 
       val unpickle = new Unpickler
       val row = new GenericMutableRow(1)
