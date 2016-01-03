@@ -117,4 +117,21 @@ class OuterJoinEliminationSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("joins: left to inner with complicated filter predicates") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery =
+      x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
+        .where(!'e.isNull || ('d.isNotNull && 'f.isNull))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation
+    val right = testRelation1.where(!'e.isNull || ('d.isNotNull && 'f.isNull))
+    val correctAnswer =
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
