@@ -380,7 +380,7 @@ def json_ser(obj):
     json serializer that deals with dates
     usage: json.dumps(object, default=utils.json_ser)
     """
-    if isinstance(obj, (datetime.datetime, datetime.date)):
+    if isinstance(obj, (datetime, date)):
         return obj.isoformat()
 
 
