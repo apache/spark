@@ -107,7 +107,8 @@ class OuterJoinEliminationSuite extends PlanTest {
     val y = testRelation1.subquery('y)
 
     val originalQuery =
-      x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr)).where("y.e".attr.isNotNull)
+      x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
+        .where("y.e".attr.isNotNull)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
