@@ -223,14 +223,14 @@ test_that("takeSample() on RDDs", {
     s <- takeSample(data, TRUE, 100L, seed)
     expect_equal(length(s), 100L)
     # Chance of getting all distinct elements is astronomically low, so test we
-    # got < 100
+    # got less than 100
     expect_true(length(unique(s)) < 100L)
   }
   for (seed in 4:5) {
     s <- takeSample(data, TRUE, 200L, seed)
     expect_equal(length(s), 200L)
     # Chance of getting all distinct elements is still quite low, so test we
-    # got < 100
+    # got less than 100
     expect_true(length(unique(s)) < 100L)
   }
 })
