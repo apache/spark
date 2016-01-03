@@ -44,7 +44,7 @@ HADOOP_PROFILES=(
 set +e
 OLD_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
-    -Dexec.fargs='${project.version}' \
+    -Dexec.args='${project.version}' \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.3.1:exec)
 if [ $? != 0 ]; then
