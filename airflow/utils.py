@@ -380,9 +380,8 @@ def json_ser(obj):
     json serializer that deals with dates
     usage: json.dumps(object, default=utils.json_ser)
     """
-    if isinstance(obj, datetime):
-        obj = obj.isoformat()
-    return obj
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
 
 
 def alchemy_to_dict(obj):
