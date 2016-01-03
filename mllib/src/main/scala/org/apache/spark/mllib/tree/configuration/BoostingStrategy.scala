@@ -21,7 +21,11 @@ import scala.beans.BeanProperty
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.configuration.Algo._
+<<<<<<< HEAD
 import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
+=======
+import org.apache.spark.mllib.tree.loss.{LogLoss, Loss, SquaredError}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Configuration options for [[org.apache.spark.mllib.tree.GradientBoostedTrees]].

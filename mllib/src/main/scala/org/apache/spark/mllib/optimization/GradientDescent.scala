@@ -19,12 +19,21 @@ package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable.ArrayBuffer
 
+<<<<<<< HEAD
 import breeze.linalg.{DenseVector => BDV, norm}
 
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+=======
+import breeze.linalg.{norm, DenseVector => BDV}
+
+import org.apache.spark.Logging
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.rdd.RDD
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 
 /**

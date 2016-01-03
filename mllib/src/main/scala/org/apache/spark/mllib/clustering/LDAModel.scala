@@ -17,7 +17,11 @@
 
 package org.apache.spark.mllib.clustering
 
+<<<<<<< HEAD
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax, argtopk, normalize, sum}
+=======
+import breeze.linalg.{argmax, argtopk, normalize, sum, DenseMatrix => BDM, DenseVector => BDV}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats

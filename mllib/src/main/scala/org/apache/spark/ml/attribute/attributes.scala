@@ -20,7 +20,11 @@ package org.apache.spark.ml.attribute
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.DeveloperApi
+<<<<<<< HEAD
 import org.apache.spark.sql.types.{DoubleType, NumericType, Metadata, MetadataBuilder, StructField}
+=======
+import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: DeveloperApi ::

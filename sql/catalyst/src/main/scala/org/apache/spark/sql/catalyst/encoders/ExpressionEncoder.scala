@@ -133,7 +133,11 @@ object ExpressionEncoder {
     }
 
     val fromRowExpression =
+<<<<<<< HEAD
       NewInstance(cls, fromRowExpressions, propagateNull = false, ObjectType(cls))
+=======
+      NewInstance(cls, fromRowExpressions, ObjectType(cls), propagateNull = false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     new ExpressionEncoder[Any](
       schema,

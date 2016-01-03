@@ -55,7 +55,10 @@ object RowEncoder {
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
         Nil,
+<<<<<<< HEAD
         false,
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
       Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
@@ -166,7 +169,10 @@ object RowEncoder {
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
         Nil,
+<<<<<<< HEAD
         false,
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 

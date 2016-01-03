@@ -20,8 +20,13 @@ package org.apache.spark.mllib.clustering
 import scala.util.Random
 
 import org.apache.spark.Logging
+<<<<<<< HEAD
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
+=======
+import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
+import org.apache.spark.mllib.linalg.Vectors
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * An utility object to run K-means locally. This is private to the ML package because it's used

@@ -17,10 +17,18 @@
 
 package org.apache.spark.mllib.clustering
 
+<<<<<<< HEAD
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+=======
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.{Logging, SparkContext, SparkException}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
@@ -30,7 +38,10 @@ import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.random.XORShiftRandom
+<<<<<<< HEAD
 import org.apache.spark.{Logging, SparkContext, SparkException}
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Model produced by [[PowerIterationClustering]].

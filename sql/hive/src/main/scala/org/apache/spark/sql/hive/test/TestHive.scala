@@ -410,7 +410,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     try {
       // HACK: Hive is too noisy by default.
       org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
+<<<<<<< HEAD
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
+=======
+        val logger = log.asInstanceOf[org.apache.log4j.Logger]
+        if (!logger.getName.contains("org.apache.spark")) {
+          logger.setLevel(org.apache.log4j.Level.WARN)
+        }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       }
 
       cacheManager.clearCache()

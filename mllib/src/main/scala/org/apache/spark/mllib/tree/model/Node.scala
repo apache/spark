@@ -17,10 +17,17 @@
 
 package org.apache.spark.mllib.tree.model
 
+<<<<<<< HEAD
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.linalg.Vector
+=======
+import org.apache.spark.Logging
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.tree.configuration.FeatureType._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: DeveloperApi ::

@@ -17,14 +17,24 @@
 
 package org.apache.spark.streaming.ui
 
+<<<<<<< HEAD
 import scala.xml.Node
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
+<<<<<<< HEAD
+=======
+import scala.xml.Node
+
+import org.apache.commons.lang3.StringEscapeUtils
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 private[streaming] object UIUtils {
 
   /**

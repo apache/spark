@@ -17,8 +17,13 @@
 
 package org.apache.spark.ml
 
+<<<<<<< HEAD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
+=======
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
+import org.apache.spark.sql.DataFrame
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * ==ML attributes==

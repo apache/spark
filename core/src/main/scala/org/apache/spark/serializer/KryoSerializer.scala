@@ -34,7 +34,10 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
+<<<<<<< HEAD
 import org.apache.spark.broadcast.HttpBroadcast
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
@@ -107,7 +110,10 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
     kryo.register(classOf[SerializableConfiguration], new KryoJavaSerializer())
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
+<<<<<<< HEAD
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
     kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
@@ -401,12 +407,16 @@ private[serializer] class KryoInputDataInputBridge(input: KryoInput) extends Dat
   override def readInt(): Int = input.readInt()
   override def readUnsignedShort(): Int = input.readShortUnsigned()
   override def skipBytes(n: Int): Int = {
+<<<<<<< HEAD
     var remaining: Long = n
     while (remaining > 0) {
       val skip = Math.min(Integer.MAX_VALUE, remaining).asInstanceOf[Int]
       input.skip(skip)
       remaining -= skip
     }
+=======
+    input.skip(n)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     n
   }
   override def readFully(b: Array[Byte]): Unit = input.read(b)

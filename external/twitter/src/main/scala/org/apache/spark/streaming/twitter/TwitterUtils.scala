@@ -19,10 +19,18 @@ package org.apache.spark.streaming.twitter
 
 import twitter4j.Status
 import twitter4j.auth.Authorization
+<<<<<<< HEAD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
+=======
+
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.api.java.{JavaDStream, JavaReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.{DStream, ReceiverInputDStream}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 object TwitterUtils {
   /**

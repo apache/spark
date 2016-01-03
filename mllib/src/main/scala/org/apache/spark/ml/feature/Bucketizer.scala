@@ -20,7 +20,11 @@ package org.apache.spark.ml.feature
 import java.{util => ju}
 
 import org.apache.spark.SparkException
+<<<<<<< HEAD
 import org.apache.spark.annotation.{Since, Experimental}
+=======
+import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._

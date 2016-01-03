@@ -23,7 +23,11 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
+<<<<<<< HEAD
 import org.apache.spark.mllib.util.{Saveable, Loader}
+=======
+import org.apache.spark.mllib.util.{Loader, Saveable}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 
 /**

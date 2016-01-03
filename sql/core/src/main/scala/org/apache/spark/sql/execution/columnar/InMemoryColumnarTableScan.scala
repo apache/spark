@@ -66,6 +66,11 @@ private[sql] case class InMemoryRelation(
     private[sql] var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
   extends LogicalPlan with MultiInstanceRelation {
 
+<<<<<<< HEAD
+=======
+  override def producedAttributes: AttributeSet = outputSet
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
     if (_batchStats == null) {
       child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[InternalRow])

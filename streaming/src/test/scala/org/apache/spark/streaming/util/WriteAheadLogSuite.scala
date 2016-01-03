@@ -705,7 +705,12 @@ object WriteAheadLogSuite {
     val logDirectoryPath = new Path(directory)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
+<<<<<<< HEAD
     if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
+=======
+    if (fileSystem.exists(logDirectoryPath) &&
+        fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       fileSystem.listStatus(logDirectoryPath).map { _.getPath() }.sortBy {
         _.getName().split("-")(1).toLong
       }.map {

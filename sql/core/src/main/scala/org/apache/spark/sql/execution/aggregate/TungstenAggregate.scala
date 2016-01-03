@@ -55,6 +55,14 @@ case class TungstenAggregate(
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
+<<<<<<< HEAD
+=======
+  override def producedAttributes: AttributeSet =
+    AttributeSet(aggregateAttributes) ++
+    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
+    AttributeSet(aggregateBufferAttributes)
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
       case Some(exprs) if exprs.length == 0 => AllTuples :: Nil

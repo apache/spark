@@ -26,10 +26,16 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.util.AbstractScalaRowIterator;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+=======
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.catalyst.util.AbstractScalaRowIterator;
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
@@ -123,7 +129,11 @@ final class UnsafeExternalRowSorter {
       return new AbstractScalaRowIterator<UnsafeRow>() {
 
         private final int numFields = schema.length();
+<<<<<<< HEAD
         private UnsafeRow row = new UnsafeRow();
+=======
+        private UnsafeRow row = new UnsafeRow(numFields);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
         @Override
         public boolean hasNext() {
@@ -137,7 +147,10 @@ final class UnsafeExternalRowSorter {
             row.pointTo(
               sortedIterator.getBaseObject(),
               sortedIterator.getBaseOffset(),
+<<<<<<< HEAD
               numFields,
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
               sortedIterator.getRecordLength());
             if (!hasNext()) {
               UnsafeRow copy = row.copy(); // so that we don't have dangling pointers to freed page
@@ -173,19 +186,34 @@ final class UnsafeExternalRowSorter {
   private static final class RowComparator extends RecordComparator {
     private final Ordering<InternalRow> ordering;
     private final int numFields;
+<<<<<<< HEAD
     private final UnsafeRow row1 = new UnsafeRow();
     private final UnsafeRow row2 = new UnsafeRow();
 
     public RowComparator(Ordering<InternalRow> ordering, int numFields) {
       this.numFields = numFields;
+=======
+    private final UnsafeRow row1;
+    private final UnsafeRow row2;
+
+    public RowComparator(Ordering<InternalRow> ordering, int numFields) {
+      this.numFields = numFields;
+      this.row1 = new UnsafeRow(numFields);
+      this.row2 = new UnsafeRow(numFields);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       this.ordering = ordering;
     }
 
     @Override
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
       // TODO: Why are the sizes -1?
+<<<<<<< HEAD
       row1.pointTo(baseObj1, baseOff1, numFields, -1);
       row2.pointTo(baseObj2, baseOff2, numFields, -1);
+=======
+      row1.pointTo(baseObj1, baseOff1, -1);
+      row2.pointTo(baseObj2, baseOff2, -1);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       return ordering.compare(row1, row2);
     }
   }

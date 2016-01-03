@@ -19,8 +19,13 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
 
+<<<<<<< HEAD
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
+=======
+import scala.collection.{Map, Set}
+import scala.collection.JavaConverters._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration

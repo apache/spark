@@ -21,6 +21,7 @@ import java.io._
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
+<<<<<<< HEAD
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 
@@ -30,6 +31,16 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.apache.spark.streaming.scheduler.JobGenerator
 
+=======
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+
+import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.io.CompressionCodec
+import org.apache.spark.streaming.scheduler.JobGenerator
+import org.apache.spark.util.{MetadataCleaner, Utils}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 private[streaming]
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)

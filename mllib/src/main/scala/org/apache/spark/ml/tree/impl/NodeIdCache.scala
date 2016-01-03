@@ -21,7 +21,11 @@ import java.io.IOException
 
 import scala.collection.mutable
 
+<<<<<<< HEAD
 import org.apache.hadoop.fs.{Path, FileSystem}
+=======
+import org.apache.hadoop.fs.{FileSystem, Path}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi

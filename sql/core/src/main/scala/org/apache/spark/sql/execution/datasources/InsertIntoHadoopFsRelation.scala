@@ -93,7 +93,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
     val isAppend = pathExists && (mode == SaveMode.Append)
 
     if (doInsertion) {
+<<<<<<< HEAD
       val job = new Job(hadoopConf)
+=======
+      val job = Job.getInstance(hadoopConf)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       job.setOutputKeyClass(classOf[Void])
       job.setOutputValueClass(classOf[InternalRow])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)

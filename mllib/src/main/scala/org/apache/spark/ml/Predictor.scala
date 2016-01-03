@@ -24,9 +24,15 @@ import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
+=======
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).

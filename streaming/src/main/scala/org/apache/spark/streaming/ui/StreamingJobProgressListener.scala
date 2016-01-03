@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.ui
 
+<<<<<<< HEAD
 import java.util.LinkedHashMap
 import java.util.{Map => JMap}
 import java.util.Properties
@@ -30,6 +31,15 @@ import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
 
+=======
+import java.util.{LinkedHashMap, Map => JMap, Properties}
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, Queue, SynchronizedBuffer}
+
+import org.apache.spark.scheduler._
+import org.apache.spark.streaming.{StreamingContext, Time}
+import org.apache.spark.streaming.scheduler._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   extends StreamingListener with SparkListener {

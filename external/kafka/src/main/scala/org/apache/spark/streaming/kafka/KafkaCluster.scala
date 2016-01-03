@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
+<<<<<<< HEAD
 import scala.util.control.NonFatal
 import scala.util.Random
 import scala.collection.mutable.ArrayBuffer
@@ -25,6 +26,19 @@ import java.util.Properties
 import kafka.api._
 import kafka.common.{ErrorMapping, OffsetAndMetadata, OffsetMetadataAndError, TopicAndPartition}
 import kafka.consumer.{ConsumerConfig, SimpleConsumer}
+=======
+import java.util.Properties
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
+import scala.util.control.NonFatal
+
+import kafka.api._
+import kafka.common.{ErrorMapping, OffsetAndMetadata, OffsetMetadataAndError, TopicAndPartition}
+import kafka.consumer.{ConsumerConfig, SimpleConsumer}
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.SparkException
 
 /**

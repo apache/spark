@@ -21,7 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.YarnApplicationState
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkException, Logging, SparkContext}
+=======
+import org.apache.spark.{Logging, SparkContext, SparkException}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl

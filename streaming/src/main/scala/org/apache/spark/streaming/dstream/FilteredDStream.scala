@@ -17,10 +17,18 @@
 
 package org.apache.spark.streaming.dstream
 
+<<<<<<< HEAD
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 
+=======
+import scala.reflect.ClassTag
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Duration, Time}
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 private[streaming]
 class FilteredDStream[T: ClassTag](
     parent: DStream[T],

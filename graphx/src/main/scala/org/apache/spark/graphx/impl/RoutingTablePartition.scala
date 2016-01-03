@@ -20,15 +20,24 @@ package org.apache.spark.graphx.impl
 import scala.reflect.ClassTag
 
 import org.apache.spark.Partitioner
+<<<<<<< HEAD
+=======
+import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 
+<<<<<<< HEAD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
 import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 private[graphx]
 object RoutingTablePartition {
   /**

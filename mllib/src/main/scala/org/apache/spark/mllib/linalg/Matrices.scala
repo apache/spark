@@ -19,7 +19,11 @@ package org.apache.spark.mllib.linalg
 
 import java.util.{Arrays, Random}
 
+<<<<<<< HEAD
 import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHashSet, ArrayBuffer}
+=======
+import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 

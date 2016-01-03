@@ -30,12 +30,20 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.java._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+<<<<<<< HEAD
 import org.apache.spark.streaming.{Interval, Duration, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
 import org.apache.spark.util.Utils
 
 
+=======
+import org.apache.spark.streaming.{Duration, Interval, Time}
+import org.apache.spark.streaming.api.java._
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.util.Utils
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * Interface for Python callback function which is used to transform RDDs
  */

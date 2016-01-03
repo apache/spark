@@ -20,13 +20,21 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
+<<<<<<< HEAD
 import org.apache.spark.annotation.{Since, Experimental}
+=======
+import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.Transformer
+<<<<<<< HEAD
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+=======
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._

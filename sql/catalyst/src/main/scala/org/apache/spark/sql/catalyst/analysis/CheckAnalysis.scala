@@ -57,7 +57,11 @@ trait CheckAnalysis {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
+<<<<<<< HEAD
             a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+=======
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns: [$from]")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {

@@ -17,10 +17,18 @@
 
 package org.apache.spark.streaming.dstream
 
+<<<<<<< HEAD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.streaming.scheduler.Job
 import scala.reflect.ClassTag
+=======
+import scala.reflect.ClassTag
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.streaming.scheduler.Job
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * An internal DStream used to represent output operations like DStream.foreachRDD.

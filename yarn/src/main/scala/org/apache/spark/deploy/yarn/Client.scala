@@ -28,12 +28,17 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
+<<<<<<< HEAD
 import scala.util.{Try, Success, Failure}
+=======
+import scala.util.{Failure, Success, Try}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import scala.util.control.NonFatal
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.base.Objects
 import com.google.common.io.Files
+<<<<<<< HEAD
 
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
@@ -44,6 +49,16 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{TokenIdentifier, Token}
+=======
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
+import org.apache.hadoop.io.{DataOutputBuffer, Text}
+import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -55,8 +70,13 @@ import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+<<<<<<< HEAD
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
+=======
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.util.Utils
 
 private[spark] class Client(

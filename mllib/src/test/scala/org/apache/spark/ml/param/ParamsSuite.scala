@@ -17,7 +17,14 @@
 
 package org.apache.spark.ml.param
 
+<<<<<<< HEAD
 import org.apache.spark.SparkFunSuite
+=======
+import java.io.{ByteArrayOutputStream, NotSerializableException, ObjectOutputStream}
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.MyParams
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 class ParamsSuite extends SparkFunSuite {
@@ -349,6 +356,34 @@ class ParamsSuite extends SparkFunSuite {
     val t3 = t.copy(ParamMap(t.maxIter -> 20))
     assert(t3.isSet(t3.maxIter))
   }
+<<<<<<< HEAD
+=======
+
+  test("Filtering ParamMap") {
+    val params1 = new MyParams("my_params1")
+    val params2 = new MyParams("my_params2")
+    val paramMap = ParamMap(
+      params1.intParam -> 1,
+      params2.intParam -> 1,
+      params1.doubleParam -> 0.2,
+      params2.doubleParam -> 0.2)
+    val filteredParamMap = paramMap.filter(params1)
+
+    assert(filteredParamMap.size === 2)
+    filteredParamMap.toSeq.foreach {
+      case ParamPair(p, _) =>
+        assert(p.parent === params1.uid)
+    }
+
+    // At the previous implementation of ParamMap#filter,
+    // mutable.Map#filterKeys was used internally but
+    // the return type of the method is not serializable (see SI-6654).
+    // Now mutable.Map#filter is used instead of filterKeys and the return type is serializable.
+    // So let's ensure serializability.
+    val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
+    objOut.writeObject(filteredParamMap)
+  }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 object ParamsSuite extends SparkFunSuite {

@@ -2027,6 +2027,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         """.stripMargin),
       Row(false) :: Row(true) :: Nil)
   }
+<<<<<<< HEAD
   
   test("SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake"){
     val rdd = sqlContext.sparkContext.parallelize(1 to 3 , 3 )
@@ -2041,5 +2042,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     
     assert(rdd.takeAsync(2147483638).get.size === 3)
   }
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 }

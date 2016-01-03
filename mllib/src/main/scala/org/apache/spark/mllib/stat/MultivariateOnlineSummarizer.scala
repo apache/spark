@@ -18,7 +18,11 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+<<<<<<< HEAD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+=======
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: DeveloperApi ::

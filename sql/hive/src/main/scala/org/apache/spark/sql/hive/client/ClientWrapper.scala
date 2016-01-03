@@ -31,9 +31,13 @@ import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
+<<<<<<< HEAD
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.VersionInfo
+=======
+import org.apache.hadoop.security.UserGroupInformation
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.{SparkConf, SparkException, Logging}
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -65,6 +69,7 @@ private[hive] class ClientWrapper(
   extends ClientInterface
   with Logging {
 
+<<<<<<< HEAD
   overrideHadoopShims()
 
   // !! HACK ALERT !!
@@ -133,6 +138,8 @@ private[hive] class ClientWrapper(
     }
   }
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
 

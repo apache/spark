@@ -60,6 +60,11 @@ case class ScriptTransformation(
 
   override protected def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
+<<<<<<< HEAD
+=======
+  override def producedAttributes: AttributeSet = outputSet -- inputSet
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   private val serializedHiveConf = new SerializableConfiguration(sc.hiveconf)
 
   protected override def doExecute(): RDD[InternalRow] = {

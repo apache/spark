@@ -41,7 +41,10 @@ object SSLSampleConfigs {
 
   def sparkSSLConfig(): SparkConf = {
     val conf = new SparkConf(loadDefaults = false)
+<<<<<<< HEAD
     conf.set("spark.rpc", "akka")
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")
@@ -55,7 +58,10 @@ object SSLSampleConfigs {
 
   def sparkSSLConfigUntrusted(): SparkConf = {
     val conf = new SparkConf(loadDefaults = false)
+<<<<<<< HEAD
     conf.set("spark.rpc", "akka")
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", untrustedKeyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")

@@ -21,14 +21,23 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
+<<<<<<< HEAD
 import StreamingTab._
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * Spark Web UI tab that shows statistics of a streaming job.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
 private[spark] class StreamingTab(val ssc: StreamingContext)
+<<<<<<< HEAD
   extends SparkUITab(getSparkUI(ssc), "streaming") with Logging {
+=======
+  extends SparkUITab(StreamingTab.getSparkUI(ssc), "streaming") with Logging {
+
+  import StreamingTab._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   private val STATIC_RESOURCE_DIR = "org/apache/spark/streaming/ui/static"
 

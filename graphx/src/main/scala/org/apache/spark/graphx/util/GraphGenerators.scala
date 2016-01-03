@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 import scala.util._
 
 import org.apache.spark._
+<<<<<<< HEAD
 import org.apache.spark.serializer._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
@@ -31,6 +32,13 @@ import org.apache.spark.graphx._
 import org.apache.spark.graphx.Graph
 import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.impl.GraphImpl
+=======
+import org.apache.spark.SparkContext._
+import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.GraphImpl
+import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /** A collection of graph generating functions. */
 object GraphGenerators extends Logging {

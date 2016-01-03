@@ -21,7 +21,11 @@ import scala.collection.mutable
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+<<<<<<< HEAD
 import org.apache.spark.streaming.{Time, StreamingContext}
+=======
+import org.apache.spark.streaming.{StreamingContext, Time}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: DeveloperApi ::

@@ -17,16 +17,26 @@
 
 package org.apache.spark.tools
 
+<<<<<<< HEAD
 import java.lang.reflect.{Type, Method}
+=======
+import java.lang.reflect.{Method, Type}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.api.java._
+<<<<<<< HEAD
 import org.apache.spark.rdd.{RDD, DoubleRDDFunctions, PairRDDFunctions, OrderedRDDFunctions}
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream, JavaStreamingContext}
+=======
+import org.apache.spark.rdd.{DoubleRDDFunctions, OrderedRDDFunctions, PairRDDFunctions, RDD}
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream, JavaStreamingContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.streaming.dstream.{DStream, PairDStreamFunctions}
 
 

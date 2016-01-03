@@ -23,7 +23,11 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.SparkContext
+<<<<<<< HEAD
 import org.apache.spark.annotation.{Since, DeveloperApi}
+=======
+import org.apache.spark.annotation.{DeveloperApi, Since}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
 

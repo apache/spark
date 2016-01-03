@@ -46,8 +46,13 @@ class EncoderResolutionSuite extends PlanTest {
           toExternalString('a.string),
           AssertNotNull('b.int.cast(LongType), cls.getName, "b", "Long")
         ),
+<<<<<<< HEAD
         false,
         ObjectType(cls))
+=======
+        ObjectType(cls),
+        propagateNull = false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       compareExpressions(fromRowExpr, expected)
     }
 
@@ -60,8 +65,13 @@ class EncoderResolutionSuite extends PlanTest {
           toExternalString('a.int.cast(StringType)),
           AssertNotNull('b.long, cls.getName, "b", "Long")
         ),
+<<<<<<< HEAD
         false,
         ObjectType(cls))
+=======
+        ObjectType(cls),
+        propagateNull = false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       compareExpressions(fromRowExpr, expected)
     }
   }
@@ -88,11 +98,19 @@ class EncoderResolutionSuite extends PlanTest {
               AssertNotNull(
                 GetStructField('b.struct('a.int, 'b.long), 1, Some("b")),
                 innerCls.getName, "b", "Long")),
+<<<<<<< HEAD
             false,
             ObjectType(innerCls))
         )),
       false,
       ObjectType(cls))
+=======
+            ObjectType(innerCls),
+            propagateNull = false)
+        )),
+      ObjectType(cls),
+      propagateNull = false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     compareExpressions(fromRowExpr, expected)
   }
 
@@ -114,11 +132,19 @@ class EncoderResolutionSuite extends PlanTest {
             AssertNotNull(
               GetStructField('a.struct('a.string, 'b.byte), 1, Some("b")).cast(LongType),
               cls.getName, "b", "Long")),
+<<<<<<< HEAD
           false,
           ObjectType(cls)),
         'b.int.cast(LongType)),
       false,
       ObjectType(classOf[Tuple2[_, _]]))
+=======
+          ObjectType(cls),
+          propagateNull = false),
+        'b.int.cast(LongType)),
+      ObjectType(classOf[Tuple2[_, _]]),
+      propagateNull = false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     compareExpressions(fromRowExpr, expected)
   }
 

@@ -26,10 +26,17 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
+<<<<<<< HEAD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
+=======
+import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.DataReadMethod
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.{SQLConf, SQLContext}
 import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader
 import org.apache.spark.storage.StorageLevel
@@ -68,6 +75,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
     initLocalJobFuncOpt: Option[Job => Unit],
     inputFormatClass: Class[_ <: InputFormat[Void, V]],
     valueClass: Class[V])
+<<<<<<< HEAD
     extends RDD[V](sqlContext.sparkContext, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
@@ -78,6 +86,16 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
     // safe to mutate conf properties with initLocalJobFuncOpt
     // and initDriverSideJobFuncOpt.
     val newJob = new Job(conf)
+=======
+    extends RDD[V](sqlContext.sparkContext, Nil) with Logging {
+
+  protected def getJob(): Job = {
+    val conf = broadcastedConf.value.value
+    // "new Job" will make a copy of the conf. Then, it is
+    // safe to mutate conf properties with initLocalJobFuncOpt
+    // and initDriverSideJobFuncOpt.
+    val newJob = Job.getInstance(conf)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     initLocalJobFuncOpt.map(f => f(newJob))
     newJob
   }
@@ -87,7 +105,11 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
     if (isDriverSide) {
       initDriverSideJobFuncOpt.map(f => f(job))
     }
+<<<<<<< HEAD
     SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+=======
+    job.getConfiguration
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   private val jobTrackerId: String = {
@@ -110,7 +132,11 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         configurable.setConf(conf)
       case _ =>
     }
+<<<<<<< HEAD
     val jobContext = newJobContext(conf, jobId)
+=======
+    val jobContext = new JobContextImpl(conf, jobId)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[SparkPartition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
@@ -154,8 +180,13 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           configurable.setConf(conf)
         case _ =>
       }
+<<<<<<< HEAD
       val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
       val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
+=======
+      val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
+      val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       private[this] var reader: RecordReader[Void, V] = null
 
       /**

@@ -18,11 +18,19 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkContext
+<<<<<<< HEAD
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{SQLContext, DataFrame, Row}
+=======
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.types.StructType
 
 /**

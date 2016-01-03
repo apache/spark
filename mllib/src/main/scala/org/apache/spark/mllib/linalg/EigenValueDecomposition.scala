@@ -19,7 +19,11 @@ package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 import com.github.fommil.netlib.ARPACK
+<<<<<<< HEAD
 import org.netlib.util.{intW, doubleW}
+=======
+import org.netlib.util.{doubleW, intW}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Compute eigen-decomposition.

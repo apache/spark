@@ -20,7 +20,11 @@ package org.apache.spark.util
 import java.io.File
 import java.util.PriorityQueue
 
+<<<<<<< HEAD
 import scala.util.{Failure, Success, Try}
+=======
+import scala.util.Try
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.Logging
@@ -177,6 +181,7 @@ private [util] class SparkShutdownHookManager {
     val hookTask = new Runnable() {
       override def run(): Unit = runAll()
     }
+<<<<<<< HEAD
     Try(Utils.classForName("org.apache.hadoop.util.ShutdownHookManager")) match {
       case Success(shmClass) =>
         val fsPriority = classOf[FileSystem]
@@ -192,6 +197,10 @@ private [util] class SparkShutdownHookManager {
         Runtime.getRuntime.addShutdownHook(new Thread(hookTask, "Spark Shutdown Hook"));
         // scalastyle:on runtimeaddshutdownhook
     }
+=======
+    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
+      hookTask, FileSystem.SHUTDOWN_HOOK_PRIORITY + 30)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   def runAll(): Unit = {

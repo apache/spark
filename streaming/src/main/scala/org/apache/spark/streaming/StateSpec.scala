@@ -18,12 +18,20 @@
 package org.apache.spark.streaming
 
 import com.google.common.base.Optional
+<<<<<<< HEAD
+=======
+
+import org.apache.spark.{HashPartitioner, Partitioner}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaUtils}
 import org.apache.spark.api.java.function.{Function3 => JFunction3, Function4 => JFunction4}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.ClosureCleaner
+<<<<<<< HEAD
 import org.apache.spark.{HashPartitioner, Partitioner}
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: Experimental ::

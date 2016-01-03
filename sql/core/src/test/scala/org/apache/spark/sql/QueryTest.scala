@@ -130,6 +130,11 @@ abstract class QueryTest extends PlanTest {
 
     checkJsonFormat(analyzedDF)
 
+<<<<<<< HEAD
+=======
+    assertEmptyMissingInput(df)
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
@@ -198,6 +203,12 @@ abstract class QueryTest extends PlanTest {
       case a: ImperativeAggregate => return
     }
 
+<<<<<<< HEAD
+=======
+    // bypass hive tests before we fix all corner cases in hive module.
+    if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val jsonString = try {
       logicalPlan.toJSON
     } catch {
@@ -209,9 +220,12 @@ abstract class QueryTest extends PlanTest {
            """.stripMargin, e)
     }
 
+<<<<<<< HEAD
     // bypass hive tests before we fix all corner cases in hive module.
     if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     // scala function is not serializable to JSON, use null to replace them so that we can compare
     // the plans later.
     val normalized1 = logicalPlan.transformAllExpressions {
@@ -275,6 +289,21 @@ abstract class QueryTest extends PlanTest {
           """.stripMargin)
     }
   }
+<<<<<<< HEAD
+=======
+
+  /**
+    * Asserts that a given [[Queryable]] does not have missing inputs in all the analyzed plans.
+    */
+  def assertEmptyMissingInput(query: Queryable): Unit = {
+    assert(query.queryExecution.analyzed.missingInput.isEmpty,
+      s"The analyzed logical plan has missing inputs: ${query.queryExecution.analyzed}")
+    assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
+      s"The optimized logical plan has missing inputs: ${query.queryExecution.optimizedPlan}")
+    assert(query.queryExecution.executedPlan.missingInput.isEmpty,
+      s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
+  }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 object QueryTest {

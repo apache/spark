@@ -45,6 +45,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
 
 class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
+<<<<<<< HEAD
   private val httpConf = broadcastConf("HttpBroadcastFactory")
   private val torrentConf = broadcastConf("TorrentBroadcastFactory")
 
@@ -78,6 +79,10 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Using TorrentBroadcast locally") {
     sc = new SparkContext("local", "test", torrentConf)
+=======
+  test("Using TorrentBroadcast locally") {
+    sc = new SparkContext("local", "test")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to 2).map(x => (x, broadcast.value.sum))
@@ -85,7 +90,11 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("Accessing TorrentBroadcast variables from multiple threads") {
+<<<<<<< HEAD
     sc = new SparkContext("local[10]", "test", torrentConf)
+=======
+    sc = new SparkContext("local[10]", "test")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to 10).map(x => (x, broadcast.value.sum))
@@ -94,7 +103,11 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Accessing TorrentBroadcast variables in a local cluster") {
     val numSlaves = 4
+<<<<<<< HEAD
     val conf = torrentConf.clone
+=======
+    val conf = new SparkConf
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
@@ -124,15 +137,21 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Test Lazy Broadcast variables with TorrentBroadcast") {
     val numSlaves = 2
+<<<<<<< HEAD
     val conf = torrentConf.clone
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val rdd = sc.parallelize(1 to numSlaves)
 
+=======
+    sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
+    val rdd = sc.parallelize(1 to numSlaves)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val results = new DummyBroadcastClass(rdd).doSomething()
 
     assert(results.toSet === (1 to numSlaves).map(x => (x, false)).toSet)
   }
 
+<<<<<<< HEAD
   test("Unpersisting HttpBroadcast on executors only in local mode") {
     testUnpersistHttpBroadcast(distributed = false, removeFromDriver = false)
   }
@@ -149,6 +168,8 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     testUnpersistHttpBroadcast(distributed = true, removeFromDriver = true)
   }
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   test("Unpersisting TorrentBroadcast on executors only in local mode") {
     testUnpersistTorrentBroadcast(distributed = false, removeFromDriver = false)
   }
@@ -180,6 +201,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
+<<<<<<< HEAD
    * Verify the persistence of state associated with an HttpBroadcast in either local mode or
    * local-cluster mode (when distributed = true).
    *
@@ -240,6 +262,8 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
    * Verify the persistence of state associated with an TorrentBroadcast in a local-cluster.
    *
    * This test creates a broadcast variable, uses it on all executors, and then unpersists it.
@@ -284,7 +308,11 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
       assert(statuses.size === expectedNumBlocks)
     }
 
+<<<<<<< HEAD
     testUnpersistBroadcast(distributed, numSlaves, torrentConf, afterCreation,
+=======
+    testUnpersistBroadcast(distributed, numSlaves, afterCreation,
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       afterUsingBroadcast, afterUnpersist, removeFromDriver)
   }
 
@@ -300,7 +328,10 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   private def testUnpersistBroadcast(
       distributed: Boolean,
       numSlaves: Int,  // used only when distributed = true
+<<<<<<< HEAD
       broadcastConf: SparkConf,
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       afterCreation: (Long, BlockManagerMaster) => Unit,
       afterUsingBroadcast: (Long, BlockManagerMaster) => Unit,
       afterUnpersist: (Long, BlockManagerMaster) => Unit,
@@ -308,7 +339,11 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
 
     sc = if (distributed) {
       val _sc =
+<<<<<<< HEAD
         new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", broadcastConf)
+=======
+        new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       // Wait until all salves are up
       try {
         _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 60000)
@@ -319,7 +354,11 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
           throw e
       }
     } else {
+<<<<<<< HEAD
       new SparkContext("local", "test", broadcastConf)
+=======
+      new SparkContext("local", "test")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
     val blockManagerMaster = sc.env.blockManager.master
     val list = List[Int](1, 2, 3, 4)
@@ -356,6 +395,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
       assert(results.collect().toSet === (1 to partitions).map(x => (x, list.sum)).toSet)
     }
   }
+<<<<<<< HEAD
 
   /** Helper method to create a SparkConf that uses the given broadcast factory. */
   private def broadcastConf(factoryName: String): SparkConf = {
@@ -363,6 +403,8 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     conf.set("spark.broadcast.factory", "org.apache.spark.broadcast.%s".format(factoryName))
     conf
   }
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 package object testPackage extends Assertions {

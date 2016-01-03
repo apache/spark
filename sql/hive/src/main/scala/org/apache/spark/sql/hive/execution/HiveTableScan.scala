@@ -51,6 +51,12 @@ case class HiveTableScan(
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
+<<<<<<< HEAD
+=======
+  override def producedAttributes: AttributeSet = outputSet ++
+    AttributeSet(partitionPruningPred.flatMap(_.references))
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   // Retrieve the original attributes based on expression ID so that capitalization matches.
   val attributes = requestedAttributes.map(relation.attributeMap)
 

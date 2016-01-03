@@ -103,7 +103,11 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+<<<<<<< HEAD
   ignore("SPARK-9757 Persist Parquet relation with decimal column") {
+=======
+  test("SPARK-9757 Persist Parquet relation with decimal column") {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),

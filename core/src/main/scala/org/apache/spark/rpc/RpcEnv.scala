@@ -23,7 +23,12 @@ import java.nio.channels.ReadableByteChannel
 import scala.concurrent.Future
 
 import org.apache.spark.{SecurityManager, SparkConf}
+<<<<<<< HEAD
 import org.apache.spark.util.{RpcUtils, Utils}
+=======
+import org.apache.spark.rpc.netty.NettyRpcEnvFactory
+import org.apache.spark.util.RpcUtils
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 
 /**
@@ -32,6 +37,7 @@ import org.apache.spark.util.{RpcUtils, Utils}
  */
 private[spark] object RpcEnv {
 
+<<<<<<< HEAD
   private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
     val rpcEnvNames = Map(
       "akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory",
@@ -41,6 +47,8 @@ private[spark] object RpcEnv {
     Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
   }
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   def create(
       name: String,
       host: String,
@@ -48,9 +56,14 @@ private[spark] object RpcEnv {
       conf: SparkConf,
       securityManager: SecurityManager,
       clientMode: Boolean = false): RpcEnv = {
+<<<<<<< HEAD
     // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
     val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
     getRpcEnvFactory(conf).create(config)
+=======
+    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
+    new NettyRpcEnvFactory().create(config)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 }
 
@@ -98,12 +111,20 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   }
 
   /**
+<<<<<<< HEAD
    * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
    * This is a blocking action.
    */
   def setupEndpointRef(
       systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
     setupEndpointRefByURI(uriOf(systemName, address, endpointName))
+=======
+   * Retrieve the [[RpcEndpointRef]] represented by `address` and `endpointName`.
+   * This is a blocking action.
+   */
+  def setupEndpointRef(address: RpcAddress, endpointName: String): RpcEndpointRef = {
+    setupEndpointRefByURI(RpcEndpointAddress(address, endpointName).toString)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   /**
@@ -125,12 +146,15 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def awaitTermination(): Unit
 
   /**
+<<<<<<< HEAD
    * Create a URI used to create a [[RpcEndpointRef]]. Use this one to create the URI instead of
    * creating it manually because different [[RpcEnv]] may have different formats.
    */
   def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
 
   /**
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
    * [[RpcEndpointRef]] cannot be deserialized without [[RpcEnv]]. So when deserializing any object
    * that contains [[RpcEndpointRef]]s, the deserialization codes should be wrapped by this method.
    */

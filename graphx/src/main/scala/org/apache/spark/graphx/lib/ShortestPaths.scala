@@ -17,9 +17,16 @@
 
 package org.apache.spark.graphx.lib
 
+<<<<<<< HEAD
 import org.apache.spark.graphx._
 import scala.reflect.ClassTag
 
+=======
+import scala.reflect.ClassTag
+
+import org.apache.spark.graphx._
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * Computes shortest paths to the given set of landmark vertices, returning a graph where each
  * vertex attribute is a map containing the shortest-path distance to each reachable landmark.

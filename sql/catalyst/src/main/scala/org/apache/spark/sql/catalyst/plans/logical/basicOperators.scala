@@ -526,7 +526,11 @@ case class MapPartitions[T, U](
     uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
+<<<<<<< HEAD
   override def missingInput: AttributeSet = AttributeSet.empty
+=======
+  override def producedAttributes: AttributeSet = outputSet
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 /** Factory for constructing new `AppendColumn` nodes. */
@@ -552,7 +556,11 @@ case class AppendColumns[T, U](
     newColumns: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output ++ newColumns
+<<<<<<< HEAD
   override def missingInput: AttributeSet = super.missingInput -- newColumns
+=======
+  override def producedAttributes: AttributeSet = AttributeSet(newColumns)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 /** Factory for constructing new `MapGroups` nodes. */
@@ -587,7 +595,11 @@ case class MapGroups[K, T, U](
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
+<<<<<<< HEAD
   override def missingInput: AttributeSet = AttributeSet.empty
+=======
+  override def producedAttributes: AttributeSet = outputSet
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 /** Factory for constructing new `CoGroup` nodes. */
@@ -630,5 +642,9 @@ case class CoGroup[Key, Left, Right, Result](
     rightGroup: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode {
+<<<<<<< HEAD
   override def missingInput: AttributeSet = AttributeSet.empty
+=======
+  override def producedAttributes: AttributeSet = outputSet
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }

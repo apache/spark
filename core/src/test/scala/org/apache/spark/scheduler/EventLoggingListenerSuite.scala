@@ -67,11 +67,19 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
     assert(fileSystem.exists(logPath))
     val logStatus = fileSystem.getFileStatus(logPath)
+<<<<<<< HEAD
     assert(!logStatus.isDir)
 
     // Verify log is renamed after stop()
     eventLogger.stop()
     assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDir)
+=======
+    assert(!logStatus.isDirectory)
+
+    // Verify log is renamed after stop()
+    eventLogger.stop()
+    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDirectory)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   test("Basic event logging") {

@@ -38,11 +38,19 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val parameterBlockSortColumn = request.getParameter("block.sort")
     val parameterBlockSortDesc = request.getParameter("block.desc")
     val parameterBlockPageSize = request.getParameter("block.pageSize")
+<<<<<<< HEAD
+=======
+    val parameterBlockPrevPageSize = request.getParameter("block.prevPageSize")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     val blockPage = Option(parameterBlockPage).map(_.toInt).getOrElse(1)
     val blockSortColumn = Option(parameterBlockSortColumn).getOrElse("Block Name")
     val blockSortDesc = Option(parameterBlockSortDesc).map(_.toBoolean).getOrElse(false)
     val blockPageSize = Option(parameterBlockPageSize).map(_.toInt).getOrElse(100)
+<<<<<<< HEAD
+=======
+    val blockPrevPageSize = Option(parameterBlockPrevPageSize).map(_.toInt).getOrElse(blockPageSize)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     val rddId = parameterId.toInt
     val rddStorageInfo = AllRDDResource.getRDDStorageInfo(rddId, listener, includeDetails = true)
@@ -56,17 +64,37 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
       rddStorageInfo.dataDistribution.get, id = Some("rdd-storage-by-worker-table"))
 
     // Block table
+<<<<<<< HEAD
     val (blockTable, blockTableHTML) = try {
+=======
+    val page: Int = {
+      // If the user has changed to a larger page size, then go to page 1 in order to avoid
+      // IndexOutOfBoundsException.
+      if (blockPageSize <= blockPrevPageSize) {
+        blockPage
+      } else {
+        1
+      }
+    }
+    val blockTableHTML = try {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       val _blockTable = new BlockPagedTable(
         UIUtils.prependBaseUri(parent.basePath) + s"/storage/rdd/?id=${rddId}",
         rddStorageInfo.partitions.get,
         blockPageSize,
         blockSortColumn,
         blockSortDesc)
+<<<<<<< HEAD
       (_blockTable, _blockTable.table(blockPage))
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         (null, <div class="alert alert-error">{e.getMessage}</div>)
+=======
+      _blockTable.table(page)
+    } catch {
+      case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+        <div class="alert alert-error">{e.getMessage}</div>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
 
     val jsForScrollingDownToBlockTable =
@@ -226,7 +254,18 @@ private[ui] class BlockPagedTable(
 
   override def tableId: String = "rdd-storage-by-block-table"
 
+<<<<<<< HEAD
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
+=======
+  override def tableCssClass: String =
+    "table table-bordered table-condensed table-striped table-head-clickable"
+
+  override def pageSizeFormField: String = "block.pageSize"
+
+  override def prevPageSizeFormField: String = "block.prevPageSize"
+
+  override def pageNumberFormField: String = "block.page"
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   override val dataSource: BlockDataSource = new BlockDataSource(
     rddPartitions,
@@ -236,6 +275,7 @@ private[ui] class BlockPagedTable(
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+<<<<<<< HEAD
     s"${basePath}&block.page=$page&block.sort=${encodedSortColumn}&block.desc=${desc}" +
       s"&block.pageSize=${pageSize}"
   }
@@ -254,6 +294,18 @@ private[ui] class BlockPagedTable(
       |}
      """.stripMargin
     (jsFuncName, jsFunc)
+=======
+    basePath +
+      s"&$pageNumberFormField=$page" +
+      s"&block.sort=$encodedSortColumn" +
+      s"&block.desc=$desc" +
+      s"&$pageSizeFormField=$pageSize"
+  }
+
+  override def goButtonFormPath: String = {
+    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    s"$basePath&block.sort=$encodedSortColumn&block.desc=$desc"
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   override def headers: Seq[Node] = {
@@ -271,6 +323,7 @@ private[ui] class BlockPagedTable(
     val headerRow: Seq[Node] = {
       blockHeaders.map { header =>
         if (header == sortColumn) {
+<<<<<<< HEAD
           val headerLink =
             s"$basePath&block.sort=${URLEncoder.encode(header, "UTF-8")}&block.desc=${!desc}" +
               s"&block.pageSize=${pageSize}"
@@ -287,6 +340,29 @@ private[ui] class BlockPagedTable(
           val js = Unparsed(s"window.location.href='${headerLink}'")
           <th onclick={js} style="cursor: pointer;">
             {header}
+=======
+          val headerLink = Unparsed(
+            basePath +
+              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&block.desc=${!desc}" +
+              s"&block.pageSize=$pageSize")
+          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
+          <th>
+            <a href={headerLink}>
+              {header}
+              <span>&nbsp;{Unparsed(arrow)}</span>
+            </a>
+          </th>
+        } else {
+          val headerLink = Unparsed(
+            basePath +
+              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&block.pageSize=$pageSize")
+          <th>
+            <a href={headerLink}>
+              {header}
+            </a>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           </th>
         }
       }

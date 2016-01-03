@@ -215,7 +215,11 @@ setMethod("%in%",
 
 #' otherwise
 #'
+<<<<<<< HEAD
 #' If values in the specified column are null, returns the value. 
+=======
+#' If values in the specified column are null, returns the value.
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 #' Can be used in conjunction with `when` to specify a default value for expressions.
 #'
 #' @rdname otherwise
@@ -225,7 +229,11 @@ setMethod("%in%",
 setMethod("otherwise",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
+<<<<<<< HEAD
             value <- ifelse(class(value) == "Column", value@jc, value)
+=======
+            value <- if (class(value) == "Column") { value@jc } else { value }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
           })

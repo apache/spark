@@ -21,7 +21,11 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
+<<<<<<< HEAD
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
+=======
+import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.DataFrame
 
 /**

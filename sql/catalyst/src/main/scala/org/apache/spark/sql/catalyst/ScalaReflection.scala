@@ -189,37 +189,65 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[java.lang.Integer] =>
         val boxedType = classOf[java.lang.Integer]
         val objectType = ObjectType(boxedType)
+<<<<<<< HEAD
         NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+=======
+        NewInstance(boxedType, getPath :: Nil, objectType)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case t if t <:< localTypeOf[java.lang.Long] =>
         val boxedType = classOf[java.lang.Long]
         val objectType = ObjectType(boxedType)
+<<<<<<< HEAD
         NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+=======
+        NewInstance(boxedType, getPath :: Nil, objectType)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case t if t <:< localTypeOf[java.lang.Double] =>
         val boxedType = classOf[java.lang.Double]
         val objectType = ObjectType(boxedType)
+<<<<<<< HEAD
         NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+=======
+        NewInstance(boxedType, getPath :: Nil, objectType)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case t if t <:< localTypeOf[java.lang.Float] =>
         val boxedType = classOf[java.lang.Float]
         val objectType = ObjectType(boxedType)
+<<<<<<< HEAD
         NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+=======
+        NewInstance(boxedType, getPath :: Nil, objectType)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case t if t <:< localTypeOf[java.lang.Short] =>
         val boxedType = classOf[java.lang.Short]
         val objectType = ObjectType(boxedType)
+<<<<<<< HEAD
         NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+=======
+        NewInstance(boxedType, getPath :: Nil, objectType)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case t if t <:< localTypeOf[java.lang.Byte] =>
         val boxedType = classOf[java.lang.Byte]
         val objectType = ObjectType(boxedType)
+<<<<<<< HEAD
         NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+=======
+        NewInstance(boxedType, getPath :: Nil, objectType)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case t if t <:< localTypeOf[java.lang.Boolean] =>
         val boxedType = classOf[java.lang.Boolean]
         val objectType = ObjectType(boxedType)
+<<<<<<< HEAD
         NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+=======
+        NewInstance(boxedType, getPath :: Nil, objectType)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case t if t <:< localTypeOf[java.sql.Date] =>
         StaticInvoke(
@@ -349,7 +377,11 @@ object ScalaReflection extends ScalaReflection {
           }
         }
 
+<<<<<<< HEAD
         val newInstance = NewInstance(cls, arguments, propagateNull = false, ObjectType(cls))
+=======
+        val newInstance = NewInstance(cls, arguments, ObjectType(cls), propagateNull = false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
         if (path.nonEmpty) {
           expressions.If(

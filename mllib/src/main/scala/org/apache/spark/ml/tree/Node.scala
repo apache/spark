@@ -20,8 +20,13 @@ package org.apache.spark.ml.tree
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
+<<<<<<< HEAD
 import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
   Node => OldNode, Predict => OldPredict, ImpurityStats}
+=======
+import org.apache.spark.mllib.tree.model.{ImpurityStats,
+  InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: DeveloperApi ::
@@ -386,9 +391,15 @@ private[tree] object LearningNode {
     var levelsToGo = indexToLevel(nodeIndex)
     while (levelsToGo > 0) {
       if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
+<<<<<<< HEAD
         tmpNode = tmpNode.leftChild.asInstanceOf[LearningNode]
       } else {
         tmpNode = tmpNode.rightChild.asInstanceOf[LearningNode]
+=======
+        tmpNode = tmpNode.leftChild.get
+      } else {
+        tmpNode = tmpNode.rightChild.get
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       }
       levelsToGo -= 1
     }

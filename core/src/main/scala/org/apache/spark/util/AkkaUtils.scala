@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.JavaConverters._
 
+<<<<<<< HEAD
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
 
@@ -27,6 +28,13 @@ import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.rpc.RpcTimeout
+=======
+import akka.actor.{ActorSystem, ExtendedActorSystem}
+import com.typesafe.config.ConfigFactory
+import org.apache.log4j.{Level, Logger}
+
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Various utility classes for working with Akka.
@@ -139,6 +147,7 @@ private[spark] object AkkaUtils extends Logging {
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
   val reservedSizeBytes = 200 * 1024
 
+<<<<<<< HEAD
   /**
    * Send a message to the given actor and get its result within a default timeout, or
    * throw a SparkException if this fails.
@@ -239,4 +248,6 @@ private[spark] object AkkaUtils extends Logging {
     s"$protocol://$systemName@$host:$port/user/$actorName"
   }
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }

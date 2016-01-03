@@ -19,12 +19,20 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.{classTag, ClassTag}
 
+<<<<<<< HEAD
 import org.apache.spark.{OneToOneDependency, HashPartitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 import org.apache.spark.graphx._
 
+=======
+import org.apache.spark.{HashPartitioner, OneToOneDependency}
+import org.apache.spark.graphx._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     @transient override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)

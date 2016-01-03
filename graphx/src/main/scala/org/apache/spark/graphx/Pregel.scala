@@ -18,8 +18,13 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
+<<<<<<< HEAD
 import org.apache.spark.Logging
 
+=======
+
+import org.apache.spark.Logging
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Implements a Pregel-like bulk-synchronous message-passing API.

@@ -18,7 +18,10 @@
 package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BreezeVector}
+<<<<<<< HEAD
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -26,11 +29,19 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+<<<<<<< HEAD
 import org.apache.spark.mllib.linalg.{Vector, Matrices, Matrix}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
+=======
+import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector}
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
+import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, SQLContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points

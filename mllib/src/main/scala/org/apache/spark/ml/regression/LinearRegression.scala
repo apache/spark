@@ -25,9 +25,15 @@ import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
+<<<<<<< HEAD
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.annotation.{Experimental, Since}
+=======
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.optim.WeightedLeastSquares
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._

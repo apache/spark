@@ -31,6 +31,10 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.mapreduce.task.JobContextImpl
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
@@ -40,7 +44,10 @@ import org.apache.parquet.{Log => ApacheParquetLog}
 import org.slf4j.bridge.SLF4JBridgeHandler
 
 import org.apache.spark.broadcast.Broadcast
+<<<<<<< HEAD
 import org.apache.spark.deploy.SparkHadoopUtil
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -82,9 +89,15 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
         //     `FileOutputCommitter.getWorkPath()`, which points to the base directory of all
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+<<<<<<< HEAD
           val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
           val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
           val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+=======
+          val configuration = context.getConfiguration
+          val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+          val taskAttemptId = context.getTaskAttemptID
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           val split = taskAttemptId.getTaskID.getId
           new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
         }
@@ -217,11 +230,15 @@ private[sql] class ParquetRelation(
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+<<<<<<< HEAD
     val conf = {
       // scalastyle:off jobcontext
       ContextUtil.getConfiguration(job)
       // scalastyle:on jobcontext
     }
+=======
+    val conf = ContextUtil.getConfiguration(job)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
     val committerClassName = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
@@ -340,7 +357,11 @@ private[sql] class ParquetRelation(
           // URI of the path to create a new Path.
           val pathWithEscapedAuthority = escapePathUserInfo(f.getPath)
           new FileStatus(
+<<<<<<< HEAD
             f.getLen, f.isDir, f.getReplication, f.getBlockSize, f.getModificationTime,
+=======
+            f.getLen, f.isDirectory, f.getReplication, f.getBlockSize, f.getModificationTime,
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
         }.toSeq
 
@@ -359,7 +380,11 @@ private[sql] class ParquetRelation(
             }
           }
 
+<<<<<<< HEAD
           val jobContext = newJobContext(getConf(isDriverSide = true), jobId)
+=======
+          val jobContext = new JobContextImpl(getConf(isDriverSide = true), jobId)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           val rawSplits = inputFormat.getSplits(jobContext)
 
           Array.tabulate[SparkPartition](rawSplits.size) { i =>
@@ -564,7 +589,11 @@ private[sql] object ParquetRelation extends Logging {
       parquetFilterPushDown: Boolean,
       assumeBinaryIsString: Boolean,
       assumeInt96IsTimestamp: Boolean)(job: Job): Unit = {
+<<<<<<< HEAD
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+=======
+    val conf = job.getConfiguration
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
 
     // Try to push down filters when filter push-down is enabled.
@@ -607,7 +636,11 @@ private[sql] object ParquetRelation extends Logging {
       FileInputFormat.setInputPaths(job, inputFiles.map(_.getPath): _*)
     }
 
+<<<<<<< HEAD
     overrideMinSplitSize(parquetBlockSize, SparkHadoopUtil.get.getConfigurationFromJobContext(job))
+=======
+    overrideMinSplitSize(parquetBlockSize, job.getConfiguration)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   private[parquet] def readSchema(

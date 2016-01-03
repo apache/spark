@@ -17,14 +17,20 @@
 
 package org.apache.spark.streaming.flume
 
+<<<<<<< HEAD
 import java.net.InetSocketAddress
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
+=======
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.net.InetSocketAddress
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+<<<<<<< HEAD
 import org.apache.flume.source.avro.AvroSourceProtocol
 import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.flume.source.avro.Status
@@ -40,6 +46,21 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.jboss.netty.channel.{ChannelPipeline, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
+=======
+import org.apache.avro.ipc.NettyServer
+import org.apache.avro.ipc.specific.SpecificResponder
+import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol, Status}
+import org.jboss.netty.channel.{ChannelPipeline, ChannelPipelineFactory, Channels}
+import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
+import org.jboss.netty.handler.codec.compression._
+
+import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.Utils
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](

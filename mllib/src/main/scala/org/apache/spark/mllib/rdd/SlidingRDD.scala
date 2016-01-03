@@ -20,7 +20,11 @@ package org.apache.spark.mllib.rdd
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+<<<<<<< HEAD
 import org.apache.spark.{TaskContext, Partition}
+=======
+import org.apache.spark.{Partition, TaskContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 
 private[mllib]

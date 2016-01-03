@@ -17,8 +17,13 @@
 
 package org.apache.spark.graphx.lib
 
+<<<<<<< HEAD
 import scala.reflect.ClassTag
 import scala.language.postfixOps
+=======
+import scala.language.postfixOps
+import scala.reflect.ClassTag
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.Logging
 import org.apache.spark.graphx._

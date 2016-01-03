@@ -17,8 +17,13 @@
 
 package org.apache.spark.mllib.linalg
 
+<<<<<<< HEAD
 import java.util
 import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
+=======
+import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
+import java.util
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
@@ -26,7 +31,11 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
+<<<<<<< HEAD
 import org.json4s.jackson.JsonMethods.{compact, render, parse => parseJson}
+=======
+import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}

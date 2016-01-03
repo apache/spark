@@ -36,6 +36,10 @@ import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
 import org.apache.hadoop.mapred.lib.CombineFileSplit
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.mapreduce.TaskType
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -357,7 +361,11 @@ private[spark] object HadoopRDD extends Logging {
   def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,
                             conf: JobConf) {
     val jobID = new JobID(jobTrackerId, jobId)
+<<<<<<< HEAD
     val taId = new TaskAttemptID(new TaskID(jobID, true, splitId), attemptId)
+=======
+    val taId = new TaskAttemptID(new TaskID(jobID, TaskType.MAP, splitId), attemptId)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     conf.set("mapred.tip.id", taId.getTaskID.toString)
     conf.set("mapred.task.id", taId.toString)

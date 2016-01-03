@@ -19,9 +19,15 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.fs.{Path, FileSystem}
 
+<<<<<<< HEAD
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+=======
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rpc.RpcEndpointAddress
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class SimrSchedulerBackend(
@@ -39,9 +45,16 @@ private[spark] class SimrSchedulerBackend(
   override def start() {
     super.start()
 
+<<<<<<< HEAD
     val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
       RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+=======
+    val driverUrl = RpcEndpointAddress(
+      sc.conf.get("spark.driver.host"),
+      sc.conf.get("spark.driver.port").toInt,
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)

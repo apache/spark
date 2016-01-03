@@ -20,14 +20,22 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.HashMap
+<<<<<<< HEAD
 import scala.concurrent.{Future, ExecutionContext}
+=======
+import scala.concurrent.{ExecutionContext, Future}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
+<<<<<<< HEAD
 import org.apache.spark.scheduler.{TaskLocation, ExecutorCacheTaskLocation}
+=======
+import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util.WriteAheadLogUtils

@@ -24,7 +24,11 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Since
+<<<<<<< HEAD
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+=======
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 
 /**

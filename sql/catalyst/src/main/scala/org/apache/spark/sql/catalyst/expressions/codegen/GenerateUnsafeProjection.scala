@@ -289,7 +289,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val exprTypes = expressions.map(_.dataType)
 
     val result = ctx.freshName("result")
+<<<<<<< HEAD
     ctx.addMutableState("UnsafeRow", result, s"this.$result = new UnsafeRow();")
+=======
+    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val bufferHolder = ctx.freshName("bufferHolder")
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
@@ -303,7 +307,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         $subexprReset
         ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
 
+<<<<<<< HEAD
         $result.pointTo($bufferHolder.buffer, ${expressions.length}, $bufferHolder.totalSize());
+=======
+        $result.pointTo($bufferHolder.buffer, $bufferHolder.totalSize());
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       """
     GeneratedExpressionCode(code, "false", result)
   }

@@ -187,6 +187,7 @@ This file is divided into 3 sections:
     scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+<<<<<<< HEAD
   <!-- As of SPARK-10330 JobContext methods should not be called directly -->
   <check customId="jobcontext" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">^getConfiguration$|^getTaskAttemptID$</parameter></parameters>
@@ -195,6 +196,8 @@ This file is divided into 3 sections:
     </customMessage>
   </check>
 
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->
@@ -219,8 +222,13 @@ This file is divided into 3 sections:
   <check level="warning" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">
     <parameters>
       <parameter name="groups">java,scala,3rdParty,spark</parameter>
+<<<<<<< HEAD
       <parameter name="group.java">javax?\..+</parameter>
       <parameter name="group.scala">scala\..+</parameter>
+=======
+      <parameter name="group.java">javax?\..*</parameter>
+      <parameter name="group.scala">scala\..*</parameter>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       <parameter name="group.3rdParty">(?!org\.apache\.spark\.).*</parameter>
       <parameter name="group.spark">org\.apache\.spark\..*</parameter>
     </parameters>

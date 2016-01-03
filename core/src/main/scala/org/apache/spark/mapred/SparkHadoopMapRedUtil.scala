@@ -18,6 +18,7 @@
 package org.apache.spark.mapred
 
 import java.io.IOException
+<<<<<<< HEAD
 import java.lang.reflect.Modifier
 
 import org.apache.hadoop.mapred._
@@ -73,6 +74,14 @@ trait SparkHadoopMapRedUtil {
     }
   }
 }
+=======
+
+import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
+import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
+
+import org.apache.spark.executor.CommitDeniedException
+import org.apache.spark.{Logging, SparkEnv, TaskContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 object SparkHadoopMapRedUtil extends Logging {
   /**
@@ -93,7 +102,11 @@ object SparkHadoopMapRedUtil extends Logging {
       jobId: Int,
       splitId: Int): Unit = {
 
+<<<<<<< HEAD
     val mrTaskAttemptID = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(mrTaskContext)
+=======
+    val mrTaskAttemptID = mrTaskContext.getTaskAttemptID
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     // Called after we have decided to commit
     def performCommit(): Unit = {

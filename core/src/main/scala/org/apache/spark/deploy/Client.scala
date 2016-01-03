@@ -230,7 +230,11 @@ object Client {
       RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
+<<<<<<< HEAD
       map(rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, _, Master.ENDPOINT_NAME))
+=======
+      map(rpcEnv.setupEndpointRef(_, Master.ENDPOINT_NAME))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
 
     rpcEnv.awaitTermination()

@@ -17,8 +17,13 @@
 
 package org.apache.spark.ml.ann
 
+<<<<<<< HEAD
 import breeze.linalg.{*, DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy,
   sum => Bsum}
+=======
+import breeze.linalg.{*, axpy => Baxpy, sum => Bsum, DenseMatrix => BDM, DenseVector => BDV,
+  Vector => BV}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import breeze.numerics.{log => Blog, sigmoid => Bsigmoid}
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}

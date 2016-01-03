@@ -165,7 +165,11 @@ case class Invoke(
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
 
+<<<<<<< HEAD
       boolean ${ev.isNull} = ${obj.value} == null;
+=======
+      boolean ${ev.isNull} = ${obj.isNull};
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       $javaType ${ev.value} =
         ${ev.isNull} ?
         ${ctx.defaultValue(dataType)} : ($javaType) $value;
@@ -178,8 +182,13 @@ object NewInstance {
   def apply(
       cls: Class[_],
       arguments: Seq[Expression],
+<<<<<<< HEAD
       propagateNull: Boolean = false,
       dataType: DataType): NewInstance =
+=======
+      dataType: DataType,
+      propagateNull: Boolean = true): NewInstance =
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     new NewInstance(cls, arguments, propagateNull, dataType, None)
 }
 
@@ -231,7 +240,11 @@ case class NewInstance(
       s"new $className($argString)"
     }
 
+<<<<<<< HEAD
     if (propagateNull) {
+=======
+    if (propagateNull && argGen.nonEmpty) {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
       s"""
@@ -248,8 +261,13 @@ case class NewInstance(
       s"""
         $setup
 
+<<<<<<< HEAD
         $javaType ${ev.value} = $constructorCall;
         final boolean ${ev.isNull} = ${ev.value} == null;
+=======
+        final $javaType ${ev.value} = $constructorCall;
+        final boolean ${ev.isNull} = false;
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       """
     }
   }

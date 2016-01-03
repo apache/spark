@@ -16,7 +16,11 @@
  */
 package org.apache.spark.mllib.clustering
 
+<<<<<<< HEAD
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, max, sum}
+=======
+import breeze.linalg.{max, sum, DenseMatrix => BDM, DenseVector => BDV}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import breeze.numerics._
 
 /**

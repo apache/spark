@@ -474,7 +474,11 @@ class StandaloneDynamicAllocationSuite
     (0 until numWorkers).map { i =>
       val rpcEnv = workerRpcEnvs(i)
       val worker = new Worker(rpcEnv, 0, cores, memory, Array(masterRpcEnv.address),
+<<<<<<< HEAD
         Worker.SYSTEM_NAME + i, Worker.ENDPOINT_NAME, null, conf, securityManager)
+=======
+        Worker.ENDPOINT_NAME, null, conf, securityManager)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       rpcEnv.setupEndpoint(Worker.ENDPOINT_NAME, worker)
       worker
     }

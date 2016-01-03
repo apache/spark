@@ -20,8 +20,13 @@ package org.apache.spark.tools
 import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
+<<<<<<< HEAD
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.{SparkConf, SparkContext}
+=======
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.executor.ShuffleWriteMetrics
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.util.Utils

@@ -49,14 +49,34 @@ object JdbcUtils extends Logging {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overriden by the dialects.
+<<<<<<< HEAD
     Try(conn.prepareStatement(dialect.getTableExistsQuery(table)).executeQuery()).isSuccess
+=======
+    Try {
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
+      try {
+        statement.executeQuery()
+      } finally {
+        statement.close()
+      }
+    }.isSuccess
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   /**
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String): Unit = {
+<<<<<<< HEAD
     conn.createStatement.executeUpdate(s"DROP TABLE $table")
+=======
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(s"DROP TABLE $table")
+    } finally {
+      statement.close()
+    }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   /**

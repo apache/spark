@@ -17,8 +17,14 @@
 
 package org.apache.spark.streaming.dstream
 
+<<<<<<< HEAD
 import org.apache.spark.streaming.StreamingContext
 import scala.reflect.ClassTag
+=======
+import scala.reflect.ClassTag
+
+import org.apache.spark.streaming.StreamingContext
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]

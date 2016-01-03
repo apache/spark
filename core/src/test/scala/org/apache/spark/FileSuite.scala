@@ -19,12 +19,20 @@ package org.apache.spark
 
 import java.io.{File, FileWriter}
 
+<<<<<<< HEAD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.storage.StorageLevel
 
 import scala.io.Source
 
+=======
+import scala.io.Source
+
+import org.apache.spark.input.PortableDataStream
+import org.apache.spark.storage.StorageLevel
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
 import org.apache.hadoop.mapred.{JobConf, FileAlreadyExistsException, FileSplit, TextInputFormat, TextOutputFormat}
@@ -506,11 +514,19 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
       Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+<<<<<<< HEAD
     val job = new Job(sc.hadoopConfiguration)
     job.setOutputKeyClass(classOf[String])
     job.setOutputValueClass(classOf[String])
     job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])
     val jobConfig = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+=======
+    val job = Job.getInstance(sc.hadoopConfiguration)
+    job.setOutputKeyClass(classOf[String])
+    job.setOutputValueClass(classOf[String])
+    job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])
+    val jobConfig = job.getConfiguration
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     jobConfig.set("mapred.output.dir", tempDir.getPath + "/outputDataset_new")
     randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists() === true)

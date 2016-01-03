@@ -20,7 +20,11 @@ package org.apache.spark.ml.tuning
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.Estimator
 import org.apache.spark.ml.evaluation.Evaluator
+<<<<<<< HEAD
 import org.apache.spark.ml.param.{ParamMap, Param, Params}
+=======
+import org.apache.spark.ml.param.{Param, ParamMap, Params}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: DeveloperApi ::

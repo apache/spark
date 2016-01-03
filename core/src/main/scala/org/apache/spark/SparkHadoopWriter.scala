@@ -25,6 +25,10 @@ import java.util.Date
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.mapreduce.TaskType
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
@@ -37,10 +41,14 @@ import org.apache.spark.util.SerializableJobConf
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
 private[spark]
+<<<<<<< HEAD
 class SparkHadoopWriter(jobConf: JobConf)
   extends Logging
   with SparkHadoopMapRedUtil
   with Serializable {
+=======
+class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   private val now = new Date()
   private val conf = new SerializableJobConf(jobConf)
@@ -131,7 +139,11 @@ class SparkHadoopWriter(jobConf: JobConf)
 
   private def getJobContext(): JobContext = {
     if (jobContext == null) {
+<<<<<<< HEAD
       jobContext = newJobContext(conf.value, jID.value)
+=======
+      jobContext = new JobContextImpl(conf.value, jID.value)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
     jobContext
   }
@@ -143,6 +155,15 @@ class SparkHadoopWriter(jobConf: JobConf)
     taskContext
   }
 
+<<<<<<< HEAD
+=======
+  protected def newTaskAttemptContext(
+      conf: JobConf,
+      attemptId: TaskAttemptID): TaskAttemptContext = {
+    new TaskAttemptContextImpl(conf, attemptId)
+  }
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
     jobID = jobid
     splitID = splitid
@@ -150,7 +171,11 @@ class SparkHadoopWriter(jobConf: JobConf)
 
     jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobid))
     taID = new SerializableWritable[TaskAttemptID](
+<<<<<<< HEAD
         new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
+=======
+        new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 }
 
@@ -168,9 +193,16 @@ object SparkHadoopWriter {
     }
     val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(conf)
+<<<<<<< HEAD
     if (outputPath == null || fs == null) {
       throw new IllegalArgumentException("Incorrectly formatted output path")
     }
     outputPath.makeQualified(fs)
+=======
+    if (fs == null) {
+      throw new IllegalArgumentException("Incorrectly formatted output path")
+    }
+    outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 }

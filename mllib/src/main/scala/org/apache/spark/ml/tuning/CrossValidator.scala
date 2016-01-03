@@ -19,8 +19,13 @@ package org.apache.spark.ml.tuning
 
 import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
+<<<<<<< HEAD
 import org.json4s.jackson.JsonMethods._
 import org.json4s.{DefaultFormats, JObject}
+=======
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.jackson.JsonMethods._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{Experimental, Since}

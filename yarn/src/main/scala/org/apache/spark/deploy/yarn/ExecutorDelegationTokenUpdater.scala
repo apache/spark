@@ -18,16 +18,28 @@ package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.{Executors, TimeUnit}
 
+<<<<<<< HEAD
+=======
+import scala.util.control.NonFatal
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
+<<<<<<< HEAD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 import scala.util.control.NonFatal
 
+=======
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.{ThreadUtils, Utils}
+
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 private[spark] class ExecutorDelegationTokenUpdater(
     sparkConf: SparkConf,
     hadoopConf: Configuration) extends Logging {

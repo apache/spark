@@ -17,9 +17,16 @@
 
 package org.apache.spark.deploy.yarn
 
+<<<<<<< HEAD
 import org.apache.spark.util.{MemoryParam, IntParam}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import collection.mutable.ArrayBuffer
+=======
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.util.{IntParam, MemoryParam}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 class ApplicationMasterArguments(val args: Array[String]) {
   var userJar: String = null

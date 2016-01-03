@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
+<<<<<<< HEAD
 import scala.util.control.NonFatal
 
 import org.apache.spark.streaming.StreamingContext
@@ -29,6 +30,19 @@ import java.io._
 import java.net.{UnknownHostException, Socket}
 import org.apache.spark.Logging
 import org.apache.spark.streaming.receiver.Receiver
+=======
+import java.io._
+import java.net.{Socket, UnknownHostException}
+
+import scala.reflect.ClassTag
+import scala.util.control.NonFatal
+
+import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.NextIterator
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](

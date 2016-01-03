@@ -20,20 +20,34 @@ package org.apache.spark.util
 import scala.concurrent.duration.FiniteDuration
 import scala.language.postfixOps
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
 object RpcUtils {
+=======
+import org.apache.spark.SparkConf
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
+
+private[spark] object RpcUtils {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   /**
    * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
    */
   def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
+<<<<<<< HEAD
     val driverActorSystemName = SparkEnv.driverActorSystemName
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
     rpcEnv.setupEndpointRef(driverActorSystemName, RpcAddress(driverHost, driverPort), name)
+=======
+    val driverHost: String = conf.get("spark.driver.host", "localhost")
+    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
+    Utils.checkHost(driverHost, "Expected hostname")
+    rpcEnv.setupEndpointRef(RpcAddress(driverHost, driverPort), name)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   /** Returns the configured number of times to retry connecting */
@@ -47,7 +61,11 @@ object RpcUtils {
   }
 
   /** Returns the default Spark timeout to use for RPC ask operations. */
+<<<<<<< HEAD
   private[spark] def askRpcTimeout(conf: SparkConf): RpcTimeout = {
+=======
+  def askRpcTimeout(conf: SparkConf): RpcTimeout = {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     RpcTimeout(conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "120s")
   }
 
@@ -57,7 +75,11 @@ object RpcUtils {
   }
 
   /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
+<<<<<<< HEAD
   private[spark] def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
+=======
+  def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     RpcTimeout(conf, Seq("spark.rpc.lookupTimeout", "spark.network.timeout"), "120s")
   }
 

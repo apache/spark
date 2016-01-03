@@ -17,11 +17,19 @@
 
 package org.apache.spark.ml.api.r
 
+<<<<<<< HEAD
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
+=======
+import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.DataFrame
 
 private[r] object SparkRWrappers {

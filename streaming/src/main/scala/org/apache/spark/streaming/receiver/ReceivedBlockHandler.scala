@@ -17,18 +17,30 @@
 
 package org.apache.spark.streaming.receiver
 
+<<<<<<< HEAD
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+=======
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import scala.language.{existentials, postfixOps}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+<<<<<<< HEAD
+=======
+import org.apache.spark.{Logging, SparkConf, SparkException}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
 import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
+<<<<<<< HEAD
 import org.apache.spark.{Logging, SparkConf, SparkException}
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /** Trait that represents the metadata related to storage of blocks */
 private[streaming] trait ReceivedBlockStoreResult {

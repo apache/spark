@@ -24,8 +24,13 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
+<<<<<<< HEAD
 import org.apache.spark.streaming.rdd.{MapWithStateRDD, MapWithStateRDDRecord}
 import org.apache.spark.streaming.dstream.InternalMapWithStateDStream._
+=======
+import org.apache.spark.streaming.dstream.InternalMapWithStateDStream._
+import org.apache.spark.streaming.rdd.{MapWithStateRDD, MapWithStateRDDRecord}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: Experimental ::

@@ -19,10 +19,17 @@ package org.apache.spark.mllib.optimization
 
 import scala.math._
 
+<<<<<<< HEAD
 import breeze.linalg.{norm => brzNorm, axpy => brzAxpy, Vector => BV}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+=======
+import breeze.linalg.{axpy => brzAxpy, norm => brzNorm, Vector => BV}
+
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * :: DeveloperApi ::

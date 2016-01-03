@@ -21,8 +21,13 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
+<<<<<<< HEAD
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf, SparkException}
+=======
+import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.util.Utils
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /** A helper class with utility functions related to the WriteAheadLog interface */
 private[streaming] object WriteAheadLogUtils extends Logging {

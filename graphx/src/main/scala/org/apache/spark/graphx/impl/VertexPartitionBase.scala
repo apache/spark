@@ -20,10 +20,16 @@ package org.apache.spark.graphx.impl
 import scala.language.higherKinds
 import scala.reflect.ClassTag
 
+<<<<<<< HEAD
 import org.apache.spark.util.collection.BitSet
 
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+=======
+import org.apache.spark.graphx._
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.util.collection.BitSet
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 private[graphx] object VertexPartitionBase {
   /**

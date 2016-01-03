@@ -17,8 +17,13 @@
 
 package org.apache.spark.mllib.api.python
 
+<<<<<<< HEAD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.clustering.PowerIterationClusteringModel
+=======
+import org.apache.spark.mllib.clustering.PowerIterationClusteringModel
+import org.apache.spark.rdd.RDD
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * A Wrapper of PowerIterationClusteringModel to provide helper method for Python
