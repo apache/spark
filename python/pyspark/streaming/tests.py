@@ -279,10 +279,15 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.countByValue()
+<<<<<<< HEAD
+        expected = [[4], [4], [3]]
+        self._test_func(input, func, expected)
+=======
         expected = [[(1, 2), (2, 2), (3, 2), (4, 2)],
                     [(5, 2), (6, 2), (7, 1), (8, 1)],
                     [("a", 2), ("b", 1), ("", 1)]]
         self._test_func(input, func, expected, sort=True)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     def test_groupByKey(self):
         """Basic operation test for DStream.groupByKey."""
@@ -653,6 +658,9 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         def func(dstream):
             return dstream.countByValueAndWindow(2.5, .5)
 
+<<<<<<< HEAD
+        expected = [[1], [2], [3], [4], [5], [6], [6], [6], [6], [6]]
+=======
         expected = [[(0, 1)],
                     [(0, 2), (1, 1)],
                     [(0, 3), (1, 2), (2, 1)],
@@ -663,6 +671,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
                     [(0, 3), (1, 3), (2, 3), (3, 3), (4, 2), (5, 1)],
                     [(0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 1)],
                     [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]]
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         self._test_func(input, func, expected)
 
     def test_group_by_key_and_window(self):

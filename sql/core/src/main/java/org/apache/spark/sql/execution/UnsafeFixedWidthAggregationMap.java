@@ -61,7 +61,11 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Re-used pointer to the current aggregation buffer
    */
+<<<<<<< HEAD
+  private final UnsafeRow currentAggregationBuffer = new UnsafeRow();
+=======
   private final UnsafeRow currentAggregationBuffer;
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   private final boolean enablePerfMetrics;
 
@@ -98,7 +102,10 @@ public final class UnsafeFixedWidthAggregationMap {
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.aggregationBufferSchema = aggregationBufferSchema;
+<<<<<<< HEAD
+=======
     this.currentAggregationBuffer = new UnsafeRow(aggregationBufferSchema.length());
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map =
@@ -148,6 +155,10 @@ public final class UnsafeFixedWidthAggregationMap {
     currentAggregationBuffer.pointTo(
       address.getBaseObject(),
       address.getBaseOffset(),
+<<<<<<< HEAD
+      aggregationBufferSchema.length(),
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       loc.getValueLength()
     );
     return currentAggregationBuffer;
@@ -165,8 +176,13 @@ public final class UnsafeFixedWidthAggregationMap {
 
       private final BytesToBytesMap.MapIterator mapLocationIterator =
         map.destructiveIterator();
+<<<<<<< HEAD
+      private final UnsafeRow key = new UnsafeRow();
+      private final UnsafeRow value = new UnsafeRow();
+=======
       private final UnsafeRow key = new UnsafeRow(groupingKeySchema.length());
       private final UnsafeRow value = new UnsafeRow(aggregationBufferSchema.length());
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       @Override
       public boolean next() {
@@ -177,11 +193,19 @@ public final class UnsafeFixedWidthAggregationMap {
           key.pointTo(
             keyAddress.getBaseObject(),
             keyAddress.getBaseOffset(),
+<<<<<<< HEAD
+            groupingKeySchema.length(),
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             loc.getKeyLength()
           );
           value.pointTo(
             valueAddress.getBaseObject(),
             valueAddress.getBaseOffset(),
+<<<<<<< HEAD
+            aggregationBufferSchema.length(),
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             loc.getValueLength()
           );
           return true;

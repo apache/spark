@@ -90,13 +90,21 @@ class GenerateUnsafeRowJoinerBitsetSuite extends SparkFunSuite {
   }
 
   private def createUnsafeRow(numFields: Int): UnsafeRow = {
+<<<<<<< HEAD
+    val row = new UnsafeRow
+=======
     val row = new UnsafeRow(numFields)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val sizeInBytes = numFields * 8 + ((numFields + 63) / 64) * 8
     // Allocate a larger buffer than needed and point the UnsafeRow to somewhere in the middle.
     // This way we can test the joiner when the input UnsafeRows are not the entire arrays.
     val offset = numFields * 8
     val buf = new Array[Byte](sizeInBytes + offset)
+<<<<<<< HEAD
+    row.pointTo(buf, Platform.BYTE_ARRAY_OFFSET + offset, numFields, sizeInBytes)
+=======
     row.pointTo(buf, Platform.BYTE_ARRAY_OFFSET + offset, sizeInBytes)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     row
   }
 

@@ -77,6 +77,17 @@ private[spark] class EventLoggingListener(
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
+<<<<<<< HEAD
+  // The Hadoop APIs have changed over time, so we use reflection to figure out
+  // the correct method to use to flush a hadoop data stream. See SPARK-1518
+  // for details.
+  private val hadoopFlushMethod = {
+    val cls = classOf[FSDataOutputStream]
+    scala.util.Try(cls.getMethod("hflush")).getOrElse(cls.getMethod("sync"))
+  }
+
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   private var writer: Option[PrintWriter] = None
 
   // For testing. Keep track of all JSON serialized events that have been logged.
@@ -89,7 +100,11 @@ private[spark] class EventLoggingListener(
    * Creates the log file in the configured log directory.
    */
   def start() {
+<<<<<<< HEAD
+    if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDir) {
+=======
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
     }
 
@@ -139,7 +154,11 @@ private[spark] class EventLoggingListener(
     // scalastyle:on println
     if (flushLogger) {
       writer.foreach(_.flush())
+<<<<<<< HEAD
+      hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
+=======
       hadoopDataStream.foreach(_.hflush())
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
     if (testing) {
       loggedEvents += eventJson

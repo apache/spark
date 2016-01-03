@@ -20,8 +20,11 @@ package org.apache.spark.rdd
 import org.apache.hadoop.conf.{ Configurable, Configuration }
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
+<<<<<<< HEAD
+=======
 import org.apache.hadoop.mapreduce.task.JobContextImpl
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.input.StreamFileInputFormat
 import org.apache.spark.{ Partition, SparkContext }
 
@@ -42,7 +45,11 @@ private[spark] class BinaryFileRDD[T](
         configurable.setConf(conf)
       case _ =>
     }
+<<<<<<< HEAD
+    val jobContext = newJobContext(conf, jobId)
+=======
     val jobContext = new JobContextImpl(conf, jobId)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     inputFormat.setMinPartitions(jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)

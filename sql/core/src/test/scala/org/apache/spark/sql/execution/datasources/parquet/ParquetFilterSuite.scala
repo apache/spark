@@ -17,17 +17,27 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+<<<<<<< HEAD
+import org.apache.parquet.filter2.predicate.Operators._
+import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+
+import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
+=======
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 
 import org.apache.spark.sql._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.test.SharedSQLContext
+<<<<<<< HEAD
+=======
 import org.apache.spark.sql.types._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -325,6 +335,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+<<<<<<< HEAD
+=======
   test("SPARK-12231: test the filter and empty project in partitioned DataSource scan") {
     import testImplicits._
 
@@ -366,6 +378,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
     import testImplicits._
 
@@ -425,6 +438,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+<<<<<<< HEAD
+=======
   test("SPARK-12218 Converting conjunctions into Parquet filter predicates") {
     val schema = StructType(Seq(
       StructField("a", IntegerType, nullable = false),
@@ -461,6 +476,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   test("SPARK-11164: test the parquet filter in") {
     import testImplicits._
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {

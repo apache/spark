@@ -34,8 +34,13 @@ class UnsafeRowSuite extends SparkFunSuite {
   test("UnsafeRow Java serialization") {
     // serializing an UnsafeRow pointing to a large buffer should only serialize the relevant data
     val data = new Array[Byte](1024)
+<<<<<<< HEAD
+    val row = new UnsafeRow
+    row.pointTo(data, 1, 16)
+=======
     val row = new UnsafeRow(1)
     row.pointTo(data, 16)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     row.setLong(0, 19285)
 
     val ser = new JavaSerializer(new SparkConf).newInstance()
@@ -47,8 +52,13 @@ class UnsafeRowSuite extends SparkFunSuite {
   test("UnsafeRow Kryo serialization") {
     // serializing an UnsafeRow pointing to a large buffer should only serialize the relevant data
     val data = new Array[Byte](1024)
+<<<<<<< HEAD
+    val row = new UnsafeRow
+    row.pointTo(data, 1, 16)
+=======
     val row = new UnsafeRow(1)
     row.pointTo(data, 16)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     row.setLong(0, 19285)
 
     val ser = new KryoSerializer(new SparkConf).newInstance()
@@ -86,10 +96,18 @@ class UnsafeRowSuite extends SparkFunSuite {
           offheapRowPage.getBaseOffset,
           arrayBackedUnsafeRow.getSizeInBytes
         )
+<<<<<<< HEAD
+        val offheapUnsafeRow: UnsafeRow = new UnsafeRow()
+        offheapUnsafeRow.pointTo(
+          offheapRowPage.getBaseObject,
+          offheapRowPage.getBaseOffset,
+          3, // num fields
+=======
         val offheapUnsafeRow: UnsafeRow = new UnsafeRow(3)
         offheapUnsafeRow.pointTo(
           offheapRowPage.getBaseObject,
           offheapRowPage.getBaseOffset,
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           arrayBackedUnsafeRow.getSizeInBytes
         )
         assert(offheapUnsafeRow.getBaseObject === null)

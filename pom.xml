@@ -1951,11 +1951,14 @@
             </compilerArgs>
           </configuration>
         </plugin>
+<<<<<<< HEAD
+=======
         <plugin>
           <groupId>org.antlr</groupId>
           <artifactId>antlr3-maven-plugin</artifactId>
           <version>3.5.2</version>
         </plugin>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         <!-- Surefire runs all Java tests -->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2118,6 +2121,8 @@
           <artifactId>maven-deploy-plugin</artifactId>
           <version>2.8.2</version>
         </plugin>
+<<<<<<< HEAD
+=======
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
@@ -2135,6 +2140,7 @@
             </execution>
           </executions>
         </plugin>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         <!-- This plugin's configuration is used to store Eclipse m2e settings only. -->
         <!-- It has no influence on the Maven build itself. -->
         <plugin>

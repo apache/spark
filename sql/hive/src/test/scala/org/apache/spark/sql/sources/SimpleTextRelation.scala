@@ -25,6 +25,10 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
+<<<<<<< HEAD
+import org.apache.spark.deploy.SparkHadoopUtil
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, expressions}
@@ -52,9 +56,15 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   numberFormat.setGroupingUsed(false)
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+<<<<<<< HEAD
+    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+    val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+=======
     val configuration = context.getConfiguration
     val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
     val taskAttemptId = context.getTaskAttemptID
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val split = taskAttemptId.getTaskID.getId
     val name = FileOutputFormat.getOutputName(context)
     new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId")

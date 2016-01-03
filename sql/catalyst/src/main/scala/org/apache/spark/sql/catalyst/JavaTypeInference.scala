@@ -178,6 +178,21 @@ object JavaTypeInference {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath
 
       case c if c == classOf[java.lang.Short] =>
+<<<<<<< HEAD
+        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+      case c if c == classOf[java.lang.Integer] =>
+        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+      case c if c == classOf[java.lang.Long] =>
+        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+      case c if c == classOf[java.lang.Double] =>
+        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+      case c if c == classOf[java.lang.Byte] =>
+        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+      case c if c == classOf[java.lang.Float] =>
+        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+      case c if c == classOf[java.lang.Boolean] =>
+        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+=======
         NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Integer] =>
         NewInstance(c, getPath :: Nil, ObjectType(c))
@@ -191,6 +206,7 @@ object JavaTypeInference {
         NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Boolean] =>
         NewInstance(c, getPath :: Nil, ObjectType(c))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       case c if c == classOf[java.sql.Date] =>
         StaticInvoke(
@@ -298,7 +314,11 @@ object JavaTypeInference {
           p.getWriteMethod.getName -> setter
         }.toMap
 
+<<<<<<< HEAD
+        val newInstance = NewInstance(other, Nil, propagateNull = false, ObjectType(other))
+=======
         val newInstance = NewInstance(other, Nil, ObjectType(other), propagateNull = false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         val result = InitializeJavaBean(newInstance, setters)
 
         if (path.nonEmpty) {

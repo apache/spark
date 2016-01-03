@@ -26,7 +26,11 @@ import org.apache.spark.{SecurityManager, SparkConf}
  * protocol to do a distributed transfer of the broadcasted data to the executors. Refer to
  * [[org.apache.spark.broadcast.TorrentBroadcast]] for more details.
  */
+<<<<<<< HEAD
+class TorrentBroadcastFactory extends BroadcastFactory {
+=======
 private[spark] class TorrentBroadcastFactory extends BroadcastFactory {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   override def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) { }
 

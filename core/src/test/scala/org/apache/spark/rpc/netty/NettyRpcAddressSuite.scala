@@ -18,7 +18,10 @@
 package org.apache.spark.rpc.netty
 
 import org.apache.spark.SparkFunSuite
+<<<<<<< HEAD
+=======
 import org.apache.spark.rpc.RpcEndpointAddress
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 class NettyRpcAddressSuite extends SparkFunSuite {
 

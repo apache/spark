@@ -77,13 +77,21 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
       This implementation is non-blocking, asynchronously handling the
       results of each job and triggering the next job using callbacks on futures.
      */
+<<<<<<< HEAD
+    def continue(partsScanned: Long)(implicit jobSubmitter: JobSubmitter) : Future[Seq[T]] =
+=======
     def continue(partsScanned: Int)(implicit jobSubmitter: JobSubmitter) : Future[Seq[T]] =
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       if (results.size >= num || partsScanned >= totalParts) {
         Future.successful(results.toSeq)
       } else {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
+<<<<<<< HEAD
+        var numPartsToTry = 1L
+=======
         var numPartsToTry = 1
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate it
@@ -99,7 +107,11 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         }
 
         val left = num - results.size
+<<<<<<< HEAD
+        val p = partsScanned.toInt until math.min(partsScanned + numPartsToTry, totalParts).toInt
+=======
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
         val buf = new Array[Array[T]](p.size)
         self.context.setCallSite(callSite)
@@ -111,11 +123,19 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           Unit)
         job.flatMap {_ =>
           buf.foreach(results ++= _.take(num - results.size))
+<<<<<<< HEAD
+          continue(partsScanned + p.size)
+        }
+      }
+
+    new ComplexFutureAction[Seq[T]](continue(0L)(_))
+=======
           continue(partsScanned + numPartsToTry)
         }
       }
 
     new ComplexFutureAction[Seq[T]](continue(0)(_))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   /**

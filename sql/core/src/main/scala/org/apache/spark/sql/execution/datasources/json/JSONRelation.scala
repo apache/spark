@@ -30,6 +30,11 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
+<<<<<<< HEAD
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -87,8 +92,13 @@ private[sql] class JSONRelation(
   override val needConversion: Boolean = false
 
   private def createBaseRdd(inputPaths: Array[FileStatus]): RDD[String] = {
+<<<<<<< HEAD
+    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+=======
     val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     val paths = inputPaths.map(_.getPath)
 
@@ -174,7 +184,11 @@ private[json] class JsonOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
+<<<<<<< HEAD
+  extends OutputWriter with SparkHadoopMapRedUtil with Logging {
+=======
   extends OutputWriter with Logging {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
@@ -184,9 +198,15 @@ private[json] class JsonOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+<<<<<<< HEAD
+        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+=======
         val configuration = context.getConfiguration
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
       }

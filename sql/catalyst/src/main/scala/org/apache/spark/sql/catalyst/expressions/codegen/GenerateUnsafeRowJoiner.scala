@@ -165,7 +165,11 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
+<<<<<<< HEAD
+       |  private UnsafeRow out = new UnsafeRow();
+=======
        |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
@@ -188,7 +192,11 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    $copyVariableLengthRow2
        |    $updateOffset
        |
+<<<<<<< HEAD
+       |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes - $sizeReduction);
+=======
        |    out.pointTo(buf, sizeInBytes - $sizeReduction);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
        |
        |    return out;
        |  }

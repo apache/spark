@@ -227,6 +227,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row("Manufacturer#5", "almond azure blanched chiffon midnight", 23, 315.9225931564038, 315.9225931564038, 46, 99807.08486666666, -0.9978877469246935, -5664.856666666666)))
       // scalastyle:on
   }
+<<<<<<< HEAD
+=======
 
   test("null arguments") {
     checkAnswer(sql("""
@@ -242,4 +244,5 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |from part
         """.stripMargin))
   }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }

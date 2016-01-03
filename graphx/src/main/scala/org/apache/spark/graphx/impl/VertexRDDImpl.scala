@@ -21,10 +21,18 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+<<<<<<< HEAD
+import org.apache.spark.rdd._
+import org.apache.spark.storage.StorageLevel
+
+import org.apache.spark.graphx._
+
+=======
 import org.apache.spark.graphx._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 class VertexRDDImpl[VD] private[graphx] (
     @transient val partitionsRDD: RDD[ShippableVertexPartition[VD]],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)

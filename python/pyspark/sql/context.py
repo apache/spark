@@ -18,7 +18,10 @@
 import sys
 import warnings
 import json
+<<<<<<< HEAD
+=======
 from functools import reduce
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 if sys.version >= '3':
     basestring = unicode = str
@@ -237,9 +240,20 @@ class SQLContext(object):
         if type(first) is dict:
             warnings.warn("inferring schema from dict is deprecated,"
                           "please use pyspark.sql.Row instead")
+<<<<<<< HEAD
+        schema = _infer_schema(first)
+        if _has_nulltype(schema):
+            for r in data:
+                schema = _merge_type(schema, _infer_schema(r))
+                if not _has_nulltype(schema):
+                    break
+            else:
+                raise ValueError("Some of types cannot be determined after inferring")
+=======
         schema = reduce(_merge_type, map(_infer_schema, data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         return schema
 
     def _inferSchema(self, rdd, samplingRatio=None):

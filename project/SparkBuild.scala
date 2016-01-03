@@ -414,6 +414,11 @@ object Hive {
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
+<<<<<<< HEAD
+    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
+  )
+
+=======
     fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") },
     // ANTLR code-generation step.
     //
@@ -459,6 +464,7 @@ object Hive {
       ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
     }.taskValue
   )
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 object Assembly {

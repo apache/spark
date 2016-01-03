@@ -17,16 +17,28 @@
 
 package org.apache.spark.mllib.stat.test
 
+<<<<<<< HEAD
+import breeze.linalg.{DenseMatrix => BDM}
+import org.apache.commons.math3.distribution.ChiSquaredDistribution
+
+import org.apache.spark.{SparkException, Logging}
+=======
 import scala.collection.mutable
 
 import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
 import org.apache.spark.{Logging, SparkException}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
+<<<<<<< HEAD
+import scala.collection.mutable
+
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.
  * Goodness-of-fit test is conducted on two `Vectors`, whereas test of independence is conducted

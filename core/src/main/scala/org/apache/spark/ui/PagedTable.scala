@@ -17,6 +17,10 @@
 
 package org.apache.spark.ui
 
+<<<<<<< HEAD
+import scala.xml.{Node, Unparsed}
+
+=======
 import java.net.URLDecoder
 
 import scala.collection.JavaConverters._
@@ -26,6 +30,7 @@ import com.google.common.base.Splitter
 
 import org.apache.spark.util.Utils
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * A data source that provides data for a page.
  *
@@ -78,12 +83,15 @@ private[ui] trait PagedTable[T] {
 
   def tableCssClass: String
 
+<<<<<<< HEAD
+=======
   def pageSizeFormField: String
 
   def prevPageSizeFormField: String
 
   def pageNumberFormField: String
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   def dataSource: PagedDataSource[T]
 
   def headers: Seq[Node]
@@ -108,12 +116,16 @@ private[ui] trait PagedTable[T] {
         val PageData(totalPages, _) = _dataSource.pageData(1)
         <div>
           {pageNavigation(1, _dataSource.pageSize, totalPages)}
+<<<<<<< HEAD
+          <div class="alert alert-error">{e.getMessage}</div>
+=======
           <div class="alert alert-error">
             <p>Error while rendering table:</p>
             <pre>
               {Utils.exceptionString(e)}
             </pre>
           </div>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         </div>
     }
   }
@@ -169,6 +181,27 @@ private[ui] trait PagedTable[T] {
           // The current page should be disabled so that it cannot be clicked.
           <li class="disabled"><a href="#">{p}</a></li>
         } else {
+<<<<<<< HEAD
+          <li><a href={pageLink(p)}>{p}</a></li>
+        }
+      }
+      val (goButtonJsFuncName, goButtonJsFunc) = goButtonJavascriptFunction
+      // When clicking the "Go" button, it will call this javascript method and then call
+      // "goButtonJsFuncName"
+      val formJs =
+        s"""$$(function(){
+          |  $$( "#form-$tableId-page" ).submit(function(event) {
+          |    var page = $$("#form-$tableId-page-no").val()
+          |    var pageSize = $$("#form-$tableId-page-size").val()
+          |    pageSize = pageSize ? pageSize: 100;
+          |    if (page != "") {
+          |      ${goButtonJsFuncName}(page, pageSize);
+          |    }
+          |    event.preventDefault();
+          |  });
+          |});
+        """.stripMargin
+=======
           <li><a href={Unparsed(pageLink(p))}>{p}</a></li>
         }
       }
@@ -193,10 +226,20 @@ private[ui] trait PagedTable[T] {
           Seq.empty
         }
       }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
       <div>
         <div>
           <form id={s"form-$tableId-page"}
+<<<<<<< HEAD
+                class="form-inline pull-right" style="margin-bottom: 0px;">
+            <label>{totalPages} Pages. Jump to</label>
+            <input type="text" id={s"form-$tableId-page-no"} value={page.toString} class="span1" />
+            <label>. Show </label>
+            <input type="text"
+                   id={s"form-$tableId-page-size"} value={pageSize.toString} class="span1" />
+            <label>items in a page.</label>
+=======
                 method="get"
                 action={Unparsed(goButtonFormPath)}
                 class="form-inline pull-right"
@@ -219,6 +262,7 @@ private[ui] trait PagedTable[T] {
                    class="span1" />
             <label>items in a page.</label>
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             <button type="submit" class="btn">Go</button>
           </form>
         </div>
@@ -227,7 +271,11 @@ private[ui] trait PagedTable[T] {
           <ul>
             {if (currentGroup > firstGroup) {
             <li>
+<<<<<<< HEAD
+              <a href={pageLink(startPage - groupSize)} aria-label="Previous Group">
+=======
               <a href={Unparsed(pageLink(startPage - groupSize))} aria-label="Previous Group">
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
                 <span aria-hidden="true">
                   &lt;&lt;
                 </span>
@@ -236,7 +284,11 @@ private[ui] trait PagedTable[T] {
             }}
             {if (page > 1) {
             <li>
+<<<<<<< HEAD
+            <a href={pageLink(page - 1)} aria-label="Previous">
+=======
             <a href={Unparsed(pageLink(page - 1))} aria-label="Previous">
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
               <span aria-hidden="true">
                 &lt;
               </span>
@@ -246,14 +298,22 @@ private[ui] trait PagedTable[T] {
             {pageTags}
             {if (page < totalPages) {
             <li>
+<<<<<<< HEAD
+              <a href={pageLink(page + 1)} aria-label="Next">
+=======
               <a href={Unparsed(pageLink(page + 1))} aria-label="Next">
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
                 <span aria-hidden="true">&gt;</span>
               </a>
             </li>
             }}
             {if (currentGroup < lastGroup) {
             <li>
+<<<<<<< HEAD
+              <a href={pageLink(startPage + groupSize)} aria-label="Next Group">
+=======
               <a href={Unparsed(pageLink(startPage + groupSize))} aria-label="Next Group">
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
                 <span aria-hidden="true">
                   &gt;&gt;
                 </span>
@@ -262,6 +322,14 @@ private[ui] trait PagedTable[T] {
           }}
           </ul>
         </div>
+<<<<<<< HEAD
+        <script>
+          {Unparsed(goButtonJsFunc)}
+
+          {Unparsed(formJs)}
+        </script>
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       </div>
     }
   }
@@ -272,7 +340,16 @@ private[ui] trait PagedTable[T] {
   def pageLink(page: Int): String
 
   /**
+<<<<<<< HEAD
+   * Only the implementation knows how to create the url with a page number and the page size, so we
+   * leave this one to the implementation. The implementation should create a JavaScript method that
+   * accepts a page number along with the page size and jumps to the page. The return value is this
+   * method name and its JavaScript codes.
+   */
+  def goButtonJavascriptFunction: (String, String)
+=======
    * Returns the submission path for the "go to page #" form.
    */
   def goButtonFormPath: String
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }

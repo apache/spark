@@ -19,7 +19,11 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
+<<<<<<< HEAD
+import org.apache.spark.rpc.RpcAddress
+=======
 import org.apache.spark.rpc.{RpcEndpointAddress, RpcAddress}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
@@ -54,10 +58,16 @@ private[spark] class SparkDeploySchedulerBackend(
     launcherBackend.connect()
 
     // The endpoint for executors to talk to us
+<<<<<<< HEAD
+    val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
+      RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+=======
     val driverUrl = RpcEndpointAddress(
       sc.conf.get("spark.driver.host"),
       sc.conf.get("spark.driver.port").toInt,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val args = Seq(
       "--driver-url", driverUrl,
       "--executor-id", "{{EXECUTOR_ID}}",

@@ -33,6 +33,12 @@ import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
+<<<<<<< HEAD
+import org.apache.hadoop.mapreduce.JobContext
+import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
+import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -73,6 +79,12 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
+<<<<<<< HEAD
+  @deprecated("use newConfiguration with SparkConf argument", "1.2.0")
+  def newConfiguration(): Configuration = newConfiguration(null)
+
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   /**
    * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
    * subsystems.
@@ -185,6 +197,36 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
+<<<<<<< HEAD
+   * Using reflection to get the Configuration from JobContext/TaskAttemptContext. If we directly
+   * call `JobContext/TaskAttemptContext.getConfiguration`, it will generate different byte codes
+   * for Hadoop 1.+ and Hadoop 2.+ because JobContext/TaskAttemptContext is class in Hadoop 1.+
+   * while it's interface in Hadoop 2.+.
+   */
+  def getConfigurationFromJobContext(context: JobContext): Configuration = {
+    // scalastyle:off jobconfig
+    val method = context.getClass.getMethod("getConfiguration")
+    // scalastyle:on jobconfig
+    method.invoke(context).asInstanceOf[Configuration]
+  }
+
+  /**
+   * Using reflection to call `getTaskAttemptID` from TaskAttemptContext. If we directly
+   * call `TaskAttemptContext.getTaskAttemptID`, it will generate different byte codes
+   * for Hadoop 1.+ and Hadoop 2.+ because TaskAttemptContext is class in Hadoop 1.+
+   * while it's interface in Hadoop 2.+.
+   */
+  def getTaskAttemptIDFromTaskAttemptContext(
+      context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
+    // scalastyle:off jobconfig
+    val method = context.getClass.getMethod("getTaskAttemptID")
+    // scalastyle:on jobconfig
+    method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
+  }
+
+  /**
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
    * Get [[FileStatus]] objects for all leaf children (files) under the given base path. If the
    * given path points to a file, return a single-element collection containing [[FileStatus]] of
    * that file.
@@ -200,11 +242,19 @@ class SparkHadoopUtil extends Logging {
    */
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
+<<<<<<< HEAD
+      val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDir)
+      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
+    }
+
+    if (baseStatus.isDir) recurse(baseStatus) else Seq(baseStatus)
+=======
       val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDirectory)
       leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
     }
 
     if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   def listLeafDirStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
@@ -213,12 +263,20 @@ class SparkHadoopUtil extends Logging {
 
   def listLeafDirStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
+<<<<<<< HEAD
+      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDir)
+=======
       val (directories, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       val leaves = if (directories.isEmpty) Seq(status) else Seq.empty[FileStatus]
       leaves ++ directories.flatMap(dir => listLeafDirStatuses(fs, dir))
     }
 
+<<<<<<< HEAD
+    assert(baseStatus.isDir)
+=======
     assert(baseStatus.isDirectory)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     recurse(baseStatus)
   }
 

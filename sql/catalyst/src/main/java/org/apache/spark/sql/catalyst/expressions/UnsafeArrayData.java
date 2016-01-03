@@ -270,8 +270,13 @@ public class UnsafeArrayData extends ArrayData {
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
     final int size = getElementSize(offset, ordinal);
+<<<<<<< HEAD
+    final UnsafeRow row = new UnsafeRow();
+    row.pointTo(baseObject, baseOffset + offset, numFields, size);
+=======
     final UnsafeRow row = new UnsafeRow(numFields);
     row.pointTo(baseObject, baseOffset + offset, size);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     return row;
   }
 

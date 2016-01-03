@@ -232,7 +232,10 @@
              <configuration>
                <sources>
                  <source>v${hive.version.short}/src/main/scala</source>
+<<<<<<< HEAD
+=======
                  <source>${project.build.directory/generated-sources/antlr</source>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
                </sources>
              </configuration>
            </execution>
@@ -261,6 +264,8 @@
           </execution>
         </executions>
       </plugin>
+<<<<<<< HEAD
+=======
 
 
       <plugin>
@@ -282,6 +287,7 @@
         </configuration>
       </plugin>
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     </plugins>
   </build>
 </project>

@@ -19,6 +19,17 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.Since
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.PartitionwiseSampledRDD
+import org.apache.spark.util.random.BernoulliCellSampler
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.dot
+import org.apache.spark.storage.StorageLevel
+=======
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
@@ -27,6 +38,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.

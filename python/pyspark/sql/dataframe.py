@@ -608,16 +608,23 @@ class DataFrame(object):
         :param on: a string for join column name, a list of column names,
             , a join expression (Column) or a list of Columns.
             If `on` is a string or a list of string indicating the name of the join column(s),
+<<<<<<< HEAD
+            the column(s) must exist on both sides, and this performs an inner equi-join.
+=======
             the column(s) must exist on both sides, and this performs an equi-join.
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
 
+<<<<<<< HEAD
+=======
         >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
         [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         >>> cond = [df.name == df3.name, df.age == df3.age]
         >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
         [Row(name=u'Bob', age=5), Row(name=u'Alice', age=2)]

@@ -17,10 +17,17 @@
 
 package org.apache.spark.mllib.stat.distribution
 
+<<<<<<< HEAD
+import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym, Vector => BV}
+
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
+=======
 import breeze.linalg.{diag, eigSym, max, DenseMatrix => DBM, DenseVector => DBV, Vector => BV}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.mllib.util.MLUtils
 
 /**

@@ -17,11 +17,19 @@
 
 package org.apache.spark.ml.feature
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
+=======
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
 import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.DataFrame

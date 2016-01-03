@@ -225,6 +225,9 @@ a.expandbutton {
   background-color: #49535a !important;
   color: white;
   cursor:pointer;
+<<<<<<< HEAD
+}
+=======
 }
 
 .table-head-clickable th a, .table-head-clickable th a:hover {
@@ -235,3 +238,4 @@ a.expandbutton {
   color: #333;
   text-decoration: none;
 }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965

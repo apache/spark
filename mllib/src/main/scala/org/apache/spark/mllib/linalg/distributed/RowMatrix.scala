@@ -21,8 +21,13 @@ import java.util.Arrays
 
 import scala.collection.mutable.ListBuffer
 
+<<<<<<< HEAD
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV, axpy => brzAxpy,
+  svd => brzSvd, MatrixSingularException, inv}
+=======
 import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV,
   MatrixSingularException, SparseVector => BSV}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.Logging
@@ -30,8 +35,13 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
+import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.storage.StorageLevel
+=======
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Represents a row-oriented distributed Matrix with no meaningful row indices.

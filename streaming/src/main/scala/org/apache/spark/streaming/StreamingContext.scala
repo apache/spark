@@ -29,8 +29,13 @@ import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+<<<<<<< HEAD
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+=======
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}

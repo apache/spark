@@ -62,10 +62,13 @@ mockLinesComplexType <-
 complexTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
+<<<<<<< HEAD
+=======
 test_that("calling sparkRSQL.init returns existing SQL context", {
   expect_equal(sparkRSQL.init(sc), sqlContext)
 })
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 test_that("infer types and check types", {
   expect_equal(infer_type(1L), "integer")
   expect_equal(infer_type(1.0), "double")
@@ -1124,6 +1127,8 @@ test_that("when(), otherwise() and ifelse() on a DataFrame", {
   expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, 0, 1)))[, 1], c(1, 0))
 })
 
+<<<<<<< HEAD
+=======
 test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
   l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
   df <- createDataFrame(sqlContext, l)
@@ -1132,6 +1137,7 @@ test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
   expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, lit(0), lit(1))))[, 1], c(1, 0))
 })
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 test_that("group by, agg functions", {
   df <- read.json(sqlContext, jsonPath)
   df1 <- agg(df, name = "max", age = "sum")

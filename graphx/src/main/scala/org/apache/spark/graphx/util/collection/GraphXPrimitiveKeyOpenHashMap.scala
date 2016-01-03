@@ -17,10 +17,17 @@
 
 package org.apache.spark.graphx.util.collection
 
+<<<<<<< HEAD
+import org.apache.spark.util.collection.OpenHashSet
+
+import scala.reflect._
+
+=======
 import scala.reflect._
 
 import org.apache.spark.util.collection.OpenHashSet
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * A fast hash map implementation for primitive, non-null keys. This hash map supports
  * insertions and updates, but not deletions. This map is about an order of magnitude

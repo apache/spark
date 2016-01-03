@@ -19,11 +19,19 @@ package org.apache.spark.ml.feature
 
 import edu.emory.mathcs.jtransforms.dct._
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.param.BooleanParam
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+=======
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.types.DataType
 
 /**

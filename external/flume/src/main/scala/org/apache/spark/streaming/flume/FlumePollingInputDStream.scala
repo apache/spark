@@ -32,8 +32,13 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+<<<<<<< HEAD
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.flume.sink._
+=======
 import org.apache.spark.streaming.flume.sink._
 import org.apache.spark.streaming.receiver.Receiver
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running

@@ -18,11 +18,19 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.sources.{HadoopFsRelation, BaseRelation}
+=======
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
 
@@ -84,8 +92,11 @@ private[sql] case class LogicalRDD(
     case _ => false
   }
 
+<<<<<<< HEAD
+=======
   override def producedAttributes: AttributeSet = outputSet
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.

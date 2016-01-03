@@ -33,7 +33,11 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.loss.{LogLoss => OldLogLoss, Loss => OldLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
+import org.apache.spark.sql.{Row, DataFrame}
+=======
 import org.apache.spark.sql.{DataFrame, Row}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 

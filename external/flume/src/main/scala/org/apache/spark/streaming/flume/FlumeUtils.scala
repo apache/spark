@@ -17,8 +17,13 @@
 
 package org.apache.spark.streaming.flume
 
+<<<<<<< HEAD
+import java.net.InetSocketAddress
+import java.io.{DataOutputStream, ByteArrayOutputStream}
+=======
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 import java.net.InetSocketAddress
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -30,6 +35,10 @@ import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
+<<<<<<< HEAD
+
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 object FlumeUtils {
   private val DEFAULT_POLLING_PARALLELISM = 5
   private val DEFAULT_POLLING_BATCH_SIZE = 1000

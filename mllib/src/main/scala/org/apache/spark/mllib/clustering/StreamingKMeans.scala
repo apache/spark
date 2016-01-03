@@ -24,7 +24,11 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
+import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream}
+=======
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom

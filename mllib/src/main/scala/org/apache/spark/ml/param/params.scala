@@ -859,12 +859,17 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
    * Filters this param map for the given parent.
    */
   def filter(parent: Params): ParamMap = {
+<<<<<<< HEAD
+    val filtered = map.filterKeys(_.parent == parent)
+    new ParamMap(filtered.asInstanceOf[mutable.Map[Param[Any], Any]])
+=======
     // Don't use filterKeys because mutable.Map#filterKeys
     // returns the instance of collections.Map, not mutable.Map.
     // Otherwise, we get ClassCastException.
     // Not using filterKeys also avoid SI-6654
     val filtered = map.filter { case (k, _) => k.parent == parent.uid }
     new ParamMap(filtered)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   /**

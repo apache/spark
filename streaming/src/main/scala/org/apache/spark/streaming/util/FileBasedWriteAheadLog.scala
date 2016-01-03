@@ -17,8 +17,13 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
+<<<<<<< HEAD
+import java.util.concurrent.{RejectedExecutionException, ThreadPoolExecutor}
+import java.util.{Iterator => JIterator}
+=======
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.{RejectedExecutionException, ThreadPoolExecutor}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -29,8 +34,13 @@ import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+<<<<<<< HEAD
+import org.apache.spark.util.{CompletionIterator, ThreadUtils}
+import org.apache.spark.{Logging, SparkConf}
+=======
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * This class manages write ahead log files.
@@ -224,8 +234,12 @@ private[streaming] class FileBasedWriteAheadLog(
     val logDirectoryPath = new Path(logDirectory)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
+<<<<<<< HEAD
+    if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
+=======
     if (fileSystem.exists(logDirectoryPath) &&
         fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
       pastLogs.clear()
       pastLogs ++= logFileInfo

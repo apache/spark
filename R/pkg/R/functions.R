@@ -37,7 +37,11 @@ setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lit",
+<<<<<<< HEAD
+                              ifelse(class(x) == "Column", x@jc, x))
+=======
                               if (class(x) == "Column") { x@jc } else { x })
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             column(jc)
           })
 
@@ -2262,7 +2266,11 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
+<<<<<<< HEAD
+              value <- ifelse(class(value) == "Column", value@jc, value)
+=======
               value <- if (class(value) == "Column") { value@jc } else { value }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
@@ -2277,16 +2285,25 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' @name ifelse
 #' @seealso \link{when}
 #' @export
+<<<<<<< HEAD
+#' @examples \dontrun{ifelse(df$a > 1 & df$b > 2, 0, 1)}
+=======
 #' @examples \dontrun{
 #' ifelse(df$a > 1 & df$b > 2, 0, 1)
 #' ifelse(df$a > 1, df$a, 1)
 #' }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
               test <- test@jc
+<<<<<<< HEAD
+              yes <- ifelse(class(yes) == "Column", yes@jc, yes)
+              no <- ifelse(class(no) == "Column", no@jc, no)
+=======
               yes <- if (class(yes) == "Column") { yes@jc } else { yes }
               no <- if (class(no) == "Column") { no@jc } else { no }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
               jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
                                             "when",
                                             test, yes),

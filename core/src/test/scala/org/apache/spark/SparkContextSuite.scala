@@ -274,6 +274,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+<<<<<<< HEAD
+=======
   test("Default path for file based RDDs is properly set (SPARK-12517)") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
@@ -299,6 +301,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   test("calling multiple sc.stop() must not throw any exception") {
     noException should be thrownBy {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))

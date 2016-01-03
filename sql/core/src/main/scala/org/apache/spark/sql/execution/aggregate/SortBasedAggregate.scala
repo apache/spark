@@ -36,6 +36,8 @@ case class SortBasedAggregate(
     child: SparkPlan)
   extends UnaryNode {
 
+<<<<<<< HEAD
+=======
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
   }
@@ -45,6 +47,7 @@ case class SortBasedAggregate(
       AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
       AttributeSet(aggregateBufferAttributes)
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   override private[sql] lazy val metrics = Map(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))

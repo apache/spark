@@ -24,7 +24,11 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
+<<<<<<< HEAD
+import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
+=======
 import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._

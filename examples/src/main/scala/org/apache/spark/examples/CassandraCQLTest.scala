@@ -16,6 +16,10 @@
  */
 
  // scalastyle:off println
+<<<<<<< HEAD
+ // scalastyle:off jobcontext
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -79,7 +83,11 @@ object CassandraCQLTest {
     val InputColumnFamily = "ordercf"
     val OutputColumnFamily = "salecount"
 
+<<<<<<< HEAD
+    val job = new Job()
+=======
     val job = Job.getInstance()
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     job.setInputFormatClass(classOf[CqlPagingInputFormat])
     val configuration = job.getConfiguration
     ConfigHelper.setInputInitialAddress(job.getConfiguration(), cHost)
@@ -136,3 +144,7 @@ object CassandraCQLTest {
   }
 }
 // scalastyle:on println
+<<<<<<< HEAD
+// scalastyle:on jobcontext
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965

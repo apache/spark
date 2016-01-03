@@ -514,7 +514,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       ds.as[ClassData2].collect()
     }
+<<<<<<< HEAD
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns a, b"), e.getMessage)
+=======
     assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   test("runtime nullability check") {

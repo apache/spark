@@ -21,19 +21,44 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
+
+import static org.apache.parquet.column.ValuesType.DEFINITION_LEVEL;
+import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
+import static org.apache.parquet.column.ValuesType.VALUES;
+
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.column.Encoding;
+<<<<<<< HEAD
+import org.apache.parquet.column.page.DataPage;
+import org.apache.parquet.column.page.DataPageV1;
+import org.apache.parquet.column.page.DataPageV2;
+import org.apache.parquet.column.page.DictionaryPage;
+import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.column.page.PageReader;
+=======
 import org.apache.parquet.column.page.*;
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
+<<<<<<< HEAD
+=======
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
@@ -43,6 +68,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.parquet.column.ValuesType.*;
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * A specialized RecordReader that reads into UnsafeRows directly using the Parquet column APIs.
  *
@@ -174,11 +200,20 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     rowWriters = new UnsafeRowWriter[rows.length];
 
     for (int i = 0; i < rows.length; ++i) {
+<<<<<<< HEAD
+      rows[i] = new UnsafeRow();
+      rowWriters[i] = new UnsafeRowWriter();
+      BufferHolder holder = new BufferHolder(rowByteSize);
+      rowWriters[i].initialize(rows[i], holder, requestedSchema.getFieldCount());
+      rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, requestedSchema.getFieldCount(),
+          holder.buffer.length);
+=======
       rows[i] = new UnsafeRow(requestedSchema.getFieldCount());
       rowWriters[i] = new UnsafeRowWriter();
       BufferHolder holder = new BufferHolder(rowByteSize);
       rowWriters[i].initialize(rows[i], holder, requestedSchema.getFieldCount());
       rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, holder.buffer.length);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
   }
 

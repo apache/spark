@@ -18,6 +18,10 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
+<<<<<<< HEAD
+import java.util.concurrent.locks.ReentrantLock
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import java.util.{Collections, Date, List => JList}
 
 import scala.collection.JavaConverters._
@@ -125,7 +129,11 @@ private[spark] class MesosClusterScheduler(
   private val retainedDrivers = conf.getInt("spark.mesos.retainedDrivers", 200)
   private val maxRetryWaitTime = conf.getInt("spark.mesos.cluster.retry.wait.max", 60) // 1 minute
   private val schedulerState = engineFactory.createEngine("scheduler")
+<<<<<<< HEAD
+  private val stateLock = new ReentrantLock()
+=======
   private val stateLock = new Object()
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   private val finishedDrivers =
     new mutable.ArrayBuffer[MesosClusterSubmissionState](retainedDrivers)
   private var frameworkId: String = null

@@ -122,6 +122,32 @@ private[sql] object JDBCRDD extends Logging {
     val dialect = JdbcDialects.get(url)
     val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
     try {
+<<<<<<< HEAD
+      val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
+      try {
+        val rsmd = rs.getMetaData
+        val ncols = rsmd.getColumnCount
+        val fields = new Array[StructField](ncols)
+        var i = 0
+        while (i < ncols) {
+          val columnName = rsmd.getColumnLabel(i + 1)
+          val dataType = rsmd.getColumnType(i + 1)
+          val typeName = rsmd.getColumnTypeName(i + 1)
+          val fieldSize = rsmd.getPrecision(i + 1)
+          val fieldScale = rsmd.getScale(i + 1)
+          val isSigned = rsmd.isSigned(i + 1)
+          val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+          val metadata = new MetadataBuilder().putString("name", columnName)
+          val columnType =
+            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
+          fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+          i = i + 1
+        }
+        return new StructType(fields)
+      } finally {
+        rs.close()
+=======
       val statement = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0")
       try {
         val rs = statement.executeQuery()
@@ -151,6 +177,7 @@ private[sql] object JDBCRDD extends Logging {
         }
       } finally {
         statement.close()
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       }
     } finally {
       conn.close()
@@ -179,7 +206,10 @@ private[sql] object JDBCRDD extends Logging {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
     case dateValue: Date => "'" + dateValue + "'"
+<<<<<<< HEAD
+=======
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     case _ => value
   }
 
@@ -188,6 +218,20 @@ private[sql] object JDBCRDD extends Logging {
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
+<<<<<<< HEAD
+   * Returns null for an unhandled filter.
+   */
+  private def compileFilter(f: Filter): String = f match {
+    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    case Not(EqualTo(attr, value)) => s"$attr != ${compileValue(value)}"
+    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
+    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
+    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
+    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
+    case IsNull(attr) => s"$attr IS NULL"
+    case IsNotNull(attr) => s"$attr IS NOT NULL"
+    case _ => null
+=======
    * Returns None for an unhandled filter.
    */
   private def compileFilter(f: Filter): Option[String] = {
@@ -226,6 +270,7 @@ private[sql] object JDBCRDD extends Logging {
         }
       case _ => null
     })
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   /**
@@ -323,17 +368,39 @@ private[sql] class JDBCRDD(
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
+<<<<<<< HEAD
+
+  /**
+   * `filters`, but as a WHERE clause suitable for injection into a SQL query.
+   */
+  private val filterWhereClause: String = {
+    val filterStrings = filters.map(JDBCRDD.compileFilter).filter(_ != null)
+    if (filterStrings.size > 0) {
+      val sb = new StringBuilder("WHERE ")
+      filterStrings.foreach(x => sb.append(x).append(" AND "))
+      sb.substring(0, sb.length - 5)
+    } else ""
+  }
+=======
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String =
     filters.map(JDBCRDD.compileFilter).flatten.mkString(" AND ")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.
    */
   private def getWhereClause(part: JDBCPartition): String = {
     if (part.whereClause != null && filterWhereClause.length > 0) {
+<<<<<<< HEAD
+      filterWhereClause + " AND " + part.whereClause
+    } else if (part.whereClause != null) {
+      "WHERE " + part.whereClause
+    } else {
+      filterWhereClause
+=======
       "WHERE " + filterWhereClause + " AND " + part.whereClause
     } else if (part.whereClause != null) {
       "WHERE " + part.whereClause
@@ -341,6 +408,7 @@ private[sql] class JDBCRDD(
       "WHERE " + filterWhereClause
     } else {
       ""
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
   }
 

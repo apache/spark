@@ -24,12 +24,21 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.StreamingContext.rddToFileName
+import org.apache.spark.streaming._
+import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
+import org.apache.spark.{HashPartitioner, Partitioner}
+=======
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Extra functions available on DStream of (key, value) pairs through an implicit conversion.

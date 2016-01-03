@@ -18,7 +18,10 @@
 package org.apache.spark.mllib.api.python
 
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
+<<<<<<< HEAD
+=======
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkContext

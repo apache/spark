@@ -64,6 +64,9 @@ class PagedTableSuite extends SparkFunSuite {
 
       override def row(t: Int): Seq[Node] = Nil
 
+<<<<<<< HEAD
+      override def goButtonJavascriptFunction: (String, String) = ("", "")
+=======
       override def pageSizeFormField: String = "pageSize"
 
       override def prevPageSizeFormField: String = "prevPageSize"
@@ -71,6 +74,7 @@ class PagedTableSuite extends SparkFunSuite {
       override def pageNumberFormField: String = "page"
 
       override def goButtonFormPath: String = ""
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
 
     assert(pagedTable.pageNavigation(1, 10, 1) === Nil)

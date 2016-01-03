@@ -18,20 +18,34 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
+<<<<<<< HEAD
+import org.apache.spark.Logging
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasSeed, HasMaxIter}
+import org.apache.spark.ml.param._
+=======
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
     EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
     LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
     OnlineLDAOptimizer => OldOnlineLDAOptimizer}
+<<<<<<< HEAD
+import org.apache.spark.mllib.linalg.{VectorUDT, Vectors, Matrix, Vector}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{SQLContext, DataFrame, Row}
+=======
 import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
 

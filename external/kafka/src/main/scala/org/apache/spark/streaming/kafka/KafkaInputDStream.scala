@@ -22,7 +22,11 @@ import java.util.Properties
 import scala.collection.Map
 import scala.reflect.{classTag, ClassTag}
 
+<<<<<<< HEAD
+import kafka.consumer.{KafkaStream, Consumer, ConsumerConfig, ConsumerConnector}
+=======
 import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 

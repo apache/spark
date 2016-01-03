@@ -103,7 +103,11 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
       ReflectionUtils.newInstance(inputFormatClazz.asInstanceOf[Class[_]], conf).asInstanceOf[
         org.apache.hadoop.mapreduce.InputFormat[_, _]]
+<<<<<<< HEAD
+    val job = new Job(conf)
+=======
     val job = Job.getInstance(conf)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     val retval = new ArrayBuffer[SplitInfo]()
     val list = instance.getSplits(job)

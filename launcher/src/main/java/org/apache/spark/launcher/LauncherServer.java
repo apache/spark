@@ -293,7 +293,13 @@ class LauncherServer implements Closeable {
     protected void handle(Message msg) throws IOException {
       try {
         if (msg instanceof Hello) {
+<<<<<<< HEAD
+          synchronized (timeout) {
+            timeout.cancel();
+          }
+=======
           timeout.cancel();
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           timeout = null;
           Hello hello = (Hello) msg;
           ChildProcAppHandle handle = pending.remove(hello.secret);

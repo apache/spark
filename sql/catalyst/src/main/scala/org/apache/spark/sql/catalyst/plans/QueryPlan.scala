@@ -44,6 +44,17 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
 
   /**
+<<<<<<< HEAD
+   * Attributes that are referenced by expressions but not provided by this nodes children.
+   * Subclasses should override this method if they produce attributes internally as it is used by
+   * assertions designed to prevent the construction of invalid plans.
+   *
+   * Note that virtual columns should be excluded. Currently, we only support the grouping ID
+   * virtual column.
+   */
+  def missingInput: AttributeSet =
+    (references -- inputSet).filter(_.name != VirtualColumn.groupingIdName)
+=======
     * The set of all attributes that are produced by this node.
     */
   def producedAttributes: AttributeSet = AttributeSet.empty
@@ -54,6 +65,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    * assertions designed to prevent the construction of invalid plans.
    */
   def missingInput: AttributeSet = references -- inputSet -- producedAttributes
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.

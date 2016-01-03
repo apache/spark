@@ -20,8 +20,13 @@ package org.apache.spark.streaming.kafka
 import java.io.File
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
+<<<<<<< HEAD
+import java.util.concurrent.TimeoutException
+import java.util.{Map => JMap, Properties}
+=======
 import java.util.{Map => JMap, Properties}
 import java.util.concurrent.TimeoutException
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -37,9 +42,15 @@ import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
+<<<<<<< HEAD
+import org.apache.spark.streaming.Time
+import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf}
+=======
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up

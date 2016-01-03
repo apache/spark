@@ -24,9 +24,15 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
+import org.apache.spark.{SparkEnv, Logging, SparkConf}
+import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.util.{Utils, ThreadUtils}
+=======
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.{ThreadUtils, Utils}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.

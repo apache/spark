@@ -24,9 +24,15 @@ import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
+<<<<<<< HEAD
+import org.apache.spark.deploy.SparkHadoopUtil
+
+import org.apache.spark.{Logging, SparkConf}
+=======
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.util.ThreadUtils
 
 /*

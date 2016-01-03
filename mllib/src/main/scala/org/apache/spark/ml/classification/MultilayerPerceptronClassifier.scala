@@ -20,12 +20,21 @@ package org.apache.spark.ml.classification
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.{Experimental, Since}
+<<<<<<< HEAD
+import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
+import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
+import org.apache.spark.ml.param.{IntParam, ParamValidators, IntArrayParam, ParamMap}
+import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.ann.{FeedForwardTrainer, FeedForwardTopology}
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
+=======
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.param.{IntArrayParam, IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasTol}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
 

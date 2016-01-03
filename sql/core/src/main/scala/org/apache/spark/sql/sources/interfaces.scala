@@ -462,7 +462,11 @@ abstract class HadoopFsRelation private[sql](
           name.toLowerCase == "_temporary" || name.startsWith(".")
         }
 
+<<<<<<< HEAD
+        val (dirs, files) = statuses.partition(_.isDir)
+=======
         val (dirs, files) = statuses.partition(_.isDirectory)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
         // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
         if (dirs.isEmpty) {
@@ -858,10 +862,17 @@ private[sql] object HadoopFsRelation extends Logging {
       val jobConf = new JobConf(fs.getConf, this.getClass())
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       if (pathFilter != null) {
+<<<<<<< HEAD
+        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
+        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+      } else {
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+=======
         val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
         files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
       } else {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
       }
     }
@@ -896,7 +907,11 @@ private[sql] object HadoopFsRelation extends Logging {
       FakeFileStatus(
         status.getPath.toString,
         status.getLen,
+<<<<<<< HEAD
+        status.isDir,
+=======
         status.isDirectory,
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         status.getReplication,
         status.getBlockSize,
         status.getModificationTime,

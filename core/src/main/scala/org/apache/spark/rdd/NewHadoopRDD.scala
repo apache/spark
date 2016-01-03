@@ -26,11 +26,18 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
+<<<<<<< HEAD
+=======
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
+<<<<<<< HEAD
+import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -66,7 +73,13 @@ class NewHadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     @transient private val _conf: Configuration)
+<<<<<<< HEAD
+  extends RDD[(K, V)](sc, Nil)
+  with SparkHadoopMapReduceUtil
+  with Logging {
+=======
   extends RDD[(K, V)](sc, Nil) with Logging {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
@@ -107,7 +120,11 @@ class NewHadoopRDD[K, V](
         configurable.setConf(_conf)
       case _ =>
     }
+<<<<<<< HEAD
+    val jobContext = newJobContext(_conf, jobId)
+=======
     val jobContext = new JobContextImpl(_conf, jobId)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
@@ -142,8 +159,13 @@ class NewHadoopRDD[K, V](
           configurable.setConf(conf)
         case _ =>
       }
+<<<<<<< HEAD
+      val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
+      val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
+=======
       val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
       val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       private var reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)

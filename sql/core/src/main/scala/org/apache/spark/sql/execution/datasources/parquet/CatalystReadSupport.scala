@@ -58,7 +58,13 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
    */
   override def init(context: InitContext): ReadContext = {
     catalystRequestedSchema = {
+<<<<<<< HEAD
+      // scalastyle:off jobcontext
       val conf = context.getConfiguration
+      // scalastyle:on jobcontext
+=======
+      val conf = context.getConfiguration
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       val schemaString = conf.get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
       assert(schemaString != null, "Parquet requested schema not set.")
       StructType.fromString(schemaString)

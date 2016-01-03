@@ -94,7 +94,11 @@ public final class UnsafeKVExternalSorter {
       // The only new memory we are allocating is the pointer/prefix array.
       BytesToBytesMap.MapIterator iter = map.iterator();
       final int numKeyFields = keySchema.size();
+<<<<<<< HEAD
+      UnsafeRow row = new UnsafeRow();
+=======
       UnsafeRow row = new UnsafeRow(numKeyFields);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         final Object baseObject = loc.getKeyAddress().getBaseObject();
@@ -107,7 +111,11 @@ public final class UnsafeKVExternalSorter {
         long address = taskMemoryManager.encodePageNumberAndOffset(page, baseOffset - 8);
 
         // Compute prefix
+<<<<<<< HEAD
+        row.pointTo(baseObject, baseOffset, numKeyFields, loc.getKeyLength());
+=======
         row.pointTo(baseObject, baseOffset, loc.getKeyLength());
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         final long prefix = prefixComputer.computePrefix(row);
 
         inMemSorter.insertRecord(address, prefix);
@@ -194,14 +202,22 @@ public final class UnsafeKVExternalSorter {
 
   private static final class KVComparator extends RecordComparator {
     private final BaseOrdering ordering;
+<<<<<<< HEAD
+    private final UnsafeRow row1 = new UnsafeRow();
+    private final UnsafeRow row2 = new UnsafeRow();
+=======
     private final UnsafeRow row1;
     private final UnsafeRow row2;
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     private final int numKeyFields;
 
     public KVComparator(BaseOrdering ordering, int numKeyFields) {
       this.numKeyFields = numKeyFields;
+<<<<<<< HEAD
+=======
       this.row1 = new UnsafeRow(numKeyFields);
       this.row2 = new UnsafeRow(numKeyFields);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       this.ordering = ordering;
     }
 
@@ -209,15 +225,27 @@ public final class UnsafeKVExternalSorter {
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
       // Note that since ordering doesn't need the total length of the record, we just pass -1
       // into the row.
+<<<<<<< HEAD
+      row1.pointTo(baseObj1, baseOff1 + 4, numKeyFields, -1);
+      row2.pointTo(baseObj2, baseOff2 + 4, numKeyFields, -1);
+=======
       row1.pointTo(baseObj1, baseOff1 + 4, -1);
       row2.pointTo(baseObj2, baseOff2 + 4, -1);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       return ordering.compare(row1, row2);
     }
   }
 
   public class KVSorterIterator extends KVIterator<UnsafeRow, UnsafeRow> {
+<<<<<<< HEAD
+    private UnsafeRow key = new UnsafeRow();
+    private UnsafeRow value = new UnsafeRow();
+    private final int numKeyFields = keySchema.size();
+    private final int numValueFields = valueSchema.size();
+=======
     private UnsafeRow key = new UnsafeRow(keySchema.size());
     private UnsafeRow value = new UnsafeRow(valueSchema.size());
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     private final UnsafeSorterIterator underlying;
 
     private KVSorterIterator(UnsafeSorterIterator underlying) {
@@ -237,8 +265,13 @@ public final class UnsafeKVExternalSorter {
           // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
           int keyLen = Platform.getInt(baseObj, recordOffset);
           int valueLen = recordLen - keyLen - 4;
+<<<<<<< HEAD
+          key.pointTo(baseObj, recordOffset + 4, numKeyFields, keyLen);
+          value.pointTo(baseObj, recordOffset + 4 + keyLen, numValueFields, valueLen);
+=======
           key.pointTo(baseObj, recordOffset + 4, keyLen);
           value.pointTo(baseObj, recordOffset + 4 + keyLen, valueLen);
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
           return true;
         } else {

@@ -32,7 +32,11 @@ private[r] object SQLUtils {
   SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
 
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
+<<<<<<< HEAD
+    new SQLContext(jsc)
+=======
     SQLContext.getOrCreate(jsc.sc)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   def getJavaSparkContext(sqlCtx: SQLContext): JavaSparkContext = {

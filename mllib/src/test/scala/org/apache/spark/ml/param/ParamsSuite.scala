@@ -17,10 +17,14 @@
 
 package org.apache.spark.ml.param
 
+<<<<<<< HEAD
+import org.apache.spark.SparkFunSuite
+=======
 import java.io.{ByteArrayOutputStream, NotSerializableException, ObjectOutputStream}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.MyParams
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 class ParamsSuite extends SparkFunSuite {
@@ -352,6 +356,8 @@ class ParamsSuite extends SparkFunSuite {
     val t3 = t.copy(ParamMap(t.maxIter -> 20))
     assert(t3.isSet(t3.maxIter))
   }
+<<<<<<< HEAD
+=======
 
   test("Filtering ParamMap") {
     val params1 = new MyParams("my_params1")
@@ -377,6 +383,7 @@ class ParamsSuite extends SparkFunSuite {
     val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
     objOut.writeObject(filteredParamMap)
   }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 object ParamsSuite extends SparkFunSuite {

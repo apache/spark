@@ -17,11 +17,19 @@
 
 package org.apache.spark.streaming.api.java
 
+<<<<<<< HEAD
+import org.apache.spark.streaming.dstream.InputDStream
+
+import scala.language.implicitConversions
+import scala.reflect.ClassTag
+
+=======
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.streaming.dstream.InputDStream
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * A Java-friendly interface to [[org.apache.spark.streaming.dstream.InputDStream]] of
  * key-value pairs.

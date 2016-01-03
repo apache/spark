@@ -26,13 +26,20 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
+<<<<<<< HEAD
+=======
 import org.apache.spark.{Logging, SparkEnv, SparkException}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.util.RpcUtils
+<<<<<<< HEAD
+import org.apache.spark.{Logging, SparkEnv, SparkException}
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]

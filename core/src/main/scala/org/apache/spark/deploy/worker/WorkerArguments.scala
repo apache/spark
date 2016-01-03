@@ -175,7 +175,11 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   def checkWorkerMemory(): Unit = {
     if (memory <= 0) {
+<<<<<<< HEAD
+      val message = "Memory can't be 0, missing a M or G on the end of the memory specification?"
+=======
       val message = "Memory is below 1MB, or missing a M/G at the end of the memory specification?"
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       throw new IllegalStateException(message)
     }
   }

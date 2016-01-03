@@ -188,11 +188,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
     val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
+<<<<<<< HEAD
+    var partsScanned = 0L
+    while (buf.size < n && partsScanned < totalParts) {
+      // The number of partitions to try in this iteration. It is ok for this number to be
+      // greater than totalParts because we actually cap it at totalParts in runJob.
+      var numPartsToTry = 1L
+=======
     var partsScanned = 0
     while (buf.size < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       if (partsScanned > 0) {
         // If we didn't find any rows after the first iteration, just try all partitions next.
         // Otherwise, interpolate the number of partitions we need to try, but overestimate it
@@ -206,13 +214,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
       val left = n - buf.size
+<<<<<<< HEAD
+      val p = partsScanned.toInt until math.min(partsScanned + numPartsToTry, totalParts).toInt
+=======
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       val sc = sqlContext.sparkContext
       val res =
         sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
 
       res.foreach(buf ++= _.take(n - buf.size))
+<<<<<<< HEAD
+      partsScanned += p.size
+=======
       partsScanned += numPartsToTry
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
 
     buf.toArray
@@ -279,7 +295,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
 private[sql] trait LeafNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
+<<<<<<< HEAD
+=======
   override def producedAttributes: AttributeSet = outputSet
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }
 
 private[sql] trait UnaryNode extends SparkPlan {

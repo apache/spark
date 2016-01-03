@@ -27,10 +27,16 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.TableDesc
+<<<<<<< HEAD
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.mapred._
+import org.apache.hadoop.hive.common.FileUtils
+=======
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
@@ -47,7 +53,13 @@ import org.apache.spark.util.SerializableJobConf
 private[hive] class SparkHiveWriterContainer(
     jobConf: JobConf,
     fileSinkConf: FileSinkDesc)
+<<<<<<< HEAD
+  extends Logging
+  with SparkHadoopMapRedUtil
+  with Serializable {
+=======
   extends Logging with Serializable {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   private val now = new Date()
   private val tableDesc: TableDesc = fileSinkConf.getTableInfo
@@ -67,8 +79,13 @@ private[hive] class SparkHiveWriterContainer(
 
   @transient private var writer: FileSinkOperator.RecordWriter = null
   @transient protected lazy val committer = conf.value.getOutputCommitter
+<<<<<<< HEAD
+  @transient protected lazy val jobContext = newJobContext(conf.value, jID.value)
+  @transient private lazy val taskContext = newTaskAttemptContext(conf.value, taID.value)
+=======
   @transient protected lazy val jobContext = new JobContextImpl(conf.value, jID.value)
   @transient private lazy val taskContext = new TaskAttemptContextImpl(conf.value, taID.value)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   @transient private lazy val outputFormat =
     conf.value.getOutputFormat.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
 
@@ -130,7 +147,11 @@ private[hive] class SparkHiveWriterContainer(
 
     jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobId))
     taID = new SerializableWritable[TaskAttemptID](
+<<<<<<< HEAD
+      new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
+=======
       new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
   }
 
   private def setConfParams() {

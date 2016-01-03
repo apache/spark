@@ -24,6 +24,10 @@ import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.io.{BytesWritable, LongWritable}
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
+<<<<<<< HEAD
+import org.apache.spark.deploy.SparkHadoopUtil
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * FixedLengthBinaryRecordReader is returned by FixedLengthBinaryInputFormat.
@@ -82,16 +86,26 @@ private[spark] class FixedLengthBinaryRecordReader
     // the actual file we will be reading from
     val file = fileSplit.getPath
     // job configuration
+<<<<<<< HEAD
+    val job = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    // check compression
+    val codec = new CompressionCodecFactory(job).getCodec(file)
+=======
     val conf = context.getConfiguration
     // check compression
     val codec = new CompressionCodecFactory(conf).getCodec(file)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     if (codec != null) {
       throw new IOException("FixedLengthRecordReader does not support reading compressed files")
     }
     // get the record length
     recordLength = FixedLengthBinaryInputFormat.getRecordLength(context)
     // get the filesystem
+<<<<<<< HEAD
+    val fs = file.getFileSystem(job)
+=======
     val fs = file.getFileSystem(conf)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     // open the File
     fileInputStream = fs.open(file)
     // seek to the splitStart position

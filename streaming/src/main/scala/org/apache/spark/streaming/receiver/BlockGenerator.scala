@@ -21,7 +21,11 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 
+<<<<<<< HEAD
+import org.apache.spark.{SparkException, Logging, SparkConf}
+=======
 import org.apache.spark.{Logging, SparkConf, SparkException}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock}

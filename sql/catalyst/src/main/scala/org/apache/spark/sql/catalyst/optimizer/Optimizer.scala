@@ -28,12 +28,19 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
 
+<<<<<<< HEAD
+abstract class Optimizer extends RuleExecutor[LogicalPlan]
+
+object DefaultOptimizer extends Optimizer {
+  val batches =
+=======
 /**
   * Abstract class all optimizers should inherit of, contains the standard batches (extending
   * Optimizers can override this.
   */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   def batches: Seq[Batch] = {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
@@ -68,6 +75,11 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
+<<<<<<< HEAD
+}
+
+/**
+=======
   }
 }
 
@@ -80,6 +92,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
 object DefaultOptimizer extends Optimizer
 
 /**
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
  * Pushes operations down into a Sample.
  */
 object SamplePushDown extends Rule[LogicalPlan] {

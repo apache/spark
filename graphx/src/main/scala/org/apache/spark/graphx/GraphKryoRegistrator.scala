@@ -19,11 +19,20 @@ package org.apache.spark.graphx
 
 import com.esotericsoftware.kryo.Kryo
 
+<<<<<<< HEAD
+import org.apache.spark.serializer.KryoRegistrator
+import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.collection.BitSet
+
+import org.apache.spark.graphx.impl._
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+=======
 import org.apache.spark.graphx.impl._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.collection.BitSet
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.util.collection.OpenHashSet
 
 /**

@@ -70,6 +70,20 @@ class KinesisBackedBlockRDDPartition(
  */
 private[kinesis]
 class KinesisBackedBlockRDD[T: ClassTag](
+<<<<<<< HEAD
+    @transient sc: SparkContext,
+    val regionName: String,
+    val endpointUrl: String,
+    @transient blockIds: Array[BlockId],
+    @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
+    @transient isBlockIdValid: Array[Boolean] = Array.empty,
+    val retryTimeoutMs: Int = 10000,
+    val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
+    val awsCredentialsOption: Option[SerializableAWSCredentials] = None
+  ) extends BlockRDD[T](sc, blockIds) {
+
+  require(blockIds.length == arrayOfseqNumberRanges.length,
+=======
     sc: SparkContext,
     val regionName: String,
     val endpointUrl: String,
@@ -82,14 +96,21 @@ class KinesisBackedBlockRDD[T: ClassTag](
   ) extends BlockRDD[T](sc, _blockIds) {
 
   require(_blockIds.length == arrayOfseqNumberRanges.length,
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     "Number of blockIds is not equal to the number of sequence number ranges")
 
   override def isValid(): Boolean = true
 
   override def getPartitions: Array[Partition] = {
+<<<<<<< HEAD
+    Array.tabulate(blockIds.length) { i =>
+      val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i)
+      new KinesisBackedBlockRDDPartition(i, blockIds(i), isValid, arrayOfseqNumberRanges(i))
+=======
     Array.tabulate(_blockIds.length) { i =>
       val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i)
       new KinesisBackedBlockRDDPartition(i, _blockIds(i), isValid, arrayOfseqNumberRanges(i))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     }
   }
 

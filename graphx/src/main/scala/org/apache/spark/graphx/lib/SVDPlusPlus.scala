@@ -21,8 +21,13 @@ import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
+<<<<<<< HEAD
+import org.apache.spark.rdd._
+import org.apache.spark.graphx._
+=======
 import org.apache.spark.graphx._
 import org.apache.spark.rdd._
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /** Implementation of SVD++ algorithm. */
 object SVDPlusPlus {

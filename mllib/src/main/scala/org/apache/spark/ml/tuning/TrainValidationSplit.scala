@@ -19,8 +19,13 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
+<<<<<<< HEAD
+import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.{Estimator, Model}
+=======
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame

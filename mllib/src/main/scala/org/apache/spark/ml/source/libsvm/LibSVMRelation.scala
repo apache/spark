@@ -24,7 +24,11 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
+import org.apache.spark.sql.{DataFrameReader, DataFrame, Row, SQLContext}
+=======
 import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 

@@ -27,12 +27,28 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.lib.Node
+<<<<<<< HEAD
+import org.apache.hadoop.hive.ql.parse._
+=======
 import org.apache.hadoop.hive.ql.parse.SemanticException
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+<<<<<<< HEAD
+
+import org.apache.spark.Logging
+import org.apache.spark.sql.{AnalysisException, catalyst}
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.{logical, _}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.TableIdentifier
+=======
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
@@ -41,14 +57,19 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{logical, _}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
+<<<<<<< HEAD
+import org.apache.spark.sql.types._
+=======
 import org.apache.spark.sql.parser._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, catalyst}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
@@ -227,7 +248,11 @@ private[hive] object HiveQl extends Logging {
      */
     def withChildren(newChildren: Seq[ASTNode]): ASTNode = {
       (1 to n.getChildCount).foreach(_ => n.deleteChild(0))
+<<<<<<< HEAD
+      n.addChildren(newChildren.asJava)
+=======
       newChildren.foreach(n.addChild(_))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       n
     }
 
@@ -273,8 +298,12 @@ private[hive] object HiveQl extends Logging {
   private def createContext(): Context = new Context(hiveConf)
 
   private def getAst(sql: String, context: Context) =
+<<<<<<< HEAD
+    ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, context))
+=======
     ParseUtils.findRootNonNullToken(
         (new ParseDriver).parse(sql, context))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   /**
    * Returns the HiveConf
@@ -313,7 +342,11 @@ private[hive] object HiveQl extends Logging {
       context.clear()
       plan
     } catch {
+<<<<<<< HEAD
+      case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
+=======
       case pe: ParseException =>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         pe.getMessage match {
           case errorRegEx(line, start, message) =>
             throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
@@ -338,8 +371,12 @@ private[hive] object HiveQl extends Logging {
     val tree =
       try {
         ParseUtils.findRootNonNullToken(
+<<<<<<< HEAD
+          (new ParseDriver).parse(ddl, null /* no context required for parsing alone */))
+=======
           (new ParseDriver)
             .parse(ddl, null /* no context required for parsing alone */))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       } catch {
         case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
           throw new RuntimeException(s"Failed to parse ddl: '$ddl'", pe)
@@ -600,12 +637,21 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         NativePlaceholder
       } else {
         tableType match {
+<<<<<<< HEAD
+          case Token("TOK_TABTYPE", nameParts) if nameParts.size == 1 => {
+            nameParts.head match {
+              case Token(".", dbName :: tableName :: Nil) =>
+                // It is describing a table with the format like "describe db.table".
+                // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
+                val tableIdent = extractTableIdent(nameParts.head)
+=======
           case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts :: Nil) :: Nil) => {
             nameParts match {
               case Token(".", dbName :: tableName :: Nil) =>
                 // It is describing a table with the format like "describe db.table".
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val tableIdent = extractTableIdent(nameParts)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
                 DescribeCommand(
                   UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
@@ -664,7 +710,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         NativePlaceholder
       } else {
         val schema = maybeColumns.map { cols =>
+<<<<<<< HEAD
+          BaseSemanticAnalyzer.getColumns(cols, true).asScala.map { field =>
+=======
           SemanticAnalyzer.getColumns(cols, true).asScala.map { field =>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             // We can't specify column types when create view, so fill it with null first, and
             // update it after the schema has been resolved later.
             HiveColumn(field.getName, null, field.getComment)
@@ -680,7 +730,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
         maybeComment.foreach {
           case Token("TOK_TABLECOMMENT", child :: Nil) =>
+<<<<<<< HEAD
+            val comment = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+=======
             val comment = SemanticAnalyzer.unescapeSQLString(child.getText)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
             if (comment ne null) {
               properties += ("comment" -> comment)
             }
@@ -752,7 +806,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
       children.collect {
         case list @ Token("TOK_TABCOLLIST", _) =>
+<<<<<<< HEAD
+          val cols = BaseSemanticAnalyzer.getColumns(list, true)
+=======
           val cols = SemanticAnalyzer.getColumns(list, true)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           if (cols != null) {
             tableDesc = tableDesc.copy(
               schema = cols.asScala.map { field =>
@@ -760,11 +818,19 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               })
           }
         case Token("TOK_TABLECOMMENT", child :: Nil) =>
+<<<<<<< HEAD
+          val comment = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+          // TODO support the sql text
+          tableDesc = tableDesc.copy(viewText = Option(comment))
+        case Token("TOK_TABLEPARTCOLS", list @ Token("TOK_TABCOLLIST", _) :: Nil) =>
+          val cols = BaseSemanticAnalyzer.getColumns(list(0), false)
+=======
           val comment = SemanticAnalyzer.unescapeSQLString(child.getText)
           // TODO support the sql text
           tableDesc = tableDesc.copy(viewText = Option(comment))
         case Token("TOK_TABLEPARTCOLS", list @ Token("TOK_TABCOLLIST", _) :: Nil) =>
           val cols = SemanticAnalyzer.getColumns(list(0), false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           if (cols != null) {
             tableDesc = tableDesc.copy(
               partitionColumns = cols.asScala.map { field =>
@@ -775,6 +841,23 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           val serdeParams = new java.util.HashMap[String, String]()
           child match {
             case Token("TOK_TABLEROWFORMATFIELD", rowChild1 :: rowChild2) =>
+<<<<<<< HEAD
+              val fieldDelim = BaseSemanticAnalyzer.unescapeSQLString (rowChild1.getText())
+              serdeParams.put(serdeConstants.FIELD_DELIM, fieldDelim)
+              serdeParams.put(serdeConstants.SERIALIZATION_FORMAT, fieldDelim)
+              if (rowChild2.length > 1) {
+                val fieldEscape = BaseSemanticAnalyzer.unescapeSQLString (rowChild2(0).getText)
+                serdeParams.put(serdeConstants.ESCAPE_CHAR, fieldEscape)
+              }
+            case Token("TOK_TABLEROWFORMATCOLLITEMS", rowChild :: Nil) =>
+              val collItemDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              serdeParams.put(serdeConstants.COLLECTION_DELIM, collItemDelim)
+            case Token("TOK_TABLEROWFORMATMAPKEYS", rowChild :: Nil) =>
+              val mapKeyDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              serdeParams.put(serdeConstants.MAPKEY_DELIM, mapKeyDelim)
+            case Token("TOK_TABLEROWFORMATLINES", rowChild :: Nil) =>
+              val lineDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+=======
               val fieldDelim = SemanticAnalyzer.unescapeSQLString (rowChild1.getText())
               serdeParams.put(serdeConstants.FIELD_DELIM, fieldDelim)
               serdeParams.put(serdeConstants.SERIALIZATION_FORMAT, fieldDelim)
@@ -790,6 +873,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               serdeParams.put(serdeConstants.MAPKEY_DELIM, mapKeyDelim)
             case Token("TOK_TABLEROWFORMATLINES", rowChild :: Nil) =>
               val lineDelim = SemanticAnalyzer.unescapeSQLString(rowChild.getText)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
               if (!(lineDelim == "\n") && !(lineDelim == "10")) {
                 throw new AnalysisException(
                   SemanticAnalyzer.generateErrorMessage(
@@ -798,13 +882,28 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               }
               serdeParams.put(serdeConstants.LINE_DELIM, lineDelim)
             case Token("TOK_TABLEROWFORMATNULL", rowChild :: Nil) =>
+<<<<<<< HEAD
+              val nullFormat = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+=======
               val nullFormat = SemanticAnalyzer.unescapeSQLString(rowChild.getText)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
               // TODO support the nullFormat
             case _ => assert(false)
           }
           tableDesc = tableDesc.copy(
             serdeProperties = tableDesc.serdeProperties ++ serdeParams.asScala)
         case Token("TOK_TABLELOCATION", child :: Nil) =>
+<<<<<<< HEAD
+          var location = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+          location = EximUtil.relativeToAbsolutePath(hiveConf, location)
+          tableDesc = tableDesc.copy(location = Option(location))
+        case Token("TOK_TABLESERIALIZER", child :: Nil) =>
+          tableDesc = tableDesc.copy(
+            serde = Option(BaseSemanticAnalyzer.unescapeSQLString(child.getChild(0).getText)))
+          if (child.getChildCount == 2) {
+            val serdeParams = new java.util.HashMap[String, String]()
+            BaseSemanticAnalyzer.readProps(
+=======
           var location = SemanticAnalyzer.unescapeSQLString(child.getText)
           location = SemanticAnalyzer.relativeToAbsolutePath(hiveConf, location)
           tableDesc = tableDesc.copy(location = Option(location))
@@ -814,6 +913,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           if (child.getChildCount == 2) {
             val serdeParams = new java.util.HashMap[String, String]()
             SemanticAnalyzer.readProps(
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
               (child.getChild(1).getChild(0)).asInstanceOf[ASTNode], serdeParams)
             tableDesc = tableDesc.copy(
               serdeProperties = tableDesc.serdeProperties ++ serdeParams.asScala)
@@ -893,9 +993,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case list @ Token("TOK_TABLEFILEFORMAT", children) =>
           tableDesc = tableDesc.copy(
             inputFormat =
+<<<<<<< HEAD
+              Option(BaseSemanticAnalyzer.unescapeSQLString(list.getChild(0).getText)),
+            outputFormat =
+              Option(BaseSemanticAnalyzer.unescapeSQLString(list.getChild(1).getText)))
+=======
               Option(SemanticAnalyzer.unescapeSQLString(list.getChild(0).getText)),
             outputFormat =
               Option(SemanticAnalyzer.unescapeSQLString(list.getChild(1).getText)))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         case Token("TOK_STORAGEHANDLER", _) =>
           throw new AnalysisException(ErrorMsg.CREATE_NON_NATIVE_AS.getMsg())
         case _ => // Unsupport features
@@ -911,6 +1017,26 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           Token("TOK_TABLE_PARTITION", table) :: Nil) => NativePlaceholder
 
     case Token("TOK_QUERY", queryArgs)
+<<<<<<< HEAD
+        if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
+
+      val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
+        queryArgs match {
+          case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
+            // check if has CTE
+            insertClauses.last match {
+              case Token("TOK_CTE", cteClauses) =>
+                val cteRelations = cteClauses.map(node => {
+                  val relation = nodeToRelation(node, context).asInstanceOf[Subquery]
+                  (relation.alias, relation)
+                }).toMap
+                (Some(args.head), insertClauses.init, Some(cteRelations))
+
+              case _ => (Some(args.head), insertClauses, None)
+            }
+
+          case Token("TOK_INSERT", _) :: Nil => (None, queryArgs, None)
+=======
         if Seq("TOK_CTE", "TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
 
       val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
@@ -925,6 +1051,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             (Some(from.head), inserts, None)
           case Token("TOK_INSERT", _) :: Nil =>
             (None, queryArgs, None)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         }
 
       // Return one query for each insert clause.
@@ -1023,20 +1150,33 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 (rowFormat, None, Nil, false)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
+<<<<<<< HEAD
+                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), Nil, false)
+=======
                 (Nil, Some(SemanticAnalyzer.unescapeSQLString(serdeClass)), Nil, false)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
                 Token("TOK_TABLEPROPERTIES",
                 Token("TOK_TABLEPROPLIST", propsClause) :: Nil) :: Nil) :: Nil =>
                 val serdeProps = propsClause.map {
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
+<<<<<<< HEAD
+                    (BaseSemanticAnalyzer.unescapeSQLString(name),
+                      BaseSemanticAnalyzer.unescapeSQLString(value))
+=======
                     (SemanticAnalyzer.unescapeSQLString(name),
                       SemanticAnalyzer.unescapeSQLString(value))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
                 }
 
                 // SPARK-10310: Special cases LazySimpleSerDe
                 // TODO Fully supports user-defined record reader/writer classes
+<<<<<<< HEAD
+                val unescapedSerDeClass = BaseSemanticAnalyzer.unescapeSQLString(serdeClass)
+=======
                 val unescapedSerDeClass = SemanticAnalyzer.unescapeSQLString(serdeClass)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
                 val useDefaultRecordReaderWriter =
                   unescapedSerDeClass == classOf[LazySimpleSerDe].getCanonicalName
                 (Nil, Some(unescapedSerDeClass), serdeProps, useDefaultRecordReaderWriter)
@@ -1053,7 +1193,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             val (outRowFormat, outSerdeClass, outSerdeProps, useDefaultRecordWriter) =
               matchSerDe(outputSerdeClause)
 
+<<<<<<< HEAD
+            val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+=======
             val unescapedScript = SemanticAnalyzer.unescapeSQLString(script)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
             // TODO Adds support for user-defined record reader/writer classes
             val recordReaderClass = if (useDefaultRecordReader) {
@@ -1359,7 +1503,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
         case "TOK_LEFTSEMIJOIN" => LeftSemi
+<<<<<<< HEAD
+=======
         case "TOK_ANTIJOIN" => throw new NotImplementedError("Anti join not supported")
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       }
       Join(nodeToRelation(relation1, context),
         nodeToRelation(relation2, context),
@@ -1474,11 +1621,19 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   val numericAstTypes = Seq(
+<<<<<<< HEAD
+    HiveParser.Number,
+    HiveParser.TinyintLiteral,
+    HiveParser.SmallintLiteral,
+    HiveParser.BigintLiteral,
+    HiveParser.DecimalLiteral)
+=======
     SparkSqlParser.Number,
     SparkSqlParser.TinyintLiteral,
     SparkSqlParser.SmallintLiteral,
     SparkSqlParser.BigintLiteral,
     SparkSqlParser.DecimalLiteral)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   /* Case insensitive matches */
   val COUNT = "(?i)COUNT".r
@@ -1648,7 +1803,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token(TRUE(), Nil) => Literal.create(true, BooleanType)
     case Token(FALSE(), Nil) => Literal.create(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
+<<<<<<< HEAD
+      Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.getText)).mkString)
+=======
       Literal(strings.map(s => SemanticAnalyzer.unescapeSQLString(s.getText)).mkString)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     // This code is adapted from
     // /ql/src/java/org/apache/hadoop/hive/ql/parse/TypeCheckProcFactory.java#L223
@@ -1683,6 +1842,39 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         v
       }
 
+<<<<<<< HEAD
+    case ast: ASTNode if ast.getType == HiveParser.StringLiteral =>
+      Literal(BaseSemanticAnalyzer.unescapeSQLString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_DATELITERAL =>
+      Literal(Date.valueOf(ast.getText.substring(1, ast.getText.length - 1)))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_CHARSETLITERAL =>
+      Literal(BaseSemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
+      Literal(CalendarInterval.fromYearMonthString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
+      Literal(CalendarInterval.fromDayTimeString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("year", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MONTH_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("month", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("day", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_HOUR_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("hour", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MINUTE_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("minute", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_SECOND_LITERAL =>
+=======
     case ast: ASTNode if ast.getType == SparkSqlParser.StringLiteral =>
       Literal(SemanticAnalyzer.unescapeSQLString(ast.getText))
 
@@ -1714,6 +1906,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Literal(CalendarInterval.fromSingleUnitString("minute", ast.getText))
 
     case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_SECOND_LITERAL =>
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
       Literal(CalendarInterval.fromSingleUnitString("second", ast.getText))
 
     case a: ASTNode =>

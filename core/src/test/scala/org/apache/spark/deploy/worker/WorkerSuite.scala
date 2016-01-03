@@ -67,7 +67,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     conf.set("spark.worker.ui.retainedExecutors", 2.toString)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
+<<<<<<< HEAD
+      "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
+=======
       "Worker", "/tmp", conf, new SecurityManager(conf))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     // initialize workers
     for (i <- 0 until 5) {
       worker.executors += s"app1/$i" -> createExecutorRunner(i)
@@ -93,7 +97,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     conf.set("spark.worker.ui.retainedExecutors", 30.toString)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
+<<<<<<< HEAD
+      "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
+=======
       "Worker", "/tmp", conf, new SecurityManager(conf))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     // initialize workers
     for (i <- 0 until 50) {
       worker.executors += s"app1/$i" -> createExecutorRunner(i)
@@ -128,7 +136,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     conf.set("spark.worker.ui.retainedDrivers", 2.toString)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
+<<<<<<< HEAD
+      "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
+=======
       "Worker", "/tmp", conf, new SecurityManager(conf))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     // initialize workers
     for (i <- 0 until 5) {
       val driverId = s"driverId-$i"
@@ -154,7 +166,11 @@ class WorkerSuite extends SparkFunSuite with Matchers {
     conf.set("spark.worker.ui.retainedDrivers", 30.toString)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
+<<<<<<< HEAD
+      "sparkWorker1", "Worker", "/tmp", conf, new SecurityManager(conf))
+=======
       "Worker", "/tmp", conf, new SecurityManager(conf))
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     // initialize workers
     for (i <- 0 until 50) {
       val driverId = s"driverId-$i"

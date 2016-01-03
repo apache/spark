@@ -26,6 +26,11 @@ import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.broadcast.Broadcast
+<<<<<<< HEAD
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -86,8 +91,13 @@ private[sql] class TextRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+<<<<<<< HEAD
+    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+=======
     val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
     val paths = inputPaths.map(_.getPath).sortBy(_.toUri)
 
     if (paths.nonEmpty) {
@@ -99,14 +109,22 @@ private[sql] class TextRelation(
       .mapPartitions { iter =>
         val bufferHolder = new BufferHolder
         val unsafeRowWriter = new UnsafeRowWriter
+<<<<<<< HEAD
+        val unsafeRow = new UnsafeRow
+=======
         val unsafeRow = new UnsafeRow(1)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
         iter.map { case (_, line) =>
           // Writes to an UnsafeRow directly
           bufferHolder.reset()
           unsafeRowWriter.initialize(bufferHolder, 1)
           unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
+<<<<<<< HEAD
+          unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
+=======
           unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize())
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
           unsafeRow
         }
       }
@@ -136,16 +154,27 @@ private[sql] class TextRelation(
 }
 
 class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
+<<<<<<< HEAD
+  extends OutputWriter
+  with SparkHadoopMapRedUtil {
+=======
   extends OutputWriter {
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
   private[this] val buffer = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+<<<<<<< HEAD
+        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+=======
         val configuration = context.getConfiguration
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
         val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
       }

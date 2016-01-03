@@ -125,7 +125,11 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
+<<<<<<< HEAD
+      slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+=======
       slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
     masterTracker.registerShuffle(10, 1)
     masterTracker.incrementEpoch()

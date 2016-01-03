@@ -21,8 +21,14 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkException
+<<<<<<< HEAD
+import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.UnionRDD
+=======
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming.{Duration, Time}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 private[streaming]
 class UnionDStream[T: ClassTag](parents: Array[DStream[T]])

@@ -17,6 +17,21 @@
 
 package org.apache.spark.streaming.dstream
 
+<<<<<<< HEAD
+import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.storage.{StorageLevel, StreamBlockId}
+import org.apache.spark.streaming.StreamingContext
+
+import scala.reflect.ClassTag
+
+import java.net.InetSocketAddress
+import java.nio.ByteBuffer
+import java.nio.channels.{ReadableByteChannel, SocketChannel}
+import java.io.EOFException
+import java.util.concurrent.ArrayBlockingQueue
+import org.apache.spark.streaming.receiver.Receiver
+
+=======
 import java.io.EOFException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
@@ -29,6 +44,7 @@ import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /**
  * An input stream that reads blocks of serialized objects from a given network address.

@@ -292,6 +292,8 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         Row("b", 3, 8, 32),
         Row("b", 2, 4, 8)))
   }
+<<<<<<< HEAD
+=======
 
   test("null inputs") {
     val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2))
@@ -312,4 +314,5 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         Row("b", 3, null, null),
         Row("b", 2, null, null)))
   }
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 }

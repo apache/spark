@@ -19,10 +19,17 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.{Failure, Success, Try}
 
+<<<<<<< HEAD
+import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
+import org.apache.spark.streaming.util.RecurringTimer
+import org.apache.spark.util.{Utils, Clock, EventLoop, ManualClock}
+=======
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent

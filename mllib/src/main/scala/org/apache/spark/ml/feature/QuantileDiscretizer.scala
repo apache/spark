@@ -20,6 +20,16 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable
 
 import org.apache.spark.Logging
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.ml._
+import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.{IntParam, _}
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.{DataFrame, Row}
+=======
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
@@ -28,6 +38,7 @@ import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.{DoubleType, StructType}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.util.random.XORShiftRandom
 
 /**

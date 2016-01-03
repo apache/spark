@@ -18,7 +18,10 @@
 package org.apache.spark.graphx.lib
 
 import scala.reflect.ClassTag
+<<<<<<< HEAD
+=======
 
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.graphx._
 
 /** Label Propagation algorithm. */

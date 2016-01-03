@@ -23,7 +23,11 @@ import scala.collection.mutable.{ArrayBuffer, Queue}
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
+<<<<<<< HEAD
+import org.apache.spark.streaming.{Time, StreamingContext}
+=======
 import org.apache.spark.streaming.{StreamingContext, Time}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 
 private[streaming]
 class QueueInputDStream[T: ClassTag](

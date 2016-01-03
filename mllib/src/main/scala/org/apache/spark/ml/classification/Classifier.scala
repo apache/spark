@@ -18,7 +18,11 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
+<<<<<<< HEAD
+import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
+=======
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -26,6 +30,10 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
 
+<<<<<<< HEAD
+
+=======
+>>>>>>> 15bd73627e04591fd13667b4838c9098342db965
 /**
  * (private[spark]) Params for classification.
  */
