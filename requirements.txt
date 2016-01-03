@@ -10,7 +10,7 @@ dill
 filechunkio
 flake8
 flask
-flask-admin
+flask-admin==1.2.0
 flask-cache
 flask-login
 flower
