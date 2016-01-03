@@ -782,7 +782,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * This rule should be executed before pushing down the Filter
  */
 object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
-  
+
   private def containsAttr(plan: LogicalPlan, attr: Attribute): Boolean =
     plan.outputSet.exists(_.semanticEquals(attr))
 
