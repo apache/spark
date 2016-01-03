@@ -104,7 +104,7 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     val tableName = getTableName(tableIdent)
     val table = tables.get(tableName)
     if (table == null) {
-      throw new NoSuchTableException
+      throw new AnalysisException("Table not found: " + tableName)
     }
     val tableWithQualifiers = Subquery(tableName, table)
 
