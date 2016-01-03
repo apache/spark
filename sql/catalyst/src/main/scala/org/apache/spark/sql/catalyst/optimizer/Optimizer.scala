@@ -770,54 +770,52 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Elimination of outer joins, if the local predicates can restrict the result sets so that
+ * Elimination of outer joins, if the predicates can restrict the result sets so that
  * all null-supplying rows are eliminated
  *
- * - full outer -> inner if both sides have such local predicates
- * - left outer -> inner if the right side has such local predicates
- * - right outer -> inner if the left side has such local predicates
- * - full outer -> left outer if only the left side has such local predicates
- * - full outer -> right outer if only the right side has such local predicates
+ * - full outer -> inner if both sides have such predicates
+ * - left outer -> inner if the right side has such predicates
+ * - right outer -> inner if the left side has such predicates
+ * - full outer -> left outer if only the left side has such predicates
+ * - full outer -> right outer if only the right side has such predicates
  *
  * This rule should be executed before pushing down the Filter
  */
 object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
+  
+  private def containsAttr(plan: LogicalPlan, attr: Attribute): Boolean =
+    plan.outputSet.exists(_.semanticEquals(attr))
 
-  private def isNullFilteringPredicate(predicate: Expression): Boolean = {
+  private def hasNullFilteringPredicate(predicate: Expression, plan: LogicalPlan): Boolean = {
     predicate match {
-      case EqualTo(ar: AttributeReference, _) => true
-      case EqualTo(_, ar: AttributeReference) => true
-      case EqualNullSafe(ar: AttributeReference, l) if !l.nullable => true
-      case EqualNullSafe(l, ar: AttributeReference) if !l.nullable => true
-      case GreaterThan(ar: AttributeReference, _) => true
-      case GreaterThan(_, ar: AttributeReference) => true
-      case GreaterThanOrEqual(ar: AttributeReference, _) => true
-      case GreaterThanOrEqual(_, ar: AttributeReference) => true
-      case LessThan(ar: AttributeReference, _) => true
-      case LessThan(_, ar: AttributeReference) => true
-      case LessThanOrEqual(ar: AttributeReference, _) => true
-      case LessThanOrEqual(_, ar: AttributeReference) => true
-      case In(ar: AttributeReference, _) => true
-      case IsNotNull(ar: AttributeReference) => true
-      case And(l, r) => isNullFilteringPredicate(l) || isNullFilteringPredicate(l)
-      case Or(l, r) => isNullFilteringPredicate(l) && isNullFilteringPredicate(l)
-      case Not(e) => !isNullFilteringPredicate(e)
+      case EqualTo(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case EqualTo(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case EqualNullSafe(ar: AttributeReference, l)
+        if !l.nullable && containsAttr(plan, ar) => true
+      case EqualNullSafe(l, ar: AttributeReference)
+        if !l.nullable && containsAttr(plan, ar) => true
+      case GreaterThan(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case GreaterThan(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case GreaterThanOrEqual(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case GreaterThanOrEqual(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case LessThan(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case LessThan(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case LessThanOrEqual(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case LessThanOrEqual(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case In(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case IsNotNull(ar: AttributeReference) if containsAttr(plan, ar) => true
+      case And(l, r) => hasNullFilteringPredicate(l, plan) || hasNullFilteringPredicate(r, plan)
+      case Or(l, r) => hasNullFilteringPredicate(l, plan) && hasNullFilteringPredicate(r, plan)
+      case Not(e) => !hasNullFilteringPredicate(e, plan)
       case _ => false
     }
-  }
-
-  private def hasNullFilteringLocalPredicate(
-      condition: Expression, child: LogicalPlan): Boolean = {
-    val localPredicates = splitConjunctivePredicates(condition)
-      .filter(_.references subsetOf child.outputSet)
-    localPredicates.exists(isNullFilteringPredicate)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Only three outer join types are eligible: RightOuter|LeftOuter|FullOuter
     case f @ Filter(filterCond, j @ Join(left, right, RightOuter|LeftOuter|FullOuter, joinCond)) =>
-      val leftHasNonNullPredicate = hasNullFilteringLocalPredicate(filterCond, left)
-      val rightHasNonNullPredicate = hasNullFilteringLocalPredicate(filterCond, right)
+      val leftHasNonNullPredicate = hasNullFilteringPredicate(filterCond, left)
+      val rightHasNonNullPredicate = hasNullFilteringPredicate(filterCond, right)
 
       j.joinType match {
         case RightOuter if leftHasNonNullPredicate =>
@@ -830,6 +828,7 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
           Filter(filterCond, Join(left, right, LeftOuter, joinCond))
         case FullOuter if rightHasNonNullPredicate =>
           Filter(filterCond, Join(left, right, RightOuter, joinCond))
+        case _ => f
       }
   }
 }
