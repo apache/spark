@@ -783,10 +783,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
-  // Todo: is it complete?
-  private def hasNonNullPredicate(condition: Seq[Expression], child: LogicalPlan): Boolean = {
-    val localCondition = condition.filter(_.references subsetOf child.outputSet)
-    localCondition.exists(_.collect {
+  private def isNullFilteringPredicate(predicate: Expression): Boolean = {
+    predicate match {
       case EqualTo(ar: AttributeReference, _) => true
       case EqualTo(_, ar: AttributeReference) => true
       case EqualNullSafe(ar: AttributeReference, l) if !l.nullable => true
@@ -801,27 +799,37 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
       case LessThanOrEqual(_, ar: AttributeReference) => true
       case In(ar: AttributeReference, _) => true
       case IsNotNull(ar: AttributeReference) => true
-    }.nonEmpty)
+      case And(l, r) => isNullFilteringPredicate(l) || isNullFilteringPredicate(l)
+      case Or(l, r) => isNullFilteringPredicate(l) && isNullFilteringPredicate(l)
+      case Not(e) => !isNullFilteringPredicate(e)
+      case _ => false
+    }
+  }
+
+  private def hasNullFilteringLocalPredicate(
+      condition: Expression, child: LogicalPlan): Boolean = {
+    val localPredicates = splitConjunctivePredicates(condition)
+      .filter(_.references subsetOf child.outputSet)
+    localPredicates.exists(isNullFilteringPredicate)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) =>
-      val leftHasNonNullPredicate =
-        hasNonNullPredicate(splitConjunctivePredicates(filterCondition), left)
-      val rightHasNonNullPredicate =
-        hasNonNullPredicate(splitConjunctivePredicates(filterCondition), right)
-      joinType match {
+    // Only three outer join types are eligible: RightOuter|LeftOuter|FullOuter
+    case f @ Filter(filterCond, j @ Join(left, right, RightOuter|LeftOuter|FullOuter, joinCond)) =>
+      val leftHasNonNullPredicate = hasNullFilteringLocalPredicate(filterCond, left)
+      val rightHasNonNullPredicate = hasNullFilteringLocalPredicate(filterCond, right)
+
+      j.joinType match {
         case RightOuter if leftHasNonNullPredicate =>
-          Filter(filterCondition, Join(left, right, Inner, joinCondition))
+          Filter(filterCond, Join(left, right, Inner, joinCond))
         case LeftOuter if rightHasNonNullPredicate =>
-          Filter(filterCondition, Join(left, right, Inner, joinCondition))
+          Filter(filterCond, Join(left, right, Inner, joinCond))
         case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate =>
-          Filter(filterCondition, Join(left, right, Inner, joinCondition))
+          Filter(filterCond, Join(left, right, Inner, joinCond))
         case FullOuter if leftHasNonNullPredicate =>
-          Filter(filterCondition, Join(left, right, LeftOuter, joinCondition))
+          Filter(filterCond, Join(left, right, LeftOuter, joinCond))
         case FullOuter if rightHasNonNullPredicate =>
-          Filter(filterCondition, Join(left, right, RightOuter, joinCondition))
-        case _ => f
+          Filter(filterCond, Join(left, right, RightOuter, joinCond))
       }
   }
 }
