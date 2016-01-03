@@ -47,11 +47,7 @@ case class NestedLoopJoinNode(
   }
 
   private[this] def genResultProjection: InternalRow => InternalRow = {
-    if (outputsUnsafeRows) {
-      UnsafeProjection.create(schema)
-    } else {
-      identity[InternalRow]
-    }
+    UnsafeProjection.create(schema)
   }
 
   private[this] var currentRow: InternalRow = _
