@@ -1461,6 +1461,13 @@ class BaseOperator(object):
             logging.warning(
                 "start_date for {} isn't datetime.datetime".format(self))
         self.end_date = end_date
+        if not TriggerRule.is_valid(trigger_rule):
+            raise AirflowException(
+                "The trigger_rule must be one of {all_triggers},"
+                "'{d}.{t}'; received '{tr}'."
+                .format(all_triggers=TriggerRule.all_triggers,
+                        d=dag.dag_id, t=task_id, tr = trigger_rule))
+
         self.trigger_rule = trigger_rule
         self.depends_on_past = depends_on_past
         self.wait_for_downstream = wait_for_downstream

@@ -59,6 +59,16 @@ class TriggerRule(object):
     ONE_FAILED = 'one_failed'
     DUMMY = 'dummy'
 
+    @classmethod
+    def is_valid(cls, trigger_rule):
+        return trigger_rule in cls.all_triggers()
+
+    @classmethod
+    def all_triggers(cls):
+        return [getattr(cls, attr)
+                for attr in dir(cls)
+                if not attr.startswith("__") and not callable(getattr(cls, attr))]
+
 
 class State(object):
     """
