@@ -37,8 +37,11 @@ object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("2.0") =>
       Seq(
-        // SPARK-7995 Remove AkkaRpcEnv
-        excludePackage("org.apache.spark.rpc.akka")
+        excludePackage("org.apache.spark.rpc.akka"),
+        excludePackage("org.spark-project.jetty"),
+        excludePackage("org.apache.spark.unused"),
+        excludePackage("org.apache.spark.sql.catalyst"),
+        excludePackage("org.apache.spark.sql.execution")
       ) ++ Seq(
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
