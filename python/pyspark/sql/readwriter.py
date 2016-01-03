@@ -160,7 +160,7 @@ class DataFrameReader(object):
                 quotes
             * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
                 (e.g. 00012)
-            * ``allowBackslashEscapingAnyCharacter`` (default ``true``): allows accepting quoting \
+            * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
                 of all character using backslash quoting mechanism
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')

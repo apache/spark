@@ -32,7 +32,7 @@ case class JSONOptions(
     allowSingleQuotes: Boolean = true,
     allowNumericLeadingZeros: Boolean = false,
     allowNonNumericNumbers: Boolean = false,
-    allowBackslashEscapingAnyCharacter: Boolean = true) {
+    allowBackslashEscapingAnyCharacter: Boolean = false) {
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
@@ -64,6 +64,6 @@ object JSONOptions {
     allowNonNumericNumbers =
       parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true),
     allowBackslashEscapingAnyCharacter =
-      parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(true)
+      parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
   )
 }
