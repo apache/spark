@@ -176,8 +176,8 @@ test_that("partitionBy() partitions data correctly", {
 
   resultRDD <- partitionBy(numPairsRdd, 2L, partitionByMagnitude)
 
-  expected_first <- list(list(1, 100), list(2, 200)) # key < 3
-  expected_second <- list(list(4, -1), list(3, 1), list(3, 0)) # key >= 3
+  expected_first <- list(list(1, 100), list(2, 200)) # key less than 3
+  expected_second <- list(list(4, -1), list(3, 1), list(3, 0)) # key greater than or equal 3
   actual_first <- collectPartition(resultRDD, 0L)
   actual_second <- collectPartition(resultRDD, 1L)
 
