@@ -787,19 +787,19 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
   private def hasNonNullPredicate(condition: Seq[Expression], child: LogicalPlan): Boolean = {
     val localCondition = condition.filter(_.references subsetOf child.outputSet)
     localCondition.exists(_.collect {
-      case EqualTo(ar: AttributeReference, l: Literal) => true
-      case EqualTo(l: Literal, ar: AttributeReference) => true
-      case EqualNullSafe(ar: AttributeReference, l: Literal) => true
-      case EqualNullSafe(l: Literal, ar: AttributeReference) => true
-      case GreaterThan(ar: AttributeReference, l: Literal) => true
-      case GreaterThan(l: Literal, ar: AttributeReference) => true
-      case GreaterThanOrEqual(ar: AttributeReference, l: Literal) => true
-      case GreaterThanOrEqual(l: Literal, ar: AttributeReference) => true
-      case LessThan(ar: AttributeReference, l: Literal) => true
-      case LessThan(l: Literal, ar: AttributeReference) => true
-      case LessThanOrEqual(ar: AttributeReference, l: Literal) => true
-      case LessThanOrEqual(l: Literal, ar: AttributeReference) => true
-      case In(ar: AttributeReference, l) => true
+      case EqualTo(ar: AttributeReference, _) => true
+      case EqualTo(_, ar: AttributeReference) => true
+      case EqualNullSafe(ar: AttributeReference, l) if !l.nullable => true
+      case EqualNullSafe(l, ar: AttributeReference) if !l.nullable => true
+      case GreaterThan(ar: AttributeReference, _) => true
+      case GreaterThan(_, ar: AttributeReference) => true
+      case GreaterThanOrEqual(ar: AttributeReference, _) => true
+      case GreaterThanOrEqual(_, ar: AttributeReference) => true
+      case LessThan(ar: AttributeReference, _) => true
+      case LessThan(_, ar: AttributeReference) => true
+      case LessThanOrEqual(ar: AttributeReference, _) => true
+      case LessThanOrEqual(_, ar: AttributeReference) => true
+      case In(ar: AttributeReference, _) => true
       case IsNotNull(ar: AttributeReference) => true
     }.nonEmpty)
   }
