@@ -41,8 +41,18 @@ HADOOP_PROFILES=(
 # the old version. We need to do this because the `dependency:build-classpath` task needs to
 # resolve Spark's internal submodule dependencies.
 
-# See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
-OLD_VERSION=$($MVN help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
+# From http://stackoverflow.com/a/26514030
+set +e
+OLD_VERSION=$($MVN -q \
+    -Dexec.executable="echo" \
+    -Dexec.fargs='${project.version}' \
+    --non-recursive \
+    org.codehaus.mojo:exec-maven-plugin:1.3.1:exec)
+if [ $? != 0 ]; then
+    echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
+    exit 1
+fi
+set -e
 TEMP_VERSION="spark-$(python -S -c "import random; print(random.randrange(100000, 999999))")"
 
 function reset_version {
