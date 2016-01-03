@@ -30,6 +30,8 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  * It is also possible to exclude Spark classes and packages. This should be used sparingly:
  *
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
+ *
+ * For a new Spark version, please update MimaBuild.scala to reflect the previous version.
  */
 object MimaExcludes {
   def excludes(version: String) = version match {
