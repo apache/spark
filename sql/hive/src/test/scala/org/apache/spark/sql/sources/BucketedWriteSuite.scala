@@ -71,6 +71,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         .saveAsTable("bucketedTable")
 
       val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      logWarning(tableDir.listFiles().map(_.getAbsolutePath).mkString("\n"))
       for (i <- 0 until 5) {
         val allBucketFiles = new File(tableDir, s"i=$i").listFiles().filter(!_.isHidden)
         val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
