@@ -322,6 +322,15 @@ class ConfigParserWithDefaults(ConfigParser):
     def __init__(self, defaults, *args, **kwargs):
         self.defaults = defaults
         ConfigParser.__init__(self, *args, **kwargs)
+        self.is_validated = False
+
+    def _validate(self):
+        if self.get("core", "executor") != 'SequentialExecutor' \
+                and "sqlite" in self.get('core', 'sql_alchemy_conn'):
+            raise AirflowConfigException("error: cannot use sqlite with the {}".
+                                                       format(self.get('core', 'executor')))
+
+        self.is_validated = True
 
     def get(self, section, key, **kwargs):
         section = str(section).lower()
@@ -366,6 +375,10 @@ class ConfigParserWithDefaults(ConfigParser):
 
     def getfloat(self, section, key):
         return float(self.get(section, key))
+
+    def read(self, filenames):
+        ConfigParser.read(self, filenames)
+        self._validate()
 
 
 def mkdir_p(path):
