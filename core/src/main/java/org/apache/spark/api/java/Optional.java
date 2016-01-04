@@ -22,7 +22,8 @@ import java.io.Serializable;
 import com.google.common.base.Preconditions;
 
 /**
- * API copied from {@code java.util.Optional} in Java 8 and reimplemented.
+ * API copied from {@code java.util.Optional} in Java 8 and
+ * {@code com.google.common.base.Optional } and reimplemented.
  *
  * @param <T> type of value held inside
  */
@@ -41,17 +42,30 @@ public final class Optional<T> implements Serializable {
     this.value = value;
   }
 
+  // java.util.Optional API (subset)
+
+  /**
+   * @return an empty {@code Optional}
+   */
   public static <T> Optional<T> empty() {
     @SuppressWarnings("unchecked")
     Optional<T> t = (Optional<T>) EMPTY;
     return t;
   }
 
-
+  /**
+   * @param value non-null value to wrap
+   * @return {@code Optional} wrapping this value
+   * @throws NullPointerException if value is null
+   */
   public static <T> Optional<T> of(T value) {
     return new Optional<>(value);
   }
 
+  /**
+   * @param value value to wrap, which may be null
+   * @return {@code Optional} wrapping this value, which may be empty
+   */
   public static <T> Optional<T> ofNullable(T value) {
     if (value == null) {
       return empty();
@@ -60,18 +74,64 @@ public final class Optional<T> implements Serializable {
     }
   }
 
+  /**
+   * @return the value wrapped by this {@code Optional}
+   * @throws NullPointerException if this is empty (contains no value)
+   */
   public T get() {
     Preconditions.checkNotNull(value);
     return value;
   }
 
+  /**
+   * @param other value to return if this is empty
+   * @return this {@code Optional}'s value if present, or else the given value
+   */
   public T orElse(T other) {
     return value != null ? value : other;
   }
 
+  /**
+   * @return true iff this {@code Optional} contains a value (non-empty)
+   */
   public boolean isPresent() {
     return value != null;
   }
+
+  // Guava API (subset)
+  // of(), get() and isPresent() are identically present in the Guava API
+
+  /**
+   * @return an empty {@code Optional}
+   */
+  public static <T> Optional<T> absent() {
+    return empty();
+  }
+
+  /**
+   * @param value value to wrap, which may be null
+   * @return {@code Optional} wrapping this value, which may be empty
+   */
+  public static <T> Optional<T> fromNullable(T value) {
+    return ofNullable(value);
+  }
+
+  /**
+   * @param other value to return if this is empty
+   * @return this {@code Optional}'s value if present, or else the given value
+   */
+  public T or(T other) {
+    return value != null ? value : other;
+  }
+
+  /**
+   * @return this {@code Optional}'s value if present, or else null
+   */
+  public T orNull() {
+    return value;
+  }
+
+  // Common methods
 
   @Override
   public boolean equals(Object obj) {
