@@ -169,18 +169,3 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
     case _ => None
   }
 }
-
-/**
- * A pattern that collects all adjacent unions and returns their children as a Seq.
- */
-object Unions {
-  def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
-    case u: Union => Some(collectUnionChildren(u))
-    case _ => None
-  }
-
-  private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
-    case other => other :: Nil
-  }
-}

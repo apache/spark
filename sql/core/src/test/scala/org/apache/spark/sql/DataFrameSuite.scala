@@ -25,7 +25,7 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.catalyst.plans.logical.{Unions, OneRowRelation}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
@@ -96,6 +96,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test ("union all") {
+    val unionsDF = testData.unionAll(testData).unionAll(testData)
+      .unionAll(testData).unionAll(testData)
+
+    assert(unionsDF.queryExecution.optimizedPlan.collect {
+      case j @ Unions(Seq(_, _, _, _, _)) => j }.size === 1)
+
+    checkAnswer(
+      unionsDF.agg(avg('key), max('key), min('key), sum('key)),
+      Row(50.5, 100, 1, 25250) :: Nil
+    )
   }
 
   test("empty data frame") {

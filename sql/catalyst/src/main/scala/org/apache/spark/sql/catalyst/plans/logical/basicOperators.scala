@@ -107,6 +107,13 @@ private[sql] object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
+
+case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+  /** We don't use right.output because those rows get excluded from the set. */
+  override def output: Seq[Attribute] = left.output
+}
+
 case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
   override def statistics: Statistics = {
@@ -115,11 +122,20 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
   }
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
+case class Unions(children: Seq[LogicalPlan]) extends LogicalPlan {
 
-case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-  /** We don't use right.output because those rows get excluded from the set. */
-  override def output: Seq[Attribute] = left.output
+  override def output: Seq[Attribute] = {
+    children.tail.foldLeft(children.head.output) { case (currentOutput, child) =>
+      currentOutput.zip(child.output).map { case (a1, a2) =>
+        a1.withNullability(a1.nullable || a2.nullable)
+      }
+    }
+  }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Join(

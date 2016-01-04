@@ -40,6 +40,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
+    Batch("Unions", FixedPoint(100),
+      CombineUnions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -54,6 +56,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ProjectCollapsing,
       CombineFilters,
       CombineLimits,
+      CombineUnions,
       // Constant folding
       NullPropagation,
       OptimizeIn,
@@ -591,6 +594,22 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // if (false) a else b  =>  b
       case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
     }
+  }
+}
+
+/**
+ * Combines all adjacent [[Union]] and [[Unions]] operators into a single [[Unions]].
+ */
+object CombineUnions extends Rule[LogicalPlan] {
+  private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
+    case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
+    case Unions(children) => children.flatMap(collectUnionChildren)
+    case other => other :: Nil
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case u: Union => Unions(collectUnionChildren(u))
+    case u: Unions => Unions(collectUnionChildren(u))
   }
 }
 

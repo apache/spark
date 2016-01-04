@@ -31,7 +31,9 @@ class SetOperationPushDownSuite extends PlanTest {
         EliminateSubQueries) ::
       Batch("Union Pushdown", Once,
         SetOperationPushDown,
-        SimplifyFilters) :: Nil
+        SimplifyFilters) ::
+      Batch("Unions", Once,
+        CombineUnions) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -39,6 +41,20 @@ class SetOperationPushDownSuite extends PlanTest {
   val testUnion = Union(testRelation, testRelation2)
   val testIntersect = Intersect(testRelation, testRelation2)
   val testExcept = Except(testRelation, testRelation2)
+
+  test("union: combine unions into one unions") {
+    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation)
+    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation))
+    val unionOptimized1 = Optimize.execute(unionQuery1.analyze)
+    val unionOptimized2 = Optimize.execute(unionQuery2.analyze)
+    comparePlans(unionOptimized1, unionOptimized2)
+
+    val combinedUnions = Unions(unionOptimized1 :: unionOptimized2 :: Nil)
+    val combinedUnionsOptimized = Optimize.execute(combinedUnions.analyze)
+    val unionQuery3 = Union(unionQuery1, unionQuery2)
+    val unionOptimized3 = Optimize.execute(unionQuery3.analyze)
+    comparePlans(combinedUnionsOptimized, unionOptimized3)
+  }
 
   test("union/intersect/except: filter to each side") {
     val unionQuery = testUnion.where('a === 1)
@@ -50,7 +66,7 @@ class SetOperationPushDownSuite extends PlanTest {
     val exceptOptimized = Optimize.execute(exceptQuery.analyze)
 
     val unionCorrectAnswer =
-      Union(testRelation.where('a === 1), testRelation2.where('d === 1)).analyze
+      Unions(testRelation.where('a === 1) :: testRelation2.where('d === 1) :: Nil).analyze
     val intersectCorrectAnswer =
       Intersect(testRelation.where('b < 10), testRelation2.where('e < 10)).analyze
     val exceptCorrectAnswer =
@@ -65,7 +81,7 @@ class SetOperationPushDownSuite extends PlanTest {
     val unionQuery = testUnion.select('a)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.select('a), testRelation2.select('d)).analyze
+      Unions(testRelation.select('a) :: testRelation2.select('d) :: Nil ).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
