@@ -31,10 +31,13 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.sql.{SQLContext, SQLConf}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -446,6 +449,27 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
+    }
+  }
+
+  @transient
+  override protected[sql] lazy val functionRegistry = new TestHiveFunctionRegistry(
+    org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtin.copy(), this.executionHive)
+}
+
+private[hive] class TestHiveFunctionRegistry(fr: SimpleFunctionRegistry, client: ClientWrapper)
+  extends HiveFunctionRegistry(fr, client) {
+
+  private val removedFunctions =
+    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
+
+  def unregisterFunction(name: String): Unit = {
+    fr.functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
+  }
+
+  def restore(): Unit = {
+    removedFunctions.foreach {
+      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
     }
   }
 }
