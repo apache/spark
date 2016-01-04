@@ -26,11 +26,9 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkContext, Logging}
-import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
-import org.apache.spark.ml.util.MLReader
-import org.apache.spark.ml.util.MLWriter
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -167,6 +165,7 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with M
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val theStages = $(stages)
     require(theStages.toSet.size == theStages.length,
       "Cannot have duplicate components in a pipeline.")
@@ -298,6 +297,7 @@ class PipelineModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur))
   }
 

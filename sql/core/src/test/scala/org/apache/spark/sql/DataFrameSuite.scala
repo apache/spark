@@ -1221,4 +1221,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
 
   }
+
+  test("SPARK-12512: support `.` in column name for withColumn()") {
+    val df = Seq("a" -> "b").toDF("col.a", "col.b")
+    checkAnswer(df.select(df("*")), Row("a", "b"))
+    checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
+    checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
+  }
 }
