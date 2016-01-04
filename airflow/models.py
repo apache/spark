@@ -826,6 +826,7 @@ class TaskInstance(Base):
         successes, skipped, failed, upstream_failed, done = qry.first()
         upstream = len(task._upstream_list)
         tr = task.trigger_rule
+        upstream_done = done >= upstream
 
         # handling instant state assignment based on trigger rules
         if flag_upstream_failed:
@@ -838,10 +839,10 @@ class TaskInstance(Base):
                 if successes or skipped:
                     self.set_state(State.SKIPPED)
             elif tr == TR.ONE_SUCCESS:
-                if done >= upstream and not successes:
+                if upstream_done and not successes:
                     self.set_state(State.SKIPPED)
             elif tr == TR.ONE_FAILED:
-                if successes or skipped:
+                if upstream_done and not(failed or upstream_failed):
                     self.set_state(State.SKIPPED)
 
         if (
@@ -849,7 +850,7 @@ class TaskInstance(Base):
             (tr == TR.ONE_FAILED and (failed or upstream_failed)) or
             (tr == TR.ALL_SUCCESS and successes >= upstream) or
             (tr == TR.ALL_FAILED and failed + upstream_failed >= upstream) or
-            (tr == TR.ALL_DONE and done >= upstream)
+            (tr == TR.ALL_DONE and upstream_done)
         ):
             return True
 
