@@ -60,6 +60,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
+    super.afterAll()
   }
 
   test("SPARK-4908: concurrent hive native commands") {

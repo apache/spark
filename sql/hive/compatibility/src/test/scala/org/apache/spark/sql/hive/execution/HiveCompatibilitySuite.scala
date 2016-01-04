@@ -46,6 +46,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   }
 
   override def beforeAll() {
+    super.beforeAll()
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -70,6 +71,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // For debugging dump some statistics about how much time was spent in various optimizer rules.
     logWarning(RuleExecutor.dumpTimeSpent())
+    super.afterAll()
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */

@@ -131,6 +131,21 @@ abstract class HiveComparisonTest
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
+  /** Used for testing [[SQLBuilder]] */
+  private var numConvertibleQueries: Int = 0
+  private var numTotalQueries: Int = 0
+
+  override protected def afterAll(): Unit = {
+    logInfo(
+      s"""SQLBuiler statistics:
+         |- Total query number:                $numTotalQueries
+         |- Number of convertible queries:     $numConvertibleQueries
+         |- Percentage of convertible queries: ${numConvertibleQueries.toDouble / numTotalQueries}
+       """.stripMargin)
+
+    super.afterAll()
+  }
+
   protected def prepareAnswer(
     hiveQuery: TestHive.type#QueryExecution,
     answer: Seq[String]): Seq[String] = {
@@ -383,7 +398,9 @@ abstract class HiveComparisonTest
             if (containsCommands) {
               originalQuery
             } else {
+              numTotalQueries += 1
               new SQLBuilder(originalQuery.analyzed, TestHive).toSQL.map { sql =>
+                numConvertibleQueries += 1
                 logInfo(
                   s"""
                      |### Running SQL generation round-trip test {{{
