@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, PreparedStatement}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement}
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -34,10 +35,31 @@ import org.apache.spark.sql.{DataFrame, Row}
 object JdbcUtils extends Logging {
 
   /**
-   * Establishes a JDBC connection.
+   * Returns a factory for creating connections to the given JDBC URL.
+   *
+   * @param url the JDBC url to connect to.
+   * @param properties JDBC connection properties.
    */
-  def createConnection(url: String, connectionProperties: Properties): Connection = {
-    JDBCRDD.getConnector(connectionProperties.getProperty("driver"), url, connectionProperties)()
+  def createConnectionFactory(url: String, properties: Properties): () => Connection = {
+    val userSpecifiedDriverClass = Option(properties.getProperty("driver"))
+    userSpecifiedDriverClass.foreach(DriverRegistry.register)
+    // Performing this part of the logic on the driver guards against the corner-case where the
+    // driver returned for a URL is different on the driver and executors due to classpath
+    // differences.
+    val driverClass: String = userSpecifiedDriverClass.getOrElse {
+      DriverManager.getDriver(url).getClass.getCanonicalName
+    }
+    () => {
+      userSpecifiedDriverClass.foreach(DriverRegistry.register)
+      val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
+        case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
+        case d if d.getClass.getCanonicalName == driverClass => d
+      }.getOrElse {
+        throw new IllegalStateException(
+          s"Did not find registered driver with class $driverClass")
+      }
+      driver.connect(url, properties)
+    }
   }
 
   /**
@@ -49,28 +71,36 @@ object JdbcUtils extends Logging {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overriden by the dialects.
-    Try(conn.prepareStatement(dialect.getTableExistsQuery(table)).executeQuery()).isSuccess
+    Try {
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
+      try {
+        statement.executeQuery()
+      } finally {
+        statement.close()
+      }
+    }.isSuccess
   }
 
   /**
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String): Unit = {
-    conn.createStatement.executeUpdate(s"DROP TABLE $table")
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(s"DROP TABLE $table")
+    } finally {
+      statement.close()
+    }
   }
 
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
-    var fieldsLeft = rddSchema.fields.length
-    while (fieldsLeft > 0) {
-      sql.append("?")
-      if (fieldsLeft > 1) sql.append(", ") else sql.append(")")
-      fieldsLeft = fieldsLeft - 1
-    }
-    conn.prepareStatement(sql.toString())
+    val columns = rddSchema.fields.map(_.name).mkString(",")
+    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
+    val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    conn.prepareStatement(sql)
   }
 
   /**
@@ -234,15 +264,14 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      properties: Properties = new Properties()) {
+      properties: Properties) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
     }
 
     val rddSchema = df.schema
-    val driver: String = DriverRegistry.getDriverClassName(url)
-    val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
+    val getConnection: () => Connection = createConnectionFactory(url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
       savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)

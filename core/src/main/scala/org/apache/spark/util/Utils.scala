@@ -43,8 +43,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
-import tachyon.TachyonURI
-import tachyon.client.{TachyonFS, TachyonFile}
+import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -946,15 +945,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Delete a file or directory and its contents recursively.
-   */
-  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
-      throw new IOException("Failed to delete the tachyon dir: " + dir)
-    }
-  }
-
-  /**
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
@@ -1709,6 +1699,30 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Terminates a process waiting for at most the specified duration. Returns whether
+   * the process terminated.
+   */
+  def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
+    try {
+      // Java8 added a new API which will more forcibly kill the process. Use that if available.
+      val destroyMethod = process.getClass().getMethod("destroyForcibly");
+      destroyMethod.setAccessible(true)
+      destroyMethod.invoke(process)
+    } catch {
+      case NonFatal(e) =>
+        if (!e.isInstanceOf[NoSuchMethodException]) {
+          logWarning("Exception when attempting to kill process", e)
+        }
+        process.destroy()
+    }
+    if (waitForProcess(process, timeoutMs)) {
+      Option(process.exitValue())
+    } else {
+      None
+    }
+  }
+
+  /**
    * Wait for a process to terminate for at most the specified duration.
    * Return whether the process actually terminated after the given timeout.
    */
@@ -2220,6 +2234,23 @@ private[spark] object Utils extends Logging {
    */
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
+  }
+
+  /**
+   * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
+   * this is formatted as PID@hostname.
+   */
+  def getProcessName(): String = {
+    ManagementFactory.getRuntimeMXBean().getName()
+  }
+
+  /**
+   * Utility function that should be called early in `main()` for daemons to set up some common
+   * diagnostic state.
+   */
+  def initDaemon(log: Logger): Unit = {
+    log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
+    SignalLogger.register(log)
   }
 }
 
