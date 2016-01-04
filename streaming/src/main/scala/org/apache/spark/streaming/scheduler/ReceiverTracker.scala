@@ -435,10 +435,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** RpcEndpoint to receive messages from the receivers. */
   private class ReceiverTrackerEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
 
-    // TODO Remove this thread pool after https://github.com/apache/spark/issues/7385 is merged
-    private val submitJobThreadPool = ExecutionContext.fromExecutorService(
-      ThreadUtils.newDaemonCachedThreadPool("submit-job-thread-pool"))
-
     private val walBatchingThreadPool = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("wal-batching-thread-pool"))
 
@@ -610,12 +606,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             logInfo(s"Restarting Receiver $receiverId")
             self.send(RestartReceiver(receiver))
           }
-      }(submitJobThreadPool)
+      }(ThreadUtils.sameThread)
       logInfo(s"Receiver ${receiver.streamId} started")
     }
 
     override def onStop(): Unit = {
-      submitJobThreadPool.shutdownNow()
       active = false
       walBatchingThreadPool.shutdown()
     }
