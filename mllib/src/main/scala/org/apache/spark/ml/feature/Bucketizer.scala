@@ -86,6 +86,7 @@ final class Bucketizer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }

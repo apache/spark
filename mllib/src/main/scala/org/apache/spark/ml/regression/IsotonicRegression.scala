@@ -105,6 +105,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   protected[ml] def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean): StructType = {
+    validateParams()
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
       if (hasWeightCol) {

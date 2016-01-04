@@ -72,6 +72,7 @@ final class Binarizer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
 
     val inputFields = schema.fields

@@ -145,6 +145,7 @@ class StopWordsRemover(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.sameType(ArrayType(StringType)),
       s"Input type must be ArrayType(StringType) but got $inputType.")

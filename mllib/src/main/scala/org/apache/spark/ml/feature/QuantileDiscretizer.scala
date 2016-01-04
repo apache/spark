@@ -74,6 +74,7 @@ final class QuantileDiscretizer(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     val inputFields = schema.fields
     require(inputFields.forall(_.name != $(outputCol)),
