@@ -64,11 +64,10 @@ class Accumulable[R, T] private[spark] (
   def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
     this(initialValue, param, None)
 
-  val id: Long = Accumulators.newId
+  val id: Long = Accumulators.newId()
 
-  @volatile @transient private var value_ : R = initialValue // Current value on master
+  @volatile private var value_ : R = initialValue
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
-  private var deserialized = false
 
   Accumulators.register(this)
 
@@ -110,13 +109,7 @@ class Accumulable[R, T] private[spark] (
   /**
    * Access the accumulator's current value; only allowed on master.
    */
-  def value: R = {
-    if (!deserialized) {
-      value_
-    } else {
-      throw new UnsupportedOperationException("Can't read accumulator value in task")
-    }
-  }
+  def value: R = value_
 
   /**
    * Get the current value of this accumulator from within a task.
@@ -133,11 +126,7 @@ class Accumulable[R, T] private[spark] (
    * Set the accumulator's value; only allowed on master.
    */
   def value_= (newValue: R) {
-    if (!deserialized) {
-      value_ = newValue
-    } else {
-      throw new UnsupportedOperationException("Can't assign accumulator value in task")
-    }
+    value_ = newValue
   }
 
   /**
@@ -150,8 +139,10 @@ class Accumulable[R, T] private[spark] (
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    value_ = zero
-    deserialized = true
+    // TODO: fix me?
+    // value_ = zero
+    // deserialized = true
+
     // Automatically register the accumulator when it is deserialized with the task closure.
     //
     // Note internal accumulators sent with task are deserialized before the TaskContext is created
@@ -361,18 +352,33 @@ private[spark] object Accumulators extends Logging {
 }
 
 private[spark] object InternalAccumulator {
+  val EXECUTOR_DESERIALIZE_TIME = "executorDeserializeTime"
+  val EXECUTOR_RUN_TIME = "executorRunTime"
   val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
-  val TEST_ACCUMULATOR = "testAccumulator"
+  val TEST_ACCUM = "testAccumulator"
 
-  // For testing only.
-  // This needs to be a def since we don't want to reuse the same accumulator across stages.
-  private def maybeTestAccumulator: Option[Accumulator[Long]] = {
-    if (sys.props.contains("spark.testing")) {
-      Some(new Accumulator(
-        0L, AccumulatorParam.LongAccumulatorParam, Some(TEST_ACCUMULATOR), internal = true))
-    } else {
-      None
-    }
+  /**
+   * Create a new internal Long accumulator with the specified name.
+   */
+  private def newMetric(name: String): Accumulator[Long] = {
+    new Accumulator(0L, AccumulatorParam.LongAccumulatorParam, Some(name), internal = true)
+  }
+
+  /**
+   * Accumulators for tracking internal metrics.
+   * Note: this method does not register accumulators for clean up.
+   */
+  def create(): Seq[Accumulator[Long]] = {
+    val maybeTestAccumulator = sys.props.get("spark.testing").map(_ => newMetric(TEST_ACCUM)).toSeq
+    Seq(
+      newMetric(EXECUTOR_DESERIALIZE_TIME),
+      newMetric(EXECUTOR_RUN_TIME),
+      // Execution memory refers to the memory used by internal data structures created
+      // during shuffles, aggregations and joins. The value of this accumulator should be
+      // approximately the sum of the peak sizes across all such data structures created
+      // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
+      newMetric(PEAK_EXECUTION_MEMORY)
+    ) ++ maybeTestAccumulator
   }
 
   /**
@@ -383,17 +389,10 @@ private[spark] object InternalAccumulator {
    * values across all tasks within each stage.
    */
   def create(sc: SparkContext): Seq[Accumulator[Long]] = {
-    val internalAccumulators = Seq(
-        // Execution memory refers to the memory used by internal data structures created
-        // during shuffles, aggregations and joins. The value of this accumulator should be
-        // approximately the sum of the peak sizes across all such data structures created
-        // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
-        new Accumulator(
-          0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true)
-      ) ++ maybeTestAccumulator.toSeq
-    internalAccumulators.foreach { accumulator =>
-      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accumulator))
+    val accums = create()
+    accums.foreach { accum =>
+      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accum))
     }
-    internalAccumulators
+    accums
   }
 }

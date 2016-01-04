@@ -21,13 +21,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.{Accumulator, InternalAccumulator}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
  * Metrics tracked during the execution of a task.
  *
  * This class is used to house metrics both for in-progress and completed tasks. In executors,
@@ -38,8 +38,16 @@ import org.apache.spark.util.Utils
  * So, when adding new fields, take into consideration that the whole object can be serialized for
  * shipping off at any time to consumers of the SparkListener interface.
  */
-@DeveloperApi
-class TaskMetrics(val hostname: String) extends Serializable {
+private[spark] class TaskMetrics(
+    internalMetricsToAccums: Map[String, Accumulator[Long]],
+    val hostname: String = TaskMetrics.getCachedHostName)
+  extends Serializable {
+
+  import InternalAccumulator._
+
+  def this(host: String) {
+    this(TaskMetrics.newAccumMap, host)
+  }
 
   // Needed for Java
   def this() {
@@ -47,19 +55,27 @@ class TaskMetrics(val hostname: String) extends Serializable {
   }
 
   /**
-   * Time taken on the executor to deserialize this task
+   * Return the internal accumulator associated with the specified metric, assuming it exists.
    */
-  private var _executorDeserializeTime: Long = _
-  def executorDeserializeTime: Long = _executorDeserializeTime
-  private[spark] def setExecutorDeserializeTime(value: Long) = _executorDeserializeTime = value
+  private def getAccum(metricName: String): Accumulator[Long] = {
+    assert(internalMetricsToAccums.contains(metricName), s"metric $metricName is missing")
+    internalMetricsToAccums(metricName)
+  }
+
+  /**
+   * Time taken on the executor to deserialize this task.
+   */
+  private val _executorDeserializeTime: Accumulator[Long] = getAccum(EXECUTOR_DESERIALIZE_TIME)
+  def executorDeserializeTime: Long = _executorDeserializeTime.value
+  def setExecutorDeserializeTime(v: Long) = _executorDeserializeTime.setValue(v)
 
 
   /**
    * Time the executor spends actually running the task (including fetching shuffle data)
    */
-  private var _executorRunTime: Long = _
-  def executorRunTime: Long = _executorRunTime
-  private[spark] def setExecutorRunTime(value: Long) = _executorRunTime = value
+  private val _executorRunTime: Accumulator[Long] = getAccum(EXECUTOR_RUN_TIME)
+  def executorRunTime: Long = _executorRunTime.value
+  def setExecutorRunTime(v: Long) = _executorRunTime.setValue(v)
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult
@@ -241,6 +257,13 @@ private[spark] object TaskMetrics {
     val host = Utils.localHostName()
     val canonicalHost = hostNameCache.putIfAbsent(host, host)
     if (canonicalHost != null) canonicalHost else host
+  }
+
+  /**
+   * Construct a set of new accumulators indexed by metric name.
+   */
+  private def newAccumMap: Map[String, Accumulator[Long]] = {
+    InternalAccumulator.create().map { accum => (accum.name.get, accum) }.toMap
   }
 }
 
