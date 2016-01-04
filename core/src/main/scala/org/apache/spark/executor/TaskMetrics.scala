@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
  * shipping off at any time to consumers of the SparkListener interface.
  */
 private[spark] class TaskMetrics(
-    internalMetricsToAccums: Map[String, Accumulator[Long]],
+    accumMap: Map[String, Accumulator[Long]],
     val hostname: String = TaskMetrics.getCachedHostName)
   extends Serializable {
 
@@ -57,9 +57,10 @@ private[spark] class TaskMetrics(
   /**
    * Return the internal accumulator associated with the specified metric, assuming it exists.
    */
-  private def getAccum(metricName: String): Accumulator[Long] = {
-    assert(internalMetricsToAccums.contains(metricName), s"metric $metricName is missing")
-    internalMetricsToAccums(metricName)
+  private def getAccum(baseName: String): Accumulator[Long] = {
+    val fullName = METRICS_PREFIX + baseName
+    assert(accumMap.contains(fullName), s"metric '$fullName' is missing")
+    accumMap(fullName)
   }
 
   /**
@@ -112,6 +113,77 @@ private[spark] class TaskMetrics(
   def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
 
   /**
+   * ...
+   *
+   * Execution memory refers to the memory used by internal data structures created
+   * during shuffles, aggregations and joins. The value of this accumulator should be
+   * approximately the sum of the peak sizes across all such data structures created
+   * in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
+   */
+  private val _peakExecutionMemory: Accumulator[Long] = getAccum(PEAK_EXECUTION_MEMORY)
+  def peakExecutionMemory: Long = _peakExecutionMemory.value
+  def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
+
+
+  /* ================================== *
+   |        SHUFFLE READ METRICS        |
+   * ================================== */
+
+  /**
+   * Aggregated [[ShuffleReadMetrics]] across all shuffle dependencies.
+   */
+  private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
+  def shuffleReadMetrics: Option[ShuffleReadMetrics] = _shuffleReadMetrics
+  def setShuffleReadMetrics(metrics: Option[ShuffleReadMetrics]): Unit = {
+    _shuffleReadMetrics = metrics
+  }
+
+  /**
+   * Temporary list of [[ShuffleReadMetrics]], one per shuffle dependency.
+   *
+   * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
+   * issues from readers in different threads, in-progress tasks use a [[ShuffleReadMetrics]] for
+   * each dependency and merge these metrics before reporting them to the driver.
+   */
+  @transient private lazy val tempShuffleReadMetrics = new ArrayBuffer[ShuffleReadMetrics]
+
+  /**
+   * Create a temporary [[ShuffleReadMetrics]] for a particular shuffle dependency.
+   * All values set in this [[ShuffleReadMetrics]] will be merged synchronously later.
+   */
+  def createShuffleReadMetricsForDependency(): ShuffleReadMetrics = synchronized {
+    val readMetrics = new ShuffleReadMetrics
+    tempShuffleReadMetrics += readMetrics
+    readMetrics
+  }
+
+  /**
+   * Merge values across all temporary [[ShuffleReadMetrics]] into `_shuffleReadMetrics`.
+   */
+  def updateShuffleReadMetrics(): Unit = synchronized {
+    val agg = _shuffleReadMetrics.getOrElse {
+      val metrics = new ShuffleReadMetrics(accumMap)
+      _shuffleReadMetrics = Some(metrics)
+      metrics
+    }
+    agg.setRemoteBlocksFetched(tempShuffleReadMetrics.map(_.remoteBlocksFetched).sum)
+    agg.setLocalBlocksFetched(tempShuffleReadMetrics.map(_.localBlocksFetched).sum)
+    agg.setFetchWaitTime(tempShuffleReadMetrics.map(_.fetchWaitTime).sum)
+    agg.setRemoteBytesRead(tempShuffleReadMetrics.map(_.remoteBytesRead).sum)
+    agg.setLocalBytesRead(tempShuffleReadMetrics.map(_.localBytesRead).sum)
+    agg.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
+  }
+
+
+
+
+
+
+
+
+  
+
+  /**
    * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
    * are stored here.
    */
@@ -134,28 +206,6 @@ private[spark] class TaskMetrics(
   var outputMetrics: Option[OutputMetrics] = None
 
   /**
-   * If this task reads from shuffle output, metrics on getting shuffle data will be collected here.
-   * This includes read metrics aggregated over all the task's shuffle dependencies.
-   */
-  private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
-
-  def shuffleReadMetrics: Option[ShuffleReadMetrics] = _shuffleReadMetrics
-
-  /**
-   * This should only be used when recreating TaskMetrics, not when updating read metrics in
-   * executors.
-   */
-  private[spark] def setShuffleReadMetrics(shuffleReadMetrics: Option[ShuffleReadMetrics]) {
-    _shuffleReadMetrics = shuffleReadMetrics
-  }
-
-  /**
-   * ShuffleReadMetrics per dependency for collecting independently while task is in progress.
-   */
-  @transient private lazy val depsShuffleReadMetrics: ArrayBuffer[ShuffleReadMetrics] =
-    new ArrayBuffer[ShuffleReadMetrics]()
-
-  /**
    * If this task writes to shuffle output, metrics on the written shuffle data will be collected
    * here
    */
@@ -165,18 +215,6 @@ private[spark] class TaskMetrics(
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
-
-  /**
-   * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
-   * issues from readers in different threads, in-progress tasks use a ShuffleReadMetrics for each
-   * dependency, and merge these metrics before reporting them to the driver. This method returns
-   * a ShuffleReadMetrics for a dependency and registers it for merging later.
-   */
-  private [spark] def createShuffleReadMetricsForDependency(): ShuffleReadMetrics = synchronized {
-    val readMetrics = new ShuffleReadMetrics()
-    depsShuffleReadMetrics += readMetrics
-    readMetrics
-  }
 
   /**
    * Returns the input metrics object that the task should use. Currently, if
@@ -200,24 +238,6 @@ private[spark] class TaskMetrics(
         case Some(InputMetrics(method)) =>
           new InputMetrics(readMethod)
       }
-    }
-  }
-
-  /**
-   * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
-   */
-  private[spark] def updateShuffleReadMetrics(): Unit = synchronized {
-    if (!depsShuffleReadMetrics.isEmpty) {
-      val merged = new ShuffleReadMetrics()
-      for (depMetrics <- depsShuffleReadMetrics) {
-        merged.incFetchWaitTime(depMetrics.fetchWaitTime)
-        merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
-        merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
-        merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
-        merged.incLocalBytesRead(depMetrics.localBytesRead)
-        merged.incRecordsRead(depMetrics.recordsRead)
-      }
-      _shuffleReadMetrics = Some(merged)
     }
   }
 
@@ -352,64 +372,89 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
 }
 
 /**
- * :: DeveloperApi ::
  * Metrics pertaining to shuffle data read in a given task.
  */
-@DeveloperApi
-class ShuffleReadMetrics extends Serializable {
-  /**
-   * Number of remote blocks fetched in this shuffle by this task
-   */
-  private var _remoteBlocksFetched: Int = _
-  def remoteBlocksFetched: Int = _remoteBlocksFetched
-  private[spark] def incRemoteBlocksFetched(value: Int) = _remoteBlocksFetched += value
+private[spark] class ShuffleReadMetrics(accumMap: Map[String, Accumulator[Long]])
+  extends Serializable {
+
+  import InternalAccumulator.shuffleRead._
 
   /**
-   * Number of local blocks fetched in this shuffle by this task
+   * Construct a temporary [[ShuffleReadMetrics]], one for each shuffle dependency.
    */
-  private var _localBlocksFetched: Int = _
-  def localBlocksFetched: Int = _localBlocksFetched
-  private[spark] def incLocalBlocksFetched(value: Int) = _localBlocksFetched += value
+  def this() {
+    this(InternalAccumulator.createShuffleReadMetrics().map { a => (a.name.get, a) }.toMap)
+  }
+
+  /**
+   * Return the internal accumulator associated with the specified metric, assuming it exists.
+   * TODO: duplicate code alert!
+   */
+  private def getAccum(baseName: String): Accumulator[Long] = {
+    val fullName = InternalAccumulator.SHUFFLE_READ_METRICS_PREFIX + baseName
+    assert(accumMap.contains(fullName), s"metric '$fullName' is missing")
+    accumMap(fullName)
+  }
+
+  /**
+   * Number of remote blocks fetched in this shuffle by this task.
+   */
+  private val _remoteBlocksFetched: Accumulator[Long] = getAccum(REMOTE_BLOCKS_FETCHED)
+  def remoteBlocksFetched: Long = _remoteBlocksFetched.value
+  def incRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched.add(v)
+  def setRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched.setValue(v)
+
+  /**
+   * Number of local blocks fetched in this shuffle by this task.
+   */
+  private val _localBlocksFetched: Accumulator[Long] = getAccum(LOCAL_BLOCKS_FETCHED)
+  def localBlocksFetched: Long = _localBlocksFetched.value
+  def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.add(v)
+  def setLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.setValue(v)
 
   /**
    * Time the task spent waiting for remote shuffle blocks. This only includes the time
    * blocking on shuffle input data. For instance if block B is being fetched while the task is
    * still not finished processing block A, it is not considered to be blocking on block B.
    */
-  private var _fetchWaitTime: Long = _
-  def fetchWaitTime: Long = _fetchWaitTime
-  private[spark] def incFetchWaitTime(value: Long) = _fetchWaitTime += value
+  private val _fetchWaitTime: Accumulator[Long] = getAccum(FETCH_WAIT_TIME)
+  def fetchWaitTime: Long = _fetchWaitTime.value
+  def incFetchWaitTime(v: Long): Unit = _fetchWaitTime.add(v)
+  def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.setValue(v)
 
   /**
-   * Total number of remote bytes read from the shuffle by this task
+   * Total number of remote bytes read from the shuffle by this task.
    */
-  private var _remoteBytesRead: Long = _
-  def remoteBytesRead: Long = _remoteBytesRead
-  private[spark] def incRemoteBytesRead(value: Long) = _remoteBytesRead += value
+  private val _remoteBytesRead: Accumulator[Long] = getAccum(REMOTE_BYTES_READ)
+  def remoteBytesRead: Long = _remoteBytesRead.value
+  def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead.add(v)
+  def setRemoteBytesRead(v: Long): Unit = _remoteBytesRead.setValue(v)
 
   /**
    * Shuffle data that was read from the local disk (as opposed to from a remote executor).
    */
-  private var _localBytesRead: Long = _
-  def localBytesRead: Long = _localBytesRead
-  private[spark] def incLocalBytesRead(value: Long) = _localBytesRead += value
+  private val _localBytesRead: Accumulator[Long] = getAccum(LOCAL_BYTES_READ)
+  def localBytesRead: Long = _localBytesRead.value
+  def incLocalBytesRead(v: Long): Unit = _localBytesRead.add(v)
+  def setLocalBytesRead(v: Long): Unit = _localBytesRead.setValue(v)
+
+  /**
+   * Total number of records read from the shuffle by this task.
+   */
+  private val _recordsRead: Accumulator[Long] = getAccum(RECORDS_READ)
+  def recordsRead: Long = _recordsRead.value
+  def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
+  def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
 
   /**
    * Total bytes fetched in the shuffle by this task (both remote and local).
    */
-  def totalBytesRead: Long = _remoteBytesRead + _localBytesRead
+  def totalBytesRead: Long = remoteBytesRead + localBytesRead
 
   /**
-   * Number of blocks fetched in this shuffle by this task (remote or local)
+   * Number of blocks fetched in this shuffle by this task (remote or local).
    */
-  def totalBlocksFetched: Int = _remoteBlocksFetched + _localBlocksFetched
-
-  /**
-   * Total number of records read from the shuffle by this task
-   */
-  private var _recordsRead: Long = _
-  def recordsRead: Long = _recordsRead
-  private[spark] def incRecordsRead(value: Long) = _recordsRead += value
+  def totalBlocksFetched: Long = remoteBlocksFetched + localBlocksFetched
 }
 
 /**

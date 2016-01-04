@@ -316,9 +316,12 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
 private[spark] object AccumulatorSuite {
 
+  import InternalAccumulator._
+
   /**
    * Run one or more Spark jobs and verify that the peak execution memory accumulator
    * is updated afterwards.
+   * TODO: assert it's also set in task metrics?
    */
   def verifyPeakExecutionMemorySet(
       sc: SparkContext,
@@ -330,12 +333,12 @@ private[spark] object AccumulatorSuite {
       if (jobId == 0) {
         // The first job is a dummy one to verify that the accumulator does not already exist
         val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
-        assert(!accums.exists(_.name == InternalAccumulator.PEAK_EXECUTION_MEMORY))
+        assert(!accums.exists(_.name == METRICS_PREFIX + PEAK_EXECUTION_MEMORY))
       } else {
         // In the subsequent jobs, verify that peak execution memory is updated
         val accum = listener.getCompletedStageInfos
           .flatMap(_.accumulables.values)
-          .find(_.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
+          .find(_.name == METRICS_PREFIX + PEAK_EXECUTION_MEMORY)
           .getOrElse {
           throw new TestFailedException(
             s"peak execution memory accumulator not set in '$testName'", 0)

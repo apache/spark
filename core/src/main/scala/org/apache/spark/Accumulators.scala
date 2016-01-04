@@ -348,6 +348,8 @@ private[spark] object Accumulators extends Logging {
 }
 
 private[spark] object InternalAccumulator {
+
+  // Names of internal metrics
   val EXECUTOR_DESERIALIZE_TIME = "executorDeserializeTime"
   val EXECUTOR_RUN_TIME = "executorRunTime"
   val RESULT_SIZE = "resultSize"
@@ -358,6 +360,21 @@ private[spark] object InternalAccumulator {
   val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
   val TEST_ACCUM = "testAccumulator"
 
+  // Names of shuffle read metrics
+  object shuffleRead {
+    val REMOTE_BLOCKS_FETCHED = "remoteBlocksFetched"
+    val LOCAL_BLOCKS_FETCHED = "localBlocksFetched"
+    val REMOTE_BYTES_READ = "remoteBytesRead"
+    val LOCAL_BYTES_READ = "localBytesRead"
+    val FETCH_WAIT_TIME = "fetchWaitTime"
+    val RECORDS_READ = "recordsRead"
+  }
+
+  // Accumulator name prefixes
+  val METRICS_PREFIX = "metrics."
+  val SHUFFLE_READ_METRICS_PREFIX = METRICS_PREFIX + "shuffle.read."
+  val SHUFFLE_WRITE_METRICS_PREFIX = METRICS_PREFIX + "shuffle.write."
+
   /**
    * Create a new internal Long accumulator with the specified name.
    */
@@ -367,24 +384,36 @@ private[spark] object InternalAccumulator {
 
   /**
    * Accumulators for tracking internal metrics.
-   * Note: this method does not register accumulators for clean up.
+   * Note: this method does not register accumulators for cleanup.
    */
   def create(): Seq[Accumulator[Long]] = {
-    val maybeTestAccumulator = sys.props.get("spark.testing").map(_ => newMetric(TEST_ACCUM)).toSeq
-    Seq(
-      newMetric(EXECUTOR_DESERIALIZE_TIME),
-      newMetric(EXECUTOR_RUN_TIME),
-      newMetric(RESULT_SIZE),
-      newMetric(JVM_GC_TIME),
-      newMetric(RESULT_SERIALIZATION_TIME),
-      newMetric(MEMORY_BYTES_SPILLED),
-      newMetric(DISK_BYTES_SPILLED),
-      // Execution memory refers to the memory used by internal data structures created
-      // during shuffles, aggregations and joins. The value of this accumulator should be
-      // approximately the sum of the peak sizes across all such data structures created
-      // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
-      newMetric(PEAK_EXECUTION_MEMORY)
-    ) ++ maybeTestAccumulator
+    val metricNames = Seq[String](
+      EXECUTOR_DESERIALIZE_TIME,
+      EXECUTOR_RUN_TIME,
+      RESULT_SIZE,
+      JVM_GC_TIME,
+      RESULT_SERIALIZATION_TIME,
+      MEMORY_BYTES_SPILLED,
+      DISK_BYTES_SPILLED,
+      PEAK_EXECUTION_MEMORY) ++
+      // For testing only
+      sys.props.get("spark.testing").map(_ => TEST_ACCUM).toSeq
+    metricNames.map { m => newMetric(METRICS_PREFIX + m) } ++ createShuffleReadMetrics()
+  }
+
+  /**
+   * Accumulators for tracking shuffle read metrics.
+   * Note: this method does not register accumulators for cleanup.
+   */
+  def createShuffleReadMetrics(): Seq[Accumulator[Long]] = {
+    val metricNames = Seq[String](
+      shuffleRead.REMOTE_BLOCKS_FETCHED,
+      shuffleRead.LOCAL_BLOCKS_FETCHED,
+      shuffleRead.REMOTE_BYTES_READ,
+      shuffleRead.LOCAL_BYTES_READ,
+      shuffleRead.FETCH_WAIT_TIME,
+      shuffleRead.RECORDS_READ)
+    metricNames.map { m => newMetric(SHUFFLE_READ_METRICS_PREFIX + m) }
   }
 
   /**

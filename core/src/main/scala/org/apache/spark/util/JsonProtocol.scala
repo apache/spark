@@ -744,12 +744,12 @@ private[spark] object JsonProtocol {
 
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
     val metrics = new ShuffleReadMetrics
-    metrics.incRemoteBlocksFetched((json \ "Remote Blocks Fetched").extract[Int])
-    metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
-    metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
-    metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
-    metrics.incLocalBytesRead((json \ "Local Bytes Read").extractOpt[Long].getOrElse(0))
-    metrics.incRecordsRead((json \ "Total Records Read").extractOpt[Long].getOrElse(0))
+    metrics.setRemoteBlocksFetched((json \ "Remote Blocks Fetched").extract[Long])
+    metrics.setLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Long])
+    metrics.setFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
+    metrics.setRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
+    metrics.setLocalBytesRead((json \ "Local Bytes Read").extractOpt[Long].getOrElse(0))
+    metrics.setRecordsRead((json \ "Total Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }
 
