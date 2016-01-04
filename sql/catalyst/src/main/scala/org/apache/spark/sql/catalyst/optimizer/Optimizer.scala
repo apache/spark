@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueri
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -811,25 +811,34 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def buildNewJoin(
+      otherCondition: Expression,
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      condition: Option[Expression]): Join = {
+    val leftHasNonNullPredicate = hasNullFilteringPredicate(otherCondition, left)
+    val rightHasNonNullPredicate = hasNullFilteringPredicate(otherCondition, right)
+
+    joinType match {
+      case RightOuter if leftHasNonNullPredicate =>
+        Join(left, right, Inner, condition)
+      case LeftOuter if rightHasNonNullPredicate =>
+        Join(left, right, Inner, condition)
+      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate =>
+        Join(left, right, Inner, condition)
+      case FullOuter if leftHasNonNullPredicate =>
+        Join(left, right, LeftOuter, condition)
+      case FullOuter if rightHasNonNullPredicate =>
+        Join(left, right, RightOuter, condition)
+      case _ => Join(left, right, joinType, condition)
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Only three outer join types are eligible: RightOuter|LeftOuter|FullOuter
     case f @ Filter(filterCond, j @ Join(left, right, RightOuter|LeftOuter|FullOuter, joinCond)) =>
-      val leftHasNonNullPredicate = hasNullFilteringPredicate(filterCond, left)
-      val rightHasNonNullPredicate = hasNullFilteringPredicate(filterCond, right)
-
-      j.joinType match {
-        case RightOuter if leftHasNonNullPredicate =>
-          Filter(filterCond, Join(left, right, Inner, joinCond))
-        case LeftOuter if rightHasNonNullPredicate =>
-          Filter(filterCond, Join(left, right, Inner, joinCond))
-        case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate =>
-          Filter(filterCond, Join(left, right, Inner, joinCond))
-        case FullOuter if leftHasNonNullPredicate =>
-          Filter(filterCond, Join(left, right, LeftOuter, joinCond))
-        case FullOuter if rightHasNonNullPredicate =>
-          Filter(filterCond, Join(left, right, RightOuter, joinCond))
-        case _ => f
-      }
+      Filter(filterCond, buildNewJoin(filterCond, left, right, j.joinType, joinCond))
   }
 }
 
