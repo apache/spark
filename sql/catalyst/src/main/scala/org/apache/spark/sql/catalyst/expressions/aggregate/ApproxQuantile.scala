@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
- 
+
 /**
  * Calculate the approximate quantile.
  * @param child
@@ -48,7 +48,7 @@ case class ApproxQuantile(
       inputAggBufferOffset = 0)
 
   def children: Seq[Expression] = Seq(child)
- 
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = DoubleType
@@ -211,4 +211,4 @@ case class ApproxQuantile(
       buffer.getArray(mutableAggBufferOffset).toArray[InternalRow](innerStruct)
     query(sampled, count)
   }
-} 
+}
