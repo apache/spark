@@ -114,6 +114,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         orderOrSort = if (global) "ORDER" else "SORT"
       } yield s"$childSQL $orderOrSort BY ${ordersSQL.mkString(", ")}"
 
+    case OneRowRelation =>
+      Some("")
+
     case _ => None
   }
 
@@ -121,7 +124,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     override protected def batches: Seq[Batch] = Seq(
       Batch("Normalizer", FixedPoint(100),
         // The `WidenSetOperationTypes` analysis rule may introduce extra `Project`s over
-        // `Aggregate`s to perform type casting.  This rule removes them.
+        // `Aggregate`s to perform type casting.  This rule merges these `Project`s into
+        // `Aggregate`s.
         ProjectCollapsing,
 
         // Used to handle other auxiliary `Project`s added by analyzer (e.g.
@@ -132,7 +136,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     object RecoverScopingInfo extends Rule[LogicalPlan] {
       override def apply(tree: LogicalPlan): LogicalPlan = tree transform {
-        // This branch handles aggregate function within HAVING clauses.  For example:
+        // This branch handles aggregate functions within HAVING clauses.  For example:
         //
         //   SELECT key FROM src GROUP BY key HAVING max(value) > "val_255"
         //
@@ -146,8 +150,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case plan @ Project(_, Filter(_, _: Aggregate)) =>
           wrapChildWithSubquery(plan)
 
-        case plan @ Project(
-          _, _: Subquery | _: Filter | _: Join | _: MetastoreRelation | OneRowRelation
+        case plan @ Project(_,
+          _: Subquery | _: Filter | _: Join | _: MetastoreRelation | OneRowRelation | _: Limit
         ) => plan
 
         case plan: Project =>
