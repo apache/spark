@@ -100,8 +100,6 @@ case class Window(
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def canProcessUnsafeRows: Boolean = true
-
   /**
    * Create a bound ordering object for a given frame type and offset. A bound ordering object is
    * used to determine which input row lies within the frame boundaries of an output row.
@@ -259,16 +257,16 @@ case class Window(
    * @return the final resulting projection.
    */
   private[this] def createResultProjection(
-      expressions: Seq[Expression]): MutableProjection = {
+      expressions: Seq[Expression]): UnsafeProjection = {
     val references = expressions.zipWithIndex.map{ case (e, i) =>
       // Results of window expressions will be on the right side of child's output
       BoundReference(child.output.size + i, e.dataType, e.nullable)
     }
     val unboundToRefMap = expressions.zip(references).toMap
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
-    newMutableProjection(
+    UnsafeProjection.create(
       projectList ++ patchedWindowExpression,
-      child.output)()
+      child.output)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -440,16 +438,17 @@ private[execution] final class OffsetWindowFunctionFrame(
   /** Create the projection. */
   private[this] val projection = {
     // Collect the expressions and bind them.
-    val numInputAttributes = inputSchema.size
+    val inputAttrs = inputSchema.map(_.withNullability(true))
+    val numInputAttributes = inputAttrs.size
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map {
       case e: OffsetWindowFunction =>
-        val input = BindReferences.bindReference(e.input, inputSchema)
+        val input = BindReferences.bindReference(e.input, inputAttrs)
         if (e.default == null || e.default.foldable && e.default.eval() == null) {
           // Without default value.
           input
         } else {
           // With default value.
-          val default = BindReferences.bindReference(e.default, inputSchema).transform {
+          val default = BindReferences.bindReference(e.default, inputAttrs).transform {
             // Shift the input reference to its default version.
             case BoundReference(o, dataType, nullable) =>
               BoundReference(o + numInputAttributes, dataType, nullable)
@@ -457,7 +456,7 @@ private[execution] final class OffsetWindowFunctionFrame(
           org.apache.spark.sql.catalyst.expressions.Coalesce(input :: default :: Nil)
         }
       case e =>
-        BindReferences.bindReference(e, inputSchema)
+        BindReferences.bindReference(e, inputAttrs)
     }
 
     // Create the projection.

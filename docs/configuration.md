@@ -595,7 +595,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>snappy</td>
+  <td>lz4</td>
   <td>
     The codec used to compress internal data such as RDD partitions, broadcast variables and
     shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
@@ -687,9 +687,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for
-    <code>StorageLevel.MEMORY_ONLY_SER</code>). Can save substantial space at the cost of some
-    extra CPU time.
+    Whether to compress serialized RDD partitions (e.g. for 
+    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java 
+    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python). 
+    Can save substantial space at the cost of some extra CPU time. 
   </td>
 </tr>
 <tr>
@@ -820,13 +821,6 @@ Apart from these, the following properties are also available, and may be useful
     Size of each piece of a block for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
     too small, <code>BlockManager</code> might take a performance hit.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
-  <td>
-    Which broadcast implementation to use.
   </td>
 </tr>
 <tr>
@@ -1014,14 +1008,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for all block managers to listen on. These exist on both the driver and the executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP broadcast server to listen on.
-    This is not relevant for torrent broadcast.
   </td>
 </tr>
 <tr>
@@ -1443,8 +1429,8 @@ Apart from these, the following properties are also available, and may be useful
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            either <code>akka</code> for Akka based connections or <code>fs</code> for broadcast and
-            file server.</p>
+            either <code>akka</code> for Akka based connections or <code>fs</code> for file
+            server.</p>
         </td>
     </tr>
     <tr>

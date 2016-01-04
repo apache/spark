@@ -37,7 +37,7 @@ setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lit",
-                              ifelse(class(x) == "Column", x@jc, x))
+                              if (class(x) == "Column") { x@jc } else { x })
             column(jc)
           })
 
@@ -2262,7 +2262,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
-              value <- ifelse(class(value) == "Column", value@jc, value)
+              value <- if (class(value) == "Column") { value@jc } else { value }
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
@@ -2277,13 +2277,16 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' @name ifelse
 #' @seealso \link{when}
 #' @export
-#' @examples \dontrun{ifelse(df$a > 1 & df$b > 2, 0, 1)}
+#' @examples \dontrun{
+#' ifelse(df$a > 1 & df$b > 2, 0, 1)
+#' ifelse(df$a > 1, df$a, 1)
+#' }
 setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
               test <- test@jc
-              yes <- ifelse(class(yes) == "Column", yes@jc, yes)
-              no <- ifelse(class(no) == "Column", no@jc, no)
+              yes <- if (class(yes) == "Column") { yes@jc } else { yes }
+              no <- if (class(no) == "Column") { no@jc } else { no }
               jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
                                             "when",
                                             test, yes),

@@ -257,9 +257,6 @@ private[netty] class NettyRpcEnv(
     dispatcher.getRpcEndpointRef(endpoint)
   }
 
-  override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String =
-    new RpcEndpointAddress(address, endpointName).toString
-
   override def shutdown(): Unit = {
     cleanup()
   }
@@ -363,15 +360,14 @@ private[netty] class NettyRpcEnv(
     }
 
     override def read(dst: ByteBuffer): Int = {
-      val result = if (error == null) {
-        Try(source.read(dst))
-      } else {
-        Failure(error)
-      }
-
-      result match {
+      Try(source.read(dst)) match {
         case Success(bytesRead) => bytesRead
-        case Failure(error) => throw error
+        case Failure(readErr) =>
+          if (error != null) {
+            throw error
+          } else {
+            throw readErr
+          }
       }
     }
 
@@ -397,7 +393,7 @@ private[netty] class NettyRpcEnv(
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
-      logError(s"Error downloading stream $streamId.", cause)
+      logDebug(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
     }
@@ -428,7 +424,7 @@ private[netty] object NettyRpcEnv extends Logging {
 
 }
 
-private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
+private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
@@ -549,10 +545,6 @@ private[netty] class NettyRpcHandler(
     nettyEnv: NettyRpcEnv,
     streamManager: StreamManager) extends RpcHandler with Logging {
 
-  // TODO: Can we add connection callback (channel registered) to the underlying framework?
-  // A variable to track whether we should dispatch the RemoteProcessConnected message.
-  private val clients = new ConcurrentHashMap[TransportClient, JBoolean]()
-
   // A variable to track the remote RpcEnv addresses of all clients
   private val remoteAddresses = new ConcurrentHashMap[RpcAddress, RpcAddress]()
 
@@ -575,9 +567,6 @@ private[netty] class NettyRpcHandler(
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
-    if (clients.putIfAbsent(client, JBoolean.TRUE) == null) {
-      dispatcher.postToAll(RemoteProcessConnected(clientAddr))
-    }
     val requestMessage = nettyEnv.deserialize[RequestMessage](client, message)
     if (requestMessage.senderAddress == null) {
       // Create a new message with the socket address of the client as the sender.
@@ -614,10 +603,16 @@ private[netty] class NettyRpcHandler(
     }
   }
 
-  override def connectionTerminated(client: TransportClient): Unit = {
+  override def channelActive(client: TransportClient): Unit = {
+    val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
+    assert(addr != null)
+    val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+    dispatcher.postToAll(RemoteProcessConnected(clientAddr))
+  }
+
+  override def channelInactive(client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
-      clients.remove(client)
       val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
       nettyEnv.removeOutbox(clientAddr)
       dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
