@@ -211,33 +211,37 @@ private[netty] class NettyRpcEnv(
         }
     }
 
-    if (remoteAddr == address) {
-      val p = Promise[Any]()
-      p.future.onComplete {
-        case Success(response) => onSuccess(response)
-        case Failure(e) => onFailure(e)
-      }(ThreadUtils.sameThread)
-      dispatcher.postLocalMessage(message, p)
-    } else {
-      val rpcMessage = RpcOutboxMessage(serialize(message),
-        onFailure,
-        (client, response) => onSuccess(deserialize[Any](client, response)))
-      postToOutbox(message.receiver, rpcMessage)
-      promise.future.onFailure {
-        case _: TimeoutException => rpcMessage.onTimeout()
-        case _ =>
-      }(ThreadUtils.sameThread)
-    }
-
-    val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
-      override def run(): Unit = {
-        promise.tryFailure(
-          new TimeoutException(s"Cannot receive any reply in ${timeout.duration}"))
+    try {
+      if (remoteAddr == address) {
+        val p = Promise[Any]()
+        p.future.onComplete {
+          case Success(response) => onSuccess(response)
+          case Failure(e) => onFailure(e)
+        }(ThreadUtils.sameThread)
+        dispatcher.postLocalMessage(message, p)
+      } else {
+        val rpcMessage = RpcOutboxMessage(serialize(message),
+          onFailure,
+          (client, response) => onSuccess(deserialize[Any](client, response)))
+        postToOutbox(message.receiver, rpcMessage)
+        promise.future.onFailure {
+          case _: TimeoutException => rpcMessage.onTimeout()
+          case _ =>
+        }(ThreadUtils.sameThread)
       }
-    }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
-    promise.future.onComplete { v =>
-      timeoutCancelable.cancel(true)
-    }(ThreadUtils.sameThread)
+
+      val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
+        override def run(): Unit = {
+          onFailure(new TimeoutException(s"Cannot receive any reply in ${timeout.duration}"))
+        }
+      }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
+      promise.future.onComplete { v =>
+        timeoutCancelable.cancel(true)
+      }(ThreadUtils.sameThread)
+    } catch {
+      case NonFatal(e) =>
+        onFailure(e)
+    }
     promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
@@ -502,7 +506,12 @@ private[netty] class NettyRpcEndpointRef(
 
   override def send(message: Any): Unit = {
     require(message != null, "Message is null")
-    nettyEnv.send(RequestMessage(nettyEnv.address, this, message))
+    try {
+      nettyEnv.send(RequestMessage(nettyEnv.address, this, message))
+    } catch {
+      case NonFatal(e) =>
+        logWarning(e.getMessage, e)
+    }
   }
 
   override def toString: String = s"NettyRpcEndpointRef(${_address})"
