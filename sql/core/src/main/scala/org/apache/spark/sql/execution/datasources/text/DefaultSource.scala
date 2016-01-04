@@ -50,7 +50,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, partitionColumns, paths)(sqlContext)
+    new TextRelation(None, dataSchema, partitionColumns, paths)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -70,15 +70,16 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
 private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
+    val textSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
-  /** Data schema is always a single column, named "value". */
-  override def dataSchema: StructType = new StructType().add("value", StringType)
-
+  /** Data schema is always a single column, named "value" if original Data source has no schema. */
+  override def dataSchema: StructType =
+    textSchema.getOrElse(new StructType().add("value", StringType))
   /** This is an internal data source that outputs internal row format. */
   override val needConversion: Boolean = false
 
