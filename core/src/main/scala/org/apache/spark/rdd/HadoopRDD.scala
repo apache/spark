@@ -45,7 +45,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, NextIterator, Utils}
+import org.apache.spark.util.{SerializableConfiguration, SimpleCombiner, ShutdownHookManager, NextIterator, Utils}
 import org.apache.spark.scheduler.{HostTaskLocation, HDFSCacheTaskLocation}
 import org.apache.spark.storage.StorageLevel
 
@@ -189,7 +189,12 @@ class HadoopRDD[K, V](
       case c: Configurable => c.setConf(conf)
       case _ =>
     }
-    newInputFormat
+    val threshold = conf.getLong("hive.split.combine.threshold", -1)
+    if (threshold > 0 && SimpleCombiner.accepts(inputFormatClass)) {
+      new SimpleCombiner(newInputFormat, threshold)
+    } else {
+      newInputFormat
+    }
   }
 
   override def getPartitions: Array[Partition] = {
