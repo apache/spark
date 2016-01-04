@@ -21,6 +21,8 @@ import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -175,5 +177,38 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
         ${ev.value} = checksum.getValue();
       """
     })
+  }
+}
+
+case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression {
+  def this(arguments: Seq[Expression]) = this(arguments, 42)
+
+  override def dataType: DataType = IntegerType
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def nullable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      TypeCheckResult.TypeCheckFailure("arguments of function hash cannot be empty")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  private lazy val unsafeProjection = UnsafeProjection.create(children)
+
+  override def eval(input: InternalRow): Any = {
+    unsafeProjection(input).hashCode(seed)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val unsafeRow = GenerateUnsafeProjection.createCode(ctx, children)
+    ev.isNull = "false"
+    s"""
+      ${unsafeRow.code}
+      final int ${ev.value} = ${unsafeRow.value}.hashCode($seed);
+    """
   }
 }

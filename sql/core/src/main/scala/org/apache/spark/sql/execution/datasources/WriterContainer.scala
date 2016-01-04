@@ -313,26 +313,21 @@ private[sql] class DynamicPartitionWriterContainer(
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
 
+  private def bucketColumns = bucketSpec.get.resolvedBucketingColumns(inputSchema)
+  private def sortColumns = bucketSpec.get.resolvedSortingColumns(inputSchema)
+  private def numBuckets = bucketSpec.get.numBuckets
+  private def bucketIdExpr = Pmod(new Murmur3Hash(bucketColumns), Literal(numBuckets))
+
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     val outputWriters = new java.util.HashMap[InternalRow, OutputWriter]
     executorSideSetup(taskContext)
 
     var outputWritersCleared = false
 
-    val getKey: InternalRow => UnsafeRow = if (bucketSpec.isEmpty) {
-      val projection = UnsafeProjection.create(partitionColumns, inputSchema)
-      row => projection(row)
+    val getKey = if (bucketSpec.isEmpty) {
+      UnsafeProjection.create(partitionColumns, inputSchema)
     } else { // If it's bucketed, we should also consider bucket id as part of the key.
-      val bucketColumns = bucketSpec.get.resolvedBucketingColumns(inputSchema)
-      val getBucketKey = UnsafeProjection.create(bucketColumns, inputSchema)
-      // Leave an empty int slot at the last of the result row, so that we can set bucket id later.
-      val getResultRow = UnsafeProjection.create(partitionColumns :+ Literal(-1), inputSchema)
-      row => {
-        val bucketId = math.abs(getBucketKey(row).hashCode()) % bucketSpec.get.numBuckets
-        val result = getResultRow(row)
-        result.setInt(partitionColumns.length, bucketId)
-        result
-      }
+      UnsafeProjection.create(partitionColumns :+ bucketIdExpr, inputSchema)
     }
 
     val keySchema = if (bucketSpec.isEmpty) {
@@ -372,20 +367,8 @@ private[sql] class DynamicPartitionWriterContainer(
       val mustSort = bucketSpec.isDefined && bucketSpec.get.sortingColumns.isDefined
       // TODO: remove duplicated code.
       if (mustSort) {
-        val bucketColumns = bucketSpec.get.resolvedBucketingColumns(inputSchema)
-        val sortColumns = bucketSpec.get.resolvedSortingColumns(inputSchema)
-
-        val getSortingKey = {
-          val getBucketKey = UnsafeProjection.create(bucketColumns, inputSchema)
-          val getResultRow = UnsafeProjection.create(
-            (partitionColumns :+ Literal(-1)) ++ sortColumns, inputSchema)
-          (row: InternalRow) => {
-            val bucketId = math.abs(getBucketKey(row).hashCode()) % bucketSpec.get.numBuckets
-            val result = getResultRow(row)
-            result.setInt(partitionColumns.length, bucketId)
-            result
-          }
-        }
+        val getSortingKey =
+          UnsafeProjection.create((partitionColumns :+ bucketIdExpr) ++ sortColumns, inputSchema)
 
         val sortingKeySchema = {
           val fields = StructType.fromAttributes(partitionColumns)
@@ -408,9 +391,16 @@ private[sql] class DynamicPartitionWriterContainer(
         logInfo(s"Sorting complete. Writing out partition files one at a time.")
 
         def sameBucket(row1: InternalRow, row2: InternalRow): Boolean = {
-          partitionColumns.map(_.dataType).zipWithIndex.forall { case (dt, index) =>
-            row1.get(index, dt) == row2.get(index, dt)
-          } && row1.getInt(partitionColumns.length) == row2.getInt(partitionColumns.length)
+          if (row1.getInt(partitionColumns.length) != row2.getInt(partitionColumns.length)) {
+            false
+          } else {
+            var i = partitionColumns.length - 1
+            val dt = partitionColumns(i).dataType
+            while (i >= 0 && row1.get(i, dt) == row2.get(i, dt)) {
+              i -= 1
+            }
+            i < 0
+          }
         }
         val sortedIterator = sorter.sortedIterator()
         var currentKey: InternalRow = null

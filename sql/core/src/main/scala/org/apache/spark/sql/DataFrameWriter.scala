@@ -227,18 +227,16 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-    if (numBuckets.isEmpty && sortingColumns.isDefined) {
-      throw new IllegalArgumentException(
-        "Specify bucketing information by bucketBy when use sortBy.")
-    }
-    if (numBuckets.isDefined && numBuckets.get <= 0) {
-      throw new IllegalArgumentException("numBuckets must be greater than 0.")
+    if (sortingColumns.isDefined) {
+      require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
     }
 
-    if (numBuckets.isDefined) {
-      Some(BucketSpec(numBuckets.get, normalizedBucketCols.get, normalizedSortCols))
-    } else {
-      None
+    for {
+      n <- numBuckets
+      cols <- normalizedBucketCols
+    } yield {
+      require(n > 0, "Bucket number must be greater than 0.")
+      BucketSpec(n, cols, normalizedSortCols)
     }
   }
 
