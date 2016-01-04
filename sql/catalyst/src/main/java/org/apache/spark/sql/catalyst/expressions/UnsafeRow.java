@@ -214,6 +214,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     pointTo(buf, numFields, sizeInBytes);
   }
 
+  public void setTotalSize(int sizeInBytes) {
+    this.sizeInBytes = sizeInBytes;
+  }
 
   public void setNotNullAt(int i) {
     assertIndexIsValid(i);

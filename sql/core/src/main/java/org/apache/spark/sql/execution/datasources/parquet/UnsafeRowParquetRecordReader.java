@@ -264,6 +264,15 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       numBatched = num;
       batchIdx = 0;
     }
+
+    // Update the total row lengths if the schema contained variable length. We did not maintain
+    // this as we populated the columns.
+    if (containsVarLenFields) {
+      for (int i = 0; i < numBatched; ++i) {
+        rows[i].setTotalSize(rowWriters[i].holder().totalSize());
+      }
+    }
+
     return true;
   }
 
