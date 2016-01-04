@@ -443,6 +443,7 @@ object Hive {
         val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
         log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
         antlr.addGrammarFile(relGFilePath)
+        antlr.setLibDirectory(gFilePath.getParent)
       }
 
       // Generate the parser.
