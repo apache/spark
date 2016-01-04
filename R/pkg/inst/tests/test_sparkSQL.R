@@ -867,6 +867,18 @@ test_that("test HiveContext", {
   df3 <- sql(hiveCtx, "select * from json")
   expect_is(df3, "DataFrame")
   expect_equal(count(df3), 6)
+
+  hivetestDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  saveAsTable(df, "hivetestbl", path = hivetestDataPath)
+  df4 <- sql(hiveCtx, "select * from hivetestbl")
+  expect_is(df4, "DataFrame")
+  expect_equal(count(df4), 6)
+
+  parquetDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  saveAsTable(df, "parquetest", "parquet", path=parquetDataPath)
+  df5 <- sql(hiveCtx, "select * from parquetest")
+  expect_is(df5, "DataFrame")
+  expect_equal(count(df5), 6)
 })
 
 test_that("column operators", {
