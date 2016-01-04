@@ -61,9 +61,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val outputBitsetWords = (schema1.size + schema2.size + 63) / 64
     val bitset1Remainder = schema1.size % 64
 
-    // The number of words we can reduce when we concat two rows together.
+    // The number of bytes we can reduce when we concat two rows together.
     // The only reduction comes from merging the bitset portion of the two rows, saving 1 word.
-    val sizeReduction = bitset1Words + bitset2Words - outputBitsetWords
+    val sizeReduction = (bitset1Words + bitset2Words - outputBitsetWords) * 8
 
     // --------------------- copy bitset from row 1 and row 2 --------------------------- //
     val copyBitset = Seq.tabulate(outputBitsetWords) { i =>
@@ -171,7 +171,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
        |    // row2: ${schema2.size}, $bitset2Words words in bitset
        |    // output: ${schema1.size + schema2.size} fields, $outputBitsetWords words in bitset
-       |    final int sizeInBytes = row1.getSizeInBytes() + row2.getSizeInBytes();
+       |    final int sizeInBytes = row1.getSizeInBytes() + row2.getSizeInBytes() - $sizeReduction;
        |    if (sizeInBytes > buf.length) {
        |      buf = new byte[sizeInBytes];
        |    }
@@ -188,7 +188,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    $copyVariableLengthRow2
        |    $updateOffset
        |
-       |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes - $sizeReduction);
+       |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes);
        |
        |    return out;
        |  }
