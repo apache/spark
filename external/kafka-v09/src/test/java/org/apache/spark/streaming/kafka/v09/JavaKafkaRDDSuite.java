@@ -19,18 +19,12 @@ package org.apache.spark.streaming.kafka.v09;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.spark.streaming.kafka.v09.Broker;
-import org.apache.spark.streaming.kafka.v09.KafkaTestUtils;
-import org.apache.spark.streaming.kafka.v09.KafkaUtils;
-import org.apache.spark.streaming.kafka.v09.OffsetRange;
 import scala.Tuple2;
 
-import kafka.common.TopicAndPartition;
-import kafka.message.MessageAndMetadata;
-import kafka.serializer.StringDecoder;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,7 +44,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     kafkaTestUtils = new KafkaTestUtils();
     kafkaTestUtils.setup();
     SparkConf sparkConf = new SparkConf()
-        .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
     sc = new JavaSparkContext(sparkConf);
   }
 
@@ -69,29 +63,22 @@ public class JavaKafkaRDDSuite implements Serializable {
 
   @Test
   public void testKafkaRDD() throws InterruptedException {
-    String topic1 = "new_topic1_testKafkaRDD";
-    String topic2 = "new_topic2_testKafkaRDD";
+    String topic1 = "topic1_testKafkaRDD";
+    String topic2 = "topic2_testKafkaRDD";
 
-    String[] topic1data = createTopicAndSendData(topic1);
-    String[] topic2data = createTopicAndSendData(topic2);
+    createTopicAndSendData(topic1);
+    createTopicAndSendData(topic2);
 
-    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    Map<String, String> kafkaParams = new HashMap<>();
     kafkaParams.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaTestUtils.brokerAddress());
     kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
     kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
     kafkaParams.put("spark.kafka.poll.time", "1000");
 
     OffsetRange[] offsetRanges = {
-        OffsetRange.create(topic1, 0, 0, 1),
-        OffsetRange.create(topic2, 0, 0, 1)
+      OffsetRange.create(topic1, 0, 0, 1),
+      OffsetRange.create(topic2, 0, 0, 1)
     };
-
-    HashMap<TopicAndPartition, Broker> emptyLeaders = new HashMap<TopicAndPartition, Broker>();
-    HashMap<TopicAndPartition, Broker> leaders = new HashMap<TopicAndPartition, Broker>();
-    String[] hostAndPort = kafkaTestUtils.brokerAddress().split(":");
-    Broker broker = Broker.create(hostAndPort[0], Integer.parseInt(hostAndPort[1]));
-    leaders.put(new TopicAndPartition(topic1, 0), broker);
-    leaders.put(new TopicAndPartition(topic2, 0), broker);
 
     JavaRDD<String> rdd1 = KafkaUtils.createRDD(
         sc,
@@ -102,7 +89,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override
-          public String call(Tuple2<String, String> kv) throws Exception {
+          public String call(Tuple2<String, String> kv) {
             return kv._2();
           }
         }

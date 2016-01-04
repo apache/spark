@@ -21,11 +21,8 @@ import java.io.Serializable;
 import java.util.*;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.spark.streaming.kafka.v09.KafkaTestUtils;
-import org.apache.spark.streaming.kafka.v09.KafkaUtils;
 import scala.Tuple2;
 
-import kafka.serializer.StringDecoder;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,7 +47,7 @@ public class JavaKafkaStreamSuite implements Serializable {
     kafkaTestUtils = new KafkaTestUtils();
     kafkaTestUtils.setup();
     SparkConf sparkConf = new SparkConf()
-        .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
     ssc = new JavaStreamingContext(sparkConf, new Duration(500));
   }
 
@@ -69,11 +66,11 @@ public class JavaKafkaStreamSuite implements Serializable {
 
   @Test
   public void testKafkaStream() throws InterruptedException {
-    String topic = "new_topic1_testKafkaStream";
-    HashMap<String, Integer> topics = new HashMap<String, Integer>();
+    String topic = "topic1_testKafkaStream";
+    Map<String, Integer> topics = new HashMap<>();
     topics.put(topic, 1);
 
-    HashMap<String, Integer> sent = new HashMap<String, Integer>();
+    Map<String, Integer> sent = new HashMap<>();
     sent.put("a", 5);
     sent.put("b", 3);
     sent.put("c", 10);
@@ -81,7 +78,7 @@ public class JavaKafkaStreamSuite implements Serializable {
     kafkaTestUtils.createTopic(topic);
     kafkaTestUtils.sendMessages(topic, sent);
 
-    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    Map<String, String> kafkaParams = new HashMap<>();
     kafkaParams.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaTestUtils.brokerAddress());
     kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, "test-consumer-" + random.nextInt(10000));
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
@@ -90,39 +87,39 @@ public class JavaKafkaStreamSuite implements Serializable {
     kafkaParams.put("spark.kafka.poll.time", "1000");
 
     JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
-        String.class,
-        String.class,
-        kafkaParams,
-        topics,
-        StorageLevel.MEMORY_ONLY_SER());
+      String.class,
+      String.class,
+      kafkaParams,
+      topics,
+      StorageLevel.MEMORY_ONLY_SER());
 
     final Map<String, Long> result = Collections.synchronizedMap(new HashMap<String, Long>());
 
     JavaDStream<String> words = stream.map(
-        new Function<Tuple2<String, String>, String>() {
-          @Override
-          public String call(Tuple2<String, String> tuple2) throws Exception {
-            return tuple2._2();
-          }
+      new Function<Tuple2<String, String>, String>() {
+        @Override
+        public String call(Tuple2<String, String> tuple2) {
+          return tuple2._2();
         }
+      }
     );
 
     words.countByValue().foreachRDD(
-        new Function<JavaPairRDD<String, Long>, Void>() {
-          @Override
-          public Void call(JavaPairRDD<String, Long> rdd) throws Exception {
-            List<Tuple2<String, Long>> ret = rdd.collect();
-            for (Tuple2<String, Long> r : ret) {
-              if (result.containsKey(r._1())) {
-                result.put(r._1(), result.get(r._1()) + r._2());
-              } else {
-                result.put(r._1(), r._2());
-              }
+      new Function<JavaPairRDD<String, Long>, Void>() {
+        @Override
+        public Void call(JavaPairRDD<String, Long> rdd) {
+          List<Tuple2<String, Long>> ret = rdd.collect();
+          for (Tuple2<String, Long> r : ret) {
+            if (result.containsKey(r._1())) {
+              result.put(r._1(), result.get(r._1()) + r._2());
+            } else {
+              result.put(r._1(), r._2());
             }
-
-            return null;
           }
+
+          return null;
         }
+      }
     );
 
     ssc.start();
@@ -134,8 +131,8 @@ public class JavaKafkaStreamSuite implements Serializable {
       Thread.sleep(200);
     }
     Assert.assertEquals(sent.size(), result.size());
-    for (String k : sent.keySet()) {
-      Assert.assertEquals(sent.get(k).intValue(), result.get(k).intValue());
+    for (Map.Entry<String, Integer> e : sent.entrySet()) {
+      Assert.assertEquals(e.getValue().intValue(), result.get(e.getKey()).intValue());
     }
   }
 }
