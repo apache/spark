@@ -114,11 +114,10 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override def output: Seq[Attribute] = left.output
 }
 
-case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-
-  override def statistics: Statistics = {
-    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
-    Statistics(sizeInBytes = sizeInBytes)
+/** Factory for constructing new `AppendColumn` nodes. */
+object Unions {
+  def apply(left: LogicalPlan, right: LogicalPlan): Unions = {
+    Unions (left :: right :: Nil)
   }
 }
 

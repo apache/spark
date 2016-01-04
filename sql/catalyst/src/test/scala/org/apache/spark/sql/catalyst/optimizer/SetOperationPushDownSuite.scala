@@ -38,20 +38,20 @@ class SetOperationPushDownSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-  val testUnion = Union(testRelation, testRelation2)
+  val testUnion = Unions(testRelation, testRelation2)
   val testIntersect = Intersect(testRelation, testRelation2)
   val testExcept = Except(testRelation, testRelation2)
 
   test("union: combine unions into one unions") {
-    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation)
-    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation))
+    val unionQuery1 = Unions(Unions(testRelation, testRelation2), testRelation)
+    val unionQuery2 = Unions(testRelation, Unions(testRelation2, testRelation))
     val unionOptimized1 = Optimize.execute(unionQuery1.analyze)
     val unionOptimized2 = Optimize.execute(unionQuery2.analyze)
     comparePlans(unionOptimized1, unionOptimized2)
 
     val combinedUnions = Unions(unionOptimized1 :: unionOptimized2 :: Nil)
     val combinedUnionsOptimized = Optimize.execute(combinedUnions.analyze)
-    val unionQuery3 = Union(unionQuery1, unionQuery2)
+    val unionQuery3 = Unions(unionQuery1, unionQuery2)
     val unionOptimized3 = Optimize.execute(unionQuery3.analyze)
     comparePlans(combinedUnionsOptimized, unionOptimized3)
   }

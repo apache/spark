@@ -98,8 +98,8 @@ object SamplePushDown extends Rule[LogicalPlan] {
 /**
  * Pushes certain operations to both sides of a Union, Intersect or Except operator.
  * Operations that are safe to pushdown are listed as follows.
- * Union:
- * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
+ * Unions:
+ * Right now, Unions means UNION ALL, which does not de-duplicate rows. So, it is
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
  *
@@ -119,7 +119,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
   private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
-    assert(bn.isInstanceOf[Union] || bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
+    (bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
     assert(bn.left.output.size == bn.right.output.size)
 
     AttributeMap(bn.left.output.zip(bn.right.output))
@@ -127,7 +127,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Rewrites an expression so that it can be pushed to the right side of a
-   * Union, Intersect or Except operator. This method relies on the fact that the output attributes
+   * Unions, Intersect or Except operator. This method relies on the fact that the output attributes
    * of a union/intersect/except are always equal to the left child's output.
    */
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
@@ -156,27 +156,6 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down filter into union
-    case Filter(condition, u @ Union(left, right)) =>
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(u)
-      Filter(nondeterministic,
-        Union(
-          Filter(deterministic, left),
-          Filter(pushToRight(deterministic, rewrites), right)
-        )
-      )
-
-    // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, u @ Union(left, right)) =>
-      if (projectList.forall(_.deterministic)) {
-        val rewrites = buildRewrites(u)
-        Union(
-          Project(projectList, left),
-          Project(projectList.map(pushToRight(_, rewrites)), right))
-      } else {
-        p
-      }
 
     // Push down filter through INTERSECT
     case Filter(condition, i @ Intersect(left, right)) =>
@@ -598,17 +577,15 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Combines all adjacent [[Union]] and [[Unions]] operators into a single [[Unions]].
+ * Combines all adjacent [[Unions]] operators into a single [[Unions]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
   private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
     case Unions(children) => children.flatMap(collectUnionChildren)
     case other => other :: Nil
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case u: Union => Unions(collectUnionChildren(u))
     case u: Unions => Unions(collectUnionChildren(u))
   }
 }

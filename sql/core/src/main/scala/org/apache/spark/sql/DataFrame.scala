@@ -1005,7 +1005,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def unionAll(other: DataFrame): DataFrame = withPlan {
-    Union(logicalPlan, other.logicalPlan)
+    Unions(logicalPlan, other.logicalPlan)
   }
 
   /**
