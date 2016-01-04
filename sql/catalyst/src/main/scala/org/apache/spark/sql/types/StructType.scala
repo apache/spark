@@ -18,13 +18,14 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.util.DataTypeParser
+import org.apache.spark.sql.catalyst.util.{LegacyTypeStringParser, DataTypeParser}
 
 
 /**
@@ -337,9 +338,11 @@ object StructType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "struct"
 
-  private[sql] def fromString(raw: String): StructType = DataType.fromJson(raw) match {
-    case t: StructType => t
-    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+  private[sql] def fromString(raw: String): StructType = {
+    Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
+      case t: StructType => t
+      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+    }
   }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
