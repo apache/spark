@@ -683,6 +683,13 @@ class TaskInstance(Base):
         """
         return (self.dag_id, self.task_id, self.execution_date)
 
+    @provide_session
+    def set_state(self, state, session):
+        self.state = state
+        self.start_date = datetime.now()
+        self.end_date = datetime.now()
+        session.merge(self)
+
     def is_queueable(self, flag_upstream_failed=False):
         """
         Returns a boolean on whether the task instance has met all dependencies
@@ -789,59 +796,59 @@ class TaskInstance(Base):
         # Checking that all upstream dependencies have succeeded
         if not task._upstream_list or task.trigger_rule == TR.DUMMY:
             return True
-        else:
-            upstream_task_ids = [t.task_id for t in task._upstream_list]
-            qry = (
-                session
-                .query(
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.SUCCESS, 1)], else_=0)), 0),
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.FAILED, 1)], else_=0)), 0),
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.UPSTREAM_FAILED, 1)], else_=0)), 0),
-                    func.count(TI.task_id),
-                )
-                .filter(
-                    TI.dag_id == self.dag_id,
-                    TI.task_id.in_(upstream_task_ids),
-                    TI.execution_date == self.execution_date,
-                    TI.state.in_([
-                        State.SUCCESS, State.FAILED,
-                        State.UPSTREAM_FAILED, State.SKIPPED]),
-                )
-            )
-            successes, skipped, failed, upstream_failed, done = qry.first()
-            if flag_upstream_failed:
-                if (skipped >= len(task._upstream_list) or
-                      (task.trigger_rule == TR.ALL_SUCCESS and skipped > 0)):
-                    self.state = State.SKIPPED
-                    self.start_date = datetime.now()
-                    self.end_date = datetime.now()
-                    session.merge(self)
-                elif (failed + upstream_failed >= len(task._upstream_list) or
-                      (task.trigger_rule == TR.ALL_SUCCESS and upstream_failed > 0)):
-                    self.state = State.UPSTREAM_FAILED
-                    self.start_date = datetime.now()
-                    self.end_date = datetime.now()
-                    session.merge(self)
 
-            if task.trigger_rule == TR.ONE_SUCCESS and successes > 0:
-                return True
-            elif (task.trigger_rule == TR.ONE_FAILED and
-                  (failed + upstream_failed) > 0):
-                return True
-            elif (task.trigger_rule == TR.ALL_SUCCESS and
-                  successes == len(task._upstream_list)):
-                return True
-            elif (task.trigger_rule == TR.ALL_FAILED and
-                  failed + upstream_failed == len(task._upstream_list)):
-                return True
-            elif (task.trigger_rule == TR.ALL_DONE and
-                  done == len(task._upstream_list)):
-                return True
+        upstream_task_ids = [t.task_id for t in task._upstream_list]
+        qry = (
+            session
+            .query(
+                func.coalesce(func.sum(
+                    case([(TI.state == State.SUCCESS, 1)], else_=0)), 0),
+                func.coalesce(func.sum(
+                    case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
+                func.coalesce(func.sum(
+                    case([(TI.state == State.FAILED, 1)], else_=0)), 0),
+                func.coalesce(func.sum(
+                    case([(TI.state == State.UPSTREAM_FAILED, 1)], else_=0)), 0),
+                func.count(TI.task_id),
+            )
+            .filter(
+                TI.dag_id == self.dag_id,
+                TI.task_id.in_(upstream_task_ids),
+                TI.execution_date == self.execution_date,
+                TI.state.in_([
+                    State.SUCCESS, State.FAILED,
+                    State.UPSTREAM_FAILED, State.SKIPPED]),
+            )
+        )
+        successes, skipped, failed, upstream_failed, done = qry.first()
+        upstream = len(task._upstream_list)
+        tr = task.trigger_rule
+
+        # handling instant state assignment based on trigger rules
+        if flag_upstream_failed:
+            if tr == TR.ALL_SUCCESS:
+                if upstream_failed or failed:
+                    self.set_state(State.UPSTREAM_FAILED)
+                elif skipped:
+                    self.set_state(State.SKIPPED)
+            elif tr == TR.ALL_FAILED:
+                if successes or skipped:
+                    self.set_state(State.SKIPPED)
+            elif tr == TR.ONE_SUCCESS:
+                if done >= upstream and not successes:
+                    self.set_state(State.SKIPPED)
+            elif tr == TR.ONE_FAILED:
+                if successes or skipped:
+                    self.set_state(State.SKIPPED)
+
+        if (
+            (tr == TR.ONE_SUCCESS and successes) or
+            (tr == TR.ONE_FAILED and (failed or upstream_failed)) or
+            (tr == TR.ALL_SUCCESS and successes >= upstream) or
+            (tr == TR.ALL_FAILED and failed + upstream_failed >= upstream) or
+            (tr == TR.ALL_DONE and done >= upstream)
+        ):
+            return True
 
         if not main_session:
             session.commit()

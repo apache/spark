@@ -40,7 +40,6 @@ from croniter import croniter
 
 from airflow import settings
 from airflow import configuration
-from airflow.settings import LOGGING_LEVEL
 
 
 class AirflowException(Exception):
