@@ -295,13 +295,14 @@ def exec_sbt(sbt_args=()):
 
 def get_hadoop_profiles(hadoop_version):
     """
-    For the given Hadoop version tag, return a list of SBT profile flags for
+    For the given Hadoop version tag, return a list of Maven/SBT profile flags for
     building and testing against that Hadoop version.
     """
 
     sbt_maven_hadoop_profiles = {
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
+        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
+        "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
         "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
     }
 
