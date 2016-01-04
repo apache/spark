@@ -437,9 +437,12 @@ class Connection(Base):
 
     def get_hook(self):
         from airflow import hooks
+        from airflow.contrib import hooks as contrib_hooks
         try:
             if self.conn_type == 'mysql':
                 return hooks.MySqlHook(mysql_conn_id=self.conn_id)
+            elif self.conn_type == 'bigquery':
+                return contrib_hooks.BigQueryHook(bigquery_conn_id=self.conn_id)
             elif self.conn_type == 'postgres':
                 return hooks.PostgresHook(postgres_conn_id=self.conn_id)
             elif self.conn_type == 'hive_cli':
