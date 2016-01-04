@@ -96,7 +96,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) { value_ = param.addInPlace(value_, term)}
+  def ++= (term: R) { value_ = param.addInPlace(value_, term) }
 
   /**
    * Merge two accumulable objects together
@@ -104,7 +104,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { value_ = param.addInPlace(value_, term)}
+  def merge(term: R) { value_ = param.addInPlace(value_, term) }
 
   /**
    * Access the accumulator's current value; only allowed on master.
@@ -139,10 +139,6 @@ class Accumulable[R, T] private[spark] (
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    // TODO: fix me?
-    // value_ = zero
-    // deserialized = true
-
     // Automatically register the accumulator when it is deserialized with the task closure.
     //
     // Note internal accumulators sent with task are deserialized before the TaskContext is created
@@ -354,6 +350,11 @@ private[spark] object Accumulators extends Logging {
 private[spark] object InternalAccumulator {
   val EXECUTOR_DESERIALIZE_TIME = "executorDeserializeTime"
   val EXECUTOR_RUN_TIME = "executorRunTime"
+  val RESULT_SIZE = "resultSize"
+  val JVM_GC_TIME = "jvmGCTime"
+  val RESULT_SERIALIZATION_TIME = "resultSerializationTime"
+  val MEMORY_BYTES_SPILLED = "memoryBytesSpilled"
+  val DISK_BYTES_SPILLED = "diskBytesSpilled"
   val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
   val TEST_ACCUM = "testAccumulator"
 
@@ -373,6 +374,11 @@ private[spark] object InternalAccumulator {
     Seq(
       newMetric(EXECUTOR_DESERIALIZE_TIME),
       newMetric(EXECUTOR_RUN_TIME),
+      newMetric(RESULT_SIZE),
+      newMetric(JVM_GC_TIME),
+      newMetric(RESULT_SERIALIZATION_TIME),
+      newMetric(MEMORY_BYTES_SPILLED),
+      newMetric(DISK_BYTES_SPILLED),
       // Execution memory refers to the memory used by internal data structures created
       // during shuffles, aggregations and joins. The value of this accumulator should be
       // approximately the sum of the peak sizes across all such data structures created

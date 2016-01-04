@@ -69,49 +69,47 @@ private[spark] class TaskMetrics(
   def executorDeserializeTime: Long = _executorDeserializeTime.value
   def setExecutorDeserializeTime(v: Long) = _executorDeserializeTime.setValue(v)
 
-
   /**
-   * Time the executor spends actually running the task (including fetching shuffle data)
+   * Time the executor spends actually running the task (including fetching shuffle data).
    */
   private val _executorRunTime: Accumulator[Long] = getAccum(EXECUTOR_RUN_TIME)
   def executorRunTime: Long = _executorRunTime.value
   def setExecutorRunTime(v: Long) = _executorRunTime.setValue(v)
 
   /**
-   * The number of bytes this task transmitted back to the driver as the TaskResult
+   * The number of bytes this task transmitted back to the driver as the TaskResult.
    */
-  private var _resultSize: Long = _
-  def resultSize: Long = _resultSize
-  private[spark] def setResultSize(value: Long) = _resultSize = value
-
-
-  /**
-   * Amount of time the JVM spent in garbage collection while executing this task
-   */
-  private var _jvmGCTime: Long = _
-  def jvmGCTime: Long = _jvmGCTime
-  private[spark] def setJvmGCTime(value: Long) = _jvmGCTime = value
+  private val _resultSize: Accumulator[Long] = getAccum(RESULT_SIZE)
+  def resultSize: Long = _resultSize.value
+  def setResultSize(v: Long) = _resultSize.setValue(v)
 
   /**
-   * Amount of time spent serializing the task result
+   * Amount of time the JVM spent in garbage collection while executing this task.
    */
-  private var _resultSerializationTime: Long = _
-  def resultSerializationTime: Long = _resultSerializationTime
-  private[spark] def setResultSerializationTime(value: Long) = _resultSerializationTime = value
+  private val _jvmGCTime: Accumulator[Long] = getAccum(JVM_GC_TIME)
+  def jvmGCTime: Long = _jvmGCTime.value
+  def setJvmGCTime(v: Long) = _jvmGCTime.setValue(v)
 
   /**
-   * The number of in-memory bytes spilled by this task
+   * Amount of time spent serializing the task result.
    */
-  private var _memoryBytesSpilled: Long = _
-  def memoryBytesSpilled: Long = _memoryBytesSpilled
-  private[spark] def incMemoryBytesSpilled(value: Long): Unit = _memoryBytesSpilled += value
+  private val _resultSerializationTime: Accumulator[Long] = getAccum(RESULT_SERIALIZATION_TIME)
+  def resultSerializationTime: Long = _resultSerializationTime.value
+  def setResultSerializationTime(v: Long) = _resultSerializationTime.setValue(v)
 
   /**
-   * The number of on-disk bytes spilled by this task
+   * The number of in-memory bytes spilled by this task.
    */
-  private var _diskBytesSpilled: Long = _
-  def diskBytesSpilled: Long = _diskBytesSpilled
-  private[spark] def incDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled += value
+  private val _memoryBytesSpilled: Accumulator[Long] = getAccum(MEMORY_BYTES_SPILLED)
+  def memoryBytesSpilled: Long = _memoryBytesSpilled.value
+  def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
+
+  /**
+   * The number of on-disk bytes spilled by this task.
+   */
+  private val _diskBytesSpilled: Accumulator[Long] = getAccum(DISK_BYTES_SPILLED)
+  def diskBytesSpilled: Long = _diskBytesSpilled.value
+  def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
 
   /**
    * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
