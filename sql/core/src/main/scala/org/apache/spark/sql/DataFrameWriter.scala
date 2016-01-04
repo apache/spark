@@ -117,7 +117,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Partitions the output by the given columns on the file system. If specified, the output is
-   * laid out on the file system similar to Hive's partitioning scheme.
+   * laid out on the file system similar to Hive's partitioning schema.
    *
    * @since 1.4.0
    */
@@ -129,7 +129,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Buckets the output by the given columns on the file system. If specified, the output is
-   * laid out on the file system similar to Hive's bucketing scheme.
+   * laid out on the file system similar to Hive's bucketing schema.
    *
    * @since 2.0
    */
