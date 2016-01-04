@@ -132,11 +132,29 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     object RecoverScopingInfo extends Rule[LogicalPlan] {
       override def apply(tree: LogicalPlan): LogicalPlan = tree transform {
-        case plan @ Project(
-          list, _: Subquery | _: Join | _: Filter | _: MetastoreRelation | OneRowRelation
-        ) =>
-          plan
+        // This branch handles aggregate function within HAVING clauses.  For example:
+        //
+        //   SELECT key FROM src GROUP BY key HAVING max(value) > "val_255"
+        //
+        // This kind of query results in query plans of the following form because of analysis rule
+        // `ResolveAggregateFunctions`:
+        //
+        //   Project ...
+        //    +- Filter ...
+        //        +- Aggregate ...
+        //            +- MetastoreRelation default, src, None
+        case plan @ Project(_, Filter(_, _: Aggregate)) =>
+          wrapChildWithSubquery(plan)
 
+        case plan @ Project(
+          _, _: Subquery | _: Filter | _: Join | _: MetastoreRelation | OneRowRelation
+        ) => plan
+
+        case plan: Project =>
+          wrapChildWithSubquery(plan)
+      }
+
+      def wrapChildWithSubquery(project: Project): Project = project match {
         case Project(projectList, child) =>
           val alias = SQLBuilder.newSubqueryName
           val childAttributes = child.outputSet
