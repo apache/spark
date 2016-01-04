@@ -424,12 +424,13 @@ def run_build_tests():
 
 
 def run_sparkr_tests():
-    set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
+    # set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
 
-    if which("R"):
-        run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
-    else:
-        print("Ignoring SparkR tests as R was not found in PATH")
+    # if which("R"):
+    #     run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
+    # else:
+    #     print("Ignoring SparkR tests as R was not found in PATH")
+    pass
 
 
 def parse_opts():
