@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueri
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -44,6 +44,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
+      OuterJoinElimination,
       ReorderJoin,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
@@ -765,6 +766,107 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     case j @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       createOrderedJoin(input, conditions)
+  }
+}
+
+/**
+ * Elimination of Outer Join by Parent Join Condition
+ *
+ * Given an outer join is involved in another join (called parent join), when the join type of the
+ * parent join is inner, left-semi, left-outer and right-outer, checking if the join condition of
+ * the parent join satisfies the following two conditions:
+ *
+ * 1) there exist null filtering predicates against the columns in the null-supplying side of
+ *    parent join.
+ * 2) these columns are from the child join.
+ *
+ * If having such join predicates, execute the elimination rules:
+ * - full outer -> inner if both sides of the child join have such predicates
+ * - left outer -> inner if the right side of the child join has such predicates
+ * - right outer -> inner if the left side of the child join has such predicates
+ * - full outer -> left outer if only the left side of the child join has such predicates
+ * - full outer -> right outer if only the right side of the child join has such predicates
+ *
+ */
+object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
+
+  private def containsAttr(plan: LogicalPlan, attr: Attribute): Boolean =
+    plan.outputSet.exists(_.semanticEquals(attr))
+
+  private def hasNullFilteringPredicate(predicate: Expression, plan: LogicalPlan): Boolean = {
+    predicate match {
+      case EqualTo(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case EqualTo(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case EqualNullSafe(ar: AttributeReference, l)
+        if !l.nullable && containsAttr(plan, ar) => true
+      case EqualNullSafe(l, ar: AttributeReference)
+        if !l.nullable && containsAttr(plan, ar) => true
+      case GreaterThan(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case GreaterThan(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case GreaterThanOrEqual(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case GreaterThanOrEqual(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case LessThan(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case LessThan(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case LessThanOrEqual(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case LessThanOrEqual(_, ar: AttributeReference) if containsAttr(plan, ar) => true
+      case In(ar: AttributeReference, _) if containsAttr(plan, ar) => true
+      case IsNotNull(ar: AttributeReference) if containsAttr(plan, ar) => true
+      case And(l, r) => hasNullFilteringPredicate(l, plan) || hasNullFilteringPredicate(r, plan)
+      case Or(l, r) => hasNullFilteringPredicate(l, plan) && hasNullFilteringPredicate(r, plan)
+      case Not(e) => !hasNullFilteringPredicate(e, plan)
+      case _ => false
+    }
+  }
+
+  private def buildNewJoin(
+      otherCondition: Expression,
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      condition: Option[Expression]): Join = {
+    val leftHasNonNullPredicate = hasNullFilteringPredicate(otherCondition, left)
+    val rightHasNonNullPredicate = hasNullFilteringPredicate(otherCondition, right)
+
+    joinType match {
+      case RightOuter if leftHasNonNullPredicate =>
+        Join(left, right, Inner, condition)
+      case LeftOuter if rightHasNonNullPredicate =>
+        Join(left, right, Inner, condition)
+      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate =>
+        Join(left, right, Inner, condition)
+      case FullOuter if leftHasNonNullPredicate =>
+        Join(left, right, LeftOuter, condition)
+      case FullOuter if rightHasNonNullPredicate =>
+        Join(left, right, RightOuter, condition)
+      case _ => Join(left, right, joinType, condition)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // Case 1: when parent join is Inner|LeftSemi|LeftOuter and the child join is on the right side
+    case pj @ Join(
+        pLeft,
+        j @ Join(left, right, RightOuter|LeftOuter|FullOuter, condition),
+        Inner|LeftSemi|LeftOuter,
+        Some(pJoinCond)) =>
+      Join(
+          pLeft,
+          buildNewJoin(pJoinCond, left, right, j.joinType, condition),
+          pj.joinType,
+          Some(pJoinCond))
+
+    // Case 2: when parent join is Inner|LeftSemi|RightOuter and the child join is on the left side
+    case pj @ Join(
+        j @ Join(left, right, RightOuter|LeftOuter|FullOuter, condition),
+        pRight,
+        Inner|LeftSemi|RightOuter,
+        Some(pJoinCond)) =>
+      Join(
+          buildNewJoin(pJoinCond, left, right, j.joinType, condition),
+          pRight,
+          pj.joinType,
+          Some(pJoinCond))
   }
 }
 

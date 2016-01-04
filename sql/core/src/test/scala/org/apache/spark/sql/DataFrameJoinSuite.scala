@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.{Project, Join}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -139,5 +141,158 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
       assert(df1.join(broadcast(pf1)).count() === 4)
     }
+  }
+
+  test("join - left outer to inner by the parent join's join condition") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 3, "1"), (3, 6, "5")).toDF("int", "int2", "str").as("c")
+
+    // Left -> Inner
+    val right = df.join(df2, $"a.int" === $"b.int", "left")
+    val left2Inner =
+      df3.join(right, $"c.int" === $"b.int", "inner").select($"a.*", $"b.*", $"c.*")
+
+    left2Inner.explain(true)
+
+    // The order before conversion: Left Then Inner
+    assert(left2Inner.queryExecution.analyzed.collect {
+      case j@Join(_, Join(_, _, LeftOuter, _), Inner, _) => j
+    }.size === 1)
+
+    // The order after conversion: Inner Then Inner
+    assert(left2Inner.queryExecution.optimizedPlan.collect {
+      case j@Join(_, Join(_, _, Inner, _), Inner, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      left2Inner,
+      Row(1, 2, "1", 1, 3, "1", 1, 3, "1") :: Nil)
+  }
+
+  test("join - right outer to inner by the parent join's join condition") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 9, "8"), (5, 0, "4")).toDF("int", "int2", "str").as("c")
+
+    // Right Then Inner -> Inner Then Right
+    val right2Inner = df.join(df2, $"a.int" === $"b.int", "right")
+      .join(df3, $"a.int" === $"b.int", "inner").select($"a.*", $"b.*", $"c.*")
+
+    // The order before conversion: Left Then Inner
+    assert(right2Inner.queryExecution.analyzed.collect {
+      case j@Join(Join(_, _, RightOuter, _), _, Inner, _) => j
+    }.size === 1)
+
+    // The order after conversion: Inner Then Inner
+    assert(right2Inner.queryExecution.optimizedPlan.collect {
+      case j@Join(Join(_, _, Inner, _), _, Inner, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      right2Inner,
+      Row(1, 2, "1", 1, 3, "1", 1, 9, "8") ::
+      Row(1, 2, "1", 1, 3, "1", 5, 0, "4") :: Nil)
+  }
+
+  test("join - full outer to inner by the parent join's join condition") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 2, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 3, "1"), (3, 6, "5")).toDF("int", "int2", "str").as("c")
+
+    // Full -> Inner
+    val right = df.join(df2, $"a.int" === $"b.int", "full")
+    val full2Inner = df3.join(right, $"c.int" === $"a.int" && $"b.int" === 1, "inner")
+      .select($"a.*", $"b.*", $"c.*")
+
+    // The order before conversion: Left Then Inner
+    assert(full2Inner.queryExecution.analyzed.collect {
+      case j@Join(_, Join(_, _, FullOuter, _), Inner, _) => j
+    }.size === 1)
+
+    // The order after conversion: Inner Then Inner
+    assert(full2Inner.queryExecution.optimizedPlan.collect {
+      case j@Join(_, Join(_, _, Inner, _), Inner, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      full2Inner,
+      Row(1, 2, "1", 1, 2, "1", 1, 3, "1") :: Nil)
+  }
+
+  test("join - full outer to right by the parent join's join condition") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 2, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 3, "1"), (3, 6, "5")).toDF("int", "int2", "str").as("c")
+
+    // Full -> Right
+    val right = df.join(df2, $"a.int" === $"b.int", "full")
+    val full2Right = df3.join(right, $"b.int" === 1, "leftsemi")
+
+    // The order before conversion: Left Then Inner
+    assert(full2Right.queryExecution.analyzed.collect {
+      case j@Join(_, Join(_, _, FullOuter, _), LeftSemi, _) => j
+    }.size === 1)
+
+    // The order after conversion: Inner Then Inner
+    assert(full2Right.queryExecution.optimizedPlan.collect {
+      case j@Join(_, Project(_, Join(_, _, RightOuter, _)), LeftSemi, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      full2Right,
+      Row(1, 3, "1") :: Row(3, 6, "5") :: Nil)
+  }
+
+
+  test("join - full outer to left by the parent join's join condition #1") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 2, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 3, "1"), (4, 6, "5")).toDF("int", "int2", "str").as("c")
+
+    // Full -> Left
+    val right = df.join(df2, $"a.int" === $"b.int", "full")
+    val full2Left = df3.join(right, $"c.int" === $"a.int", "left")
+      .select($"a.*", $"b.*", $"c.*")
+
+    // The order before conversion: Full Then Left
+    assert(full2Left.queryExecution.analyzed.collect {
+      case j@Join(_, Join(_, _, FullOuter, _), LeftOuter, _) => j
+    }.size === 1)
+
+    // The order after conversion: Left Then Left
+    assert(full2Left.queryExecution.optimizedPlan.collect {
+      case j@Join(_, Join(_, _, LeftOuter, _), LeftOuter, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      full2Left,
+      Row(1, 2, "1", 1, 2, "1", 1, 3, "1") ::
+      Row(null, null, null, null, null, null, 4, 6, "5") :: Nil)
+  }
+
+  test("join - full outer to left by the parent join's join condition #2") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 2, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+    val df3 = Seq((1, 3, "1"), (4, 6, "5")).toDF("int", "int2", "str").as("c")
+
+    // Full -> Left
+    val full2Left = df.join(df2, $"a.int" === $"b.int", "full")
+      .join(df3, $"c.int" === $"a.int", "right").select($"a.*", $"b.*", $"c.*")
+
+    // The order before conversion: Full Then Right
+    assert(full2Left.queryExecution.analyzed.collect {
+      case j@Join(Join(_, _, FullOuter, _), _, RightOuter, _) => j
+    }.size === 1)
+
+    // The order after conversion: Left Then Right
+    assert(full2Left.queryExecution.optimizedPlan.collect {
+      case j@Join(Join(_, _, LeftOuter, _), _, RightOuter, _) => j
+    }.size === 1)
+
+    checkAnswer(
+      full2Left,
+      Row(1, 2, "1", 1, 2, "1", 1, 3, "1") ::
+      Row(null, null, null, null, null, null, 4, 6, "5") :: Nil)
   }
 }
