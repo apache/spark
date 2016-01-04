@@ -104,4 +104,20 @@ class RowTest extends FunSpec with Matchers {
       internalRow shouldEqual internalRow2
     }
   }
+
+  describe("row copy") {
+    val noSchemaRowCopy = noSchemaRow.copy()
+    it("equality check for copied rows") {
+      noSchemaRowCopy shouldEqual noSchemaRow
+    }
+
+    val noSchemaRowCopySec = noSchemaRow.copy()
+    val array = noSchemaRowCopySec.toSeq.toArray
+    array(0) = "value3"
+    val newRow = Row.fromSeq(array)
+    it("check mutating a copied row's internal array does not affect the original row") {
+      newRow.getAs[String](0) shouldBe "value3"
+      noSchemaRow.getAs[String](0) shouldBe "value1"
+    }
+  }
 }
