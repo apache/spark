@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc.RpcEnvFileServer
+import org.apache.spark.util.Utils
 
 /**
  * StreamManager implementation for serving files from a NettyRpcEnv.
@@ -57,20 +58,23 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
         new File(dir, fname)
     }
 
-    require(file != null && file.isFile(), s"File not found: $streamId")
-    new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+    if (file != null && file.isFile()) {
+      new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+    } else {
+      null
+    }
   }
 
   override def addFile(file: File): String = {
     require(files.putIfAbsent(file.getName(), file) == null,
       s"File ${file.getName()} already registered.")
-    s"${rpcEnv.address.toSparkURL}/files/${file.getName()}"
+    s"${rpcEnv.address.toSparkURL}/files/${Utils.encodeFileNameToURIRawPath(file.getName())}"
   }
 
   override def addJar(file: File): String = {
     require(jars.putIfAbsent(file.getName(), file) == null,
       s"JAR ${file.getName()} already registered.")
-    s"${rpcEnv.address.toSparkURL}/jars/${file.getName()}"
+    s"${rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(file.getName())}"
   }
 
   override def addDirectory(baseUri: String, path: File): String = {

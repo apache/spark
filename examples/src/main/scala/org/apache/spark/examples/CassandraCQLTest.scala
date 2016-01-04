@@ -16,7 +16,6 @@
  */
 
  // scalastyle:off println
- // scalastyle:off jobcontext
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -80,7 +79,7 @@ object CassandraCQLTest {
     val InputColumnFamily = "ordercf"
     val OutputColumnFamily = "salecount"
 
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[CqlPagingInputFormat])
     val configuration = job.getConfiguration
     ConfigHelper.setInputInitialAddress(job.getConfiguration(), cHost)
@@ -137,4 +136,3 @@ object CassandraCQLTest {
   }
 }
 // scalastyle:on println
-// scalastyle:on jobcontext

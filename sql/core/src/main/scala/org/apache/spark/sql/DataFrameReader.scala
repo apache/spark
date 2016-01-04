@@ -154,13 +154,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
+   * @param url JDBC database url of the form `jdbc:subprotocol:subname`.
    * @param table Name of the table in the external database.
    * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` used to decide partition stride
-   * @param upperBound the maximum value of `columnName` used to decide partition stride
-   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
-   *                      evenly into this many partitions
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride.
+   * @param upperBound the maximum value of `columnName` used to decide partition stride.
+   * @param numPartitions the number of partitions. This, along with `lowerBound` (inclusive),
+   *                      `upperBound` (exclusive), form partition strides for generated WHERE
+   *                      clause expressions used to split the column `columnName` evenly.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
@@ -257,6 +258,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
+   * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
+   * character using backslash quoting mechanism</li>
    *
    * @since 1.6.0
    */
@@ -339,7 +342,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
    * Each line in the text file is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:

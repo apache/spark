@@ -49,14 +49,19 @@ class MapWithStateSuite extends SparkFunSuite
   }
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
   }
 
   override def afterAll(): Unit = {
-    if (sc != null) {
-      sc.stop()
+    try {
+      if (sc != null) {
+        sc.stop()
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -125,7 +130,7 @@ class MapWithStateSuite extends SparkFunSuite
     state.remove()
     testState(None, shouldBeRemoved = true)
 
-    state.wrapTiminoutState(3)
+    state.wrapTimingOutState(3)
     testState(Some(3), shouldBeTimingOut = true)
   }
 

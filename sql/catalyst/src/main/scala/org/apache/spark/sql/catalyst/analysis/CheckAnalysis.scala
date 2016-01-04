@@ -57,7 +57,7 @@ trait CheckAnalysis {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns: [$from]")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -70,15 +70,32 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
-          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
-            failAnalysis(
-              s"Could not resolve window function '$name'. " +
-              "Note that, using window functions currently requires a HiveContext")
+          case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
+            failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
-            // The window spec is not valid.
-            val reason = windowSpec.validate.get
-            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
+          case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
+               SpecifiedWindowFrame(frame,
+                 FrameBoundary(l),
+                 FrameBoundary(h))))
+             if order.isEmpty || frame != RowFrame || l != h =>
+            failAnalysis("An offset window function can only be evaluated in an ordered " +
+              s"row-based window frame with a single offset: $w")
+
+          case w @ WindowExpression(e, s) =>
+            // Only allow window functions with an aggregate expression or an offset window
+            // function.
+            e match {
+              case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+              case _ =>
+                failAnalysis(s"Expression '$e' not supported within a window function.")
+            }
+            // Make sure the window specification is valid.
+            s.validate match {
+              case Some(m) =>
+                failAnalysis(s"Window specification $s is not valid because $m")
+              case None => w
+            }
+
         }
 
         operator match {
@@ -204,10 +221,12 @@ trait CheckAnalysis {
               s"unresolved operator ${operator.simpleString}")
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] & !o.isInstanceOf[Aggregate] =>
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
-              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+              s"""nondeterministic expressions are only allowed in
+                 |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.prettyString).mkString(",")}
                  |in operator ${operator.simpleString}
              """.stripMargin)
