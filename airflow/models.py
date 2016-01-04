@@ -528,7 +528,7 @@ class TaskInstance(Base):
     end_date = Column(DateTime)
     duration = Column(Float)
     state = Column(String(20))
-    try_number = Column(Integer)
+    try_number = Column(Integer, default=1)
     hostname = Column(String(1000))
     unixname = Column(String(1000))
     job_id = Column(Integer)
@@ -926,20 +926,19 @@ class TaskInstance(Base):
                 "Next run after {0}".format(next_run)
             )
         elif force or self.state in State.runnable():
-            msg = "\n" + ("-" * 80)
+            HR = "\n" + ("-" * 80) + "\n"  # Line break
             if self.state == State.UP_FOR_RETRY:
-                msg += "\nRetry run {self.try_number} out of {task.retries} "
-                msg += "starting @{iso}\n"
-            else:
-                msg += "\nNew run starting @{iso}\n"
-            msg += ("-" * 80)
-            logging.info(msg.format(**locals()))
-
-            self.start_date = datetime.now()
-            if self.state == State.UP_FOR_RETRY:
+                msg = (
+                    "Retry run {self.try_number} out of {task.retries} "
+                    "starting @{iso}")
                 self.try_number += 1
             else:
+                msg = "New run starting @{iso}"
                 self.try_number = 1
+            msg = msg.format(**locals())
+            logging.info(HR + msg + HR)
+            self.start_date = datetime.now()
+
             if self.state != State.QUEUED and (
                     self.pool or self.task.dag.concurrency_reached):
                 # If a pool is set for this task, marking the task instance
