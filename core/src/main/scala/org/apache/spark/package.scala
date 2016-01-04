@@ -42,6 +42,6 @@ package org.apache
  */
 
 package object spark {
-  // For package docs only
+  // When updating also change test version
   val SPARK_VERSION = "2.0.0-SNAPSHOT"
 }
