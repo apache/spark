@@ -45,7 +45,6 @@ private[deploy] class Worker(
     cores: Int,
     memory: Int,
     masterRpcAddresses: Array[RpcAddress],
-    systemName: String,
     endpointName: String,
     workDirPath: String = null,
     val conf: SparkConf,
@@ -102,7 +101,7 @@ private[deploy] class Worker(
   private var activeMasterUrl: String = ""
   private[worker] var activeMasterWebUiUrl : String = ""
   private var workerWebUiUrl: String = ""
-  private val workerUri = rpcEnv.uriOf(systemName, rpcEnv.address, endpointName)
+  private val workerUri = RpcEndpointAddress(rpcEnv.address, endpointName).toString
   private var registered = false
   private var connected = false
   private val workerId = generateWorkerId()
@@ -211,8 +210,7 @@ private[deploy] class Worker(
         override def run(): Unit = {
           try {
             logInfo("Connecting to master " + masterAddress + "...")
-            val masterEndpoint =
-              rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+            val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
             registerWithMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -268,8 +266,7 @@ private[deploy] class Worker(
               override def run(): Unit = {
                 try {
                   logInfo("Connecting to master " + masterAddress + "...")
-                  val masterEndpoint =
-                    rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+                  val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
                   registerWithMaster(masterEndpoint)
                 } catch {
                   case ie: InterruptedException => // Cancelled
@@ -713,7 +710,7 @@ private[deploy] object Worker extends Logging {
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
     val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL(_))
     rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
-      masterAddresses, systemName, ENDPOINT_NAME, workDir, conf, securityMgr))
+      masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr))
     rpcEnv
   }
 

@@ -198,15 +198,6 @@ configure those ports.
     <td>Jetty-based. Only used if Akka RPC backend is configured.</td>
   </tr>
   <tr>
-    <td>Executor</td>
-    <td>Driver</td>
-    <td>(random)</td>
-    <td>HTTP Broadcast</td>
-    <td><code>spark.broadcast.port</code></td>
-    <td>Jetty-based. Not used by TorrentBroadcast, which sends data through the block manager
-    instead.</td>
-  </tr>
-  <tr>
     <td>Executor / Driver</td>
     <td>Executor / Driver</td>
     <td>(random)</td>
