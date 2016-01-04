@@ -25,15 +25,19 @@ import org.apache.spark.sql.types._
   * A placeholder expression for cube/rollup, which will be replaced by analyzer
   */
 trait GroupingSet extends Expression with CodegenFallback {
+
+  def groupByExprs: Seq[Expression]
+  override def children: Seq[Expression] = groupByExprs
+
   // this should be replaced first
   override lazy val resolved: Boolean = false
-  // dataType is only used for logging
+
   override def dataType: DataType = throw new UnsupportedOperationException
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 }
 
-case class Cube(children: Seq[Expression]) extends GroupingSet {}
+case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
 
-case class Rollup(children: Seq[Expression]) extends GroupingSet {}
+case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}

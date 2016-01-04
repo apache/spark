@@ -190,7 +190,7 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(r: Rollup): Seq[Int] = {
-      Seq.tabulate(r.children.length + 1)(idx => {(1 << idx) - 1})
+      Seq.tabulate(r.groupByExprs.length + 1)(idx => {(1 << idx) - 1})
     }
 
     /*
@@ -203,15 +203,15 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(c: Cube): Seq[Int] = {
-      Seq.tabulate(1 << c.children.length)(i => i)
+      Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
-      case Aggregate(Seq(c @ Cube(children)), aggregateExpressions, child) =>
-        GroupingSets(bitmasks(c), children, child, aggregateExpressions)
-      case Aggregate(Seq(r @ Rollup(children)), aggregateExpressions, child) =>
-        GroupingSets(bitmasks(r), children, child, aggregateExpressions)
+      case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
+        GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
+      case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
+        GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
