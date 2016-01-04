@@ -27,15 +27,16 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for regression.
  *
- * @param predictionAndObservations an RDD of (prediction, observation) pairs,
+ * @param predictionAndObservations an RDD of (prediction, observation) pairs
  * @param throughOrigin True if the regression is through the origin. For example, in linear
  *                      regression, it will be true without fitting intercept.
  */
 @Since("1.2.0")
-class RegressionMetrics @Since("1.2.0") (
+class RegressionMetrics @Since("2.0.0") (
     predictionAndObservations: RDD[(Double, Double)], throughOrigin: Boolean)
     extends Logging {
 
+  @Since("1.2.0")
   def this(predictionAndObservations: RDD[(Double, Double)]) =
     this(predictionAndObservations, false)
 
