@@ -115,6 +115,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Loads input in as a [[DataFrame]], for data sources that require a path (e.g. data backed by
+   * a local or distributed file system).
+   *
+   * @since 1.4.0
+   */
+  def load(path: String): DataFrame = {
+    option("path", path).load()
+  }
+
+  /**
    * Loads input in as a [[DataFrame]], for data sources that support multiple paths.
    * Only works if the source is a HadoopFsRelationProvider.
    *
