@@ -21,8 +21,9 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{Properties, Locale, Random, UUID}
+import java.nio.channels.Channels
 import java.util.concurrent._
+import java.util.{Locale, Properties, Random, UUID}
 import javax.net.ssl.HttpsURLConnection
 
 import scala.collection.JavaConverters._
@@ -30,7 +31,7 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.{ByteStreams, Files}
@@ -42,9 +43,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
-
-import tachyon.TachyonURI
-import tachyon.client.{TachyonFS, TachyonFile}
+import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -57,6 +56,7 @@ private[spark] case class CallSite(shortForm: String, longForm: String)
 private[spark] object CallSite {
   val SHORT_FORM = "callSite.short"
   val LONG_FORM = "callSite.long"
+  val empty = CallSite("", "")
 }
 
 /**
@@ -177,7 +177,20 @@ private[spark] object Utils extends Logging {
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
-  def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
+  def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
+    }
+  }
+
+  /**
+   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.OutputStream]]
+   */
+  def writeByteBuffer(bb: ByteBuffer, out: OutputStream): Unit = {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
@@ -317,6 +330,30 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * A file name may contain some invalid URI characters, such as " ". This method will convert the
+   * file name to a raw path accepted by `java.net.URI(String)`.
+   *
+   * Note: the file name must not contain "/" or "\"
+   */
+  def encodeFileNameToURIRawPath(fileName: String): String = {
+    require(!fileName.contains("/") && !fileName.contains("\\"))
+    // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
+    // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
+    // We should remove it after we get the raw path.
+    new URI("file", null, "localhost", -1, "/" + fileName, null, null).getRawPath.substring(1)
+  }
+
+  /**
+   * Get the file name from uri's raw path and decode it. If the raw path of uri ends with "/",
+   * return the name before the last "/".
+   */
+  def decodeFileNameInURI(uri: URI): String = {
+    val rawPath = uri.getRawPath
+    val rawFileName = rawPath.split("/").last
+    new URI("file:///" + rawFileName).getPath.substring(1)
+  }
+
+    /**
    * Download a file or directory to target directory. Supports fetching the file in a variety of
    * ways, including HTTP, Hadoop-compatible filesystems, and files on a standard filesystem, based
    * on the URL parameter. Fetching directories is only supported from Hadoop-compatible
@@ -337,7 +374,7 @@ private[spark] object Utils extends Logging {
       hadoopConf: Configuration,
       timestamp: Long,
       useCache: Boolean) {
-    val fileName = url.split("/").last
+    val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
     if (useCache && fetchCacheEnabled) {
@@ -535,6 +572,14 @@ private[spark] object Utils extends Logging {
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     Option(uri.getScheme).getOrElse("file") match {
+      case "spark" =>
+        if (SparkEnv.get == null) {
+          throw new IllegalStateException(
+            "Cannot retrieve files with 'spark' scheme without an active SparkEnv.")
+        }
+        val source = SparkEnv.get.rpcEnv.openChannel(url)
+        val is = Channels.newInputStream(source)
+        downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
         var uc: URLConnection = null
         if (securityMgr.isAuthenticationEnabled()) {
@@ -649,6 +694,7 @@ private[spark] object Utils extends Logging {
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
+    val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -657,13 +703,23 @@ private[spark] object Utils extends Logging {
       getYarnLocalDirs(conf).split(",")
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
+    } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
+      conf.getenv("SPARK_LOCAL_DIRS").split(",")
+    } else if (conf.getenv("MESOS_DIRECTORY") != null && !shuffleServiceEnabled) {
+      // Mesos already creates a directory per Mesos task. Spark should use that directory
+      // instead so all temporary files are automatically cleaned up when the Mesos task ends.
+      // Note that we don't want this if the shuffle service is enabled because we want to
+      // continue to serve shuffle files after the executors that wrote them have already exited.
+      Array(conf.getenv("MESOS_DIRECTORY"))
     } else {
+      if (conf.getenv("MESOS_DIRECTORY") != null && shuffleServiceEnabled) {
+        logInfo("MESOS_DIRECTORY available but not using provided Mesos sandbox because " +
+          "spark.shuffle.service.enabled is enabled.")
+      }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
-      Option(conf.getenv("SPARK_LOCAL_DIRS"))
-        .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-        .split(",")
+      conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(",")
     }
   }
 
@@ -889,15 +945,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Delete a file or directory and its contents recursively.
-   */
-  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
-      throw new IOException("Failed to delete the tachyon dir: " + dir)
-    }
-  }
-
-  /**
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
@@ -941,7 +988,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   def timeStringAsSeconds(str: String): Long = {
@@ -1749,6 +1796,13 @@ private[spark] object Utils extends Logging {
       if (uri.getScheme() != null) {
         return uri
       }
+      // make sure to handle if the path has a fragment (applies to yarn
+      // distributed cache)
+      if (uri.getFragment() != null) {
+        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
+        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+          uri.getFragment())
+      }
     } catch {
       case e: URISyntaxException =>
     }
@@ -1888,6 +1942,7 @@ private[spark] object Utils extends Logging {
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
    * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
    */
   def startServiceOnPort[T](
       startPort: Int,
@@ -2145,6 +2200,34 @@ private[spark] object Utils extends Logging {
       conf.getInt("spark.executor.instances", 0) == 0
   }
 
+  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
+    val resource = createResource
+    try f.apply(resource) finally resource.close()
+  }
+
+  /**
+   * Returns a path of temporary file which is in the same directory with `path`.
+   */
+  def tempFileWith(path: File): File = {
+    new File(path.getAbsolutePath + "." + UUID.randomUUID())
+  }
+
+  /**
+   * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
+   * this is formatted as PID@hostname.
+   */
+  def getProcessName(): String = {
+    ManagementFactory.getRuntimeMXBean().getName()
+  }
+
+  /**
+   * Utility function that should be called early in `main()` for daemons to set up some common
+   * diagnostic state.
+   */
+  def initDaemon(log: Logger): Unit = {
+    log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
+    SignalLogger.register(log)
+  }
 }
 
 /**

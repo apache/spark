@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.mapreduce.task.JobContextImpl
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
@@ -81,8 +82,10 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
         //     `FileOutputCommitter.getWorkPath()`, which points to the base directory of all
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-          val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
-          val split = context.getTaskAttemptID.getTaskID.getId
+          val configuration = context.getConfiguration
+          val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+          val taskAttemptId = context.getTaskAttemptID
+          val split = taskAttemptId.getTaskID.getId
           new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
         }
       }
@@ -106,7 +109,7 @@ private[sql] class ParquetRelation(
     override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(
@@ -141,6 +144,12 @@ private[sql] class ParquetRelation(
     val meta = new MetadataCache
     meta.refresh()
     meta
+  }
+
+  override def toString: String = {
+    parameters.get(ParquetRelation.METASTORE_TABLE_NAME).map { tableName =>
+      s"${getClass.getSimpleName}: $tableName"
+    }.getOrElse(super.toString)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -211,8 +220,8 @@ private[sql] class ParquetRelation(
     val conf = ContextUtil.getConfiguration(job)
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
-    val committerClassname = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
-    if (committerClassname == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
+    val committerClassName = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
+    if (committerClassName == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
       conf.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
         classOf[DirectParquetOutputCommitter].getCanonicalName)
     }
@@ -241,18 +250,22 @@ private[sql] class ParquetRelation(
     // bundled with `ParquetOutputFormat[Row]`.
     job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
 
-    // TODO There's no need to use two kinds of WriteSupport
-    // We should unify them. `SpecificMutableRow` can process both atomic (primitive) types and
-    // complex types.
-    val writeSupportClass =
-      if (dataSchema.map(_.dataType).forall(ParquetTypesConverter.isPrimitiveType)) {
-        classOf[MutableRowWriteSupport]
-      } else {
-        classOf[RowWriteSupport]
-      }
+    ParquetOutputFormat.setWriteSupportClass(job, classOf[CatalystWriteSupport])
+    CatalystWriteSupport.setSchema(dataSchema, conf)
 
-    ParquetOutputFormat.setWriteSupportClass(job, writeSupportClass)
-    RowWriteSupport.setSchema(dataSchema.toAttributes, conf)
+    // Sets flags for `CatalystSchemaConverter` (which converts Catalyst schema to Parquet schema)
+    // and `CatalystWriteSupport` (writing actual rows to Parquet files).
+    conf.set(
+      SQLConf.PARQUET_BINARY_AS_STRING.key,
+      sqlContext.conf.isParquetBinaryAsString.toString)
+
+    conf.set(
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+      sqlContext.conf.isParquetINT96AsTimestamp.toString)
+
+    conf.set(
+      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
+      sqlContext.conf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
     conf.set(
@@ -271,16 +284,19 @@ private[sql] class ParquetRelation(
     }
   }
 
-  override def buildScan(
+  override def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
-    val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
+
+    // When merging schemas is enabled and the column of the given filter does not exist,
+    // Parquet emits an exception which is an issue of Parquet (PARQUET-389).
+    val safeParquetFilterPushDown = !shouldMergeSchemas && parquetFilterPushDown
 
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
@@ -295,10 +311,9 @@ private[sql] class ParquetRelation(
         dataSchema,
         parquetBlockSize,
         useMetadataCache,
-        parquetFilterPushDown,
+        safeParquetFilterPushDown,
         assumeBinaryIsString,
-        assumeInt96IsTimestamp,
-        followParquetFormatSpec) _
+        assumeInt96IsTimestamp) _
 
     // Create the function to set input paths at the driver side.
     val setInputPaths =
@@ -306,7 +321,7 @@ private[sql] class ParquetRelation(
 
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       new SqlNewHadoopRDD(
-        sc = sqlContext.sparkContext,
+        sqlContext = sqlContext,
         broadcastedConf = broadcastedConf,
         initDriverSideJobFuncOpt = Some(setInputPaths),
         initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
@@ -321,7 +336,7 @@ private[sql] class ParquetRelation(
           // URI of the path to create a new Path.
           val pathWithEscapedAuthority = escapePathUserInfo(f.getPath)
           new FileStatus(
-            f.getLen, f.isDir, f.getReplication, f.getBlockSize, f.getModificationTime,
+            f.getLen, f.isDirectory, f.getReplication, f.getBlockSize, f.getModificationTime,
             f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
         }.toSeq
 
@@ -340,7 +355,7 @@ private[sql] class ParquetRelation(
             }
           }
 
-          val jobContext = newJobContext(getConf(isDriverSide = true), jobId)
+          val jobContext = new JobContextImpl(getConf(isDriverSide = true), jobId)
           val rawSplits = inputFormat.getSplits(jobContext)
 
           Array.tabulate[SparkPartition](rawSplits.size) { i =>
@@ -348,7 +363,7 @@ private[sql] class ParquetRelation(
               id, i, rawSplits.get(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
+      }
     }
   }
 
@@ -370,7 +385,7 @@ private[sql] class ParquetRelation(
     var schema: StructType = _
 
     // Cached leaves
-    var cachedLeaves: Set[FileStatus] = null
+    var cachedLeaves: mutable.LinkedHashSet[FileStatus] = null
 
     /**
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
@@ -383,13 +398,13 @@ private[sql] class ParquetRelation(
         !cachedLeaves.equals(currentLeafStatuses)
 
       if (leafStatusesChanged) {
-        cachedLeaves = currentLeafStatuses.toIterator.toSet
+        cachedLeaves = currentLeafStatuses
 
         // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
         val leaves = currentLeafStatuses.filter { f =>
           isSummaryFile(f.getPath) ||
             !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-        }.toArray
+        }.toArray.sortBy(_.getPath.toString)
 
         dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
         metadataStatuses =
@@ -452,13 +467,30 @@ private[sql] class ParquetRelation(
           // You should enable this configuration only if you are very sure that for the parquet
           // part-files to read there are corresponding summary files containing correct schema.
 
+          // As filed in SPARK-11500, the order of files to touch is a matter, which might affect
+          // the ordering of the output columns. There are several things to mention here.
+          //
+          //  1. If mergeRespectSummaries config is false, then it merges schemas by reducing from
+          //     the first part-file so that the columns of the lexicographically first file show
+          //     first.
+          //
+          //  2. If mergeRespectSummaries config is true, then there should be, at least,
+          //     "_metadata"s for all given files, so that we can ensure the columns of
+          //     the lexicographically first file show first.
+          //
+          //  3. If shouldMergeSchemas is false, but when multiple files are given, there is
+          //     no guarantee of the output order, since there might not be a summary file for the
+          //     lexicographically first file, which ends up putting ahead the columns of
+          //     the other files. However, this should be okay since not enabling
+          //     shouldMergeSchemas means (assumes) all the files have the same schemas.
+
           val needMerged: Seq[FileStatus] =
             if (mergeRespectSummaries) {
               Seq()
             } else {
               dataStatuses
             }
-          (metadataStatuses ++ commonMetadataStatuses ++ needMerged).toSeq
+          needMerged ++ metadataStatuses ++ commonMetadataStatuses
         } else {
           // Tries any "_common_metadata" first. Parquet files written by old versions or Parquet
           // don't have this.
@@ -490,6 +522,10 @@ private[sql] object ParquetRelation extends Logging {
   // Hive Metastore schema, used when converting Metastore Parquet tables.  This option is only used
   // internally.
   private[sql] val METASTORE_SCHEMA = "metastoreSchema"
+
+  // If a ParquetRelation is converted from a Hive metastore table, this option is set to the
+  // original Hive table name.
+  private[sql] val METASTORE_TABLE_NAME = "metastoreTableName"
 
   /**
    * If parquet's block size (row group size) setting is larger than the min split size,
@@ -523,8 +559,7 @@ private[sql] object ParquetRelation extends Logging {
       useMetadataCache: Boolean,
       parquetFilterPushDown: Boolean,
       assumeBinaryIsString: Boolean,
-      assumeInt96IsTimestamp: Boolean,
-      followParquetFormatSpec: Boolean)(job: Job): Unit = {
+      assumeInt96IsTimestamp: Boolean)(job: Job): Unit = {
     val conf = job.getConfiguration
     conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
 
@@ -545,16 +580,15 @@ private[sql] object ParquetRelation extends Logging {
     })
 
     conf.set(
-      RowWriteSupport.SPARK_ROW_SCHEMA,
+      CatalystWriteSupport.SPARK_ROW_SCHEMA,
       CatalystSchemaConverter.checkFieldNames(dataSchema).json)
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
 
-    // Sets flags for Parquet schema conversion
+    // Sets flags for `CatalystSchemaConverter`
     conf.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING.key, assumeBinaryIsString)
     conf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, assumeInt96IsTimestamp)
-    conf.setBoolean(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key, followParquetFormatSpec)
 
     overrideMinSplitSize(parquetBlockSize, conf)
   }
@@ -579,7 +613,7 @@ private[sql] object ParquetRelation extends Logging {
       val converter = new CatalystSchemaConverter(
         sqlContext.conf.isParquetBinaryAsString,
         sqlContext.conf.isParquetBinaryAsString,
-        sqlContext.conf.followParquetFormatSpec)
+        sqlContext.conf.writeLegacyParquetFormat)
 
       converter.convert(schema)
     }
@@ -713,7 +747,7 @@ private[sql] object ParquetRelation extends Logging {
       filesToTouch: Seq[FileStatus], sqlContext: SQLContext): Option[StructType] = {
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
-    val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
+    val writeLegacyParquetFormat = sqlContext.conf.writeLegacyParquetFormat
     val serializedConf = new SerializableConfiguration(sqlContext.sparkContext.hadoopConfiguration)
 
     // !! HACK ALERT !!
@@ -753,14 +787,14 @@ private[sql] object ParquetRelation extends Logging {
             new CatalystSchemaConverter(
               assumeBinaryIsString = assumeBinaryIsString,
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-              followParquetFormatSpec = followParquetFormatSpec)
+              writeLegacyParquetFormat = writeLegacyParquetFormat)
 
           footers.map { footer =>
             ParquetRelation.readSchemaFromFooter(footer, converter)
-          }.reduceOption(_ merge _).iterator
+          }.reduceLeftOption(_ merge _).iterator
         }.collect()
 
-    partiallyMergedSchemas.reduceOption(_ merge _)
+    partiallyMergedSchemas.reduceLeftOption(_ merge _)
   }
 
   /**
@@ -834,9 +868,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "NONE" -> CompressionCodecName.UNCOMPRESSED,
     "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY"       -> CompressionCodecName.SNAPPY,
-    "GZIP"         -> CompressionCodecName.GZIP,
-    "LZO"          -> CompressionCodecName.LZO)
+    "SNAPPY" -> CompressionCodecName.SNAPPY,
+    "GZIP" -> CompressionCodecName.GZIP,
+    "LZO" -> CompressionCodecName.LZO)
 }

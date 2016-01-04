@@ -18,18 +18,23 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.DriverManager
+import java.sql.{Date, DriverManager, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+class JDBCSuite extends SparkFunSuite
+  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -176,12 +181,33 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size === 0)
-    assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
+      .collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
+      .collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
+      .collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
+      + "AND THEID = 2")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+
+    // This is a test to reflect discussion in SPARK-12218.
+    // The older versions of spark have this kind of bugs in parquet data source.
+    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2 AND NAME != 'mary')")
+    val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
+    assert(df1.collect.toSet === Set(Row("mary", 2)))
+    assert(df2.collect.toSet === Set(Row("mary", 2)))
   }
 
   test("SELECT * WHERE (quoted strings)") {
@@ -255,26 +281,26 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("Basic API") {
-    assert(ctx.read.jdbc(
+    assert(sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
   }
 
   test("Basic API with FetchSize") {
     val properties = new Properties
     properties.setProperty("fetchSize", "2")
-    assert(ctx.read.jdbc(
+    assert(sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
     assert(
-      ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
       .collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
+    assert(sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
       .collect().length === 3)
   }
 
@@ -330,9 +356,9 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("test DATE types") {
-    val rows = ctx.read.jdbc(
+    val rows = sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    val cachedRows = ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val cachedRows = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
       .cache().collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(1).getAs[java.sql.Date](1) === null)
@@ -340,8 +366,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("test DATE types in cache") {
-    val rows = ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val rows = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
+    sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
       .cache().registerTempTable("mycached_date")
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
@@ -349,7 +375,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("test types for null value") {
-    val rows = ctx.read.jdbc(
+    val rows = sqlContext.read.jdbc(
       urlWithUserAndPass, "TEST.NULLTYPES", new Properties).collect()
     assert((0 to 14).forall(i => rows(0).isNullAt(i)))
   }
@@ -396,7 +422,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
 
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
-    val df = ctx.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    val df = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
     assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
@@ -407,18 +433,50 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
+    assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
+    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
+    assert(JdbcDialects.get("jdbc:derby:db") == DerbyDialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
   test("quote column names by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val Derby = JdbcDialects.get("jdbc:derby:db")
 
     val columns = Seq("abc", "key")
     val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
     val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
+    val DerbyColumns = columns.map(Derby.quoteIdentifier(_))
     assert(MySQLColumns === Seq("`abc`", "`key`"))
     assert(PostgresColumns === Seq(""""abc"""", """"key""""))
+    assert(DerbyColumns === Seq(""""abc"""", """"key""""))
+  }
+
+  test("compile filters") {
+    val compileFilter = PrivateMethod[Option[String]]('compileFilter)
+    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f) getOrElse("")
+    assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "(NOT (col1 = 'abc'))")
+    assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
+      === "(col0 = 0) AND (col1 = 'def')")
+    assert(doCompileFilter(Or(EqualTo("col0", 2), EqualTo("col1", "ghi")))
+      === "(col0 = 2) OR (col1 = 'ghi')")
+    assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
+    assert(doCompileFilter(LessThan("col3",
+      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === "col3 < '1995-11-21 00:00:00.0'")
+    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04"))) === "col4 < '1983-08-04'")
+    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === "col0 <= 5")
+    assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
+    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
+    assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
+    assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
+      === "(NOT (col1 IN ('mno', 'pqr')))")
+    assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
+    assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
+    assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def")))
+      === "((NOT (col0 != 'abc' OR col0 IS NULL OR 'abc' IS NULL) "
+        + "OR (col0 IS NULL AND 'abc' IS NULL))) AND (col1 = 'def')")
   }
 
   test("Dialect unregister") {
@@ -442,5 +500,55 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(!agg.canHandle("jdbc:h2"))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+  }
+
+  test("DB2Dialect type mapping") {
+    val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+  }
+
+  test("PostgresDialect type mapping") {
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    val errMsg = intercept[IllegalArgumentException] {
+      Postgres.getJDBCType(ByteType)
+    }
+    assert(errMsg.getMessage contains "Unsupported type in postgresql: ByteType")
+  }
+
+  test("DerbyDialect jdbc type mapping") {
+    val derbyDialect = JdbcDialects.get("jdbc:derby:db")
+    assert(derbyDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(derbyDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    assert(derbyDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("table exists query by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val table = "weblogs"
+    val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
+    val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
+    assert(MySQL.getTableExistsQuery(table) == limitQuery)
+    assert(Postgres.getTableExistsQuery(table) == limitQuery)
+    assert(db2.getTableExistsQuery(table) == defaultQuery)
+    assert(h2.getTableExistsQuery(table) == defaultQuery)
+    assert(derby.getTableExistsQuery(table) == defaultQuery)
+  }
+
+  test("Test DataFrame.where for Date and Timestamp") {
+    // Regression test for bug SPARK-11788
+    val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
+    val date = java.sql.Date.valueOf("1995-01-01")
+    val jdbcDf = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
+    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(rows(0).getAs[java.sql.Timestamp](2)
+      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 }

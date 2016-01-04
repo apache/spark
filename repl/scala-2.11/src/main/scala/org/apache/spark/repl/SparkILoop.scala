@@ -37,18 +37,19 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def initializeSpark() {
     intp.beQuietDuring {
       processLine("""
-         @transient val sc = {
-           val _sc = org.apache.spark.repl.Main.createSparkContext()
-           println("Spark context available as sc.")
-           _sc
-         }
+        @transient val sc = {
+          val _sc = org.apache.spark.repl.Main.createSparkContext()
+          println("Spark context available as sc " +
+            s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
+          _sc
+        }
         """)
       processLine("""
-         @transient val sqlContext = {
-           val _sqlContext = org.apache.spark.repl.Main.createSQLContext()
-           println("SQL context available as sqlContext.")
-           _sqlContext
-         }
+        @transient val sqlContext = {
+          val _sqlContext = org.apache.spark.repl.Main.createSQLContext()
+          println("SQL context available as sqlContext.")
+          _sqlContext
+        }
         """)
       processLine("import org.apache.spark.SparkContext._")
       processLine("import sqlContext.implicits._")
@@ -85,7 +86,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   /** Available commands */
   override def commands: List[LoopCommand] = sparkStandardCommands
 
-  /** 
+  /**
    * We override `loadFiles` because we need to initialize Spark *before* the REPL
    * sees any files, so that the Spark context is visible in those files. This is a bit of a
    * hack, but there isn't another hook available to us at this point.
@@ -98,7 +99,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 
 object SparkILoop {
 
-  /** 
+  /**
    * Creates an interpreter loop with default settings and feeds
    * the given code to it as input.
    */
@@ -118,5 +119,5 @@ object SparkILoop {
       }
     }
   }
-  def run(lines: List[String]): String = run(lines map (_ + "\n") mkString)
+  def run(lines: List[String]): String = run(lines.map(_ + "\n").mkString)
 }

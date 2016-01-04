@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
@@ -110,6 +110,7 @@ class JavaEstimator(Estimator, JavaWrapper):
 
     __metaclass__ = ABCMeta
 
+    @abstractmethod
     def _create_model(self, java_model):
         """
         Creates a model from the input Java model reference.
@@ -119,6 +120,7 @@ class JavaEstimator(Estimator, JavaWrapper):
     def _fit_java(self, dataset):
         """
         Fits a Java model to the input dataset.
+
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
@@ -136,7 +138,8 @@ class JavaEstimator(Estimator, JavaWrapper):
 class JavaTransformer(Transformer, JavaWrapper):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
-    implementations.
+    implementations. Subclasses should ensure they have the transformer Java object
+    available as _java_obj.
     """
 
     __metaclass__ = ABCMeta
@@ -172,6 +175,7 @@ class JavaModel(Model, JavaTransformer):
         extra params. This implementation first calls Params.copy and
         then make a copy of the companion Java model with extra params.
         So both the Python wrapper and the Java model get copied.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """

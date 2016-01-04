@@ -18,7 +18,7 @@ package org.apache.spark.streaming.flume
 
 
 import java.net.InetSocketAddress
-import java.util.concurrent.{LinkedBlockingQueue, Executors}
+import java.util.concurrent.{Executors, LinkedBlockingQueue, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -32,8 +32,8 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.flume.sink._
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
@@ -46,7 +46,7 @@ import org.apache.spark.streaming.flume.sink._
  * @tparam T Class type of the object of this stream
  */
 private[streaming] class FlumePollingInputDStream[T: ClassTag](
-    @transient _ssc: StreamingContext,
+    _ssc: StreamingContext,
     val addresses: Seq[InetSocketAddress],
     val maxBatchSize: Int,
     val parallelism: Int,
@@ -93,7 +93,11 @@ private[streaming] class FlumePollingReceiver(
 
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")
-    receiverExecutor.shutdownNow()
+    receiverExecutor.shutdown()
+    // Wait upto a minute for the threads to die
+    if (!receiverExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
+      receiverExecutor.shutdownNow()
+    }
     connections.asScala.foreach(_.transceiver.close())
     channelFactory.releaseExternalResources()
   }

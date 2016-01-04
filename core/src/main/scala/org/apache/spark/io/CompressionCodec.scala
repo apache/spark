@@ -17,10 +17,10 @@
 
 package org.apache.spark.io
 
-import java.io.{IOException, InputStream, OutputStream}
+import java.io._
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
+import net.jpountz.lz4.LZ4BlockOutputStream
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
@@ -47,6 +47,12 @@ trait CompressionCodec {
 private[spark] object CompressionCodec {
 
   private val configKey = "spark.io.compression.codec"
+
+  private[spark] def supportsConcatenationOfSerializedStreams(codec: CompressionCodec): Boolean = {
+    (codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
+      || codec.isInstanceOf[LZ4CompressionCodec])
+  }
+
   private val shortCompressionCodecNames = Map(
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
@@ -87,11 +93,10 @@ private[spark] object CompressionCodec {
     }
   }
 
-  val FALLBACK_COMPRESSION_CODEC = "lzf"
-  val DEFAULT_COMPRESSION_CODEC = "snappy"
+  val FALLBACK_COMPRESSION_CODEC = "snappy"
+  val DEFAULT_COMPRESSION_CODEC = "lz4"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
-
 
 /**
  * :: DeveloperApi ::
@@ -148,7 +153,7 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   try {
     Snappy.getNativeLibraryVersion
   } catch {
-    case e: Error => throw new IllegalArgumentException
+    case e: Error => throw new IllegalArgumentException(e)
   }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {

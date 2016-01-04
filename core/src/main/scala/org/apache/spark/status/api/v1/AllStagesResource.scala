@@ -17,8 +17,8 @@
 package org.apache.spark.status.api.v1
 
 import java.util.{Arrays, Date, List => JList}
-import javax.ws.rs.{GET, PathParam, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
+import javax.ws.rs.{GET, Produces, QueryParam}
 
 import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
@@ -59,6 +59,15 @@ private[v1] object AllStagesResource {
       stageUiData: StageUIData,
       includeDetails: Boolean): StageData = {
 
+    val taskLaunchTimes = stageUiData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0)
+
+    val firstTaskLaunchedTime: Option[Date] =
+      if (taskLaunchTimes.nonEmpty) {
+        Some(new Date(taskLaunchTimes.min))
+      } else {
+        None
+      }
+
     val taskData = if (includeDetails) {
       Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v) } )
     } else {
@@ -92,6 +101,9 @@ private[v1] object AllStagesResource {
       numCompleteTasks = stageUiData.numCompleteTasks,
       numFailedTasks = stageUiData.numFailedTasks,
       executorRunTime = stageUiData.executorRunTime,
+      submissionTime = stageInfo.submissionTime.map(new Date(_)),
+      firstTaskLaunchedTime,
+      completionTime = stageInfo.completionTime.map(new Date(_)),
       inputBytes = stageUiData.inputBytes,
       inputRecords = stageUiData.inputRecords,
       outputBytes = stageUiData.outputBytes,
@@ -127,7 +139,7 @@ private[v1] object AllStagesResource {
     new TaskData(
       taskId = uiData.taskInfo.taskId,
       index = uiData.taskInfo.index,
-      attempt = uiData.taskInfo.attempt,
+      attempt = uiData.taskInfo.attemptNumber,
       launchTime = new Date(uiData.taskInfo.launchTime),
       executorId = uiData.taskInfo.executorId,
       host = uiData.taskInfo.host,

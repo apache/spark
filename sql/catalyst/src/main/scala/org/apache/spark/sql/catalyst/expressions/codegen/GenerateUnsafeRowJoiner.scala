@@ -159,13 +159,13 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
-       |public Object generate($exprType[] exprs) {
+       |public java.lang.Object generate($exprType[] exprs) {
        |  return new SpecificUnsafeRowJoiner();
        |}
        |
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
-       |  private UnsafeRow out = new UnsafeRow();
+       |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
@@ -176,9 +176,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |      buf = new byte[sizeInBytes];
        |    }
        |
-       |    final Object obj1 = row1.getBaseObject();
+       |    final java.lang.Object obj1 = row1.getBaseObject();
        |    final long offset1 = row1.getBaseOffset();
-       |    final Object obj2 = row2.getBaseObject();
+       |    final java.lang.Object obj2 = row2.getBaseObject();
        |    final long offset2 = row2.getBaseOffset();
        |
        |    $copyBitset
@@ -188,7 +188,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    $copyVariableLengthRow2
        |    $updateOffset
        |
-       |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes - $sizeReduction);
+       |    out.pointTo(buf, sizeInBytes - $sizeReduction);
        |
        |    return out;
        |  }

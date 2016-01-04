@@ -43,8 +43,12 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var server: Option[RestSubmissionServer] = None
 
   override def afterEach() {
-    rpcEnv.foreach(_.shutdown())
-    server.foreach(_.stop())
+    try {
+      rpcEnv.foreach(_.shutdown())
+      server.foreach(_.stop())
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("construct submit request") {
@@ -364,6 +368,18 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val conn3 = sendHttpRequest(statusRequestPath, "GET")
     intercept[SubmitRestProtocolException] { client.readResponse(conn3) } // empty response
     assert(conn3.getResponseCode === HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+  }
+
+  test("client does not send 'SPARK_ENV_LOADED' env var by default") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_ENV_LOADED" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
+  test("client includes mesos env vars") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1", "OTHER_VAR" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1"))
   }
 
   /* --------------------- *

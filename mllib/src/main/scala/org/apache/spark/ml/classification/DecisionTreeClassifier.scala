@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
@@ -36,31 +36,45 @@ import org.apache.spark.sql.DataFrame
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
+@Since("1.4.0")
 @Experimental
-final class DecisionTreeClassifier(override val uid: String)
+final class DecisionTreeClassifier @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams with TreeClassifierParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
+  @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
+  @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
+  @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
 
+  @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
+  @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
+  @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
+  @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
+  @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
+
+  @Since("1.6.0")
+  override def setSeed(value: Long): this.type = super.setSeed(value)
 
   override protected def train(dataset: DataFrame): DecisionTreeClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -75,7 +89,7 @@ final class DecisionTreeClassifier(override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, parentUID = Some(uid))
+      seed = $(seed), parentUID = Some(uid))
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 
@@ -87,12 +101,15 @@ final class DecisionTreeClassifier(override val uid: String)
       subsamplingRate = 1.0)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopy(extra)
 }
 
+@Since("1.4.0")
 @Experimental
 object DecisionTreeClassifier {
   /** Accessor for supported impurities: entropy, gini */
+  @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
@@ -102,11 +119,13 @@ object DecisionTreeClassifier {
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
+@Since("1.4.0")
 @Experimental
 final class DecisionTreeClassificationModel private[ml] (
-    override val uid: String,
-    override val rootNode: Node,
-    override val numClasses: Int)
+    @Since("1.4.0")override val uid: String,
+    @Since("1.4.0")override val rootNode: Node,
+    @Since("1.6.0")override val numFeatures: Int,
+    @Since("1.5.0")override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
 
@@ -117,8 +136,8 @@ final class DecisionTreeClassificationModel private[ml] (
    * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  private[ml] def this(rootNode: Node, numClasses: Int) =
-    this(Identifiable.randomUID("dtc"), rootNode, numClasses)
+  private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =
+    this(Identifiable.randomUID("dtc"), rootNode, numFeatures, numClasses)
 
   override protected def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
@@ -139,13 +158,15 @@ final class DecisionTreeClassificationModel private[ml] (
     }
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
-    copyValues(new DecisionTreeClassificationModel(uid, rootNode, numClasses), extra)
+    copyValues(new DecisionTreeClassificationModel(uid, rootNode, numFeatures, numClasses), extra)
       .setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
-    s"DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
+    s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
   /** (private[ml]) Convert to a model in the old API */
@@ -160,12 +181,14 @@ private[ml] object DecisionTreeClassificationModel {
   def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeClassifier,
-      categoricalFeatures: Map[Int, Int]): DecisionTreeClassificationModel = {
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): DecisionTreeClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification,
       s"Cannot convert non-classification DecisionTreeModel (old API) to" +
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
-    new DecisionTreeClassificationModel(uid, rootNode, -1)
+    // Can't infer number of features from old model, so default to -1
+    new DecisionTreeClassificationModel(uid, rootNode, numFeatures, -1)
   }
 }

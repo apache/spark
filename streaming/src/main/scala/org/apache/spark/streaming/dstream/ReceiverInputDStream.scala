@@ -21,12 +21,12 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
+import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.{RateController, ReceivedBlockInfo, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.streaming.scheduler.{ReceivedBlockInfo, RateController, StreamInputInfo}
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.streaming.{StreamingContext, Time}
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -38,7 +38,7 @@ import org.apache.spark.streaming.{StreamingContext, Time}
  * @param ssc_ Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
+abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
   /**

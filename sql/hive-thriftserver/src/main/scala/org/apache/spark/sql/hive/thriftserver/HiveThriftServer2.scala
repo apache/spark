@@ -55,7 +55,6 @@ object HiveThriftServer2 extends Logging {
   @DeveloperApi
   def startWithContext(sqlContext: HiveContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
-    sqlContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
     server.init(sqlContext.hiveconf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
@@ -68,6 +67,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   def main(args: Array[String]) {
+    Utils.initDaemon(log)
     val optionsProcessor = new HiveServerServerOptionsProcessor("HiveThriftServer2")
     if (!optionsProcessor.process(args)) {
       System.exit(-1)
@@ -92,6 +92,12 @@ object HiveThriftServer2 extends Logging {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
       } else {
         None
+      }
+      // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
+      // process can not exit, so check whether if SparkContext was stopped.
+      if (SparkSQLEnv.sparkContext.stopped.get()) {
+        logError("SparkContext has stopped even if HiveServer2 has started, so exit")
+        System.exit(-1)
       }
     } catch {
       case e: Exception =>

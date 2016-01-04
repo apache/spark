@@ -79,8 +79,9 @@ object CassandraCQLTest {
     val InputColumnFamily = "ordercf"
     val OutputColumnFamily = "salecount"
 
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[CqlPagingInputFormat])
+    val configuration = job.getConfiguration
     ConfigHelper.setInputInitialAddress(job.getConfiguration(), cHost)
     ConfigHelper.setInputRpcPort(job.getConfiguration(), cPort)
     ConfigHelper.setInputColumnFamily(job.getConfiguration(), KeySpace, InputColumnFamily)

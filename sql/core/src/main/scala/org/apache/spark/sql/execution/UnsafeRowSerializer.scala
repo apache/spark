@@ -45,16 +45,9 @@ private[sql] class UnsafeRowSerializer(numFields: Int) extends Serializer with S
 }
 
 private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInstance {
-
-  /**
-   * Marks the end of a stream written with [[serializeStream()]].
-   */
-  private[this] val EOF: Int = -1
-
   /**
    * Serializes a stream of UnsafeRows. Within the stream, each record consists of a record
    * length (stored as a 4-byte integer, written high byte first), followed by the record's bytes.
-   * The end of the stream is denoted by a record with the special length `EOF` (-1).
    */
   override def serializeStream(out: OutputStream): SerializationStream = new SerializationStream {
     private[this] var writeBuffer: Array[Byte] = new Array[Byte](4096)
@@ -72,7 +65,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
     override def writeKey[T: ClassTag](key: T): SerializationStream = {
       // The key is only needed on the map side when computing partition ids. It does not need to
       // be shuffled.
-      assert(key.isInstanceOf[Int])
+      assert(null == key || key.isInstanceOf[Int])
       this
     }
 
@@ -92,7 +85,6 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
 
     override def close(): Unit = {
       writeBuffer = null
-      dOut.writeInt(EOF)
       dOut.close()
     }
   }
@@ -102,14 +94,22 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
       private[this] val dIn: DataInputStream = new DataInputStream(new BufferedInputStream(in))
       // 1024 is a default buffer size; this buffer will grow to accommodate larger rows
       private[this] var rowBuffer: Array[Byte] = new Array[Byte](1024)
-      private[this] var row: UnsafeRow = new UnsafeRow()
+      private[this] var row: UnsafeRow = new UnsafeRow(numFields)
       private[this] var rowTuple: (Int, UnsafeRow) = (0, row)
+      private[this] val EOF: Int = -1
 
       override def asKeyValueIterator: Iterator[(Int, UnsafeRow)] = {
         new Iterator[(Int, UnsafeRow)] {
-          private[this] var rowSize: Int = dIn.readInt()
-          if (rowSize == EOF) dIn.close()
 
+          private[this] def readSize(): Int = try {
+            dIn.readInt()
+          } catch {
+            case e: EOFException =>
+              dIn.close()
+              EOF
+          }
+
+          private[this] var rowSize: Int = readSize()
           override def hasNext: Boolean = rowSize != EOF
 
           override def next(): (Int, UnsafeRow) = {
@@ -117,8 +117,8 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
               rowBuffer = new Array[Byte](rowSize)
             }
             ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
-            row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, numFields, rowSize)
-            rowSize = dIn.readInt() // read the next row's size
+            row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, rowSize)
+            rowSize = readSize()
             if (rowSize == EOF) { // We are returning the last row in this stream
               dIn.close()
               val _rowTuple = rowTuple
@@ -152,7 +152,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
           rowBuffer = new Array[Byte](rowSize)
         }
         ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
-        row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, numFields, rowSize)
+        row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, rowSize)
         row.asInstanceOf[T]
       }
 

@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
-
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -67,9 +65,18 @@ trait PredicateHelper {
     }
   }
 
+  // Substitute any known alias from a map.
+  protected def replaceAlias(
+      condition: Expression,
+      aliases: AttributeMap[Expression]): Expression = {
+    condition.transform {
+      case a: Attribute => aliases.getOrElse(a, a)
+    }
+  }
+
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
-   * can be used to determine when is is acceptable to move expression evaluation within a query
+   * can be used to determine when it is acceptable to move expression evaluation within a query
    * plan.
    *
    * For example consider a join between two relations R(a, b) and S(c, d).
@@ -103,6 +110,8 @@ case class Not(child: Expression)
 case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
 
+  require(list != null, "list should not be null")
+
   override def inputTypes: Seq[AbstractDataType] = value.dataType +: list.map(_.dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -116,12 +125,31 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
 
   override def children: Seq[Expression] = value +: list
 
-  override def nullable: Boolean = false // TODO: Figure out correct nullability semantics of IN.
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
-    list.exists(e => e.eval(input) == evaluatedValue)
+    if (evaluatedValue == null) {
+      null
+    } else {
+      var hasNull = false
+      list.foreach { e =>
+        val v = e.eval(input)
+        if (v == evaluatedValue) {
+          return true
+        } else if (v == null) {
+          hasNull = true
+        }
+      }
+      if (hasNull) {
+        null
+      } else {
+        false
+      }
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -129,18 +157,23 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
     val listGen = list.map(_.gen(ctx))
     val listCode = listGen.map(x =>
       s"""
-        if (!${ev.primitive}) {
+        if (!${ev.value}) {
           ${x.code}
-          if (${ctx.genEqual(value.dataType, valueGen.primitive, x.primitive)}) {
-            ${ev.primitive} = true;
+          if (${x.isNull}) {
+            ${ev.isNull} = true;
+          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
+            ${ev.isNull} = false;
+            ${ev.value} = true;
           }
         }
        """).mkString("\n")
     s"""
       ${valueGen.code}
-      boolean ${ev.primitive} = false;
-      boolean ${ev.isNull} = false;
-      $listCode
+      boolean ${ev.value} = false;
+      boolean ${ev.isNull} = ${valueGen.isNull};
+      if (!${ev.isNull}) {
+        $listCode
+      }
     """
   }
 }
@@ -151,11 +184,22 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
  */
 case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
 
-  override def nullable: Boolean = false // TODO: Figure out correct nullability semantics of IN.
+  require(hset != null, "hset could not be null")
+
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
 
-  override def eval(input: InternalRow): Any = {
-    hset.contains(child.eval(input))
+  @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+
+  override def nullable: Boolean = child.nullable || hasNull
+
+  protected override def nullSafeEval(value: Any): Any = {
+    if (hset.contains(value)) {
+      true
+    } else if (hasNull) {
+      null
+    } else {
+      false
+    }
   }
 
   def getHSet(): Set[Any] = hset
@@ -166,12 +210,20 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     val childGen = child.gen(ctx)
     ctx.references += this
     val hsetTerm = ctx.freshName("hset")
+    val hasNullTerm = ctx.freshName("hasNull")
     ctx.addMutableState(setName, hsetTerm,
       s"$hsetTerm = (($InSetName)expressions[${ctx.references.size - 1}]).getHSet();")
+    ctx.addMutableState("boolean", hasNullTerm, s"$hasNullTerm = $hsetTerm.contains(null);")
     s"""
       ${childGen.code}
-      boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = $hsetTerm.contains(${childGen.primitive});
+      boolean ${ev.isNull} = ${childGen.isNull};
+      boolean ${ev.value} = false;
+      if (!${ev.isNull}) {
+        ${ev.value} = $hsetTerm.contains(${childGen.value});
+        if (!${ev.value} && $hasNullTerm) {
+          ${ev.isNull} = true;
+        }
+      }
      """
   }
 }
@@ -208,14 +260,14 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = false;
+      boolean ${ev.value} = false;
 
-      if (!${eval1.isNull} && !${eval1.primitive}) {
+      if (!${eval1.isNull} && !${eval1.value}) {
       } else {
         ${eval2.code}
-        if (!${eval2.isNull} && !${eval2.primitive}) {
+        if (!${eval2.isNull} && !${eval2.value}) {
         } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.primitive} = true;
+          ${ev.value} = true;
         } else {
           ${ev.isNull} = true;
         }
@@ -257,14 +309,14 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = true;
+      boolean ${ev.value} = true;
 
-      if (!${eval1.isNull} && ${eval1.primitive}) {
+      if (!${eval1.isNull} && ${eval1.value}) {
       } else {
         ${eval2.code}
-        if (!${eval2.isNull} && ${eval2.primitive}) {
+        if (!${eval2.isNull} && ${eval2.value}) {
         } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.primitive} = false;
+          ${ev.value} = false;
         } else {
           ${ev.isNull} = true;
         }
@@ -360,10 +412,10 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val equalCode = ctx.genEqual(left.dataType, eval1.primitive, eval2.primitive)
+    val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
     ev.isNull = "false"
     eval1.code + eval2.code + s"""
-        boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||
+        boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
            (!${eval1.isNull} && $equalCode);
       """
   }

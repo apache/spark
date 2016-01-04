@@ -150,6 +150,25 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
+  <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">@VisibleForTesting</parameter></parameters>
+    <customMessage><![CDATA[
+      @VisibleForTesting causes classpath issues. Please note this in the java doc instead (SPARK-11615).
+    ]]></customMessage>
+  </check>
+
+  <check customId="runtimeaddshutdownhook" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Runtime\.getRuntime\.addShutdownHook</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use Runtime.getRuntime.addShutdownHook? In most cases, you should use
+      ShutdownHookManager.addShutdownHook instead.
+      If you must use Runtime.getRuntime.addShutdownHook, wrap the code block with
+      // scalastyle:off runtimeaddshutdownhook
+      Runtime.getRuntime.addShutdownHook(...)
+      // scalastyle:on runtimeaddshutdownhook
+    ]]></customMessage>
+  </check>
+
   <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Class\.forName</parameter></parameters>
     <customMessage><![CDATA[
@@ -187,6 +206,18 @@ This file is divided into 3 sections:
 
   <!-- Should turn this on, but we have a few places that need to be fixed first -->
   <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="false"></check>
+
+  <!-- Import ordering. Currently warning only since there are lots of violations. -->
+  <check level="warning" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">
+    <parameters>
+      <parameter name="groups">java,scala,3rdParty,spark</parameter>
+      <parameter name="group.java">javax?\..*</parameter>
+      <parameter name="group.scala">scala\..*</parameter>
+      <parameter name="group.3rdParty">(?!org\.apache\.spark\.).*</parameter>
+      <parameter name="group.spark">org\.apache\.spark\..*</parameter>
+    </parameters>
+  </check>
+
 
   <!-- ================================================================================ -->
   <!--                               rules we don't want                                -->

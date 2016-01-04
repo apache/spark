@@ -51,7 +51,9 @@ abstract class DataType extends AbstractDataType {
   def defaultSize: Int
 
   /** Name of the type used in JSON serialization. */
-  def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
+  def typeName: String = {
+    this.getClass.getSimpleName.stripSuffix("$").stripSuffix("Type").stripSuffix("UDT").toLowerCase
+  }
 
   private[sql] def jsonValue: JValue = typeName
 
@@ -63,6 +65,9 @@ abstract class DataType extends AbstractDataType {
 
   /** Readable string representation for the type. */
   def simpleString: String = typeName
+
+  /** Readable string representation for the type with truncation */
+  private[sql] def simpleString(maxNumberFields: Int): String = simpleString
 
   /**
    * Check if `this` and `other` are the same data type when ignoring nullability
@@ -102,8 +107,8 @@ object DataType {
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
   private val nonDecimalNameToType = {
-    Seq(NullType, DateType, TimestampType, BinaryType,
-      IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 
@@ -125,7 +130,7 @@ object DataType {
   }
 
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
-  private def parseDataType(json: JValue): DataType = json match {
+  private[sql] def parseDataType(json: JValue): DataType = json match {
     case JString(name) =>
       nameToType(name)
 

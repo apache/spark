@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.api.r
 
-import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.feature.RFormula
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.sql.DataFrame
 
 private[r] object SparkRWrappers {
@@ -30,29 +30,58 @@ private[r] object SparkRWrappers {
       df: DataFrame,
       family: String,
       lambda: Double,
-      alpha: Double): PipelineModel = {
+      alpha: Double,
+      standardize: Boolean,
+      solver: String): PipelineModel = {
     val formula = new RFormula().setFormula(value)
     val estimator = family match {
       case "gaussian" => new LinearRegression()
         .setRegParam(lambda)
         .setElasticNetParam(alpha)
         .setFitIntercept(formula.hasIntercept)
+        .setStandardization(standardize)
+        .setSolver(solver)
       case "binomial" => new LogisticRegression()
         .setRegParam(lambda)
         .setElasticNetParam(alpha)
         .setFitIntercept(formula.hasIntercept)
+        .setStandardization(standardize)
     }
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
     pipeline.fit(df)
   }
 
-  def getModelWeights(model: PipelineModel): Array[Double] = {
+  def getModelCoefficients(model: PipelineModel): Array[Double] = {
+    model.stages.last match {
+      case m: LinearRegressionModel => {
+        val coefficientStandardErrorsR = Array(m.summary.coefficientStandardErrors.last) ++
+          m.summary.coefficientStandardErrors.dropRight(1)
+        val tValuesR = Array(m.summary.tValues.last) ++ m.summary.tValues.dropRight(1)
+        val pValuesR = Array(m.summary.pValues.last) ++ m.summary.pValues.dropRight(1)
+        if (m.getFitIntercept) {
+          Array(m.intercept) ++ m.coefficients.toArray ++ coefficientStandardErrorsR ++
+            tValuesR ++ pValuesR
+        } else {
+          m.coefficients.toArray ++ coefficientStandardErrorsR ++ tValuesR ++ pValuesR
+        }
+      }
+      case m: LogisticRegressionModel => {
+        if (m.getFitIntercept) {
+          Array(m.intercept) ++ m.coefficients.toArray
+        } else {
+          m.coefficients.toArray
+        }
+      }
+    }
+  }
+
+  def getModelDevianceResiduals(model: PipelineModel): Array[Double] = {
     model.stages.last match {
       case m: LinearRegressionModel =>
-        Array(m.intercept) ++ m.weights.toArray
-      case _: LogisticRegressionModel =>
+        m.summary.devianceResiduals
+      case m: LogisticRegressionModel =>
         throw new UnsupportedOperationException(
-          "No weights available for LogisticRegressionModel")  // SPARK-9492
+          "No deviance residuals available for LogisticRegressionModel")
     }
   }
 
@@ -61,10 +90,28 @@ private[r] object SparkRWrappers {
       case m: LinearRegressionModel =>
         val attrs = AttributeGroup.fromStructField(
           m.summary.predictions.schema(m.summary.featuresCol))
-        Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get)
-      case _: LogisticRegressionModel =>
-        throw new UnsupportedOperationException(
-          "No features names available for LogisticRegressionModel")  // SPARK-9492
+        if (m.getFitIntercept) {
+          Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get)
+        } else {
+          attrs.attributes.get.map(_.name.get)
+        }
+      case m: LogisticRegressionModel =>
+        val attrs = AttributeGroup.fromStructField(
+          m.summary.predictions.schema(m.summary.featuresCol))
+        if (m.getFitIntercept) {
+          Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get)
+        } else {
+          attrs.attributes.get.map(_.name.get)
+        }
+    }
+  }
+
+  def getModelName(model: PipelineModel): String = {
+    model.stages.last match {
+      case m: LinearRegressionModel =>
+        "LinearRegressionModel"
+      case m: LogisticRegressionModel =>
+        "LogisticRegressionModel"
     }
   }
 }

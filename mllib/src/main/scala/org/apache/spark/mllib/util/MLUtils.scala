@@ -19,19 +19,14 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
-
-import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.util.random.BernoulliCellSampler
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.annotation.Since
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -263,14 +258,20 @@ object MLUtils {
   }
 
   /**
-   * :: Experimental ::
    * Return a k element array of pairs of RDDs with the first element of each pair
    * containing the training data, a complement of the validation data and the second
    * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
   @Since("1.0.0")
-  @Experimental
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
+    kFold(rdd, numFolds, seed.toLong)
+  }
+
+  /**
+   * Version of [[kFold()]] taking a Long seed.
+   */
+  @Since("2.0.0")
+  def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Long): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
       val sampler = new BernoulliCellSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,

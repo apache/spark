@@ -23,8 +23,8 @@ import java.util.jar.JarFile
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
-import scala.reflect.runtime.universe.runtimeMirror
 import scala.reflect.runtime.{universe => unv}
+import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
 
 /**
@@ -72,7 +72,9 @@ object GenerateMIMAIgnore {
         val classSymbol = mirror.classSymbol(Class.forName(className, false, classLoader))
         val moduleSymbol = mirror.staticModule(className)
         val directlyPrivateSpark =
-          isPackagePrivate(classSymbol) || isPackagePrivateModule(moduleSymbol)
+          isPackagePrivate(classSymbol) ||
+          isPackagePrivateModule(moduleSymbol) ||
+          classSymbol.isPrivate
         val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
         val experimental = isExperimental(classSymbol) || isExperimental(moduleSymbol)
         /* Inner classes defined within a private[spark] class or object are effectively

@@ -17,21 +17,19 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
+import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: Experimental ::
  * Evaluator for regression.
  *
  * @param predictionAndObservations an RDD of (prediction, observation) pairs.
  */
 @Since("1.2.0")
-@Experimental
 class RegressionMetrics @Since("1.2.0") (
     predictionAndObservations: RDD[(Double, Double)]) extends Logging {
 

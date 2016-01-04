@@ -19,11 +19,12 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.spark.rpc.RpcAddress
+import org.apache.spark.rpc.{RpcEndpointAddress, RpcAddress}
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
-import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
+import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
 private[spark] class SparkDeploySchedulerBackend(
@@ -36,6 +37,9 @@ private[spark] class SparkDeploySchedulerBackend(
 
   private var client: AppClient = null
   private var stopping = false
+  private val launcherBackend = new LauncherBackend() {
+    override protected def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
+  }
 
   @volatile var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
   @volatile private var appId: String = _
@@ -47,11 +51,13 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def start() {
     super.start()
+    launcherBackend.connect()
 
     // The endpoint for executors to talk to us
-    val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
-      RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    val driverUrl = RpcEndpointAddress(
+      sc.conf.get("spark.driver.host"),
+      sc.conf.get("spark.driver.port").toInt,
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     val args = Seq(
       "--driver-url", driverUrl,
       "--executor-id", "{{EXECUTOR_ID}}",
@@ -87,24 +93,20 @@ private[spark] class SparkDeploySchedulerBackend(
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
+    launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()
+    launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
-  override def stop() {
-    stopping = true
-    super.stop()
-    client.stop()
-
-    val callback = shutdownCallback
-    if (callback != null) {
-      callback(this)
-    }
+  override def stop(): Unit = synchronized {
+    stop(SparkAppHandle.State.FINISHED)
   }
 
   override def connected(appId: String) {
     logInfo("Connected to Spark cluster with app ID " + appId)
     this.appId = appId
     notifyContext()
+    launcherBackend.setAppId(appId)
   }
 
   override def disconnected() {
@@ -117,6 +119,7 @@ private[spark] class SparkDeploySchedulerBackend(
   override def dead(reason: String) {
     notifyContext()
     if (!stopping) {
+      launcherBackend.setState(SparkAppHandle.State.KILLED)
       logError("Application has been killed. Reason: " + reason)
       try {
         scheduler.error(reason)
@@ -135,11 +138,11 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
-      case Some(code) => ExecutorExited(code)
+      case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => SlaveLost(message)
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
-    removeExecutor(fullId.split("/")(1), reason.toString)
+    removeExecutor(fullId.split("/")(1), reason)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -186,6 +189,23 @@ private[spark] class SparkDeploySchedulerBackend(
 
   private def notifyContext() = {
     registrationBarrier.release()
+  }
+
+  private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
+    try {
+      stopping = true
+
+      super.stop()
+      client.stop()
+
+      val callback = shutdownCallback
+      if (callback != null) {
+        callback(this)
+      }
+    } finally {
+      launcherBackend.setState(finalState)
+      launcherBackend.close()
+    }
   }
 
 }

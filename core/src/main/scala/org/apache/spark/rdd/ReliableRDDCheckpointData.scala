@@ -28,7 +28,7 @@ import org.apache.spark.util.SerializableConfiguration
  * An implementation of checkpointing that writes the RDD data to reliable storage.
  * This allows drivers to be restarted on failure with previously computed state.
  */
-private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
+private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private val rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   // The directory to which the associated RDD has been checkpointed to
@@ -55,25 +55,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
    * This is called immediately after the first action invoked on this RDD has completed.
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
-
-    // Create the output path for the checkpoint
-    val path = new Path(cpDir)
-    val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
-    if (!fs.mkdirs(path)) {
-      throw new SparkException(s"Failed to create checkpoint path $cpDir")
-    }
-
-    // Save to file, and reload it as an RDD
-    val broadcastedConf = rdd.context.broadcast(
-      new SerializableConfiguration(rdd.context.hadoopConfiguration))
-    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
-    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _)
-    val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir)
-    if (newRDD.partitions.length != rdd.partitions.length) {
-      throw new SparkException(
-        s"Checkpoint RDD $newRDD(${newRDD.partitions.length}) has different " +
-          s"number of partitions from original RDD $rdd(${rdd.partitions.length})")
-    }
+    val newRDD = ReliableCheckpointRDD.writeRDDToCheckpointDirectory(rdd, cpDir)
 
     // Optionally clean our checkpoint files if the reference is out of scope
     if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
@@ -83,13 +65,12 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient rdd: RDD[
     }
 
     logInfo(s"Done checkpointing RDD ${rdd.id} to $cpDir, new parent is RDD ${newRDD.id}")
-
     newRDD
   }
 
 }
 
-private[spark] object ReliableRDDCheckpointData {
+private[spark] object ReliableRDDCheckpointData extends Logging {
 
   /** Return the path of the directory to which this RDD's checkpoint data is written. */
   def checkpointPath(sc: SparkContext, rddId: Int): Option[Path] = {
@@ -101,7 +82,9 @@ private[spark] object ReliableRDDCheckpointData {
     checkpointPath(sc, rddId).foreach { path =>
       val fs = path.getFileSystem(sc.hadoopConfiguration)
       if (fs.exists(path)) {
-        fs.delete(path, true)
+        if (!fs.delete(path, true)) {
+          logWarning(s"Error deleting ${path.toString()}")
+        }
       }
     }
   }

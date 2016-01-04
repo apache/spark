@@ -26,13 +26,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
-import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
+import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.hive.common.FileUtils
+import org.apache.hadoop.mapreduce.TaskType
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -45,18 +45,16 @@ import org.apache.spark.util.SerializableJobConf
  * It is based on [[SparkHadoopWriter]].
  */
 private[hive] class SparkHiveWriterContainer(
-    @transient jobConf: JobConf,
+    jobConf: JobConf,
     fileSinkConf: FileSinkDesc)
-  extends Logging
-  with SparkHadoopMapRedUtil
-  with Serializable {
+  extends Logging with Serializable {
 
   private val now = new Date()
   private val tableDesc: TableDesc = fileSinkConf.getTableInfo
   // Add table properties from storage handler to jobConf, so any custom storage
   // handler settings can be set to jobConf
   if (tableDesc != null) {
-    PlanUtils.configureOutputJobPropertiesForStorageHandler(tableDesc)
+    HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, false)
     Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
   }
   protected val conf = new SerializableJobConf(jobConf)
@@ -69,8 +67,8 @@ private[hive] class SparkHiveWriterContainer(
 
   @transient private var writer: FileSinkOperator.RecordWriter = null
   @transient protected lazy val committer = conf.value.getOutputCommitter
-  @transient protected lazy val jobContext = newJobContext(conf.value, jID.value)
-  @transient private lazy val taskContext = newTaskAttemptContext(conf.value, taID.value)
+  @transient protected lazy val jobContext = new JobContextImpl(conf.value, jID.value)
+  @transient private lazy val taskContext = new TaskAttemptContextImpl(conf.value, taID.value)
   @transient private lazy val outputFormat =
     conf.value.getOutputFormat.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
 
@@ -122,7 +120,7 @@ private[hive] class SparkHiveWriterContainer(
   }
 
   protected def commit() {
-    SparkHadoopMapRedUtil.commitTask(committer, taskContext, jobID, splitID, attemptID)
+    SparkHadoopMapRedUtil.commitTask(committer, taskContext, jobID, splitID)
   }
 
   private def setIDs(jobId: Int, splitId: Int, attemptId: Int) {
@@ -132,7 +130,7 @@ private[hive] class SparkHiveWriterContainer(
 
     jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobId))
     taID = new SerializableWritable[TaskAttemptID](
-      new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
+      new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
   }
 
   private def setConfParams() {
@@ -163,7 +161,7 @@ private[spark] object SparkHiveDynamicPartitionWriterContainer {
 }
 
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
-    @transient jobConf: JobConf,
+    jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
     dynamicPartColNames: Array[String])
   extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
@@ -194,10 +192,10 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     // Better solution is to add a step similar to what Hive FileSinkOperator.jobCloseOp does:
     // calling something like Utilities.mvFileToFinalPath to cleanup the output directory and then
     // load it with loadDynamicPartitions/loadPartition/loadTable.
-    val oldMarker = jobConf.getBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
-    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, false)
+    val oldMarker = conf.value.getBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
+    conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, false)
     super.commitJob()
-    jobConf.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
+    conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
   }
 
   override def getLocalFileWriter(row: InternalRow, schema: StructType)

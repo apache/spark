@@ -58,7 +58,7 @@ object CassandraTest {
     val sc = new SparkContext(sparkConf)
 
     // Build the job configuration with ConfigHelper provided by Cassandra
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[ColumnFamilyInputFormat])
 
     val host: String = args(1)

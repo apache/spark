@@ -47,6 +47,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
   override def dataType: DataType = DecimalType(precision, scale)
+  override def nullable: Boolean = true
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
   protected override def nullSafeEval(input: Any): Any =
@@ -55,8 +56,8 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
-        ${ev.primitive} = (new Decimal()).setOrNull($eval, $precision, $scale);
-        ${ev.isNull} = ${ev.primitive} == null;
+        ${ev.value} = (new Decimal()).setOrNull($eval, $precision, $scale);
+        ${ev.isNull} = ${ev.value} == null;
       """
     })
   }
@@ -97,7 +98,7 @@ case class CheckOverflow(child: Expression, dataType: DecimalType) extends Unary
       s"""
          | Decimal $tmp = $eval.clone();
          | if ($tmp.changePrecision(${dataType.precision}, ${dataType.scale})) {
-         |   ${ev.primitive} = $tmp;
+         |   ${ev.value} = $tmp;
          | } else {
          |   ${ev.isNull} = true;
          | }

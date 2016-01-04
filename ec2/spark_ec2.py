@@ -51,7 +51,7 @@ else:
     raw_input = input
     xrange = range
 
-SPARK_EC2_VERSION = "1.4.0"
+SPARK_EC2_VERSION = "1.6.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -71,6 +71,11 @@ VALID_SPARK_VERSIONS = set([
     "1.3.0",
     "1.3.1",
     "1.4.0",
+    "1.4.1",
+    "1.5.0",
+    "1.5.1",
+    "1.5.2",
+    "1.6.0",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -84,6 +89,11 @@ SPARK_TACHYON_MAP = {
     "1.3.0": "0.5.0",
     "1.3.1": "0.5.0",
     "1.4.0": "0.6.4",
+    "1.4.1": "0.6.4",
+    "1.5.0": "0.7.1",
+    "1.5.1": "0.7.1",
+    "1.5.2": "0.7.1",
+    "1.6.0": "0.8.2",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
@@ -91,7 +101,7 @@ DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
 # Default location to get the spark-ec2 scripts (and ami-list) from
 DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/amplab/spark-ec2"
-DEFAULT_SPARK_EC2_BRANCH = "branch-1.4"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.5"
 
 
 def setup_external_libs(libs):
@@ -177,6 +187,10 @@ def parse_args():
     parser.add_option(
         "-i", "--identity-file",
         help="SSH private key file to use for logging into instances")
+    parser.add_option(
+        "-p", "--profile", default=None,
+        help="If you have multiple profiles (AWS or boto config), you can configure " +
+             "additional, named profiles by using this option (default: %default)")
     parser.add_option(
         "-t", "--instance-type", default="m1.large",
         help="Type of instance to launch (default: %default). " +
@@ -587,7 +601,7 @@ def launch_cluster(conn, opts, cluster_name):
             dev = BlockDeviceType()
             dev.ephemeral_name = 'ephemeral%d' % i
             # The first ephemeral drive is /dev/sdb.
-            name = '/dev/sd' + string.letters[i + 1]
+            name = '/dev/sd' + string.ascii_letters[i + 1]
             block_map[name] = dev
 
     # Launch slaves
@@ -1234,6 +1248,10 @@ def get_ip_address(instance, private_ips=False):
 def get_dns_name(instance, private_ips=False):
     dns = instance.public_dns_name if not private_ips else \
         instance.private_ip_address
+    if not dns:
+        raise UsageError("Failed to determine hostname of {0}.\n"
+                         "Please check that you provided --private-ips if "
+                         "necessary".format(instance))
     return dns
 
 
@@ -1311,7 +1329,10 @@ def real_main():
         sys.exit(1)
 
     try:
-        conn = ec2.connect_to_region(opts.region)
+        if opts.profile is None:
+            conn = ec2.connect_to_region(opts.region)
+        else:
+            conn = ec2.connect_to_region(opts.region, profile_name=opts.profile)
     except Exception as e:
         print((e), file=stderr)
         sys.exit(1)

@@ -19,10 +19,10 @@ package org.apache.spark
 
 import java.io.{File, FileWriter}
 
+import scala.io.Source
+
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.storage.StorageLevel
-
-import scala.io.Source
 
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
@@ -43,8 +43,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   override def afterEach() {
-    super.afterEach()
-    Utils.deleteRecursively(tempDir)
+    try {
+      Utils.deleteRecursively(tempDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("text files") {
@@ -502,12 +505,13 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
       Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
-    val job = new Job(sc.hadoopConfiguration)
+    val job = Job.getInstance(sc.hadoopConfiguration)
     job.setOutputKeyClass(classOf[String])
     job.setOutputValueClass(classOf[String])
     job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])
-    job.getConfiguration.set("mapred.output.dir", tempDir.getPath + "/outputDataset_new")
-    randomRDD.saveAsNewAPIHadoopDataset(job.getConfiguration)
+    val jobConfig = job.getConfiguration
+    jobConfig.set("mapred.output.dir", tempDir.getPath + "/outputDataset_new")
+    randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists() === true)
   }
 

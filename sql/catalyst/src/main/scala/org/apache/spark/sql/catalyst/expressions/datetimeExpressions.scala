@@ -82,7 +82,7 @@ case class DateAdd(startDate: Expression, days: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.primitive} = $sd + $d;"""
+      s"""${ev.value} = $sd + $d;"""
     })
   }
 }
@@ -105,7 +105,7 @@ case class DateSub(startDate: Expression, days: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.primitive} = $sd - $d;"""
+      s"""${ev.value} = $sd - $d;"""
     })
   }
 }
@@ -269,7 +269,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
          """)
       s"""
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.primitive} = $c.get($cal.WEEK_OF_YEAR);
+        ${ev.value} = $c.get($cal.WEEK_OF_YEAR);
       """
     })
   }
@@ -299,7 +299,20 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 }
 
 /**
- * Converts time string with given pattern
+ * Converts time string with given pattern.
+ * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
+ */
+case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
+  override def left: Expression = timeExp
+  override def right: Expression = format
+
+  def this(time: Expression) = {
+    this(time, Literal("yyyy-MM-dd HH:mm:ss"))
+  }
+}
+
+/**
+ * Converts time string with given pattern.
  * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
  * to Unix time stamp (in seconds), returns null if fail.
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
@@ -308,9 +321,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
  */
-case class UnixTimestamp(timeExp: Expression, format: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
-
+case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
   override def left: Expression = timeExp
   override def right: Expression = format
 
@@ -321,11 +332,15 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
   def this() = {
     this(CurrentTimestamp())
   }
+}
+
+abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
 
   override def dataType: DataType = LongType
+  override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
 
@@ -347,7 +362,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
             null
           }
         case StringType =>
-          val f = format.eval(input)
+          val f = right.eval(input)
           if (f == null) {
             null
           } else {
@@ -368,19 +383,19 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
         if (fString == null) {
           s"""
             boolean ${ev.isNull} = true;
-            ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           """
         } else {
           val eval1 = left.gen(ctx)
           s"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
-            ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
                 $sdf $formatter = new $sdf("$fString");
-                ${ev.primitive} =
-                  $formatter.parse(${eval1.primitive}.toString()).getTime() / 1000L;
+                ${ev.value} =
+                  $formatter.parse(${eval1.value}.toString()).getTime() / 1000L;
               } catch (java.lang.Throwable e) {
                 ${ev.isNull} = true;
               }
@@ -392,7 +407,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.primitive} =
+              ${ev.value} =
                 (new $sdf($format.toString())).parse($string.toString()).getTime() / 1000L;
             } catch (java.lang.Throwable e) {
               ${ev.isNull} = true;
@@ -404,9 +419,9 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
         s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = ${eval1.primitive} / 1000000L;
+            ${ev.value} = ${eval1.value} / 1000000L;
           }
         """
       case DateType =>
@@ -415,9 +430,9 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
         s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $dtu.daysToMillis(${eval1.primitive}) / 1000L;
+            ${ev.value} = $dtu.daysToMillis(${eval1.value}) / 1000L;
           }
         """
     }
@@ -441,6 +456,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
   }
 
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
@@ -477,18 +493,18 @@ case class FromUnixTime(sec: Expression, format: Expression)
       if (constFormat == null) {
         s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """
       } else {
         val t = left.gen(ctx)
         s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
-              ${ev.primitive} = UTF8String.fromString(new $sdf("${constFormat.toString}").format(
-                new java.util.Date(${t.primitive} * 1000L)));
+              ${ev.value} = UTF8String.fromString(new $sdf("${constFormat.toString}").format(
+                new java.util.Date(${t.value} * 1000L)));
             } catch (java.lang.Throwable e) {
               ${ev.isNull} = true;
             }
@@ -499,7 +515,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.primitive} = UTF8String.fromString((new $sdf($f.toString())).format(
+          ${ev.value} = UTF8String.fromString((new $sdf($f.toString())).format(
             new java.util.Date($seconds * 1000L)));
         } catch (java.lang.Throwable e) {
           ${ev.isNull} = true;
@@ -547,6 +563,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
 
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
 
   override def nullSafeEval(start: Any, dayOfW: Any): Any = {
     val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
@@ -571,7 +588,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
         } else {
           val dayOfWeekValue = DateTimeUtils.getDayOfWeekFromString(input)
           s"""
-             |${ev.primitive} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekValue);
+             |${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekValue);
            """.stripMargin
         }
       } else {
@@ -580,7 +597,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
            |if ($dayOfWeekTerm == -1) {
            |  ${ev.isNull} = true;
            |} else {
-           |  ${ev.primitive} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
+           |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
            |}
          """.stripMargin
       }
@@ -640,7 +657,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
       if (tz == null) {
         s"""
            |boolean ${ev.isNull} = true;
-           |long ${ev.primitive} = 0;
+           |long ${ev.value} = 0;
          """.stripMargin
       } else {
         val tzTerm = ctx.freshName("tz")
@@ -650,10 +667,10 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         s"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.primitive} = 0;
+           |long ${ev.value} = 0;
            |if (!${ev.isNull}) {
-           |  ${ev.primitive} = ${eval.primitive} +
-           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000L;
+           |  ${ev.value} = ${eval.value} +
+           |   ${tzTerm}.getOffset(${eval.value} / 1000) * 1000L;
            |}
          """.stripMargin
       }
@@ -765,7 +782,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       if (tz == null) {
         s"""
            |boolean ${ev.isNull} = true;
-           |long ${ev.primitive} = 0;
+           |long ${ev.value} = 0;
          """.stripMargin
       } else {
         val tzTerm = ctx.freshName("tz")
@@ -775,10 +792,10 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         s"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.primitive} = 0;
+           |long ${ev.value} = 0;
            |if (!${ev.isNull}) {
-           |  ${ev.primitive} = ${eval.primitive} -
-           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000L;
+           |  ${ev.value} = ${eval.value} -
+           |   ${tzTerm}.getOffset(${eval.value} / 1000) * 1000L;
            |}
          """.stripMargin
       }
@@ -818,6 +835,7 @@ case class TruncDate(date: Expression, format: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
   override def prettyName: String = "trunc"
 
   private lazy val truncLevel: Int =
@@ -849,16 +867,16 @@ case class TruncDate(date: Expression, format: Expression)
       if (truncLevel == -1) {
         s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """
       } else {
         val d = date.gen(ctx)
         s"""
           ${d.code}
           boolean ${ev.isNull} = ${d.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $dtu.truncDate(${d.primitive}, $truncLevel);
+            ${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);
           }
         """
       }
@@ -870,7 +888,7 @@ case class TruncDate(date: Expression, format: Expression)
           if ($form == -1) {
             ${ev.isNull} = true;
           } else {
-            ${ev.primitive} = $dtu.truncDate($dateVal, $form);
+            ${ev.value} = $dtu.truncDate($dateVal, $form);
           }
         """
       })

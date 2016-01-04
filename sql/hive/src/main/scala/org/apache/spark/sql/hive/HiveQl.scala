@@ -25,29 +25,30 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.lib.Node
-import org.apache.hadoop.hive.ql.parse._
+import org.apache.hadoop.hive.ql.parse.SemanticException
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
-
+import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
+import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.{logical, _}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
+import org.apache.spark.sql.parser._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, catalyst}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
@@ -76,6 +77,16 @@ private[hive] case class CreateTableAsSelect(
     childrenResolved
 }
 
+private[hive] case class CreateViewAsSelect(
+    tableDesc: HiveTable,
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    sql: String) extends UnaryNode with Command {
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  override lazy val resolved: Boolean = false
+}
+
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl extends Logging {
   protected val nativeCommands = Seq(
@@ -98,7 +109,6 @@ private[hive] object HiveQl extends Logging {
     "TOK_ALTERTABLE_SKEWED",
     "TOK_ALTERTABLE_TOUCH",
     "TOK_ALTERTABLE_UNARCHIVE",
-    "TOK_ALTERVIEW",
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
@@ -108,8 +118,8 @@ private[hive] object HiveQl extends Logging {
     "TOK_CREATEDATABASE",
     "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
+    "TOK_CREATEMACRO",
     "TOK_CREATEROLE",
-    "TOK_CREATEVIEW",
 
     "TOK_DESCDATABASE",
     "TOK_DESCFUNCTION",
@@ -117,6 +127,7 @@ private[hive] object HiveQl extends Logging {
     "TOK_DROPDATABASE",
     "TOK_DROPFUNCTION",
     "TOK_DROPINDEX",
+    "TOK_DROPMACRO",
     "TOK_DROPROLE",
     "TOK_DROPTABLE_PROPERTIES",
     "TOK_DROPVIEW",
@@ -216,7 +227,7 @@ private[hive] object HiveQl extends Logging {
      */
     def withChildren(newChildren: Seq[ASTNode]): ASTNode = {
       (1 to n.getChildCount).foreach(_ => n.deleteChild(0))
-      n.addChildren(newChildren.asJava)
+      newChildren.foreach(n.addChild(_))
       n
     }
 
@@ -253,22 +264,32 @@ private[hive] object HiveQl extends Logging {
      * Otherwise, there will be Null pointer exception,
      * when retrieving properties form HiveConf.
      */
-    val hContext = new Context(SessionState.get().getConf())
-    val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
+    val hContext = createContext()
+    val node = getAst(sql, hContext)
     hContext.clear()
     node
   }
+
+  private def createContext(): Context = new Context(hiveConf)
+
+  private def getAst(sql: String, context: Context) =
+    ParseUtils.findRootNonNullToken(
+        (new ParseDriver).parse(sql, context))
 
   /**
    * Returns the HiveConf
    */
   private[this] def hiveConf: HiveConf = {
-    val ss = SessionState.get() // SessionState is lazy initialization, it can be null here
+    var ss = SessionState.get()
+    // SessionState is lazy initialization, it can be null here
     if (ss == null) {
-      new HiveConf()
-    } else {
-      ss.getConf
+      val original = Thread.currentThread().getContextClassLoader
+      val conf = new HiveConf(classOf[SessionState])
+      conf.setClassLoader(original)
+      ss = new SessionState(conf)
+      SessionState.start(ss)
     }
+    ss.getConf
   }
 
   /** Returns a LogicalPlan for a given HiveQL string. */
@@ -279,17 +300,20 @@ private[hive] object HiveQl extends Logging {
   /** Creates LogicalPlan for a given HiveQL string. */
   def createPlan(sql: String): LogicalPlan = {
     try {
-      val tree = getAst(sql)
-      if (nativeCommands contains tree.getText) {
+      val context = createContext()
+      val tree = getAst(sql, context)
+      val plan = if (nativeCommands contains tree.getText) {
         HiveNativeCommand(sql)
       } else {
-        nodeToPlan(tree) match {
+        nodeToPlan(tree, context) match {
           case NativePlaceholder => HiveNativeCommand(sql)
           case other => other
         }
       }
+      context.clear()
+      plan
     } catch {
-      case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
+      case pe: ParseException =>
         pe.getMessage match {
           case errorRegEx(line, start, message) =>
             throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
@@ -314,7 +338,8 @@ private[hive] object HiveQl extends Logging {
     val tree =
       try {
         ParseUtils.findRootNonNullToken(
-          (new ParseDriver).parse(ddl, null /* no context required for parsing alone */))
+          (new ParseDriver)
+            .parse(ddl, null /* no context required for parsing alone */))
       } catch {
         case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
           throw new RuntimeException(s"Failed to parse ddl: '$ddl'", pe)
@@ -330,6 +355,14 @@ private[hive] object HiveQl extends Logging {
   }
 
   /** Extractor for matching Hive's AST Tokens. */
+  private[hive] case class Token(name: String, children: Seq[ASTNode]) extends Node {
+    def getName(): String = name
+    def getChildren(): java.util.List[Node] = {
+      val col = new java.util.ArrayList[Node](children.size)
+      children.foreach(col.add(_))
+      col
+    }
+  }
   object Token {
     /** @return matches of the form (tokenName, children). */
     def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
@@ -337,11 +370,14 @@ private[hive] object HiveQl extends Logging {
         CurrentOrigin.setPosition(t.getLine, t.getCharPositionInLine)
         Some((t.getText,
           Option(t.getChildren).map(_.asScala.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
+      case t: Token => Some((t.name, t.children))
       case _ => None
     }
   }
 
-  protected def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode]): Seq[Option[Node]] = {
+  protected def getClauses(
+      clauseNames: Seq[String],
+      nodeList: Seq[ASTNode]): Seq[Option[ASTNode]] = {
     var remainingNodes = nodeList
     val clauses = clauseNames.map { clauseName =>
       val (matches, nonMatches) = remainingNodes.partition(_.getText.toUpperCase == clauseName)
@@ -421,24 +457,12 @@ private[hive] object HiveQl extends Logging {
       throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
   }
 
-  protected def extractDbNameTableName(tableNameParts: Node): (Option[String], String) = {
-    val (db, tableName) =
-      tableNameParts.getChildren.asScala.map {
-        case Token(part, Nil) => cleanIdentifier(part)
-      } match {
-        case Seq(tableOnly) => (None, tableOnly)
-        case Seq(databaseName, table) => (Some(databaseName), table)
-      }
-
-    (db, tableName)
-  }
-
-  protected def extractTableIdent(tableNameParts: Node): Seq[String] = {
+  protected def extractTableIdent(tableNameParts: Node): TableIdentifier = {
     tableNameParts.getChildren.asScala.map {
       case Token(part, Nil) => cleanIdentifier(part)
     } match {
-      case Seq(tableOnly) => Seq(tableOnly)
-      case Seq(databaseName, table) => Seq(databaseName, table)
+      case Seq(tableOnly) => TableIdentifier(tableOnly)
+      case Seq(databaseName, table) => TableIdentifier(table, Some(databaseName))
       case other => sys.error("Hive only supports tables names like 'tableName' " +
         s"or 'databaseName.tableName', found '$other'")
     }
@@ -488,7 +512,43 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
   }
 
-  protected def nodeToPlan(node: Node): LogicalPlan = node match {
+  private def createView(
+      view: ASTNode,
+      context: Context,
+      viewNameParts: ASTNode,
+      query: ASTNode,
+      schema: Seq[HiveColumn],
+      properties: Map[String, String],
+      allowExist: Boolean,
+      replace: Boolean): CreateViewAsSelect = {
+    val TableIdentifier(viewName, dbName) = extractTableIdent(viewNameParts)
+
+    val originalText = context.getTokenRewriteStream
+      .toString(query.getTokenStartIndex, query.getTokenStopIndex)
+
+    val tableDesc = HiveTable(
+      specifiedDatabase = dbName,
+      name = viewName,
+      schema = schema,
+      partitionColumns = Seq.empty[HiveColumn],
+      properties = properties,
+      serdeProperties = Map[String, String](),
+      tableType = VirtualView,
+      location = None,
+      inputFormat = None,
+      outputFormat = None,
+      serde = None,
+      viewText = Some(originalText))
+
+    // We need to keep the original SQL string so that if `spark.sql.nativeView` is
+    // false, we can fall back to use hive native command later.
+    // We can remove this when parser is configurable(can access SQLConf) in the future.
+    val sql = context.getTokenRewriteStream
+      .toString(view.getTokenStartIndex, view.getTokenStopIndex)
+    CreateViewAsSelect(tableDesc, nodeToPlan(query, context), allowExist, replace, sql)
+  }
+
+  protected def nodeToPlan(node: ASTNode, context: Context): LogicalPlan = node match {
     // Special drop table that also uncaches.
     case Token("TOK_DROPTABLE",
            Token("TOK_TABNAME", tableNameParts) ::
@@ -520,14 +580,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       val Some(crtTbl) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
       ExplainCommand(
-        nodeToPlan(crtTbl),
+        nodeToPlan(crtTbl, context),
         extended = extended.isDefined)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
       ExplainCommand(
-        nodeToPlan(query),
+        nodeToPlan(query, context),
         extended = extended.isDefined)
 
     case Token("TOK_DESCTABLE", describeArgs) =>
@@ -540,12 +600,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         NativePlaceholder
       } else {
         tableType match {
-          case Token("TOK_TABTYPE", nameParts) if nameParts.size == 1 => {
-            nameParts.head match {
+          case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts :: Nil) :: Nil) => {
+            nameParts match {
               case Token(".", dbName :: tableName :: Nil) =>
                 // It is describing a table with the format like "describe db.table".
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
-                val tableIdent = extractTableIdent(nameParts.head)
+                val tableIdent = extractTableIdent(nameParts)
                 DescribeCommand(
                   UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
@@ -554,12 +614,80 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(Seq(tableName.getText), None), isExtended = extended.isDefined)
+                  UnresolvedRelation(TableIdentifier(tableName.getText), None),
+                  isExtended = extended.isDefined)
             }
           }
           // All other cases.
           case _ => NativePlaceholder
         }
+      }
+
+    case view @ Token("TOK_ALTERVIEW", children) =>
+      val Some(viewNameParts) :: maybeQuery :: ignores =
+        getClauses(Seq(
+          "TOK_TABNAME",
+          "TOK_QUERY",
+          "TOK_ALTERVIEW_ADDPARTS",
+          "TOK_ALTERVIEW_DROPPARTS",
+          "TOK_ALTERVIEW_PROPERTIES",
+          "TOK_ALTERVIEW_RENAME"), children)
+
+      // if ALTER VIEW doesn't have query part, let hive to handle it.
+      maybeQuery.map { query =>
+        createView(view, context, viewNameParts, query, Nil, Map(), false, true)
+      }.getOrElse(NativePlaceholder)
+
+    case view @ Token("TOK_CREATEVIEW", children)
+        if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
+      val Seq(
+        Some(viewNameParts),
+        Some(query),
+        maybeComment,
+        replace,
+        allowExisting,
+        maybeProperties,
+        maybeColumns,
+        maybePartCols
+      ) = getClauses(Seq(
+        "TOK_TABNAME",
+        "TOK_QUERY",
+        "TOK_TABLECOMMENT",
+        "TOK_ORREPLACE",
+        "TOK_IFNOTEXISTS",
+        "TOK_TABLEPROPERTIES",
+        "TOK_TABCOLNAME",
+        "TOK_VIEWPARTCOLS"), children)
+
+      // If the view is partitioned, we let hive handle it.
+      if (maybePartCols.isDefined) {
+        NativePlaceholder
+      } else {
+        val schema = maybeColumns.map { cols =>
+          SemanticAnalyzer.getColumns(cols, true).asScala.map { field =>
+            // We can't specify column types when create view, so fill it with null first, and
+            // update it after the schema has been resolved later.
+            HiveColumn(field.getName, null, field.getComment)
+          }
+        }.getOrElse(Seq.empty[HiveColumn])
+
+        val properties = scala.collection.mutable.Map.empty[String, String]
+
+        maybeProperties.foreach {
+          case Token("TOK_TABLEPROPERTIES", list :: Nil) =>
+            properties ++= getProperties(list)
+        }
+
+        maybeComment.foreach {
+          case Token("TOK_TABLECOMMENT", child :: Nil) =>
+            val comment = SemanticAnalyzer.unescapeSQLString(child.getText)
+            if (comment ne null) {
+              properties += ("comment" -> comment)
+            }
+        }
+
+        createView(view, context, viewNameParts, query, schema, properties.toMap,
+          allowExisting.isDefined, replace.isDefined)
       }
 
     case Token("TOK_CREATETABLE", children)
@@ -592,12 +720,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             "TOK_TABLELOCATION",
             "TOK_TABLEPROPERTIES"),
           children)
-      val (db, tableName) = extractDbNameTableName(tableNameParts)
+      val TableIdentifier(tblName, dbName) = extractTableIdent(tableNameParts)
 
       // TODO add bucket support
       var tableDesc: HiveTable = HiveTable(
-        specifiedDatabase = db,
-        name = tableName,
+        specifiedDatabase = dbName,
+        name = tblName,
         schema = Seq.empty[HiveColumn],
         partitionColumns = Seq.empty[HiveColumn],
         properties = Map[String, String](),
@@ -624,7 +752,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
       children.collect {
         case list @ Token("TOK_TABCOLLIST", _) =>
-          val cols = BaseSemanticAnalyzer.getColumns(list, true)
+          val cols = SemanticAnalyzer.getColumns(list, true)
           if (cols != null) {
             tableDesc = tableDesc.copy(
               schema = cols.asScala.map { field =>
@@ -632,11 +760,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               })
           }
         case Token("TOK_TABLECOMMENT", child :: Nil) =>
-          val comment = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
+          val comment = SemanticAnalyzer.unescapeSQLString(child.getText)
           // TODO support the sql text
           tableDesc = tableDesc.copy(viewText = Option(comment))
         case Token("TOK_TABLEPARTCOLS", list @ Token("TOK_TABCOLLIST", _) :: Nil) =>
-          val cols = BaseSemanticAnalyzer.getColumns(list(0), false)
+          val cols = SemanticAnalyzer.getColumns(list(0), false)
           if (cols != null) {
             tableDesc = tableDesc.copy(
               partitionColumns = cols.asScala.map { field =>
@@ -647,21 +775,21 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           val serdeParams = new java.util.HashMap[String, String]()
           child match {
             case Token("TOK_TABLEROWFORMATFIELD", rowChild1 :: rowChild2) =>
-              val fieldDelim = BaseSemanticAnalyzer.unescapeSQLString (rowChild1.getText())
+              val fieldDelim = SemanticAnalyzer.unescapeSQLString (rowChild1.getText())
               serdeParams.put(serdeConstants.FIELD_DELIM, fieldDelim)
               serdeParams.put(serdeConstants.SERIALIZATION_FORMAT, fieldDelim)
               if (rowChild2.length > 1) {
-                val fieldEscape = BaseSemanticAnalyzer.unescapeSQLString (rowChild2(0).getText)
+                val fieldEscape = SemanticAnalyzer.unescapeSQLString (rowChild2(0).getText)
                 serdeParams.put(serdeConstants.ESCAPE_CHAR, fieldEscape)
               }
             case Token("TOK_TABLEROWFORMATCOLLITEMS", rowChild :: Nil) =>
-              val collItemDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              val collItemDelim = SemanticAnalyzer.unescapeSQLString(rowChild.getText)
               serdeParams.put(serdeConstants.COLLECTION_DELIM, collItemDelim)
             case Token("TOK_TABLEROWFORMATMAPKEYS", rowChild :: Nil) =>
-              val mapKeyDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              val mapKeyDelim = SemanticAnalyzer.unescapeSQLString(rowChild.getText)
               serdeParams.put(serdeConstants.MAPKEY_DELIM, mapKeyDelim)
             case Token("TOK_TABLEROWFORMATLINES", rowChild :: Nil) =>
-              val lineDelim = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              val lineDelim = SemanticAnalyzer.unescapeSQLString(rowChild.getText)
               if (!(lineDelim == "\n") && !(lineDelim == "10")) {
                 throw new AnalysisException(
                   SemanticAnalyzer.generateErrorMessage(
@@ -670,22 +798,22 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               }
               serdeParams.put(serdeConstants.LINE_DELIM, lineDelim)
             case Token("TOK_TABLEROWFORMATNULL", rowChild :: Nil) =>
-              val nullFormat = BaseSemanticAnalyzer.unescapeSQLString(rowChild.getText)
+              val nullFormat = SemanticAnalyzer.unescapeSQLString(rowChild.getText)
               // TODO support the nullFormat
             case _ => assert(false)
           }
           tableDesc = tableDesc.copy(
             serdeProperties = tableDesc.serdeProperties ++ serdeParams.asScala)
         case Token("TOK_TABLELOCATION", child :: Nil) =>
-          var location = BaseSemanticAnalyzer.unescapeSQLString(child.getText)
-          location = EximUtil.relativeToAbsolutePath(hiveConf, location)
+          var location = SemanticAnalyzer.unescapeSQLString(child.getText)
+          location = SemanticAnalyzer.relativeToAbsolutePath(hiveConf, location)
           tableDesc = tableDesc.copy(location = Option(location))
         case Token("TOK_TABLESERIALIZER", child :: Nil) =>
           tableDesc = tableDesc.copy(
-            serde = Option(BaseSemanticAnalyzer.unescapeSQLString(child.getChild(0).getText)))
+            serde = Option(SemanticAnalyzer.unescapeSQLString(child.getChild(0).getText)))
           if (child.getChildCount == 2) {
             val serdeParams = new java.util.HashMap[String, String]()
-            BaseSemanticAnalyzer.readProps(
+            SemanticAnalyzer.readProps(
               (child.getChild(1).getChild(0)).asInstanceOf[ASTNode], serdeParams)
             tableDesc = tableDesc.copy(
               serdeProperties = tableDesc.serdeProperties ++ serdeParams.asScala)
@@ -765,15 +893,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case list @ Token("TOK_TABLEFILEFORMAT", children) =>
           tableDesc = tableDesc.copy(
             inputFormat =
-              Option(BaseSemanticAnalyzer.unescapeSQLString(list.getChild(0).getText)),
+              Option(SemanticAnalyzer.unescapeSQLString(list.getChild(0).getText)),
             outputFormat =
-              Option(BaseSemanticAnalyzer.unescapeSQLString(list.getChild(1).getText)))
+              Option(SemanticAnalyzer.unescapeSQLString(list.getChild(1).getText)))
         case Token("TOK_STORAGEHANDLER", _) =>
           throw new AnalysisException(ErrorMsg.CREATE_NON_NATIVE_AS.getMsg())
         case _ => // Unsupport features
       }
 
-      CreateTableAsSelect(tableDesc, nodeToPlan(query), allowExisting != None)
+      CreateTableAsSelect(tableDesc, nodeToPlan(query, context), allowExisting != None)
 
     // If its not a "CTAS" like above then take it as a native command
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
@@ -783,24 +911,20 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           Token("TOK_TABLE_PARTITION", table) :: Nil) => NativePlaceholder
 
     case Token("TOK_QUERY", queryArgs)
-        if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
+        if Seq("TOK_CTE", "TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
 
       val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
         queryArgs match {
-          case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
-            // check if has CTE
-            insertClauses.last match {
-              case Token("TOK_CTE", cteClauses) =>
-                val cteRelations = cteClauses.map(node => {
-                  val relation = nodeToRelation(node).asInstanceOf[Subquery]
-                  (relation.alias, relation)
-                }).toMap
-                (Some(args.head), insertClauses.init, Some(cteRelations))
-
-              case _ => (Some(args.head), insertClauses, None)
+          case Token("TOK_CTE", ctes) :: Token("TOK_FROM", from) :: inserts =>
+            val cteRelations = ctes.map { node =>
+              val relation = nodeToRelation(node, context).asInstanceOf[Subquery]
+              relation.alias -> relation
             }
-
-          case Token("TOK_INSERT", _) :: Nil => (None, queryArgs, None)
+            (Some(from.head), inserts, Some(cteRelations.toMap))
+          case Token("TOK_FROM", from) :: inserts =>
+            (Some(from.head), inserts, None)
+          case Token("TOK_INSERT", _) :: Nil =>
+            (None, queryArgs, None)
         }
 
       // Return one query for each insert clause.
@@ -846,7 +970,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         }
 
         val relations = fromClause match {
-          case Some(f) => nodeToRelation(f)
+          case Some(f) => nodeToRelation(f, context)
           case None => OneRowRelation
         }
 
@@ -884,39 +1008,72 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   AttributeReference("value", StringType)()), true)
             }
 
-            def matchSerDe(clause: Seq[ASTNode])
-              : (Seq[(String, String)], Option[String], Seq[(String, String)]) = clause match {
+            type SerDeInfo = (
+              Seq[(String, String)],  // Input row format information
+              Option[String],         // Optional input SerDe class
+              Seq[(String, String)],  // Input SerDe properties
+              Boolean                 // Whether to use default record reader/writer
+            )
+
+            def matchSerDe(clause: Seq[ASTNode]): SerDeInfo = clause match {
               case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
                 val rowFormat = propsClause.map {
                   case Token(name, Token(value, Nil) :: Nil) => (name, value)
                 }
-                (rowFormat, None, Nil)
+                (rowFormat, None, Nil, false)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
-                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), Nil)
+                (Nil, Some(SemanticAnalyzer.unescapeSQLString(serdeClass)), Nil, false)
 
               case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
                 Token("TOK_TABLEPROPERTIES",
                 Token("TOK_TABLEPROPLIST", propsClause) :: Nil) :: Nil) :: Nil =>
                 val serdeProps = propsClause.map {
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
-                    (BaseSemanticAnalyzer.unescapeSQLString(name),
-                      BaseSemanticAnalyzer.unescapeSQLString(value))
+                    (SemanticAnalyzer.unescapeSQLString(name),
+                      SemanticAnalyzer.unescapeSQLString(value))
                 }
-                (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), serdeProps)
 
-              case Nil => (Nil, Option(hiveConf.getVar(ConfVars.HIVESCRIPTSERDE)), Nil)
+                // SPARK-10310: Special cases LazySimpleSerDe
+                // TODO Fully supports user-defined record reader/writer classes
+                val unescapedSerDeClass = SemanticAnalyzer.unescapeSQLString(serdeClass)
+                val useDefaultRecordReaderWriter =
+                  unescapedSerDeClass == classOf[LazySimpleSerDe].getCanonicalName
+                (Nil, Some(unescapedSerDeClass), serdeProps, useDefaultRecordReaderWriter)
+
+              case Nil =>
+                // Uses default TextRecordReader/TextRecordWriter, sets field delimiter here
+                val serdeProps = Seq(serdeConstants.FIELD_DELIM -> "\t")
+                (Nil, Option(hiveConf.getVar(ConfVars.HIVESCRIPTSERDE)), serdeProps, true)
             }
 
-            val (inRowFormat, inSerdeClass, inSerdeProps) = matchSerDe(inputSerdeClause)
-            val (outRowFormat, outSerdeClass, outSerdeProps) = matchSerDe(outputSerdeClause)
+            val (inRowFormat, inSerdeClass, inSerdeProps, useDefaultRecordReader) =
+              matchSerDe(inputSerdeClause)
 
-            val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+            val (outRowFormat, outSerdeClass, outSerdeProps, useDefaultRecordWriter) =
+              matchSerDe(outputSerdeClause)
+
+            val unescapedScript = SemanticAnalyzer.unescapeSQLString(script)
+
+            // TODO Adds support for user-defined record reader/writer classes
+            val recordReaderClass = if (useDefaultRecordReader) {
+              Option(hiveConf.getVar(ConfVars.HIVESCRIPTRECORDREADER))
+            } else {
+              None
+            }
+
+            val recordWriterClass = if (useDefaultRecordWriter) {
+              Option(hiveConf.getVar(ConfVars.HIVESCRIPTRECORDWRITER))
+            } else {
+              None
+            }
 
             val schema = HiveScriptIOSchema(
               inRowFormat, outRowFormat,
               inSerdeClass, outSerdeClass,
-              inSerdeProps, outSerdeProps, schemaLess)
+              inSerdeProps, outSerdeProps,
+              recordReaderClass, recordWriterClass,
+              schemaLess)
 
             Some(
               logical.ScriptTransformation(
@@ -948,7 +1105,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         // (if there is a group by) or a script transformation.
         val withProject: LogicalPlan = transformation.getOrElse {
           val selectExpressions =
-            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias)
+            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias(_))
           Seq(
             groupByClause.map(e => e match {
               case Token("TOK_GROUPBY", children) =>
@@ -1060,7 +1217,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       cteRelations.map(With(query, _)).getOrElse(query)
 
     // HIVE-9039 renamed TOK_UNION => TOK_UNIONALL while adding TOK_UNIONDISTINCT
-    case Token("TOK_UNIONALL", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
+    case Token("TOK_UNIONALL", left :: right :: Nil) =>
+      Union(nodeToPlan(left, context), nodeToPlan(right, context))
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for $node:\n ${dumpTree(a).toString} ")
@@ -1068,10 +1226,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
   val allJoinTokens = "(TOK_.*JOIN)".r
   val laterViewToken = "TOK_LATERAL_VIEW(.*)".r
-  def nodeToRelation(node: Node): LogicalPlan = node match {
+  def nodeToRelation(node: Node, context: Context): LogicalPlan = node match {
     case Token("TOK_SUBQUERY",
            query :: Token(alias, Nil) :: Nil) =>
-      Subquery(cleanIdentifier(alias), nodeToPlan(query))
+      Subquery(cleanIdentifier(alias), nodeToPlan(query, context))
 
     case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
       val Token("TOK_SELECT",
@@ -1087,7 +1245,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           outer = isOuter.nonEmpty,
           Some(alias.toLowerCase),
           attributes.map(UnresolvedAttribute(_)),
-          nodeToRelation(relationClause))
+          nodeToRelation(relationClause, context))
 
     /* All relations, possibly with aliases or sampling clauses. */
     case Token("TOK_TABREF", clauses) =>
@@ -1106,15 +1264,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           nonAliasClauses)
       }
 
-      val tableIdent =
-        tableNameParts.getChildren.asScala.map {
-          case Token(part, Nil) => cleanIdentifier(part)
-        } match {
-          case Seq(tableOnly) => Seq(tableOnly)
-          case Seq(databaseName, table) => Seq(databaseName, table)
-          case other => sys.error("Hive only supports tables names like 'tableName' " +
-            s"or 'databaseName.tableName', found '$other'")
-      }
+      val tableIdent = extractTableIdent(tableNameParts)
       val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
       val relation = UnresolvedRelation(tableIdent, alias)
 
@@ -1155,7 +1305,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         }.map(_._2)
 
       val isPreserved = tableOrdinals.map(i => (i - 1 < 0) || joinArgs(i - 1).getText == "PRESERVE")
-      val tables = tableOrdinals.map(i => nodeToRelation(joinArgs(i)))
+      val tables = tableOrdinals.map(i => nodeToRelation(joinArgs(i), context))
       val joinExpressions =
         tableOrdinals.map(i => joinArgs(i + 1).getChildren.asScala.map(nodeToExpr))
 
@@ -1209,9 +1359,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
         case "TOK_LEFTSEMIJOIN" => LeftSemi
+        case "TOK_ANTIJOIN" => throw new NotImplementedError("Anti join not supported")
       }
-      Join(nodeToRelation(relation1),
-        nodeToRelation(relation2),
+      Join(nodeToRelation(relation1, context),
+        nodeToRelation(relation2, context),
         joinType,
         other.headOption.map(nodeToExpr))
 
@@ -1323,11 +1474,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   val numericAstTypes = Seq(
-    HiveParser.Number,
-    HiveParser.TinyintLiteral,
-    HiveParser.SmallintLiteral,
-    HiveParser.BigintLiteral,
-    HiveParser.DecimalLiteral)
+    SparkSqlParser.Number,
+    SparkSqlParser.TinyintLiteral,
+    SparkSqlParser.SmallintLiteral,
+    SparkSqlParser.BigintLiteral,
+    SparkSqlParser.DecimalLiteral)
 
   /* Case insensitive matches */
   val COUNT = "(?i)COUNT".r
@@ -1363,12 +1514,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
-      UnresolvedStar(Some(name))
+      UnresolvedStar(Some(UnresolvedAttribute.parseAttributeName(name)))
 
     /* Aggregate Functions */
-    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
-    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
-    case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
+      Count(args.map(nodeToExpr)).toAggregateExpression(isDistinct = true)
+    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) =>
+      Count(Literal(1)).toAggregateExpression()
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
@@ -1473,17 +1625,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedExtractValue(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Window Functions */
-    case Token("TOK_FUNCTION", Token(name, Nil) +: args :+ Token("TOK_WINDOWSPEC", spec)) =>
-      val function = UnresolvedWindowFunction(name, args.map(nodeToExpr))
-      nodesToWindowSpecification(spec) match {
-        case reference: WindowSpecReference =>
-          UnresolvedWindowExpression(function, reference)
-        case definition: WindowSpecDefinition =>
-          WindowExpression(function, definition)
-      }
-    case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: Token("TOK_WINDOWSPEC", spec) :: Nil) =>
-      // Safe to use Literal(1)?
-      val function = UnresolvedWindowFunction(name, Literal(1) :: Nil)
+    case Token(name, args :+ Token("TOK_WINDOWSPEC", spec)) =>
+      val function = nodeToExpr(Token(name, args))
       nodesToWindowSpecification(spec) match {
         case reference: WindowSpecReference =>
           UnresolvedWindowExpression(function, reference)
@@ -1505,7 +1648,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token(TRUE(), Nil) => Literal.create(true, BooleanType)
     case Token(FALSE(), Nil) => Literal.create(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
-      Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.getText)).mkString)
+      Literal(strings.map(s => SemanticAnalyzer.unescapeSQLString(s.getText)).mkString)
 
     // This code is adapted from
     // /ql/src/java/org/apache/hadoop/hive/ql/parse/TypeCheckProcFactory.java#L223
@@ -1540,37 +1683,37 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         v
       }
 
-    case ast: ASTNode if ast.getType == HiveParser.StringLiteral =>
-      Literal(BaseSemanticAnalyzer.unescapeSQLString(ast.getText))
+    case ast: ASTNode if ast.getType == SparkSqlParser.StringLiteral =>
+      Literal(SemanticAnalyzer.unescapeSQLString(ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_DATELITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_DATELITERAL =>
       Literal(Date.valueOf(ast.getText.substring(1, ast.getText.length - 1)))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_CHARSETLITERAL =>
-      Literal(BaseSemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_CHARSETLITERAL =>
+      Literal(SemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
       Literal(CalendarInterval.fromYearMonthString(ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
       Literal(CalendarInterval.fromDayTimeString(ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_YEAR_LITERAL =>
       Literal(CalendarInterval.fromSingleUnitString("year", ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MONTH_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_MONTH_LITERAL =>
       Literal(CalendarInterval.fromSingleUnitString("month", ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_DAY_LITERAL =>
       Literal(CalendarInterval.fromSingleUnitString("day", ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_HOUR_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_HOUR_LITERAL =>
       Literal(CalendarInterval.fromSingleUnitString("hour", ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MINUTE_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_MINUTE_LITERAL =>
       Literal(CalendarInterval.fromSingleUnitString("minute", ast.getText))
 
-    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_SECOND_LITERAL =>
+    case ast: ASTNode if ast.getType == SparkSqlParser.TOK_INTERVAL_SECOND_LITERAL =>
       Literal(CalendarInterval.fromSingleUnitString("second", ast.getText))
 
     case a: ASTNode =>
@@ -1677,6 +1820,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   val explode = "(?i)explode".r
+  val jsonTuple = "(?i)json_tuple".r
   def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
     val function = nodes.head
 
@@ -1688,6 +1832,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     function match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
         (Explode(nodeToExpr(child)), attributes)
+
+      case Token("TOK_FUNCTION", Token(jsonTuple(), Nil) :: children) =>
+        (JsonTuple(children.map(nodeToExpr)), attributes)
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         val functionInfo: FunctionInfo =

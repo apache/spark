@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.local
 
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Attribute, NamedExpression}
 
 
-case class ProjectNode(projectList: Seq[NamedExpression], child: LocalNode) extends UnaryLocalNode {
+case class ProjectNode(conf: SQLConf, projectList: Seq[NamedExpression], child: LocalNode)
+  extends UnaryLocalNode(conf) {
 
   private[this] var project: UnsafeProjection = _
 
@@ -34,8 +36,8 @@ case class ProjectNode(projectList: Seq[NamedExpression], child: LocalNode) exte
 
   override def next(): Boolean = child.next()
 
-  override def get(): InternalRow = {
-    project.apply(child.get())
+  override def fetch(): InternalRow = {
+    project.apply(child.fetch())
   }
 
   override def close(): Unit = child.close()

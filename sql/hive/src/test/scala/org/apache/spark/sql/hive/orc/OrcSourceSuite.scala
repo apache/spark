@@ -21,12 +21,15 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.{QueryTest, Row}
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
+abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
+  import hiveContext._
+
   var orcTableDir: File = null
   var orcTableAsDir: File = null
 
@@ -156,7 +159,7 @@ class OrcSourceSuite extends OrcSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sql(
+    hiveContext.sql(
       s"""CREATE TEMPORARY TABLE normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
@@ -164,12 +167,41 @@ class OrcSourceSuite extends OrcSuite {
          |)
        """.stripMargin)
 
-    sql(
+    hiveContext.sql(
       s"""CREATE TEMPORARY TABLE normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
          |)
        """.stripMargin)
+  }
+
+  test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
+    // The `LessThan` should be converted while the `StringContains` shouldn't
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(Array(
+        LessThan("a", 10),
+        StringContains("b", "prefix")
+      )).get.toString
+    }
+
+    // The `LessThan` should be converted while the whole inner `And` shouldn't
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(Array(
+        LessThan("a", 10),
+        Not(And(
+          GreaterThan("a", 1),
+          StringContains("b", "prefix")
+        ))
+      )).get.toString
+    }
   }
 }

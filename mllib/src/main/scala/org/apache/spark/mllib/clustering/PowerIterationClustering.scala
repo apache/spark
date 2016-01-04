@@ -17,11 +17,12 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.json4s.JsonDSL._
 import org.json4s._
+import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
@@ -30,18 +31,14 @@ import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.{Logging, SparkContext, SparkException}
 
 /**
- * :: Experimental ::
- *
  * Model produced by [[PowerIterationClustering]].
  *
  * @param k number of clusters
  * @param assignments an RDD of clustering [[PowerIterationClustering#Assignment]]s
  */
 @Since("1.3.0")
-@Experimental
 class PowerIterationClusteringModel @Since("1.3.0") (
     @Since("1.3.0") val k: Int,
     @Since("1.3.0") val assignments: RDD[PowerIterationClustering.Assignment])
@@ -73,7 +70,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
     @Since("1.4.0")
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val metadata = compact(render(
@@ -87,7 +84,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     @Since("1.4.0")
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
@@ -107,8 +104,6 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 }
 
 /**
- * :: Experimental ::
- *
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
  * [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]]. From the abstract: PIC finds a very
  * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
@@ -120,7 +115,6 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  *
  * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */
-@Experimental
 @Since("1.3.0")
 class PowerIterationClustering private[clustering] (
     private var k: Int,
@@ -239,17 +233,14 @@ class PowerIterationClustering private[clustering] (
 }
 
 @Since("1.3.0")
-@Experimental
 object PowerIterationClustering extends Logging {
 
   /**
-   * :: Experimental ::
    * Cluster assignment.
    * @param id node id
    * @param cluster assigned cluster id
    */
   @Since("1.3.0")
-  @Experimental
   case class Assignment(id: Long, cluster: Int)
 
   /**

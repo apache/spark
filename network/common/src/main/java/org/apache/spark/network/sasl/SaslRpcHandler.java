@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.sasl;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import javax.security.sasl.Sasl;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
@@ -28,6 +31,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -70,23 +74,36 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
+  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
     if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
       return;
     }
 
-    SaslMessage saslMessage = SaslMessage.decode(Unpooled.wrappedBuffer(message));
+    ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
+    SaslMessage saslMessage;
+    try {
+      saslMessage = SaslMessage.decode(nettyBuf);
+    } finally {
+      nettyBuf.release();
+    }
 
     if (saslServer == null) {
       // First message in the handshake, setup the necessary state.
+      client.setClientId(saslMessage.appId);
       saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
         conf.saslServerAlwaysEncrypt());
     }
 
-    byte[] response = saslServer.response(saslMessage.payload);
-    callback.onSuccess(response);
+    byte[] response;
+    try {
+      response = saslServer.response(JavaUtils.bufferToArray(
+        saslMessage.body().nioByteBuffer()));
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
+    }
+    callback.onSuccess(ByteBuffer.wrap(response));
 
     // Setup encryption after the SASL response is sent, otherwise the client can't parse the
     // response. It's ok to change the channel pipeline here since we are processing an incoming
@@ -108,15 +125,34 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
+  public void receive(TransportClient client, ByteBuffer message) {
+    delegate.receive(client, message);
+  }
+
+  @Override
   public StreamManager getStreamManager() {
     return delegate.getStreamManager();
   }
 
   @Override
-  public void connectionTerminated(TransportClient client) {
-    if (saslServer != null) {
-      saslServer.dispose();
+  public void channelActive(TransportClient client) {
+    delegate.channelActive(client);
+  }
+
+  @Override
+  public void channelInactive(TransportClient client) {
+    try {
+      delegate.channelInactive(client);
+    } finally {
+      if (saslServer != null) {
+        saslServer.dispose();
+      }
     }
+  }
+
+  @Override
+  public void exceptionCaught(Throwable cause, TransportClient client) {
+    delegate.exceptionCaught(cause, client);
   }
 
 }

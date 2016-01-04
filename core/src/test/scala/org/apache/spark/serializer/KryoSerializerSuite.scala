@@ -17,17 +17,21 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileOutputStream, FileInputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
+import org.apache.spark.util.Utils
 import org.apache.spark.storage.BlockManagerId
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
@@ -144,10 +148,40 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(mutable.Map("one" -> 1, "two" -> 2))
     check(mutable.HashMap(1 -> "one", 2 -> "two"))
     check(mutable.HashMap("one" -> 1, "two" -> 2))
-    check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
+    check(List(Some(mutable.HashMap(1 -> 1, 2 -> 2)), None, Some(mutable.HashMap(3 -> 4))))
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
-      mutable.HashMap(1->"one", 2->"two", 3->"three")))
+      mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
+  }
+
+  test("Bug: SPARK-10251") {
+    val ser = new KryoSerializer(conf.clone.set("spark.kryo.registrationRequired", "true"))
+      .newInstance()
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    check((1, 3))
+    check(Array((1, 3)))
+    check(List((1, 3)))
+    check(List[Int]())
+    check(List[Int](1, 2, 3))
+    check(List[String]())
+    check(List[String]("x", "y", "z"))
+    check(None)
+    check(Some(1))
+    check(Some("hi"))
+    check(1 -> 1)
+    check(mutable.ArrayBuffer(1, 2, 3))
+    check(mutable.ArrayBuffer("1", "2", "3"))
+    check(mutable.Map())
+    check(mutable.Map(1 -> "one", 2 -> "two"))
+    check(mutable.Map("one" -> 1, "two" -> 2))
+    check(mutable.HashMap(1 -> "one", 2 -> "two"))
+    check(mutable.HashMap("one" -> 1, "two" -> 2))
+    check(List(Some(mutable.HashMap(1 -> 1, 2 -> 2)), None, Some(mutable.HashMap(3 -> 4))))
+    check(List(
+      mutable.HashMap("one" -> 1, "two" -> 2),
+      mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
   }
 
   test("ranges") {
@@ -318,6 +352,28 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val thrown = intercept[SparkException](ser.serialize(largeObject))
     assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+  }
+
+  test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {
+    val dir = Utils.createTempDir()
+    val tmpfile = dir.toString + "/RoaringBitmap"
+    val outStream = new FileOutputStream(tmpfile)
+    val output = new KryoOutput(outStream)
+    val bitmap = new RoaringBitmap
+    bitmap.add(1)
+    bitmap.add(3)
+    bitmap.add(5)
+    bitmap.serialize(new KryoOutputDataOutputBridge(output))
+    output.flush()
+    output.close()
+
+    val inStream = new FileInputStream(tmpfile)
+    val input = new KryoInput(inStream)
+    val ret = new RoaringBitmap
+    ret.deserialize(new KryoInputDataInputBridge(input))
+    input.close()
+    assert(ret == bitmap)
+    Utils.deleteRecursively(dir)
   }
 
   test("getAutoReset") {

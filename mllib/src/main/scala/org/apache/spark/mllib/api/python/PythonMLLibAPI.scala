@@ -35,25 +35,24 @@ import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.evaluation.RankingMetrics
 import org.apache.spark.mllib.feature._
-import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
+import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel, PrefixSpan}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.stat.{
+  KernelDensity, MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.{ChiSqTestResult, KolmogorovSmirnovTestResult}
-import org.apache.spark.mllib.stat.{
-  KernelDensity, MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo, BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.loss.Losses
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel, RandomForestModel}
-import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomForest}
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.util.LinearDataGenerator
+import org.apache.spark.mllib.util.{LinearDataGenerator, MLUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.storage.StorageLevel
@@ -132,7 +131,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       regParam: Double,
       regType: String,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val lrAlg = new LinearRegressionWithSGD()
     lrAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -141,6 +141,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     lrAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       lrAlg,
@@ -159,7 +160,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       miniBatchFraction: Double,
       initialWeights: Vector,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val lassoAlg = new LassoWithSGD()
     lassoAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -168,6 +170,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     trainRegressionModel(
       lassoAlg,
       data,
@@ -185,7 +188,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       miniBatchFraction: Double,
       initialWeights: Vector,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val ridgeAlg = new RidgeRegressionWithSGD()
     ridgeAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -194,6 +198,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     trainRegressionModel(
       ridgeAlg,
       data,
@@ -212,7 +217,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector,
       regType: String,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val SVMAlg = new SVMWithSGD()
     SVMAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -221,6 +227,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     SVMAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       SVMAlg,
@@ -240,7 +247,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       regParam: Double,
       regType: String,
       intercept: Boolean,
-      validateData: Boolean): JList[Object] = {
+      validateData: Boolean,
+      convergenceTol: Double): JList[Object] = {
     val LogRegAlg = new LogisticRegressionWithSGD()
     LogRegAlg.setIntercept(intercept)
       .setValidateData(validateData)
@@ -249,6 +257,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+      .setConvergenceTol(convergenceTol)
     LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       LogRegAlg,
@@ -326,7 +335,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       initializationMode: String,
       seed: java.lang.Long,
       initializationSteps: Int,
-      epsilon: Double): KMeansModel = {
+      epsilon: Double,
+      initialModel: java.util.ArrayList[Vector]): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
@@ -336,6 +346,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setEpsilon(epsilon)
 
     if (seed != null) kMeansAlg.setSeed(seed)
+    if (!initialModel.isEmpty()) kMeansAlg.setInitialModel(new KMeansModel(initialModel))
 
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
@@ -505,7 +516,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       topicConcentration: Double,
       seed: java.lang.Long,
       checkpointInterval: Int,
-      optimizer: String): LDAModel = {
+      optimizer: String): LDAModelWrapper = {
     val algo = new LDA()
       .setK(k)
       .setMaxIterations(maxIterations)
@@ -523,7 +534,16 @@ private[python] class PythonMLLibAPI extends Serializable {
         case _ => throw new IllegalArgumentException("input values contains invalid type value.")
       }
     }
-    algo.run(documents)
+    val model = algo.run(documents)
+    new LDAModelWrapper(model)
+  }
+
+  /**
+   * Load a LDA model
+   */
+  def loadLDAModel(jsc: JavaSparkContext, path: String): LDAModelWrapper = {
+    val model = DistributedLDAModel.load(jsc.sc, path)
+    new LDAModelWrapper(model)
   }
 
 
@@ -543,6 +563,27 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     val model = fpg.run(data.rdd.map(_.asScala.toArray))
     new FPGrowthModelWrapper(model)
+  }
+
+  /**
+   * Java stub for Python mllib PrefixSpan.train().  This stub returns a handle
+   * to the Java object instead of the content of the Java object.  Extra care
+   * needs to be taken in the Python code to ensure it gets freed on exit; see
+   * the Py4J documentation.
+   */
+  def trainPrefixSpanModel(
+      data: JavaRDD[java.util.ArrayList[java.util.ArrayList[Any]]],
+      minSupport: Double,
+      maxPatternLength: Int,
+      localProjDBSize: Int ): PrefixSpanModelWrapper = {
+    val prefixSpan = new PrefixSpan()
+      .setMinSupport(minSupport)
+      .setMaxPatternLength(maxPatternLength)
+      .setMaxLocalProjDBSize(localProjDBSize)
+
+    val trainData = data.rdd.map(_.asScala.toArray.map(_.asScala.toArray))
+    val model = prefixSpan.run(trainData)
+    new PrefixSpanModelWrapper(model)
   }
 
   /**
@@ -636,39 +677,6 @@ private[python] class PythonMLLibAPI extends Serializable {
     } finally {
       dataJRDD.rdd.unpersist(blocking = false)
     }
-  }
-
-  private[python] class Word2VecModelWrapper(model: Word2VecModel) {
-    def transform(word: String): Vector = {
-      model.transform(word)
-    }
-
-    /**
-     * Transforms an RDD of words to its vector representation
-     * @param rdd an RDD of words
-     * @return an RDD of vector representations of words
-     */
-    def transform(rdd: JavaRDD[String]): JavaRDD[Vector] = {
-      rdd.rdd.map(model.transform)
-    }
-
-    def findSynonyms(word: String, num: Int): JList[Object] = {
-      val vec = transform(word)
-      findSynonyms(vec, num)
-    }
-
-    def findSynonyms(vector: Vector, num: Int): JList[Object] = {
-      val result = model.findSynonyms(vector, num)
-      val similarity = Vectors.dense(result.map(_._2))
-      val words = result.map(_._1)
-      List(words, similarity).map(_.asInstanceOf[Object]).asJava
-    }
-
-    def getVectors: JMap[String, JList[Float]] = {
-      model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
-    }
-
-    def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
   }
 
   /**
@@ -1101,7 +1109,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    new RowMatrix(rows.rdd, numRows, numCols)
+    new RowMatrix(rows.rdd.retag(classOf[Vector]), numRows, numCols)
   }
 
   /**
@@ -1149,7 +1157,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
     // We use DataFrames for serialization of IndexedRows to Python,
     // so return a DataFrame.
-    val sqlContext = new SQLContext(indexedRowMatrix.rows.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(indexedRowMatrix.rows.sparkContext)
     sqlContext.createDataFrame(indexedRowMatrix.rows)
   }
 
@@ -1159,7 +1167,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixEntries(coordinateMatrix: CoordinateMatrix): DataFrame = {
     // We use DataFrames for serialization of MatrixEntry entries to
     // Python, so return a DataFrame.
-    val sqlContext = new SQLContext(coordinateMatrix.entries.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(coordinateMatrix.entries.sparkContext)
     sqlContext.createDataFrame(coordinateMatrix.entries)
   }
 
@@ -1169,7 +1177,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def getMatrixBlocks(blockMatrix: BlockMatrix): DataFrame = {
     // We use DataFrames for serialization of sub-matrix blocks to
     // Python, so return a DataFrame.
-    val sqlContext = new SQLContext(blockMatrix.blocks.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(blockMatrix.blocks.sparkContext)
     sqlContext.createDataFrame(blockMatrix.blocks)
   }
 }
@@ -1429,8 +1437,18 @@ private[spark] object SerDe extends Serializable {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }
-      new Rating(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
+      new Rating(ratingsIdCheckLong(args(0)), ratingsIdCheckLong(args(1)),
         args(2).asInstanceOf[Double])
+    }
+
+    private def ratingsIdCheckLong(obj: Object): Int = {
+      try {
+        obj.asInstanceOf[Int]
+      } catch {
+        case ex: ClassCastException =>
+          throw new PickleException(s"Ratings id ${obj.toString} exceeds " +
+            s"max integer value of ${Int.MaxValue}", ex)
+      }
     }
   }
 

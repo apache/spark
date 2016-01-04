@@ -104,8 +104,8 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * the value of `partitions`.
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
-    @transient partitions: Int,
-    @transient rdd: RDD[_ <: Product2[K, V]],
+    partitions: Int,
+    rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true)
   extends Partitioner {
 
@@ -253,7 +253,7 @@ private[spark] object RangePartitioner {
    */
   def sketch[K : ClassTag](
       rdd: RDD[K],
-      sampleSizePerPartition: Int): (Long, Array[(Int, Int, Array[K])]) = {
+      sampleSizePerPartition: Int): (Long, Array[(Int, Long, Array[K])]) = {
     val shift = rdd.id
     // val classTagK = classTag[K] // to avoid serializing the entire partitioner object
     val sketched = rdd.mapPartitionsWithIndex { (idx, iter) =>
@@ -262,7 +262,7 @@ private[spark] object RangePartitioner {
         iter, sampleSizePerPartition, seed)
       Iterator((idx, n, sample))
     }.collect()
-    val numItems = sketched.map(_._2.toLong).sum
+    val numItems = sketched.map(_._2).sum
     (numItems, sketched)
   }
 
@@ -291,7 +291,7 @@ private[spark] object RangePartitioner {
     while ((i < numCandidates) && (j < partitions - 1)) {
       val (key, weight) = ordered(i)
       cumWeight += weight
-      if (cumWeight > target) {
+      if (cumWeight >= target) {
         // Skip duplicate values.
         if (previousBound.isEmpty || ordering.gt(key, previousBound.get)) {
           bounds += key

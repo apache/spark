@@ -42,7 +42,7 @@ case class DescribeCommand(
       new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("data_type", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = false,
+    AttributeReference("comment", StringType, nullable = true,
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 }
@@ -71,7 +71,6 @@ case class CreateTableUsing(
  * can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
-// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 case class CreateTableUsingAsSelect(
     tableIdent: TableIdentifier,
     provider: String,
@@ -93,7 +92,7 @@ case class CreateTempTableUsing(
     val resolved = ResolvedDataSource(
       sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
     sqlContext.catalog.registerTable(
-      tableIdent.toSeq,
+      tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
 
     Seq.empty[Row]
@@ -112,7 +111,7 @@ case class CreateTempTableUsingAsSelect(
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
     sqlContext.catalog.registerTable(
-      tableIdent.toSeq,
+      tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
 
     Seq.empty[Row]
@@ -128,7 +127,7 @@ case class RefreshTable(tableIdent: TableIdentifier)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent.toSeq)
+    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
     val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {

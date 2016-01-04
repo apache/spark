@@ -17,33 +17,31 @@
 
 package org.apache.spark.streaming.flume
 
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.net.InetSocketAddress
-import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.flume.source.avro.AvroSourceProtocol
-import org.apache.flume.source.avro.AvroFlumeEvent
-import org.apache.flume.source.avro.Status
-import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
-import org.apache.spark.Logging
-import org.apache.spark.util.Utils
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.receiver.Receiver
-
+import org.apache.avro.ipc.specific.SpecificResponder
+import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol, Status}
 import org.jboss.netty.channel.{ChannelPipeline, ChannelPipelineFactory, Channels}
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
 
+import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.Utils
+
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
-  @transient ssc_ : StreamingContext,
+  ssc_ : StreamingContext,
   host: String,
   port: Int,
   storageLevel: StorageLevel,
@@ -93,9 +91,9 @@ class SparkFlumeEvent() extends Externalizable {
 
   /* Serialize to bytes. */
   def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    val body = event.getBody.array()
-    out.writeInt(body.length)
-    out.write(body)
+    val body = event.getBody
+    out.writeInt(body.remaining())
+    Utils.writeByteBuffer(body, out)
 
     val numHeaders = event.getHeaders.size()
     out.writeInt(numHeaders)
