@@ -88,10 +88,10 @@ private[spark] object SQLConf {
       }
 
     def intConf(
-          key: String,
-          defaultValue: Option[Int] = None,
-          doc: String = "",
-          isPublic: Boolean = true): SQLConfEntry[Int] =
+        key: String,
+        defaultValue: Option[Int] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
         try {
           v.toInt
@@ -102,29 +102,33 @@ private[spark] object SQLConf {
       }, _.toString, doc, isPublic)
 
     def intMemConf(
-                    key: String,
-                    defaultValue: Option[Int] = None,
-                    doc: String = "",
-                    isPublic: Boolean = true): SQLConfEntry[Int] =
+        key: String,
+        defaultValue: Option[Int] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
-        var isNegative: Boolean = false
-        try {
-          isNegative = (v.toInt < 0)
+        val isInteger: Option[Int] = try {
+           Some(v.toInt)
         } catch {
-          case _: Throwable =>
+          case _ : NumberFormatException =>
+            None
         }
-        if (!isNegative) {
-          if ((Utils.byteStringAsBytes(v) <= Int.MaxValue.toLong) &&
-            (Utils.byteStringAsBytes(v) >= Int.MinValue.toLong)) {
-            Utils.byteStringAsBytes(v).toInt
-          }
-          else {
-            throw new IllegalArgumentException(s"$v is out of bounds")
-          }
-        }
-        else {
-          v.toInt
-        }
+
+        isInteger.getOrElse(
+            try {
+              val getSizeAsBytes = Utils.byteStringAsBytes(v)
+              if ((getSizeAsBytes <= Int.MaxValue.toLong) &&
+                (getSizeAsBytes >= Int.MinValue.toLong)) {
+                getSizeAsBytes.toInt
+              }
+              else {
+                throw new IllegalArgumentException(s"$v is out of bounds")
+              }
+            } catch {
+              case _: NumberFormatException =>
+                throw new IllegalArgumentException(s"$key should be int, but was $v")
+            }
+        )
 
       }, _.toString, doc, isPublic)
 
@@ -135,11 +139,34 @@ private[spark] object SQLConf {
         isPublic: Boolean = true): SQLConfEntry[Long] =
       SQLConfEntry(key, defaultValue, { v =>
         try {
-          Utils.byteStringAsBytes(v)
+          v.toLong
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be long, but was $v")
         }
+      }, _.toString, doc, isPublic)
+
+    def longMemConf(
+        key: String,
+        defaultValue: Option[Long] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Long] =
+      SQLConfEntry(key, defaultValue, { v =>
+        val isLongValue: Option[Long] = try {
+          Some(v.toLong)
+        } catch {
+          case _: NumberFormatException =>
+            None
+        }
+
+        isLongValue.getOrElse(
+          try {
+            Utils.byteStringAsBytes(v)
+          } catch {
+            case _: NumberFormatException =>
+              throw new IllegalArgumentException(s"$key should be long, but was $v")
+          }
+        )
       }, _.toString, doc, isPublic)
 
     def doubleConf(
@@ -262,7 +289,7 @@ private[spark] object SQLConf {
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
-    longConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+    longMemConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
       defaultValue = Some(64 * 1024 * 1024),
       doc = "The target post-shuffle input size in bytes of a task.")
 
