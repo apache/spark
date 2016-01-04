@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.stat
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{Row, Column, DataFrame}
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
+import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.{Cast, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._

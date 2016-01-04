@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.Serializable
 
-import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate._
+import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.OriginalType
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
