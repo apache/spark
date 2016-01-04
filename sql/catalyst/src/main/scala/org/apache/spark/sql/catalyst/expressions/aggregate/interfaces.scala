@@ -93,9 +93,16 @@ private[sql] case class AggregateExpression(
 
   override def prettyString: String = aggregateFunction.prettyString
 
-  override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
+  override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
 
-  override def sql: Option[String] = aggregateFunction.sql
+  override def sql: Option[String] = if (isDistinct) {
+    aggregateFunction.argumentsSQL.map { argsSQL =>
+      val name = aggregateFunction.prettyName.toUpperCase
+      s"$name(DISTINCT $argsSQL)"
+    }
+  } else {
+    aggregateFunction.sql
+  }
 }
 
 /**
@@ -165,6 +172,10 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
     AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
   }
+
+  override def sql: Option[String] = argumentsSQL.map(sql => s"${prettyName.toUpperCase}($sql)")
+
+  def argumentsSQL: Option[String] = None
 }
 
 /**
@@ -322,10 +333,6 @@ abstract class DeclarativeAggregate
 
   final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
-
-  override def sql: Option[String] = argumentsSQL.map(sql => s"${prettyName.toUpperCase}($sql)")
-
-  def argumentsSQL: Option[String] = None
 
   /**
    * A helper class for representing an attribute used in merging two

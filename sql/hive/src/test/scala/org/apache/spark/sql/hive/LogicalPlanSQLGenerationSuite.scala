@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
 
+// All test cases in this test suite are ignored for now because currently `SQLBuilder` only handles
+// resolved logical plans parsed directly from HiveQL query strings.
 class LogicalPlanSQLGenerationSuite extends SQLGenerationTest with SQLTestUtils {
   import hiveContext.implicits._
 
@@ -38,17 +40,17 @@ class LogicalPlanSQLGenerationSuite extends SQLGenerationTest with SQLTestUtils 
     super.afterAll()
   }
 
-  test("single row project") {
+  ignore("single row project") {
     checkSQL(OneRowRelation.select(lit(1)), "SELECT 1 AS `1`")
     checkSQL(OneRowRelation.select(lit(1) as 'a), "SELECT 1 AS `a`")
   }
 
-  test("project with limit") {
+  ignore("project with limit") {
     checkSQL(OneRowRelation.select(lit(1)).limit(1), "SELECT 1 AS `1` LIMIT 1")
     checkSQL(OneRowRelation.select(lit(1) as 'a).limit(1), "SELECT 1 AS `a` LIMIT 1")
   }
 
-  test("table lookup") {
+  ignore("table lookup") {
     checkSQL(sqlContext.table("t0"), "SELECT `t0`.`a` FROM `t0`")
     checkSQL(sqlContext.table("t1").select('b alias "c"), "SELECT `t1`.`id` AS `c` FROM `t1`")
   }

@@ -220,7 +220,7 @@ case class Literal protected (value: Any, dataType: DataType)
       "NULL"
 
     case (v: UTF8String, StringType) =>
-      "\"" + v.toString.replace("\"", "\\\"") + "\""
+      "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     case (v: Byte, ByteType) =>
       s"CAST($v AS ${ByteType.simpleString.toUpperCase})"
