@@ -1121,12 +1121,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }),
             rollupGroupByClause.map(e => e match {
               case Token("TOK_ROLLUP_GROUPBY", children) =>
-                Rollup(children.map(nodeToExpr), withLateralView, selectExpressions)
+                Aggregate(Seq(Rollup(children.map(nodeToExpr))), selectExpressions, withLateralView)
               case _ => sys.error("Expect WITH ROLLUP")
             }),
             cubeGroupByClause.map(e => e match {
               case Token("TOK_CUBE_GROUPBY", children) =>
-                Cube(children.map(nodeToExpr), withLateralView, selectExpressions)
+                Aggregate(Seq(Cube(children.map(nodeToExpr))), selectExpressions, withLateralView)
               case _ => sys.error("Expect WITH CUBE")
             }),
             Some(Project(selectExpressions, withLateralView))).flatten.head
