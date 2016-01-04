@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.netty
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SSLOptions, SparkConf}
 import org.apache.spark.network.util.{TransportConf, ConfigProvider}
 
 /**
@@ -45,8 +45,13 @@ object SparkTransportConf {
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
+   * @param sslOptions SSL config options
    */
-  def fromSparkConf(_conf: SparkConf, module: String, numUsableCores: Int = 0): TransportConf = {
+  def fromSparkConf(
+      _conf: SparkConf,
+      module: String,
+      numUsableCores: Int = 0,
+      sslOptions: Option[SSLOptions] = None): TransportConf = {
     val conf = _conf.clone
 
     // Specify thread configuration based on our JVM's allocation of cores (rather than necessarily
@@ -56,9 +61,9 @@ object SparkTransportConf {
     conf.setIfMissing(s"spark.$module.io.serverThreads", numThreads.toString)
     conf.setIfMissing(s"spark.$module.io.clientThreads", numThreads.toString)
 
-    new TransportConf(module, new ConfigProvider {
+    new TransportConf(module, sslOptions.fold(new ConfigProvider {
       override def get(name: String): String = conf.get(name)
-    })
+    })(_.createConfigProvider(conf)))
   }
 
   /**

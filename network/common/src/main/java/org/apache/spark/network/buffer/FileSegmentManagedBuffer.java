@@ -29,6 +29,7 @@ import com.google.common.base.Objects;
 import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
 
+import io.netty.handler.stream.ChunkedFile;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.network.util.TransportConf;
@@ -129,7 +130,10 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    if (conf.lazyFileDescriptor()) {
+    if (conf.sslShuffleEnabled()) {
+      //Cannot use zero-copy with HTTPS
+      return new ChunkedFile(new RandomAccessFile(file, "r"), offset, length, conf.sslShuffleChunkSize());
+    } else if (conf.lazyFileDescriptor()) {
       return new LazyFileRegion(file, offset, length);
     } else {
       FileChannel fileChannel = new FileInputStream(file).getChannel();

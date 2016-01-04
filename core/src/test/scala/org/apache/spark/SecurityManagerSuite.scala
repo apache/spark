@@ -207,6 +207,16 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.akkaSSLOptions.keyPassword === Some("password"))
     assert(securityManager.akkaSSLOptions.protocol === Some("TLSv1.2"))
     assert(securityManager.akkaSSLOptions.enabledAlgorithms === expectedAlgorithms)
+    
+    assert(securityManager.btsSSLOptions.trustStore.isDefined === true)
+    assert(securityManager.btsSSLOptions.trustStore.get.getName === "truststore")
+    assert(securityManager.btsSSLOptions.keyStore.isDefined === true)
+    assert(securityManager.btsSSLOptions.keyStore.get.getName === "keystore")
+    assert(securityManager.btsSSLOptions.trustStorePassword === Some("password"))
+    assert(securityManager.btsSSLOptions.keyStorePassword === Some("password"))
+    assert(securityManager.btsSSLOptions.keyPassword === Some("password"))
+    assert(securityManager.btsSSLOptions.protocol === Some("TLSv1.2"))
+    assert(securityManager.btsSSLOptions.enabledAlgorithms === expectedAlgorithms)
   }
 
   test("ssl off setup") {
@@ -219,6 +229,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     assert(securityManager.fileServerSSLOptions.enabled === false)
     assert(securityManager.akkaSSLOptions.enabled === false)
+    assert(securityManager.btsSSLOptions.enabled === false)
     assert(securityManager.sslSocketFactory.isDefined === false)
     assert(securityManager.hostnameVerifier.isDefined === false)
   }

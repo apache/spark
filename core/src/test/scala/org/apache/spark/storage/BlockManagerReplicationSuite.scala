@@ -39,7 +39,7 @@ import org.apache.spark.storage.StorageLevel._
 /** Testsuite that tests block replication in BlockManager */
 class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
-  private val conf = new SparkConf(false).set("spark.app.id", "test")
+  private var conf = createConf()
   private var rpcEnv: RpcEnv = null
   private var master: BlockManagerMaster = null
   private val securityMgr = new SecurityManager(conf)
@@ -56,6 +56,8 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
 
   // Implicitly convert strings to BlockIds for test clarity.
   private implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
+
+  private[storage] def createConf(): SparkConf = new SparkConf(false).set("spark.app.id", "test")
 
   private def makeBlockManager(
       maxMem: Long,

@@ -20,12 +20,21 @@ package org.apache.spark.network;
 import java.util.List;
 
 import com.google.common.collect.Lists;
+
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.handler.codec.MessageToMessageEncoder;
+
+import org.apache.spark.network.util.ssl.NettySslEncryptionHandler;
+import org.apache.spark.network.util.ssl.NoSslEncryptionHandler;
+import org.apache.spark.network.util.ssl.SSLFactory;
+import org.apache.spark.network.util.ssl.SslEncryptionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.protocol.Message;
+import org.apache.spark.network.protocol.SslMessageEncoder;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -60,8 +69,9 @@ public class TransportContext {
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
+  private final SslEncryptionHandler sslEncryptionHandler;
 
-  private final MessageEncoder encoder;
+  private final MessageToMessageEncoder<Message> encoder;
   private final MessageDecoder decoder;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
@@ -74,8 +84,10 @@ public class TransportContext {
       boolean closeIdleConnections) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
-    this.encoder = new MessageEncoder();
+    this.sslEncryptionHandler = createSslEncryptionHandler();
     this.decoder = new MessageDecoder();
+    this.encoder =
+      (this.sslEncryptionHandler.isEnabled() ? new SslMessageEncoder() : new MessageEncoder());
     this.closeIdleConnections = closeIdleConnections;
   }
 
@@ -117,6 +129,14 @@ public class TransportContext {
   }
 
   /**
+   * Returns the configured {@link SslEncryptionHandler}
+   * @return
+   */
+  public SslEncryptionHandler getSslEncryptionHandler() {
+    return sslEncryptionHandler;
+  }
+
+  /**
    * Initializes a client or server Netty Channel Pipeline which encodes/decodes messages and
    * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
    * response messages.
@@ -145,6 +165,31 @@ public class TransportContext {
     } catch (RuntimeException e) {
       logger.error("Error while initializing Netty pipeline", e);
       throw e;
+    }
+  }
+
+  /**
+   *
+   * @return
+   */
+  private SslEncryptionHandler createSslEncryptionHandler() {
+    if (conf.sslShuffleEnabled()) {
+      return new NettySslEncryptionHandler(
+        new SSLFactory.Builder()
+          .requestedProtocol(conf.sslShuffleProtocol())
+          .requestedCiphers(conf.sslShuffleRequestedCiphers())
+          .keyStore(conf.sslShuffleKeyStore(), conf.sslShuffleKeyStorePassword())
+          .privateKey(conf.sslShufflePrivateKey())
+          .keyPassword(conf.sslShuffleKeyPassword())
+          .certChain(conf.sslShuffleCertChain())
+          .trustStore(
+            conf.sslShuffleTrustStore(),
+            conf.sslShuffleTrustStorePassword(),
+            conf.sslShuffleTrustStoreReloadingEnabled(),
+            conf.sslShuffleTrustStoreReloadInterval())
+          .build());
+    } else {
+      return new NoSslEncryptionHandler();
     }
   }
 

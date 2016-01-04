@@ -40,6 +40,7 @@ import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.ssl.SslEncryptionHandler;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.IOMode;
@@ -80,6 +81,8 @@ public class TransportClientFactory implements Closeable {
   private final List<TransportClientBootstrap> clientBootstraps;
   private final ConcurrentHashMap<SocketAddress, ClientPool> connectionPool;
 
+  private SslEncryptionHandler sslEncryptionHandler;
+
   /** Random number generator for picking connections between peers. */
   private final Random rand;
   private final int numConnectionsPerPeer;
@@ -89,14 +92,15 @@ public class TransportClientFactory implements Closeable {
   private PooledByteBufAllocator pooledAllocator;
 
   public TransportClientFactory(
-      TransportContext context,
-      List<TransportClientBootstrap> clientBootstraps) {
+    TransportContext context,
+    List<TransportClientBootstrap> clientBootstraps) {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
+    this.sslEncryptionHandler = context.getSslEncryptionHandler();
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
@@ -185,36 +189,15 @@ public class TransportClientFactory implements Closeable {
   private TransportClient createClient(InetSocketAddress address) throws IOException {
     logger.debug("Creating new connection to " + address);
 
-    Bootstrap bootstrap = new Bootstrap();
-    bootstrap.group(workerGroup)
-      .channel(socketChannelClass)
-      // Disable Nagle's Algorithm since we don't want packets to wait
-      .option(ChannelOption.TCP_NODELAY, true)
-      .option(ChannelOption.SO_KEEPALIVE, true)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
-      .option(ChannelOption.ALLOCATOR, pooledAllocator);
-
+    Bootstrap bootstrap = buildBootstrap();
     final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
     final AtomicReference<Channel> channelRef = new AtomicReference<Channel>();
-
-    bootstrap.handler(new ChannelInitializer<SocketChannel>() {
-      @Override
-      public void initChannel(SocketChannel ch) {
-        TransportChannelHandler clientHandler = context.initializePipeline(ch);
-        clientRef.set(clientHandler.getClient());
-        channelRef.set(ch);
-      }
-    });
+    initHandler(bootstrap, clientRef, channelRef);
 
     // Connect to the remote server
     long preConnect = System.nanoTime();
-    ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
-      throw new IOException(
-        String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
-    } else if (cf.cause() != null) {
-      throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
-    }
+    ChannelFuture cf = connect(bootstrap, conf, address);
+    sslEncryptionHandler.onConnect(cf, address, conf.connectionTimeoutMs());
 
     TransportClient client = clientRef.get();
     Channel channel = channelRef.get();
@@ -223,6 +206,60 @@ public class TransportClientFactory implements Closeable {
     // Execute any client bootstraps synchronously before marking the Client as successful.
     long preBootstrap = System.nanoTime();
     logger.debug("Connection to {} successful, running bootstraps...", address);
+    doBootstraps(client, channel, preBootstrap);
+    long postBootstrap = System.nanoTime();
+
+    logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
+      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+
+    return client;
+  }
+
+  /**
+   *
+   * @param bootstrap
+   * @param conf
+   * @param address
+   * @throws IOException
+   */
+  private ChannelFuture connect(
+    Bootstrap bootstrap,
+    TransportConf conf,
+    InetSocketAddress address) throws IOException {
+    ChannelFuture cf = bootstrap.connect(address);
+    if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
+      throw new IOException(
+        String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
+    } else if (cf.cause() != null) {
+      throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+    }
+    return cf;
+  }
+
+  /**
+   *
+   * @return
+   */
+  private Bootstrap buildBootstrap() {
+    return new Bootstrap()
+      .group(workerGroup)
+      .channel(socketChannelClass)
+      .option(ChannelOption.TCP_NODELAY, true) // Disable Nagle's Algorithm since we don't want packets to wait
+      .option(ChannelOption.SO_KEEPALIVE, true)
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
+      .option(ChannelOption.ALLOCATOR, pooledAllocator);
+  }
+
+  /**
+   * Execute all of our {@link TransportClientBootstrap} bootstraps.
+   * @param client
+   * @param channel
+   * @param preBootstrap
+   */
+  private void doBootstraps(
+    TransportClient client,
+    Channel channel,
+    long preBootstrap) {
     try {
       for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
         clientBootstrap.doBootstrap(client, channel);
@@ -233,12 +270,25 @@ public class TransportClientFactory implements Closeable {
       client.close();
       throw Throwables.propagate(e);
     }
-    long postBootstrap = System.nanoTime();
+  }
 
-    logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
-
-    return client;
+  /**
+   * @param bootstrap
+   * @param clientRef
+   */
+  private void initHandler(
+    final Bootstrap bootstrap,
+    final AtomicReference<TransportClient> clientRef,
+    final AtomicReference<Channel> channelRef) {
+    bootstrap.handler(new ChannelInitializer<SocketChannel>() {
+      @Override
+      protected void initChannel(SocketChannel ch) throws Exception {
+        TransportChannelHandler clientHandler = context.initializePipeline(ch);
+        sslEncryptionHandler.addToPipeline(ch.pipeline(), true);
+        clientRef.set(clientHandler.getClient());
+        channelRef.set(ch);
+      }
+    });
   }
 
   /** Close all connections in the connection pool, and shutdown the worker thread pool. */
@@ -259,6 +309,11 @@ public class TransportClientFactory implements Closeable {
     if (workerGroup != null) {
       workerGroup.shutdownGracefully();
       workerGroup = null;
+    }
+
+    if (sslEncryptionHandler != null) {
+      sslEncryptionHandler.close();
+      sslEncryptionHandler = null;
     }
   }
 }

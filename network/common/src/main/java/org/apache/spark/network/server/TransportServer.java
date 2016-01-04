@@ -35,6 +35,7 @@ import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.ssl.SslEncryptionHandler;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
@@ -51,6 +52,7 @@ public class TransportServer implements Closeable {
   private final RpcHandler appRpcHandler;
   private final List<TransportServerBootstrap> bootstraps;
 
+  private SslEncryptionHandler sslEncryptionHandler;
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
@@ -69,6 +71,7 @@ public class TransportServer implements Closeable {
     this.conf = context.getConf();
     this.appRpcHandler = appRpcHandler;
     this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
+    this.sslEncryptionHandler = context.getSslEncryptionHandler();
 
     try {
       init(hostToBind, portToBind);
@@ -113,16 +116,7 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
-    bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
-      @Override
-      protected void initChannel(SocketChannel ch) throws Exception {
-        RpcHandler rpcHandler = appRpcHandler;
-        for (TransportServerBootstrap bootstrap : bootstraps) {
-          rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
-        }
-        context.initializePipeline(ch, rpcHandler);
-      }
-    });
+    initHandler();
 
     InetSocketAddress address = hostToBind == null ?
         new InetSocketAddress(portToBind): new InetSocketAddress(hostToBind, portToBind);
@@ -131,6 +125,23 @@ public class TransportServer implements Closeable {
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
     logger.debug("Shuffle server started on port :" + port);
+  }
+
+  /**
+   * Initialize and add the appropriate Netty ChannelHandler
+   */
+  private void initHandler() {
+    bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
+      @Override
+      protected void initChannel(SocketChannel ch) throws Exception {
+        RpcHandler rpcHandler = appRpcHandler;
+        for (TransportServerBootstrap bootstrap : bootstraps) {
+          rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
+        }
+        context.initializePipeline(ch, rpcHandler);
+        sslEncryptionHandler.addToPipeline(ch.pipeline(), false);
+      }
+    });
   }
 
   @Override
@@ -147,5 +158,10 @@ public class TransportServer implements Closeable {
       bootstrap.childGroup().shutdownGracefully();
     }
     bootstrap = null;
+
+    if (sslEncryptionHandler != null) {
+      sslEncryptionHandler.close();
+      sslEncryptionHandler = null;
+    }
   }
 }

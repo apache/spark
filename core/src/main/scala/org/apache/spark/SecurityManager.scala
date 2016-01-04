@@ -101,12 +101,12 @@ import org.apache.spark.util.Utils
  *            over the wire in plaintext.
  *            Note that SASL is pluggable as to what mechanism it uses.  We currently use
  *            DIGEST-MD5 but this could be changed to use Kerberos or other in the future.
- *            Spark currently supports "auth" for the quality of protection, which means
- *            the connection does not support integrity or privacy protection (encryption)
- *            after authentication. SASL also supports "auth-int" and "auth-conf" which
- *            SPARK could support in the future to allow the user to specify the quality
- *            of protection they want. If we support those, the messages will also have to
- *            be wrapped and unwrapped via the SaslServer/SaslClient.wrap/unwrap API's.
+ *            Spark currently supports "auth" for the quality of protection, and if configured,
+ *            privacy protection (SSL/TLS encryption) for the Netty based implementation.
+ *            SASL also supports "auth-int" and "auth-conf" which SPARK could support
+ *            in the future to allow the user to specify the quality of protection they want.
+ *            If we support those, the messages will also have to be wrapped and unwrapped
+ *            via the SaslServer/SaslClient.wrap/unwrap API's.
  *
  *            Since the NioBlockTransferService does asynchronous messages passing, the SASL
  *            authentication is a bit more complex. A ConnectionManager can be both a client
@@ -169,7 +169,8 @@ import org.apache.spark.util.Utils
  *  configuration for the particular protocol, the properties must be overwritten in the
  *  protocol-specific namespace. Use `spark.ssl.yyy.xxx` settings to overwrite the global
  *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be either `akka` for
- *  Akka based connections or `fs` for broadcast and file server.
+ *  Akka based connections, `fs` for broadcast and file server, or `bts` for the Netty based
+ *  block transfer service.
  *
  *  Refer to [[org.apache.spark.SSLOptions]] documentation for the list of
  *  options that can be specified.
@@ -177,7 +178,7 @@ import org.apache.spark.util.Utils
  *  SecurityManager initializes SSLOptions objects for different protocols separately. SSLOptions
  *  object parses Spark configuration at a given namespace and builds the common representation
  *  of SSL settings. SSLOptions is then used to provide protocol-specific configuration like
- *  TypeSafe configuration for Akka or SSLContextFactory for Jetty.
+ *  TypeSafe configuration for Akka, SSLContextFactory for Jetty, or SSLContext for Netty.
  *
  *  SSL must be configured on each node and configured for each component involved in
  *  communication using the particular protocol. In YARN clusters, the key-store can be prepared on
@@ -248,9 +249,11 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // configuration at a specified namespace. The namespace *must* start with spark.ssl.
   val fileServerSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.fs", Some(defaultSSLOptions))
   val akkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.akka", Some(defaultSSLOptions))
+  val btsSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.bts", Some(defaultSSLOptions))
 
   logDebug(s"SSLConfiguration for file server: $fileServerSSLOptions")
   logDebug(s"SSLConfiguration for Akka: $akkaSSLOptions")
+  logDebug(s"SSLConfiguration for block transfer service (Netty): $btsSSLOptions")
 
   val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =

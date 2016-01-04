@@ -45,10 +45,10 @@ import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class TransportClientFactorySuite {
-  private TransportConf conf;
-  private TransportContext context;
-  private TransportServer server1;
-  private TransportServer server2;
+  protected TransportConf conf;
+  protected TransportContext context;
+  protected TransportServer server1;
+  protected TransportServer server2;
 
   @Before
   public void setUp() {

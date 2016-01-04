@@ -19,6 +19,8 @@ package org.apache.spark.network.util;
 
 import com.google.common.primitives.Ints;
 
+import java.io.File;
+
 /**
  * A central location that tracks all the settings we expose to users.
  */
@@ -37,6 +39,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_MAXRETRIES_KEY;
   private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
+  private final String SPARK_NETWORK_IO_SSL_CHUNK_SIZE_KEY;
 
   private final ConfigProvider conf;
 
@@ -58,6 +61,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_MAXRETRIES_KEY = getConfKey("io.maxRetries");
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
+    SPARK_NETWORK_IO_SSL_CHUNK_SIZE_KEY = getConfKey("io.ssl.chunkSize");
   }
 
   private String getConfKey(String suffix) {
@@ -141,6 +145,151 @@ public class TransportConf {
    */
   public boolean lazyFileDescriptor() {
     return conf.getBoolean(SPARK_NETWORK_IO_LAZYFD_KEY, true);
+  }
+
+  /**
+   * When Secure (SSL/TLS) Shuffle is enabled, the Chunk size to use for shuffling files.
+   *
+   * @return
+   */
+  public int sslShuffleChunkSize() {
+    return conf.getInt(SPARK_NETWORK_IO_SSL_CHUNK_SIZE_KEY, 60 * 1024);
+  }
+
+  /**
+   * Whether Secure (SSL/TLS) Shuffle (Block Transfer Service) is enabled
+   *
+   * @return
+   */
+  public boolean sslShuffleEnabled() {
+    return conf.getBoolean("spark.ssl.bts.enabled", false);
+  }
+
+  /**
+   * SSL protocol (remember that SSLv3 was compromised) supported by Java
+   *
+   * @return
+   */
+  public String sslShuffleProtocol() {
+    return conf.get("spark.ssl.bts.protocol", null);
+  }
+
+  /**
+   * A comma separated list of ciphers
+   *
+   * @return
+   */
+  public String[] sslShuffleRequestedCiphers() {
+    String ciphers = conf.get("spark.ssl.bts.enabledAlgorithms", null);
+    return (ciphers != null ? ciphers.split(",") : null);
+  }
+
+  /**
+   * The key-store file; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShuffleKeyStore() {
+    String keyStore = conf.get("spark.ssl.bts.keyStore", null);
+    if (keyStore != null)
+      return new File(keyStore);
+    else
+      return null;
+  }
+
+  /**
+   * The password to the key-store file
+   *
+   * @return
+   */
+  public String sslShuffleKeyStorePassword() {
+    return conf.get("spark.ssl.bts.keyStorePassword", null);
+  }
+
+  /**
+   * A PKCS#8 private key file in PEM format; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShufflePrivateKey() {
+    String privateKey = conf.get("spark.ssl.bts.privateKey", null);
+    if (privateKey != null)
+      return new File(privateKey);
+    else
+      return null;
+  }
+
+  /**
+   * The password to the private key
+   *
+   * @return
+   */
+  public String sslShuffleKeyPassword() {
+    return conf.get("spark.ssl.bts.keyPassword", null);
+  }
+
+  /**
+   * A X.509 certificate chain file in PEM format; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShuffleCertChain() {
+    String certChain = conf.get("spark.ssl.bts.certChain", null);
+    if (certChain != null)
+      return new File(certChain);
+    else
+      return null;
+  }
+
+  /**
+   * The trust-store file; can be relative to the current directory
+   *
+   * @return
+   */
+  public File sslShuffleTrustStore() {
+    String trustStore = conf.get("spark.ssl.bts.trustStore", null);
+    if (trustStore != null)
+      return new File(trustStore);
+    else
+      return null;
+  }
+
+  /**
+   * The password to the trust-store file
+   *
+   * @return
+   */
+  public String sslShuffleTrustStorePassword() {
+    return conf.get("spark.ssl.bts.trustStorePassword", null);
+  }
+
+  /**
+   * If using a trust-store that that reloads its configuration is enabled.
+   * If true, when the trust-store file on disk changes, it will be reloaded
+   *
+   * @return
+   */
+  public boolean sslShuffleTrustStoreReloadingEnabled() {
+    return conf.getBoolean("spark.ssl.bts.trustStoreReloadingEnabled", false);
+  }
+
+  /**
+   * The interval, in milliseconds, the trust-store will reload its configuration
+   *
+   * @return
+   */
+  public int sslShuffleTrustStoreReloadInterval() {
+    return conf.getInt("spark.ssl.bts.trustStoreReloadInterval", 10000);
+  }
+
+  /**
+   * If the OpenSSL implementation is enabled,
+   * (if available on host system), requires certChain and keyFile arguments
+   *
+   * @return
+   */
+  public boolean sslShuffleOpenSslEnabled() {
+    return conf.getBoolean("spark.ssl.bts.openSslEnabled", false);
   }
 
   /**
