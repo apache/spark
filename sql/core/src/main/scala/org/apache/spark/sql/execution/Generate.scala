@@ -54,6 +54,8 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
+  override def expressions: Seq[Expression] = generator :: Nil
+
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -62,6 +64,7 @@ case class Generate(
       child.execute().mapPartitionsInternal { iter =>
         val generatorNullRow = InternalRow.fromSeq(Seq.fill[Any](generator.elementTypes.size)(null))
         val joinedRow = new JoinedRow
+        val proj = UnsafeProjection.create(output, output)
 
         iter.flatMap { row =>
           // we should always set the left (child output)
@@ -75,13 +78,14 @@ case class Generate(
         } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
           // we leave the left side as the last element of its child output
           // keep it the same as Hive does
-          joinedRow.withRight(row)
+          proj(joinedRow.withRight(row))
         }
       }
     } else {
       child.execute().mapPartitionsInternal { iter =>
-        iter.flatMap(row => boundGenerator.eval(row)) ++
-        LazyIterator(() => boundGenerator.terminate())
+        val proj = UnsafeProjection.create(output, output)
+        (iter.flatMap(row => boundGenerator.eval(row)) ++
+          LazyIterator(() => boundGenerator.terminate())).map(proj)
       }
     }
   }

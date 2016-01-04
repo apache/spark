@@ -19,9 +19,9 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamMap, IntParam, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType

@@ -115,8 +115,8 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    dataset.withColumn($(outputCol),
-      callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
+    val transformUDF = udf(this.createTransformFunc, outputDataType)
+    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
   override def copy(extra: ParamMap): T = defaultCopy(extra)

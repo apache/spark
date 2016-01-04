@@ -31,7 +31,7 @@ class Module(object):
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
                  sbt_test_goals=(), python_test_goals=(), blacklisted_python_implementations=(),
-                 test_tags=(), should_run_r_tests=False):
+                 test_tags=(), should_run_r_tests=False, should_run_build_tests=False):
         """
         Define a new module.
 
@@ -53,6 +53,7 @@ class Module(object):
         :param test_tags A set of tags that will be excluded when running unit tests if the module
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
+        :param should_run_build_tests: If true, changes in this module will trigger build tests.
         """
         self.name = name
         self.dependencies = dependencies
@@ -64,6 +65,7 @@ class Module(object):
         self.blacklisted_python_implementations = blacklisted_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
+        self.should_run_build_tests = should_run_build_tests
 
         self.dependent_modules = set()
         for dep in dependencies:
@@ -394,6 +396,15 @@ docs = Module(
     ]
 )
 
+build = Module(
+    name="build",
+    dependencies=[],
+    source_file_regexes=[
+        ".*pom.xml",
+        "dev/test-dependencies.sh",
+    ],
+    should_run_build_tests=True
+)
 
 ec2 = Module(
     name="ec2",
@@ -433,5 +444,6 @@ root = Module(
         "test",
     ],
     python_test_goals=list(itertools.chain.from_iterable(m.python_test_goals for m in all_modules)),
-    should_run_r_tests=True
+    should_run_r_tests=True,
+    should_run_build_tests=True
 )

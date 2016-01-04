@@ -36,10 +36,6 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   override private[sql] lazy val metrics = Map(
     "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
 
-  override def outputsUnsafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
-
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -80,12 +76,6 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-
-  override def canProcessUnsafeRows: Boolean = true
-
-  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -107,10 +97,6 @@ case class Sample(
   extends UnaryNode
 {
   override def output: Seq[Attribute] = child.output
-
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (withReplacement) {
@@ -134,8 +120,6 @@ case class Range(
     numElements: BigInt,
     output: Seq[Attribute])
   extends LeafNode {
-
-  override def outputsUnsafeRows: Boolean = true
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext
@@ -199,9 +183,6 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
       }
     }
   }
-  override def outputsUnsafeRows: Boolean = children.exists(_.outputsUnsafeRows)
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
 }
@@ -268,12 +249,14 @@ case class TakeOrderedAndProject(
   // and this ordering needs to be created on the driver in order to be passed into Spark core code.
   private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
 
-  // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
-  @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
-
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    projection.map(data.map(_)).getOrElse(data)
+    if (projectList.isDefined) {
+      val proj = UnsafeProjection.create(projectList.get, child.output)
+      data.map(r => proj(r).copy())
+    } else {
+      data
+    }
   }
 
   override def executeCollect(): Array[InternalRow] = {
@@ -311,10 +294,6 @@ case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().coalesce(numPartitions, shuffle = false)
   }
-
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -327,10 +306,6 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
-
-  override def outputsUnsafeRows: Boolean = children.exists(_.outputsUnsafeRows)
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -343,10 +318,6 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
-
-  override def outputsUnsafeRows: Boolean = children.exists(_.outputsUnsafeRows)
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -369,6 +340,7 @@ case class MapPartitions[T, U](
     uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
+  override def producedAttributes: AttributeSet = outputSet
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -387,10 +359,7 @@ case class AppendColumns[T, U](
     uEncoder: ExpressionEncoder[U],
     newColumns: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
-
-  // We are using an unsafe combiner.
-  override def canProcessSafeRows: Boolean = false
-  override def canProcessUnsafeRows: Boolean = true
+  override def producedAttributes: AttributeSet = AttributeSet(newColumns)
 
   override def output: Seq[Attribute] = child.output ++ newColumns
 
@@ -419,6 +388,7 @@ case class MapGroups[K, T, U](
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
+  override def producedAttributes: AttributeSet = outputSet
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(groupingAttributes) :: Nil
@@ -458,6 +428,7 @@ case class CoGroup[Key, Left, Right, Result](
     rightGroup: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
+  override def producedAttributes: AttributeSet = outputSet
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil

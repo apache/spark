@@ -18,8 +18,8 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.{Iterator => JIterator}
+import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer

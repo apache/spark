@@ -22,9 +22,8 @@ import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-
 import org.apache.spark.graphx.lib._
+import org.apache.spark.rdd.RDD
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the

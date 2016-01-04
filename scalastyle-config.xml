@@ -187,14 +187,6 @@ This file is divided into 3 sections:
     scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
-  <!-- As of SPARK-10330 JobContext methods should not be called directly -->
-  <check customId="jobcontext" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
-    <parameters><parameter name="regex">^getConfiguration$|^getTaskAttemptID$</parameter></parameters>
-    <customMessage>Instead of calling .getConfiguration() or .getTaskAttemptID() directly,
-    use SparkHadoopUtil's getConfigurationFromJobContext() and getTaskAttemptIDFromTaskAttemptContext() methods.
-    </customMessage>
-  </check>
-
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->
@@ -219,8 +211,8 @@ This file is divided into 3 sections:
   <check level="warning" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">
     <parameters>
       <parameter name="groups">java,scala,3rdParty,spark</parameter>
-      <parameter name="group.java">javax?\..+</parameter>
-      <parameter name="group.scala">scala\..+</parameter>
+      <parameter name="group.java">javax?\..*</parameter>
+      <parameter name="group.scala">scala\..*</parameter>
       <parameter name="group.3rdParty">(?!org\.apache\.spark\.).*</parameter>
       <parameter name="group.spark">org\.apache\.spark\..*</parameter>
     </parameters>

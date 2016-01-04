@@ -836,7 +836,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       minPartitions: Int = defaultMinPartitions): RDD[String] = withScope {
     assertNotStopped()
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minPartitions).map(pair => pair._2.toString)
+      minPartitions).map(pair => pair._2.toString).setName(path)
   }
 
   /**
@@ -874,18 +874,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[(String, String)] = withScope {
     assertNotStopped()
-    val job = new NewHadoopJob(hadoopConfiguration)
+    val job = NewHadoopJob.getInstance(hadoopConfiguration)
     // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updateConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val updateConf = job.getConfiguration
     new WholeTextFileRDD(
       this,
       classOf[WholeTextFileInputFormat],
       classOf[Text],
       classOf[Text],
       updateConf,
-      minPartitions).setName(path).map(record => (record._1.toString, record._2.toString))
+      minPartitions).map(record => (record._1.toString, record._2.toString)).setName(path)
   }
 
   /**
@@ -923,11 +923,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[(String, PortableDataStream)] = withScope {
     assertNotStopped()
-    val job = new NewHadoopJob(hadoopConfiguration)
+    val job = NewHadoopJob.getInstance(hadoopConfiguration)
     // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updateConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val updateConf = job.getConfiguration
     new BinaryFileRDD(
       this,
       classOf[StreamInputFormat],
@@ -1100,13 +1100,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = withScope {
     assertNotStopped()
-    // The call to new NewHadoopJob automatically adds security credentials to conf,
+    // The call to NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
-    val job = new NewHadoopJob(conf)
+    val job = NewHadoopJob.getInstance(conf)
     // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
-    val updatedConf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val updatedConf = job.getConfiguration
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
 
@@ -1369,7 +1369,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (!fs.exists(hadoopPath)) {
         throw new FileNotFoundException(s"Added file $hadoopPath does not exist.")
       }
-      val isDir = fs.getFileStatus(hadoopPath).isDir
+      val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
         throw new SparkException(s"addFile does not support local directories when not running " +
           "local mode.")

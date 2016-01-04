@@ -26,8 +26,6 @@ import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -51,7 +49,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, partitionColumns, bucketSpec, paths)(sqlContext)
+    new TextRelation(None, dataSchema, partitionColumns, bucketSpec, paths)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -71,6 +69,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
 private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
+    val textSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
     val bucketSpec: Option[BucketSpec],
     override val paths: Array[String] = Array.empty[String],
@@ -78,9 +77,9 @@ private[sql] class TextRelation(
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
-  /** Data schema is always a single column, named "value". */
-  override def dataSchema: StructType = new StructType().add("value", StringType)
-
+  /** Data schema is always a single column, named "value" if original Data source has no schema. */
+  override def dataSchema: StructType =
+    textSchema.getOrElse(new StructType().add("value", StringType))
   /** This is an internal data source that outputs internal row format. */
   override val needConversion: Boolean = false
 
@@ -90,8 +89,8 @@ private[sql] class TextRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = job.getConfiguration
     val paths = inputPaths.map(_.getPath).sortBy(_.toUri)
 
     if (paths.nonEmpty) {
@@ -103,14 +102,14 @@ private[sql] class TextRelation(
       .mapPartitions { iter =>
         val bufferHolder = new BufferHolder
         val unsafeRowWriter = new UnsafeRowWriter
-        val unsafeRow = new UnsafeRow
+        val unsafeRow = new UnsafeRow(1)
 
         iter.map { case (_, line) =>
           // Writes to an UnsafeRow directly
           bufferHolder.reset()
           unsafeRowWriter.initialize(bufferHolder, 1)
           unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-          unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
+          unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize())
           unsafeRow
         }
       }
@@ -124,7 +123,7 @@ private[sql] class TextRelation(
           bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new TextOutputWriter(path, bucketId, dataSchema, context)
+        new TextOutputWriter(path, bucketId, context)
       }
     }
   }
@@ -143,19 +142,17 @@ private[sql] class TextRelation(
 class TextOutputWriter(
     path: String,
     bucketId: Option[Int],
-    dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter
-  with SparkHadoopMapRedUtil {
+  extends OutputWriter {
 
   private[this] val buffer = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+        val configuration = context.getConfiguration
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
-        val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+        val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
