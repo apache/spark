@@ -20,15 +20,14 @@ package org.apache.spark.sql.types
 import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
+import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
-import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.util.Utils
-
 
 /**
  * :: DeveloperApi ::

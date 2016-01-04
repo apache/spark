@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
