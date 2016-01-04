@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.dstream
 
 import java.io._
-import java.net.{Socket,ConnectException}
+import java.net.{ConnectException, Socket}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -73,7 +73,7 @@ class SocketReceiver[T: ClassTag](
   }
 
   def onStop() {
-    //in case restart thread close it twice
+    // in case restart thread close it twice
     synchronized {
       if (socket != null) {
         socket.close()
