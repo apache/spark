@@ -185,7 +185,9 @@ private[deploy] class Worker(
     shuffleService.startIfEnabled()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
-    workerWebUiUrl = s"http://$publicAddress:${webUi.boundPort}"
+
+    val scheme = if (webUi.sslOptions.enabled) "https" else "http"
+    workerWebUiUrl = s"$scheme://$publicAddress:${webUi.boundPort}"
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)

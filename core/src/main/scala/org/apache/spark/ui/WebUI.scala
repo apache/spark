@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class WebUI(
     val securityManager: SecurityManager,
-    sslOptions: SSLOptions,
+    val sslOptions: SSLOptions,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
