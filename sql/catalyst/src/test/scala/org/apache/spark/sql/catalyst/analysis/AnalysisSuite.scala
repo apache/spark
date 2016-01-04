@@ -274,4 +274,10 @@ class AnalysisSuite extends AnalysisTest {
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
   }
+
+  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+    val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
+    val plan = relation.select(CaseWhen(Seq(Literal(true), 'a, 'b)).as("val"))
+    assertAnalysisSuccess(plan)
+  }
 }

@@ -30,12 +30,14 @@ NULL
 #' @param key The key to look up for
 #' @return a list of values in this RDD for key key
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' pairs <- list(c(1, 1), c(2, 2), c(1, 3))
 #' rdd <- parallelize(sc, pairs)
 #' lookup(rdd, 1) # list(1, 3)
 #'}
+# nolint end
 #' @rdname lookup
 #' @aliases lookup,RDD-method
 #' @noRd
@@ -58,11 +60,13 @@ setMethod("lookup",
 #' @param x The RDD to count keys.
 #' @return list of (key, count) pairs, where count is number of each key in rdd.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(c("a", 1), c("b", 1), c("a", 1)))
 #' countByKey(rdd) # ("a", 2L), ("b", 1L)
 #'}
+# nolint end
 #' @rdname countByKey
 #' @aliases countByKey,RDD-method
 #' @noRd
@@ -77,11 +81,13 @@ setMethod("countByKey",
 #'
 #' @param x The RDD from which the keys of each tuple is returned.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
 #' collect(keys(rdd)) # list(1, 3)
 #'}
+# nolint end
 #' @rdname keys
 #' @aliases keys,RDD
 #' @noRd
@@ -98,11 +104,13 @@ setMethod("keys",
 #'
 #' @param x The RDD from which the values of each tuple is returned.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
 #' collect(values(rdd)) # list(2, 4)
 #'}
+# nolint end
 #' @rdname values
 #' @aliases values,RDD
 #' @noRd
@@ -348,6 +356,7 @@ setMethod("reduceByKey",
 #' @return A list of elements of type list(K, V') where V' is the merged value for each key
 #' @seealso reduceByKey
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
@@ -355,6 +364,7 @@ setMethod("reduceByKey",
 #' reduced <- reduceByKeyLocally(rdd, "+")
 #' reduced # list(list(1, 6), list(1.1, 3))
 #'}
+# nolint end
 #' @rdname reduceByKeyLocally
 #' @aliases reduceByKeyLocally,RDD,integer-method
 #' @noRd
@@ -412,6 +422,7 @@ setMethod("reduceByKeyLocally",
 #' @return An RDD where each element is list(K, C) where C is the combined type
 #' @seealso groupByKey, reduceByKey
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
@@ -420,6 +431,7 @@ setMethod("reduceByKeyLocally",
 #' combined <- collect(parts)
 #' combined[[1]] # Should be a list(1, 6)
 #'}
+# nolint end
 #' @rdname combineByKey
 #' @aliases combineByKey,RDD,ANY,ANY,ANY,integer-method
 #' @noRd
@@ -473,6 +485,7 @@ setMethod("combineByKey",
 #' @return An RDD containing the aggregation result.
 #' @seealso foldByKey, combineByKey
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
@@ -482,6 +495,7 @@ setMethod("combineByKey",
 #' aggregateByKey(rdd, zeroValue, seqOp, combOp, 2L)
 #'   # list(list(1, list(3, 2)), list(2, list(7, 2)))
 #'}
+# nolint end
 #' @rdname aggregateByKey
 #' @aliases aggregateByKey,RDD,ANY,ANY,ANY,integer-method
 #' @noRd
@@ -509,11 +523,13 @@ setMethod("aggregateByKey",
 #' @return An RDD containing the aggregation result.
 #' @seealso aggregateByKey, combineByKey
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
 #' foldByKey(rdd, 0, "+", 2L) # list(list(1, 3), list(2, 7))
 #'}
+# nolint end
 #' @rdname foldByKey
 #' @aliases foldByKey,RDD,ANY,ANY,integer-method
 #' @noRd
@@ -540,12 +556,14 @@ setMethod("foldByKey",
 #' @return a new RDD containing all pairs of elements with matching keys in
 #'         two input RDDs.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
 #' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
 #' join(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3))
 #'}
+# nolint end
 #' @rdname join-methods
 #' @aliases join,RDD,RDD-method
 #' @noRd
@@ -578,6 +596,7 @@ setMethod("join",
 #'         all pairs (k, (v, w)) for (k, w) in rdd2, or the pair (k, (v, NULL))
 #'         if no elements in rdd2 have key k.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
@@ -585,6 +604,7 @@ setMethod("join",
 #' leftOuterJoin(rdd1, rdd2, 2L)
 #' # list(list(1, list(1, 2)), list(1, list(1, 3)), list(2, list(4, NULL)))
 #'}
+# nolint end
 #' @rdname join-methods
 #' @aliases leftOuterJoin,RDD,RDD-method
 #' @noRd
@@ -616,6 +636,7 @@ setMethod("leftOuterJoin",
 #'         all pairs (k, (v, w)) for (k, v) in x, or the pair (k, (NULL, w))
 #'         if no elements in x have key k.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3)))
@@ -623,6 +644,7 @@ setMethod("leftOuterJoin",
 #' rightOuterJoin(rdd1, rdd2, 2L)
 #' # list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)))
 #'}
+# nolint end
 #' @rdname join-methods
 #' @aliases rightOuterJoin,RDD,RDD-method
 #' @noRd
@@ -655,6 +677,7 @@ setMethod("rightOuterJoin",
 #'         (k, w) in y, or the pair (k, (NULL, w))/(k, (v, NULL)) if no elements
 #'         in x/y have key k.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3), list(3, 3)))
@@ -664,6 +687,7 @@ setMethod("rightOuterJoin",
 #'                               #      list(2, list(NULL, 4)))
 #'                               #      list(3, list(3, NULL)),
 #'}
+# nolint end
 #' @rdname join-methods
 #' @aliases fullOuterJoin,RDD,RDD-method
 #' @noRd
@@ -688,6 +712,7 @@ setMethod("fullOuterJoin",
 #' @return a new RDD containing all pairs of elements with values in a list
 #' in all RDDs.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
@@ -695,6 +720,7 @@ setMethod("fullOuterJoin",
 #' cogroup(rdd1, rdd2, numPartitions = 2L)
 #' # list(list(1, list(1, list(2, 3))), list(2, list(list(4), list()))
 #'}
+# nolint end
 #' @rdname cogroup
 #' @aliases cogroup,RDD-method
 #' @noRd
@@ -740,17 +766,19 @@ setMethod("cogroup",
 #' @param numPartitions Number of partitions to create.
 #' @return An RDD where all (k, v) pair elements are sorted.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(3, 1), list(2, 2), list(1, 3)))
 #' collect(sortByKey(rdd)) # list (list(1, 3), list(2, 2), list(3, 1))
 #'}
+# nolint end
 #' @rdname sortByKey
 #' @aliases sortByKey,RDD,RDD-method
 #' @noRd
 setMethod("sortByKey",
           signature(x = "RDD"),
-          function(x, ascending = TRUE, numPartitions = SparkR:::numPartitions(x)) {
+          function(x, ascending = TRUE, numPartitions = SparkR:::getNumPartitions(x)) {
             rangeBounds <- list()
 
             if (numPartitions > 1) {
@@ -805,6 +833,7 @@ setMethod("sortByKey",
 #' @param numPartitions Number of the partitions in the result RDD.
 #' @return An RDD with the pairs from x whose keys are not in other.
 #' @examples
+# nolint start
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list("a", 1), list("b", 4),
@@ -813,12 +842,13 @@ setMethod("sortByKey",
 #' collect(subtractByKey(rdd1, rdd2))
 #' # list(list("b", 4), list("b", 5))
 #'}
+# nolint end
 #' @rdname subtractByKey
 #' @aliases subtractByKey,RDD
 #' @noRd
 setMethod("subtractByKey",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR:::numPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::getNumPartitions(x)) {
             filterFunction <- function(elem) {
               iters <- elem[[2]]
               (length(iters[[1]]) > 0) && (length(iters[[2]]) == 0)

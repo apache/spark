@@ -1,11 +1,30 @@
 ---
 layout: global
-title: Old Migration Guides - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Old Migration Guides
+title: Old Migration Guides - spark.mllib
+displayTitle: Old Migration Guides - spark.mllib
 description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 ---
 
 The migration guide for the current Spark version is kept on the [MLlib Programming Guide main page](mllib-guide.html#migration-guide).
+
+## From 1.4 to 1.5
+
+In the `spark.mllib` package, there are no breaking API changes but several behavior changes:
+
+* [SPARK-9005](https://issues.apache.org/jira/browse/SPARK-9005):
+  `RegressionMetrics.explainedVariance` returns the average regression sum of squares.
+* [SPARK-8600](https://issues.apache.org/jira/browse/SPARK-8600): `NaiveBayesModel.labels` become
+  sorted.
+* [SPARK-3382](https://issues.apache.org/jira/browse/SPARK-3382): `GradientDescent` has a default
+  convergence tolerance `1e-3`, and hence iterations might end earlier than 1.4.
+
+In the `spark.ml` package, there exists one breaking API change and one behavior change:
+
+* [SPARK-9268](https://issues.apache.org/jira/browse/SPARK-9268): Java's varargs support is removed
+  from `Params.setDefault` due to a
+  [Scala compiler bug](https://issues.scala-lang.org/browse/SI-9013).
+* [SPARK-10097](https://issues.apache.org/jira/browse/SPARK-10097): `Evaluator.isLargerBetter` is
+  added to indicate metric ordering. Metrics like RMSE no longer flip signs as in 1.4.
 
 ## From 1.3 to 1.4
 

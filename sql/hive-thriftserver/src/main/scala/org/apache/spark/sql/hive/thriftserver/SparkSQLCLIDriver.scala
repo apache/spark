@@ -83,7 +83,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    HiveContext.newTemporaryConfiguration().foreach {
+    HiveContext.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
       case (key, value) => cliConf.set(key, value)
     }
     val sessionState = new CliSessionState(cliConf)
@@ -195,20 +195,18 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     // add shutdown hook to flush the history to history file
-    Runtime.getRuntime.addShutdownHook(new Thread(new Runnable() {
-      override def run() = {
-        reader.getHistory match {
-          case h: FileHistory =>
-            try {
-              h.flush()
-            } catch {
-              case e: IOException =>
-                logWarning("WARNING: Failed to write command history file: " + e.getMessage)
-            }
-          case _ =>
-        }
+    ShutdownHookManager.addShutdownHook { () =>
+      reader.getHistory match {
+        case h: FileHistory =>
+          try {
+            h.flush()
+          } catch {
+            case e: IOException =>
+              logWarning("WARNING: Failed to write command history file: " + e.getMessage)
+          }
+        case _ =>
       }
-    }))
+    }
 
     // TODO: missing
 /*

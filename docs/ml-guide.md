@@ -1,7 +1,9 @@
 ---
 layout: global
-title: Spark ML Programming Guide
+title: "Overview: estimators, transformers and pipelines - spark.ml"
+displayTitle: "Overview: estimators, transformers and pipelines - spark.ml"
 ---
+
 
 `\[
 \newcommand{\R}{\mathbb{R}}
@@ -31,21 +33,6 @@ See the [algorithm guides](#algorithm-guides) section below for guides on sub-pa
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
-
-# Algorithm guides
-
-We provide several algorithm guides specific to the Pipelines API.
-Several of these algorithms, such as certain feature transformers, are not in the `spark.mllib` API.
-Also, some algorithms have additional capabilities in the `spark.ml` API; e.g., random forests
-provide class probabilities, and linear models provide model summaries.
-
-* [Feature extraction, transformation, and selection](ml-features.html)
-* [Clustering](ml-clustering.html)
-* [Decision Trees for classification and regression](ml-decision-tree.html)
-* [Ensembles](ml-ensembles.html)
-* [Linear methods with elastic net regularization](ml-linear-methods.html)
-* [Multilayer perceptron classifier](ml-ann.html)
-* [Survival Regression](ml-survival-regression.html)
 
 
 # Main concepts in Pipelines
@@ -204,6 +191,10 @@ There are two main ways to pass parameters to an algorithm:
 Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
+
+## Saving and Loading Pipelines
+
+Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models. Please refer to the algorithm's API documentation to see if saving and loading is supported.
 
 # Code examples
 
@@ -467,6 +458,15 @@ val pipeline = new Pipeline()
 
 // Fit the pipeline to training documents.
 val model = pipeline.fit(training)
+
+// now we can optionally save the fitted pipeline to disk
+model.save("/tmp/spark-logistic-regression-model")
+
+// we can also save this unfit pipeline to disk
+pipeline.save("/tmp/unfit-lr-model")
+
+// and load it back in during production
+val sameModel = Pipeline.load("/tmp/spark-logistic-regression-model")
 
 // Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(

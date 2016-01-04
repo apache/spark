@@ -20,8 +20,8 @@ package org.apache.spark.mllib.fpm
 import java.{lang => jl, util => ju}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
