@@ -57,10 +57,9 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
  * the hash length is not one of the permitted values, the return value is NULL.
  */
 @ExpressionDescription(
-  usage =
-    """_FUNC_(input, bitLength) - Returns a checksum of SHA-2 family as a hex string of the input.
-      SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256."""
-  ,
+  usage = """_FUNC_(input, bitLength) - Returns a checksum of SHA-2 family as a hex string of
+the input. SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is
+equivalent to 256.""",
   extended = "> SELECT _FUNC_('Spark', 0);\n " +
     "'529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b'")
 case class Sha2(left: Expression, right: Expression)
