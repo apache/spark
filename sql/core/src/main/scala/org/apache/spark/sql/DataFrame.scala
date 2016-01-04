@@ -1171,13 +1171,17 @@ class DataFrame private[sql](
    */
   def withColumn(colName: String, col: Column): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val replaced = schema.exists(f => resolver(f.name, colName))
-    if (replaced) {
-      val colNames = schema.map { field =>
-        val name = field.name
-        if (resolver(name, colName)) col.as(colName) else Column(name)
+    val output = queryExecution.analyzed.output
+    val shouldReplace = output.exists(f => resolver(f.name, colName))
+    if (shouldReplace) {
+      val columns = output.map { field =>
+        if (resolver(field.name, colName)) {
+          col.as(colName)
+        } else {
+          Column(field)
+        }
       }
-      select(colNames : _*)
+      select(columns : _*)
     } else {
       select(Column("*"), col.as(colName))
     }
@@ -1188,13 +1192,17 @@ class DataFrame private[sql](
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val replaced = schema.exists(f => resolver(f.name, colName))
-    if (replaced) {
-      val colNames = schema.map { field =>
-        val name = field.name
-        if (resolver(name, colName)) col.as(colName, metadata) else Column(name)
+    val output = queryExecution.analyzed.output
+    val shouldReplace = output.exists(f => resolver(f.name, colName))
+    if (shouldReplace) {
+      val columns = output.map { field =>
+        if (resolver(field.name, colName)) {
+          col.as(colName, metadata)
+        } else {
+          Column(field)
+        }
       }
-      select(colNames : _*)
+      select(columns : _*)
     } else {
       select(Column("*"), col.as(colName, metadata))
     }
