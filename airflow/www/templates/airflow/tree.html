@@ -232,10 +232,12 @@ function update(source) {
       .style("stroke-width", function(d) {return (d.run_id != undefined)? "2": "1"})
       .style("stroke-opacity", function(d) {return d.external_trigger ? "0": "1"})
       .attr("title", function(d){
-        s =  "Run: " + d.execution_date + "<br>";
+        s =  "Task_id: " + d.task_id + "<br>";
+        s += "Run: " + d.execution_date + "<br>";
         if(d.run_id != undefined){
           s += "run_id: <nobr>" + d.run_id + "</nobr><br>";
         }
+        s += "Operator: " + d.operator + "<br>"
         if(d.start_date != undefined){
           s += "Started: " + d.start_date + "<br>";
           s += "Ended: " + d.end_date + "<br>";
