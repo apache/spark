@@ -95,7 +95,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       // e.g.: hierarchyStore = "ssd 200GB, hdd 100GB"
       hierarchyStore.get.trim.split(",").map {
         s => val x = s.trim.split(" +")
-          (x(0).toLowerCase, Utils.byteStringAsGb(x(1)))
+          (x(0).toLowerCase, Utils.byteStringAsBytes(x(1)))
       }
     val hsLayers: Array[LayerInfo] = hsSpecs.map(
       s => LayerInfo(s._1, s._2, localDirs.filter(_.getPath.toLowerCase.containsSlice(s._1)))
@@ -106,7 +106,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     val finalLayers: Array[LayerInfo] = allLayers.filter(_.dirs.nonEmpty)
     logInfo("Hierarchy store info:")
     for (layer <- finalLayers) {
-      logInfo("Layer: %s, Threshold: %dGB".format(layer.key, layer.threshold))
+      logInfo("Layer: %s, Threshold: %s".format(layer.key, Utils.bytesToString(layer.threshold)))
       layer.dirs.foreach { dir => logInfo("\t%s".format(dir.getCanonicalPath)) }
     }
 
@@ -116,7 +116,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         val file = getFile(filename, layer.dirs)
         if (file.exists()) return file
 
-        if (availableFile == null && file.getParentFile.getUsableSpace>>30 >= layer.threshold) {
+        if (availableFile == null && file.getParentFile.getUsableSpace >= layer.threshold) {
           availableFile = file
         }
       }
