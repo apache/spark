@@ -94,6 +94,10 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
       ssc.stop()
       ssc = null
     }
+    if (kc != null) {
+      kc.close()
+      kc = null
+    }
   }
 
   test("Reliable Kafka input stream with single topic") {

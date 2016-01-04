@@ -175,12 +175,11 @@ class DirectKafkaStreamSuite
     assert(
       stream.asInstanceOf[DirectKafkaInputDStream[_, _, _]]
         .fromOffsets(topicPartition) >= offsetBeforeStart,
-      "Start offset not from latest")
+      "Start offset not from latest"
+    )
 
     val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
-    stream.map {
-      _._2
-    }.foreachRDD { rdd => collectedData ++= rdd.collect() }
+    stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
@@ -255,13 +254,9 @@ class DirectKafkaStreamSuite
 
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
-      val strings = data.map {
-        _.toString
-      }
-      kafkaTestUtils.sendMessages(topic, strings.map {
-        _ -> 1
-      }.toMap)
-      eventually(timeout(20 seconds), interval(50 milliseconds)) {
+      val strings = data.map { _.toString }
+      kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1 }.toMap)
+      eventually(timeout(60 seconds), interval(200 milliseconds)) {
         assert(strings.forall {
           DirectKafkaStreamSuite.collectedData.contains
         })
@@ -282,9 +277,7 @@ class DirectKafkaStreamSuite
 
     // This is to collect the raw data received from Kafka
     kafkaStream.foreachRDD { (rdd: RDD[(String, String)], time: Time) =>
-      val data = rdd.map {
-        _._2
-      }.collect()
+      val data = rdd.map { _._2 }.collect()
       DirectKafkaStreamSuite.collectedData.appendAll(data)
     }
 
@@ -303,10 +296,9 @@ class DirectKafkaStreamSuite
     val offsetRangesBeforeStop = getOffsetRanges(kafkaStream)
     assert(offsetRangesBeforeStop.size >= 1, "No offset ranges generated")
     assert(
-      offsetRangesBeforeStop.head._2.forall {
-        _.fromOffset === 0
-      },
-      "starting offset not zero")
+      offsetRangesBeforeStop.head._2.forall { _.fromOffset === 0 },
+      "starting offset not zero"
+    )
     ssc.stop()
     logInfo("====== RESTARTING ========")
 
@@ -322,7 +314,8 @@ class DirectKafkaStreamSuite
       recoveredOffsetRanges.forall { or =>
         earlierOffsetRangesAsSets.contains((or._1, or._2.toSet))
       },
-      "Recovered ranges are not the same as the ones generated")
+      "Recovered ranges are not the same as the ones generated"
+    )
     // Restart context, give more data and verify the total at the end
     // If the total is write that means each records has been received only once
     ssc.start()
@@ -425,9 +418,7 @@ class DirectKafkaStreamSuite
 
     // This is to collect the raw data received from Kafka
     kafkaStream.foreachRDD { (rdd: RDD[(String, String)], time: Time) =>
-      val data = rdd.map {
-        _._2
-      }.collect()
+      val data = rdd.map { _._2 }.collect()
       collectedData += data
     }
 
@@ -441,7 +432,7 @@ class DirectKafkaStreamSuite
       // Expect blocks of data equal to "rate", scaled by the interval length in secs.
       val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
       kafkaTestUtils.sendMessages(topic, messages)
-      eventually(timeout(5.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
+      eventually(timeout(10.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
         // Funky "-" in message makes the complete assertion message read better.
         assert(collectedData.exists(_.size == expectedSize),
@@ -457,9 +448,7 @@ class DirectKafkaStreamSuite
     Seq[(Time, Array[OffsetRange])] = {
     kafkaStream.generatedRDDs.mapValues { rdd =>
       rdd.asInstanceOf[KafkaRDD[K, V, (K, V)]].offsetRanges
-    }.toSeq.sortBy {
-      _._1
-    }
+    }.toSeq.sortBy { _._1 }
   }
 }
 
@@ -484,7 +473,6 @@ object DirectKafkaStreamSuite {
       numRecordsCompleted.addAndGet(batchCompleted.batchInfo.numRecords)
     }
   }
-
 }
 
 private[streaming] class ConstantEstimator(@volatile private var rate: Long)
@@ -495,9 +483,9 @@ private[streaming] class ConstantEstimator(@volatile private var rate: Long)
   }
 
   def compute(
-    time: Long,
-    elements: Long,
-    processingDelay: Long,
-    schedulingDelay: Long): Option[Double] = Some(rate)
+      time: Long,
+      elements: Long,
+      processingDelay: Long,
+      schedulingDelay: Long): Option[Double] = Some(rate)
 }
 

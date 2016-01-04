@@ -52,10 +52,11 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
   private val KAFKA_DEFAULT_POLL_TIME: String = "0"
   private val pollTime = kafkaParams.get("spark.kafka.poll.time")
     .getOrElse(KAFKA_DEFAULT_POLL_TIME).toInt
+  private val cluster = new KafkaCluster[K, V](kafkaParams)
 
   override def getPartitions: Array[Partition] = {
     val topics = offsetRanges.map { _.topic }.toSet
-    val tpLeaders = new KafkaCluster[K, V](kafkaParams).getPartitionsLeader(topics)
+    val tpLeaders = cluster.getPartitionsLeader(topics)
 
     offsetRanges.zipWithIndex.map {
       case (o, i) =>

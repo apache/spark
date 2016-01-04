@@ -41,6 +41,9 @@ class KafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String
 
   import KafkaCluster.{toTopicPart}
 
+  @transient
+  var consumer: KafkaConsumer[K, V] = null
+
   def getLatestOffsets(topicPartitions: Set[TopicAndPartition]): Map[TopicAndPartition, Long] = {
     seek(topicPartitions, OffsetResetStrategy.LATEST)
   }
@@ -134,18 +137,17 @@ class KafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String
   }
 
   private def withConsumer(fn: KafkaConsumer[K, V] => Any): Any = {
-    var consumer: KafkaConsumer[K, V] = null
-    try {
+    if (consumer == null) {
       consumer = new KafkaConsumer[K, V](kafkaParams.asInstanceOf[Map[String, Object]].asJava)
-      fn(consumer)
-    } finally {
-      if (consumer != null) {
-        consumer.close()
-      }
     }
+    fn(consumer)
   }
 
   def close(): Unit = {
+    if (consumer != null) {
+      consumer.close()
+      consumer = null
+    }
   }
 
 }
