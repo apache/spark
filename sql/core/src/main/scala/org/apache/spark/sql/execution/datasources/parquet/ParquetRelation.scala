@@ -44,14 +44,14 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitionSpec}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "parquet"
 
@@ -61,7 +61,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
+      parameters: Map[String, String]): BucketedHadoopFsRelation = {
     new ParquetRelation(paths, schema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
@@ -115,7 +115,7 @@ private[sql] class ParquetRelation(
     val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec, parameters)
+  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(
@@ -283,7 +283,7 @@ private[sql] class ParquetRelation(
           sqlContext.conf.parquetCompressionCodec.toUpperCase,
           CompressionCodecName.UNCOMPRESSED).name())
 
-    new OutputWriterFactory {
+    new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

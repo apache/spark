@@ -36,14 +36,14 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitionSpec}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "orc"
 
@@ -53,7 +53,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
+      parameters: Map[String, String]): BucketedHadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
@@ -159,7 +159,7 @@ private[sql] class OrcRelation(
     val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec, parameters)
+  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(
@@ -221,7 +221,7 @@ private[sql] class OrcRelation(
           classOf[MapRedOutputFormat[_, _]])
     }
 
-    new OutputWriterFactory {
+    new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

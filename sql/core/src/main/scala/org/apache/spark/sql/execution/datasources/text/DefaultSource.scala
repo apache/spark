@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitionSpec}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -39,7 +39,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A data source for reading text files.
  */
-class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def createRelation(
       sqlContext: SQLContext,
@@ -47,7 +47,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
+      parameters: Map[String, String]): BucketedHadoopFsRelation = {
     dataSchema.foreach(verifySchema)
     new TextRelation(None, dataSchema, partitionColumns, bucketSpec, paths)(sqlContext)
   }
@@ -75,7 +75,7 @@ private[sql] class TextRelation(
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec, parameters) {
+  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters) {
 
   /** Data schema is always a single column, named "value" if original Data source has no schema. */
   override def dataSchema: StructType =
@@ -117,7 +117,7 @@ private[sql] class TextRelation(
 
   /** Write path. */
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    new OutputWriterFactory {
+    new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

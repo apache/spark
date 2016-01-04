@@ -124,7 +124,12 @@ private[sql] case class InsertIntoHadoopFsRelation(
              |Actual: ${partitionColumns.mkString(", ")}
           """.stripMargin)
 
-        val writerContainer = if (partitionColumns.isEmpty && relation.bucketSpec.isEmpty) {
+        val bucketSpec = relation match {
+          case relation: BucketedHadoopFsRelation => relation.bucketSpec
+          case _ => None
+        }
+
+        val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)
         } else {
           val output = df.queryExecution.executedPlan.output
@@ -135,7 +140,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             relation,
             job,
             partitionOutput,
-            relation.bucketSpec,
+            bucketSpec,
             dataOutput,
             output,
             PartitioningUtils.DEFAULT_PARTITION_NAME,

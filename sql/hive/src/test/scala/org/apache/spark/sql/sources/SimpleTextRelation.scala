@@ -28,21 +28,21 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, expressions}
-import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.execution.datasources.{BucketedOutputWriterFactory, BucketedHadoopFsRelation, BucketedHadoopFsRelationProvider, BucketSpec}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{Row, SQLContext, sources}
 
 /**
  * A simple example [[HadoopFsRelationProvider]].
  */
-class SimpleTextSource extends HadoopFsRelationProvider {
+class SimpleTextSource extends BucketedHadoopFsRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
+      parameters: Map[String, String]): BucketedHadoopFsRelation = {
     new SimpleTextRelation(paths, schema, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
@@ -97,7 +97,7 @@ class SimpleTextRelation(
     val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(parameters) {
+  extends BucketedHadoopFsRelation(parameters) {
 
   import sqlContext.sparkContext
 
@@ -181,7 +181,7 @@ class SimpleTextRelation(
     }
   }
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = new BucketedOutputWriterFactory {
     job.setOutputFormatClass(classOf[TextOutputFormat[_, _]])
 
     override def newInstance(
@@ -214,14 +214,14 @@ object SimpleTextRelation {
 /**
  * A simple example [[HadoopFsRelationProvider]].
  */
-class CommitFailureTestSource extends HadoopFsRelationProvider {
+class CommitFailureTestSource extends BucketedHadoopFsRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
+      parameters: Map[String, String]): BucketedHadoopFsRelation = {
     new CommitFailureTestRelation(paths, schema, partitionColumns, bucketSpec, parameters)(
       sqlContext)
   }
@@ -240,7 +240,7 @@ class CommitFailureTestRelation(
     userDefinedPartitionColumns,
     bucketSpec,
     parameters)(sqlContext) {
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = new BucketedOutputWriterFactory {
     override def newInstance(
         path: String,
         bucketId: Option[Int],

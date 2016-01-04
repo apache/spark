@@ -33,14 +33,14 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.execution.datasources.{BucketSpec, PartitionSpec}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.util.SerializableConfiguration
 
 
-class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "json"
 
@@ -50,7 +50,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
+      parameters: Map[String, String]): BucketedHadoopFsRelation = {
 
     new JSONRelation(
       inputRDD = None,
@@ -72,7 +72,7 @@ private[sql] class JSONRelation(
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec, parameters) {
+  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters) {
 
   def this(
       inputRDD: Option[RDD[String]],
@@ -179,7 +179,7 @@ private[sql] class JSONRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    new OutputWriterFactory {
+    new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

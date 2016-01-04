@@ -84,7 +84,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
               for (row <- rows) {
                 assert(row.isInstanceOf[UnsafeRow])
-                val actualBucketId = math.abs(row.hashCode()) % 8
+                val actualBucketId = (row.hashCode() % 8 + 8) % 8
                 assert(actualBucketId == bucketId)
               }
             }
@@ -120,7 +120,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
               for (row <- rows) {
                 assert(row.isInstanceOf[UnsafeRow])
-                val actualBucketId = math.abs(row.hashCode()) % 8
+                val actualBucketId = (row.hashCode() % 8 + 8) % 8
                 assert(actualBucketId == bucketId)
               }
             }
@@ -151,7 +151,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
             for (row <- rows) {
               assert(row.isInstanceOf[UnsafeRow])
-              val actualBucketId = math.abs(row.hashCode()) % 8
+              val actualBucketId = (row.hashCode() % 8 + 8) % 8
               assert(actualBucketId == bucketId)
             }
           }
@@ -183,7 +183,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
             for (row <- rows) {
               assert(row.isInstanceOf[UnsafeRow])
-              val actualBucketId = math.abs(row.hashCode()) % 8
+              val actualBucketId = (row.hashCode() % 8 + 8) % 8
               assert(actualBucketId == bucketId)
             }
           }

@@ -142,7 +142,6 @@ object ResolvedDataSource extends Logging {
             paths,
             Some(dataSchema),
             maybePartitionsSchema,
-            None,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
@@ -174,7 +173,7 @@ object ResolvedDataSource extends Logging {
                 SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
               }
           }
-          dataSource.createRelation(sqlContext, paths, None, None, None, caseInsensitiveOptions)
+          dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
           throw new AnalysisException(
             s"A schema needs to be specified when using $className.")
@@ -241,13 +240,21 @@ object ResolvedDataSource extends Logging {
         val equality = columnNameEquality(caseSensitive)
         val dataSchema = StructType(
           data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
-        val r = dataSource.createRelation(
-          sqlContext,
-          Array(outputPath.toString),
-          Some(dataSchema.asNullable),
-          Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
-          bucketSpec,
-          caseInsensitiveOptions)
+        val r = dataSource match {
+          case provider: BucketedHadoopFsRelationProvider => provider.createRelation(
+            sqlContext,
+            Array(outputPath.toString),
+            Some(dataSchema.asNullable),
+            Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+            bucketSpec,
+            caseInsensitiveOptions)
+          case provider: HadoopFsRelationProvider => provider.createRelation(
+            sqlContext,
+            Array(outputPath.toString),
+            Some(dataSchema.asNullable),
+            Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+            caseInsensitiveOptions)
+        }
 
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This

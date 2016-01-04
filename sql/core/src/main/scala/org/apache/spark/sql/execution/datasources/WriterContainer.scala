@@ -123,7 +123,12 @@ private[sql] abstract class BaseWriterContainer(
 
   protected def newOutputWriter(path: String, bucketId: Option[Int]): OutputWriter = {
     try {
-      outputWriterFactory.newInstance(path, bucketId, dataSchema, taskAttemptContext)
+      outputWriterFactory match {
+        case factory: BucketedOutputWriterFactory =>
+          factory.newInstance(path, bucketId, dataSchema, taskAttemptContext)
+        case factory: OutputWriterFactory =>
+          factory.newInstance(path, dataSchema, taskAttemptContext)
+      }
     } catch {
       case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
         if (outputCommitter.isInstanceOf[parquet.DirectParquetOutputCommitter]) {
@@ -395,11 +400,12 @@ private[sql] class DynamicPartitionWriterContainer(
             false
           } else {
             var i = partitionColumns.length - 1
-            val dt = partitionColumns(i).dataType
-            while (i >= 0 && row1.get(i, dt) == row2.get(i, dt)) {
+            while (i >= 0) {
+              val dt = partitionColumns(i).dataType
+              if (row1.get(i, dt) != row2.get(i, dt)) return false
               i -= 1
             }
-            i < 0
+            true
           }
         }
         val sortedIterator = sorter.sortedIterator()
