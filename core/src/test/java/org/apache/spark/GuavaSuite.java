@@ -17,6 +17,10 @@
 
 package org.apache.spark;
 
+import java.io.Serializable;
+import java.util.Arrays;
+
+import com.google.common.base.Optional;
 import org.junit.Test;
 
 import org.apache.spark.api.java.*;
