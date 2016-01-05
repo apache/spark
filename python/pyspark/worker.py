@@ -137,8 +137,11 @@ def main(infile, infile2, outfile):
     for (aid, accum) in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
 
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
+    # check end of stream(s)
+    end_of_infile = read_int(infile) == SpecialLengths.END_OF_STREAM
+    if (len(deserializers) == 1 and end_of_infile) or \
+        (len(deserializers) == 2 and end_of_infile and
+            read_int(infile2) == SpecialLengths.END_OF_STREAM):
         write_int(SpecialLengths.END_OF_STREAM, outfile)
     else:
         # write a different value to tell JVM to not reuse this worker
