@@ -278,4 +278,4 @@ val lines = ssc.actorStream[String](Props[CustomActor], "CustomReceiver")
 {% endhighlight %}
 
 See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/ActorWordCount.scala)
-for a complete example.
+for an end-to-end example.
