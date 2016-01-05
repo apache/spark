@@ -226,7 +226,7 @@ class StreamingContext private[streaming] (
    * Set the context to periodically checkpoint the DStream operations for driver
    * fault-tolerance.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored.
-   *                  Note that this must be a fault-tolerant file system like HDFS for
+   *                  Note that this must be a fault-tolerant file system like HDFS.
    */
   def checkpoint(directory: String) {
     if (directory != null) {
@@ -274,7 +274,7 @@ class StreamingContext private[streaming] (
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    *
-   * @deprecated As of 1.0.0", replaced by `receiverStream`.
+   * @deprecated As of 1.0.0 replaced by `receiverStream`.
    */
   @deprecated("Use receiverStream", "1.0.0")
   def networkStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
@@ -285,7 +285,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented receiver.
-   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+   * Find more details at http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
   def receiverStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
@@ -549,7 +549,7 @@ class StreamingContext private[streaming] (
 
     // Verify whether the DStream checkpoint is serializable
     if (isCheckpointingEnabled) {
-      val checkpoint = new Checkpoint(this, Time.apply(0))
+      val checkpoint = new Checkpoint(this, Time(0))
       try {
         Checkpoint.serialize(checkpoint, conf)
       } catch {
@@ -575,9 +575,9 @@ class StreamingContext private[streaming] (
    *
    * Return the current state of the context. The context can be in three possible states -
    *
-   *  - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *  - StreamingContextState.INITIALIZED - The context has been created, but not started yet.
    *    Input DStreams, transformations and output operations can be created on the context.
-   *  - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
+   *  - StreamingContextState.ACTIVE - The context has been started, and not stopped.
    *    Input DStreams, transformations and output operations cannot be created on the context.
    *  - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
    */
