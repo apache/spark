@@ -99,7 +99,7 @@ setup(
         'croniter>=0.3.8, <0.4',
         'dill>=0.2.2, <0.3',
         'flask>=0.10.1, <0.11',
-        'flask-admin==1.2.0',
+        'flask-admin>=1.4.0',
         'flask-cache>=0.13.1, <0.14',
         'flask-login==0.2.11',
         'future>=0.15.0, <0.16',
