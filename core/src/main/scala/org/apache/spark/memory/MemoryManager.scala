@@ -182,6 +182,10 @@ private[spark] abstract class MemoryManager(
    * sun.misc.Unsafe.
    */
   final val tungstenMemoryMode: MemoryMode = {
+//println("-- spark.memory.offHeap.enabled" + conf.getBoolean("spark.memory.offHeap.enabled", false));
+//println("-- spark.memory.offHeap.size" + conf.getSizeAsBytes("spark.memory.offHeap.size"));
+//MemoryMode.OFF_HEAP
+
     if (conf.getBoolean("spark.memory.offHeap.enabled", false)) {
       require(conf.getSizeAsBytes("spark.memory.offHeap.size", 0) > 0,
         "spark.memory.offHeap.size must be > 0 when spark.memory.offHeap.enabled == true")
@@ -189,6 +193,7 @@ private[spark] abstract class MemoryManager(
     } else {
       MemoryMode.ON_HEAP
     }
+
   }
 
   /**
