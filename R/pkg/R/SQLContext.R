@@ -256,9 +256,11 @@ jsonFile <- function(sqlContext, path) {
 
 # TODO: support schema
 jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
+  .Deprecated("read.json")
   rdd <- serializeToString(rdd)
   if (is.null(schema)) {
-    sdf <- callJMethod(sqlContext, "jsonRDD", callJMethod(getJRDD(rdd), "rdd"), samplingRatio)
+    read <- callJMethod(sqlContext, "read")
+    sdf <- callJMethod(read, "json", callJMethod(getJRDD(rdd), "rdd"), samplingRatio)
     dataFrame(sdf)
   } else {
     stop("not implemented")
