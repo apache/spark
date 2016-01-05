@@ -71,7 +71,8 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         .saveAsTable("bucketedTable")
 
       val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
-      logWarning(tableDir.listFiles().map(_.getAbsolutePath).mkString("\n"))
+      logWarning(hiveContext.warehousePath.getAbsolutePath)
+      logWarning(hiveContext.warehousePath.listFiles().map(_.getAbsolutePath).mkString("\n"))
       for (i <- 0 until 5) {
         val allBucketFiles = new File(tableDir, s"i=$i").listFiles().filter(!_.isHidden)
         val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
@@ -79,15 +80,13 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         for ((bucketId, bucketFiles) <- groupedBucketFiles) {
           for (bucketFile <- bucketFiles) {
-            withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
-              val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
-              val rows = df.queryExecution.toRdd.map(_.copy()).collect()
+            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
+            val rows = df.queryExecution.toRdd.map(_.copy()).collect()
 
-              for (row <- rows) {
-                assert(row.isInstanceOf[UnsafeRow])
-                val actualBucketId = (row.hashCode() % 8 + 8) % 8
-                assert(actualBucketId == bucketId)
-              }
+            for (row <- rows) {
+              assert(row.isInstanceOf[UnsafeRow])
+              val actualBucketId = (row.hashCode() % 8 + 8) % 8
+              assert(actualBucketId == bucketId)
             }
           }
         }
@@ -114,16 +113,14 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         for ((bucketId, bucketFiles) <- groupedBucketFiles) {
           for (bucketFile <- bucketFiles) {
-            withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
-              val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
-              checkAnswer(df.sort("k"), df.collect())
-              val rows = df.select("j").queryExecution.toRdd.map(_.copy()).collect()
+            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
+            checkAnswer(df.sort("k"), df.collect())
+            val rows = df.select("j").queryExecution.toRdd.map(_.copy()).collect()
 
-              for (row <- rows) {
-                assert(row.isInstanceOf[UnsafeRow])
-                val actualBucketId = (row.hashCode() % 8 + 8) % 8
-                assert(actualBucketId == bucketId)
-              }
+            for (row <- rows) {
+              assert(row.isInstanceOf[UnsafeRow])
+              val actualBucketId = (row.hashCode() % 8 + 8) % 8
+              assert(actualBucketId == bucketId)
             }
           }
         }
@@ -146,15 +143,13 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
       for ((bucketId, bucketFiles) <- groupedBucketFiles) {
         for (bucketFile <- bucketFiles) {
-          withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
-            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("i", "j")
-            val rows = df.queryExecution.toRdd.map(_.copy()).collect()
+          val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("i", "j")
+          val rows = df.queryExecution.toRdd.map(_.copy()).collect()
 
-            for (row <- rows) {
-              assert(row.isInstanceOf[UnsafeRow])
-              val actualBucketId = (row.hashCode() % 8 + 8) % 8
-              assert(actualBucketId == bucketId)
-            }
+          for (row <- rows) {
+            assert(row.isInstanceOf[UnsafeRow])
+            val actualBucketId = (row.hashCode() % 8 + 8) % 8
+            assert(actualBucketId == bucketId)
           }
         }
       }
@@ -177,16 +172,14 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
       for ((bucketId, bucketFiles) <- groupedBucketFiles) {
         for (bucketFile <- bucketFiles) {
-          withSQLConf("spark.sql.parquet.enableUnsafeRowRecordReader" -> "false") {
-            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath)
-            checkAnswer(df.sort("k"), df.collect())
-            val rows = df.select("i", "j").queryExecution.toRdd.map(_.copy()).collect()
+          val df = sqlContext.read.parquet(bucketFile.getAbsolutePath)
+          checkAnswer(df.sort("k"), df.collect())
+          val rows = df.select("i", "j").queryExecution.toRdd.map(_.copy()).collect()
 
-            for (row <- rows) {
-              assert(row.isInstanceOf[UnsafeRow])
-              val actualBucketId = (row.hashCode() % 8 + 8) % 8
-              assert(actualBucketId == bucketId)
-            }
+          for (row <- rows) {
+            assert(row.isInstanceOf[UnsafeRow])
+            val actualBucketId = (row.hashCode() % 8 + 8) % 8
+            assert(actualBucketId == bucketId)
           }
         }
       }
