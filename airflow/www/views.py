@@ -1235,7 +1235,7 @@ class Airflow(BaseView):
             dttm = dag.latest_execution_date or datetime.now().date()
 
         DR = models.DagRun
-        drs = session.query(DR).filter_by(dag_id=dag_id).all()
+        drs = session.query(DR).filter_by(dag_id=dag_id).order_by('execution_date desc').all()
         dr_choices = []
         dr_state = None
         for dr in drs:
