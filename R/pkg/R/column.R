@@ -209,7 +209,7 @@ setMethod("cast",
 setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
-            jc <- callJMethod(x@jc, "in", as.list(table))
+            jc <- callJMethod(x@jc, "isin", as.list(table))
             return(column(jc))
           })
 
