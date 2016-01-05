@@ -778,14 +778,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
       t.setInputMetrics(Some(inputMetrics))
     } else {
-      val sr = new ShuffleReadMetrics
+      val sr = t.registerTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
       sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
       sr.incLocalBytesRead(a + f)
-      t.setShuffleReadMetrics(Some(sr))
+      t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)

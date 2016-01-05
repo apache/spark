@@ -184,12 +184,12 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
     val taskMetrics = new TaskMetrics()
-    val shuffleReadMetrics = new ShuffleReadMetrics()
+    val shuffleReadMetrics = taskMetrics.registerTempShuffleReadMetrics()
     assert(listener.stageIdToData.size === 0)
 
     // finish this task, should get updated shuffleRead
     shuffleReadMetrics.incRemoteBytesRead(1000)
-    taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
+    taskMetrics.mergeShuffleReadMetrics()
     var taskInfo = new TaskInfo(1234L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     var task = new ShuffleMapTask(0)
@@ -270,13 +270,13 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
 
     def makeTaskMetrics(base: Int): TaskMetrics = {
       val taskMetrics = new TaskMetrics()
-      val shuffleReadMetrics = new ShuffleReadMetrics()
+      val shuffleReadMetrics = taskMetrics.registerTempShuffleReadMetrics()
       val shuffleWriteMetrics = new ShuffleWriteMetrics()
-      taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
       taskMetrics.shuffleWriteMetrics = Some(shuffleWriteMetrics)
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incLocalBytesRead(base + 9)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
+      taskMetrics.mergeShuffleReadMetrics()
       shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
       taskMetrics.setExecutorRunTime(base + 4)
       taskMetrics.incDiskBytesSpilled(base + 5)

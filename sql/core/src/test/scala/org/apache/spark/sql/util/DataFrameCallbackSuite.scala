@@ -139,7 +139,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     def getPeakExecutionMemory(stageId: Int): Long = {
       val peakMemoryAccumulator = sparkListener.getCompletedStageInfos(stageId).accumulables
-        .filter(_._2.name == METRICS_PREFIX + PEAK_EXECUTION_MEMORY)
+        .filter(_._2.name == PEAK_EXECUTION_MEMORY)
 
       assert(peakMemoryAccumulator.size == 1)
       peakMemoryAccumulator.head._2.value.toLong

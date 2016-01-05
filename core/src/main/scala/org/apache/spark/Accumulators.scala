@@ -37,6 +37,8 @@ import org.apache.spark.util.Utils
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
  *
+ * TODO: document thread-safety.
+ *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
@@ -82,13 +84,13 @@ class Accumulable[R, T] private[spark] (
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def += (term: T) { value_ = param.addAccumulator(value_, term) }
+  def += (term: T): Unit = { value_ = param.addAccumulator(value_, term) }
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def add(term: T) { value_ = param.addAccumulator(value_, term) }
+  def add(term: T): Unit = { value_ = param.addAccumulator(value_, term) }
 
   /**
    * Merge two accumulable objects together
@@ -96,7 +98,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) { value_ = param.addInPlace(value_, term) }
+  def ++= (term: R): Unit = { value_ = param.addInPlace(value_, term) }
 
   /**
    * Merge two accumulable objects together
@@ -104,7 +106,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { value_ = param.addInPlace(value_, term) }
+  def merge(term: R): Unit = { value_ = param.addInPlace(value_, term) }
 
   /**
    * Access the accumulator's current value; only allowed on master.
@@ -119,20 +121,22 @@ class Accumulable[R, T] private[spark] (
    *
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
+   *
+   * TODO: probably don't need this.
    */
   def localValue: R = value_
 
   /**
-   * Set the accumulator's value; only allowed on master.
+   * Set the accumulator's value.
    */
-  def value_= (newValue: R) {
+  def value_= (newValue: R): Unit = {
     value_ = newValue
   }
 
   /**
-   * Set the accumulator's value; only allowed on master
+   * Set the accumulator's value.
    */
-  def setValue(newValue: R) {
+  def setValue(newValue: R): Unit = {
     this.value = newValue
   }
 
@@ -349,31 +353,33 @@ private[spark] object Accumulators extends Logging {
 
 private[spark] object InternalAccumulator {
 
-  // Names of internal metrics
-  val EXECUTOR_DESERIALIZE_TIME = "executorDeserializeTime"
-  val EXECUTOR_RUN_TIME = "executorRunTime"
-  val RESULT_SIZE = "resultSize"
-  val JVM_GC_TIME = "jvmGCTime"
-  val RESULT_SERIALIZATION_TIME = "resultSerializationTime"
-  val MEMORY_BYTES_SPILLED = "memoryBytesSpilled"
-  val DISK_BYTES_SPILLED = "diskBytesSpilled"
-  val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
-  val TEST_ACCUM = "testAccumulator"
+  // Names of internal task level metrics
+  val EXECUTOR_DESERIALIZE_TIME = "metrics.executorDeserializeTime"
+  val EXECUTOR_RUN_TIME = "metrics.executorRunTime"
+  val RESULT_SIZE = "metrics.resultSize"
+  val JVM_GC_TIME = "metrics.jvmGCTime"
+  val RESULT_SERIALIZATION_TIME = "metrics.resultSerializationTime"
+  val MEMORY_BYTES_SPILLED = "metrics.memoryBytesSpilled"
+  val DISK_BYTES_SPILLED = "metrics.diskBytesSpilled"
+  val PEAK_EXECUTION_MEMORY = "metrics.peakExecutionMemory"
+  val TEST_ACCUM = "metrics.testAccumulator"
 
   // Names of shuffle read metrics
   object shuffleRead {
-    val REMOTE_BLOCKS_FETCHED = "remoteBlocksFetched"
-    val LOCAL_BLOCKS_FETCHED = "localBlocksFetched"
-    val REMOTE_BYTES_READ = "remoteBytesRead"
-    val LOCAL_BYTES_READ = "localBytesRead"
-    val FETCH_WAIT_TIME = "fetchWaitTime"
-    val RECORDS_READ = "recordsRead"
+    val REMOTE_BLOCKS_FETCHED = "metrics.shuffle.read.remoteBlocksFetched"
+    val LOCAL_BLOCKS_FETCHED = "metrics.shuffle.read.localBlocksFetched"
+    val REMOTE_BYTES_READ = "metrics.shuffle.read.remoteBytesRead"
+    val LOCAL_BYTES_READ = "metrics.shuffle.read.localBytesRead"
+    val FETCH_WAIT_TIME = "metrics.shuffle.read.fetchWaitTime"
+    val RECORDS_READ = "metrics.shuffle.read.recordsRead"
   }
 
-  // Accumulator name prefixes
-  val METRICS_PREFIX = "metrics."
-  val SHUFFLE_READ_METRICS_PREFIX = METRICS_PREFIX + "shuffle.read."
-  val SHUFFLE_WRITE_METRICS_PREFIX = METRICS_PREFIX + "shuffle.write."
+  // Names of shuffle write metrics
+  object shuffleWrite {
+    val SHUFFLE_BYTES_WRITTEN = "metrics.shuffle.write.shuffleBytesWritten"
+    val SHUFFLE_RECORDS_WRITTEN = "metrics.shuffle.write.shuffleRecordsWritten"
+    val SHUFFLE_WRITE_TIME = "metrics.shuffle.write.shuffleWriteTime"
+  }
 
   /**
    * Create a new internal Long accumulator with the specified name.
@@ -398,22 +404,32 @@ private[spark] object InternalAccumulator {
       PEAK_EXECUTION_MEMORY) ++
       // For testing only
       sys.props.get("spark.testing").map(_ => TEST_ACCUM).toSeq
-    metricNames.map { m => newMetric(METRICS_PREFIX + m) } ++ createShuffleReadMetrics()
+    metricNames.map(newMetric) ++ createShuffleReadAccums()
   }
 
   /**
    * Accumulators for tracking shuffle read metrics.
    * Note: this method does not register accumulators for cleanup.
    */
-  def createShuffleReadMetrics(): Seq[Accumulator[Long]] = {
-    val metricNames = Seq[String](
+  def createShuffleReadAccums(): Seq[Accumulator[Long]] = {
+    Seq[String](
       shuffleRead.REMOTE_BLOCKS_FETCHED,
       shuffleRead.LOCAL_BLOCKS_FETCHED,
       shuffleRead.REMOTE_BYTES_READ,
       shuffleRead.LOCAL_BYTES_READ,
       shuffleRead.FETCH_WAIT_TIME,
-      shuffleRead.RECORDS_READ)
-    metricNames.map { m => newMetric(SHUFFLE_READ_METRICS_PREFIX + m) }
+      shuffleRead.RECORDS_READ).map(newMetric)
+  }
+
+  /**
+   * Accumulators for tracking shuffle read metrics.
+   * Note: this method does not register accumulators for cleanup.
+   */
+  def createShuffleWriteAccums(): Seq[Accumulator[Long]] = {
+    Seq[String](
+      shuffleWrite.SHUFFLE_BYTES_WRITTEN,
+      shuffleWrite.SHUFFLE_RECORDS_WRITTEN,
+      shuffleWrite.SHUFFLE_WRITE_TIME).map(newMetric)
   }
 
   /**
