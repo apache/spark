@@ -261,7 +261,7 @@ class Params(Identifiable):
                         self._paramMap[getattr(self, param)] = value
                     else:
                         raise Exception(
-                            "Provided type {0} incompatable with type {1} for param {2}"
+                            "Provided type {0} incompatible with type {1} for param {2}"
                             .format(type(value), p.expectedType, p))
                 except ValueError:
                     raise Exception(("Failed to convert {0} to type {1} for param {2}"
