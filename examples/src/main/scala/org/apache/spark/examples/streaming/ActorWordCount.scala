@@ -62,15 +62,13 @@ class FeederActor extends Actor {
   }.start()
 
   def receive: Receive = {
-
     case SubscribeReceiver(receiverActor: ActorRef) =>
       println("received subscribe from %s".format(receiverActor.toString))
-    receivers = LinkedList(receiverActor) ++ receivers
+      receivers = LinkedList(receiverActor) ++ receivers
 
     case UnsubscribeReceiver(receiverActor: ActorRef) =>
       println("received unsubscribe from %s".format(receiverActor.toString))
-    receivers = receivers.dropWhile(x => x eq receiverActor)
-
+      receivers = receivers.dropWhile(x => x eq receiverActor)
   }
 }
 
@@ -129,9 +127,9 @@ object FeederActor {
  *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
  *
  * To run this example locally, you may run Feeder Actor as
- *    `$ bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
+ *    `$ bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.0.1 9999`
  * and then run the example
- *    `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount 127.0.1.1 9999`
+ *    `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount 127.0.0.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {
