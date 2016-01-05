@@ -171,7 +171,10 @@ object MimaExcludes {
       ) ++
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.
-      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint") ++
+      // SPARK-529: private classes were removed, but MiMA complains.
+      MimaBuild.excludeSparkClass("sql.SQLConf$SQLConfEntry") ++
+      MimaBuild.excludeSparkClass("sql.SQLConf$SQLConfEntry$")
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
@@ -306,10 +309,7 @@ object MimaExcludes {
       ) ++
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.
-      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint") ++
-      // SPARK-529: private classes were removed, but MiMA complains.
-      MimaBuild.excludeSparkClass("sql.SQLConf$SQLConfEntry") ++
-      MimaBuild.excludeSparkClass("sql.SQLConf$SQLConfEntry$")
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
