@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -39,17 +39,16 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A data source for reading text files.
  */
-class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
+class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
-      bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): BucketedHadoopFsRelation = {
+      parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, dataSchema, partitionColumns, bucketSpec, paths)(sqlContext)
+    new TextRelation(None, dataSchema, partitionColumns, paths)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -71,11 +70,10 @@ private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
     val textSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
-    val bucketSpec: Option[BucketSpec],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
-  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters) {
+  extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
   /** Data schema is always a single column, named "value" if original Data source has no schema. */
   override def dataSchema: StructType =
@@ -116,14 +114,13 @@ private[sql] class TextRelation(
   }
 
   /** Write path. */
-  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
-    new BucketedOutputWriterFactory {
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+    new OutputWriterFactory {
       override def newInstance(
           path: String,
-          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new TextOutputWriter(path, bucketId, context)
+        new TextOutputWriter(path, dataSchema, context)
       }
     }
   }
@@ -139,10 +136,7 @@ private[sql] class TextRelation(
   }
 }
 
-class TextOutputWriter(
-    path: String,
-    bucketId: Option[Int],
-    context: TaskAttemptContext)
+class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
   extends OutputWriter {
 
   private[this] val buffer = new Text()
@@ -154,8 +148,7 @@ class TextOutputWriter(
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
-        val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
       }
     }.getRecordWriter(context)
   }

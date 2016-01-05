@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -54,132 +55,108 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[IllegalArgumentException](df.write.bucketBy(2, "i").insertInto("tt"))
   }
 
-  private val parquetFileName = """.*-(\d+)\..*\.parquet""".r
+  private val testFileName = """.*-(\d+)$""".r
+  private val otherFileName = """.*-(\d+)\..*""".r
   private def getBucketId(fileName: String): Int = {
     fileName match {
-      case parquetFileName(bucketId) => bucketId.toInt
+      case testFileName(bucketId) => bucketId.toInt
+      case otherFileName(bucketId) => bucketId.toInt
     }
   }
 
+  private def testBucketing(
+      dataDir: File,
+      source: String,
+      bucketCols: Seq[String],
+      sortCols: Seq[String] = Nil): Unit = {
+    val allBucketFiles = dataDir.listFiles().filterNot(f =>
+      f.getName.startsWith(".") || f.getName.startsWith("_")
+    )
+    val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+    assert(groupedBucketFiles.size <= 8)
+
+    for ((bucketId, bucketFiles) <- groupedBucketFiles) {
+      for (bucketFile <- bucketFiles) {
+        val df = sqlContext.read.format(source).load(bucketFile.getAbsolutePath)
+          .select((bucketCols ++ sortCols).map(col): _*)
+
+        if (sortCols.nonEmpty) {
+          checkAnswer(df.sort(sortCols.map(col): _*), df.collect())
+        }
+
+        val rows = df.select(bucketCols.map(col): _*).queryExecution.toRdd.map(_.copy()).collect()
+
+        for (row <- rows) {
+          assert(row.isInstanceOf[UnsafeRow])
+          val actualBucketId = (row.hashCode() % 8 + 8) % 8
+          assert(actualBucketId == bucketId)
+        }
+      }
+    }
+  }
+
+  private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+
   test("write bucketed data") {
-    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketed_table") {
-      df.write
-        .format("parquet")
-        .partitionBy("i")
-        .bucketBy(8, "j", "k")
-        .saveAsTable("bucketed_table")
+    for (source <- Seq("parquet", "json", "orc")) {
+      withTable("bucketed_table") {
+        df.write
+          .format(source)
+          .partitionBy("i")
+          .bucketBy(8, "j", "k")
+          .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
-      for (i <- 0 until 5) {
-        val allBucketFiles = new File(tableDir, s"i=$i").listFiles().filter(!_.isHidden)
-        val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
-        assert(groupedBucketFiles.size <= 8)
-
-        for ((bucketId, bucketFiles) <- groupedBucketFiles) {
-          for (bucketFile <- bucketFiles) {
-            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
-            val rows = df.queryExecution.toRdd.map(_.copy()).collect()
-
-            for (row <- rows) {
-              assert(row.isInstanceOf[UnsafeRow])
-              val actualBucketId = (row.hashCode() % 8 + 8) % 8
-              assert(actualBucketId == bucketId)
-            }
-          }
+        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
+        for (i <- 0 until 5) {
+          testBucketing(new File(tableDir, s"i=$i"), source, Seq("j", "k"))
         }
       }
     }
   }
 
   test("write bucketed data with sortBy") {
-    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketed_table") {
-      df.write
-        .format("parquet")
-        .partitionBy("i")
-        .bucketBy(8, "j")
-        .sortBy("k")
-        .saveAsTable("bucketed_table")
+    for (source <- Seq("parquet", "json", "orc")) {
+      withTable("bucketed_table") {
+        df.write
+          .format(source)
+          .partitionBy("i")
+          .bucketBy(8, "j")
+          .sortBy("k")
+          .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
-      for (i <- 0 until 5) {
-        val allBucketFiles = new File(tableDir, s"i=$i").listFiles()
-          .filter(_.getName.startsWith("part"))
-        val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
-        assert(groupedBucketFiles.size <= 8)
-
-        for ((bucketId, bucketFiles) <- groupedBucketFiles) {
-          for (bucketFile <- bucketFiles) {
-            val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("j", "k")
-            checkAnswer(df.sort("k"), df.collect())
-            val rows = df.select("j").queryExecution.toRdd.map(_.copy()).collect()
-
-            for (row <- rows) {
-              assert(row.isInstanceOf[UnsafeRow])
-              val actualBucketId = (row.hashCode() % 8 + 8) % 8
-              assert(actualBucketId == bucketId)
-            }
-          }
+        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
+        for (i <- 0 until 5) {
+          testBucketing(new File(tableDir, s"i=$i"), source, Seq("j"), Seq("k"))
         }
       }
     }
   }
 
   test("write bucketed data without partitionBy") {
-    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketed_table") {
-      df.write
-        .format("parquet")
-        .bucketBy(8, "i", "j")
-        .saveAsTable("bucketed_table")
+    for (source <- Seq("parquet", "json", "orc")) {
+      withTable("bucketed_table") {
+        df.write
+          .format(source)
+          .bucketBy(8, "i", "j")
+          .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
-      val allBucketFiles = tableDir.listFiles().filter(_.getName.startsWith("part"))
-      val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
-      assert(groupedBucketFiles.size <= 8)
-
-      for ((bucketId, bucketFiles) <- groupedBucketFiles) {
-        for (bucketFile <- bucketFiles) {
-          val df = sqlContext.read.parquet(bucketFile.getAbsolutePath).select("i", "j")
-          val rows = df.queryExecution.toRdd.map(_.copy()).collect()
-
-          for (row <- rows) {
-            assert(row.isInstanceOf[UnsafeRow])
-            val actualBucketId = (row.hashCode() % 8 + 8) % 8
-            assert(actualBucketId == bucketId)
-          }
-        }
+        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
+        testBucketing(tableDir, source, Seq("i", "j"))
       }
     }
   }
 
   test("write bucketed data without partitionBy with sortBy") {
-    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketed_table") {
-      df.write
-        .format("parquet")
-        .bucketBy(8, "i", "j")
-        .sortBy("k")
-        .saveAsTable("bucketed_table")
+    for (source <- Seq("parquet", "json", "orc")) {
+      withTable("bucketed_table") {
+        df.write
+          .format(source)
+          .bucketBy(8, "i", "j")
+          .sortBy("k")
+          .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
-      val allBucketFiles = tableDir.listFiles().filter(_.getName.startsWith("part"))
-      val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
-      assert(groupedBucketFiles.size <= 8)
-
-      for ((bucketId, bucketFiles) <- groupedBucketFiles) {
-        for (bucketFile <- bucketFiles) {
-          val df = sqlContext.read.parquet(bucketFile.getAbsolutePath)
-          checkAnswer(df.sort("k"), df.collect())
-          val rows = df.select("i", "j").queryExecution.toRdd.map(_.copy()).collect()
-
-          for (row <- rows) {
-            assert(row.isInstanceOf[UnsafeRow])
-            val actualBucketId = (row.hashCode() % 8 + 8) % 8
-            assert(actualBucketId == bucketId)
-          }
-        }
+        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
+        testBucketing(tableDir, source, Seq("i", "j"), Seq("k"))
       }
     }
   }

@@ -133,7 +133,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Buckets the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's bucketing scheme.
    *
-   * This is applicable for Parquet, JSON, text, ORC and avro.
+   * This is applicable for Parquet, JSON and ORC.
    *
    * @since 2.0
    */
@@ -147,7 +147,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   /**
    * Sorts the bucketed output by the given columns.
    *
-   * This is applicable for Parquet, JSON, text, ORC and avro.
+   * This is applicable for Parquet, JSON and ORC.
    *
    * @since 2.0
    */
