@@ -341,7 +341,7 @@ class RDD(object):
 
         >>> rddA = sc.parallelize(range(10), 4)
         >>> rddB = rddA.map(lambda a: str(a))
-        >>> def f(iterA, iterB): return ((a, iterB.next()) for a in iterA)
+        >>> def f(iterA, iterB): return ((a, next(iterB)) for a in iterA)
         >>> zippedRDD = rddA.zipPartitions(rddB, f)
         >>> result = zippedRDD.collect()
 
@@ -363,7 +363,7 @@ class RDD(object):
 
         >>> rddA = sc.parallelize(range(10), 4)
         >>> rddB = rddA.map(lambda a: str(a))
-        >>> def f(index, iterA, iterB): return ((a, iterB.next()) for a in iterA)
+        >>> def f(index, iterA, iterB): return ((a, next(iterB)) for a in iterA)
         >>> zippedRDD = rddA.zipPartitionsWithIndex(rddB, f)
         >>> result = zippedRDD.collect()
 
