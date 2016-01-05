@@ -17,13 +17,32 @@
 
 package org.apache.spark
 
+import java.net.URI
+
+import org.apache.spark.rpc.RpcEnv
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
+import org.apache.spark.scheduler.{SchedulerFactory, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SimrSchedulerBackend,
+    SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
+
+class CustomSchedulerFactory extends SchedulerFactory {
+  override def createScheduler(sc: SparkContext): TaskScheduler = {
+    new TaskSchedulerImpl(sc)
+  }
+
+  override def createSchedulerBackend(
+      scheduler: TaskScheduler, sc: SparkContext, uri: URI): CoarseGrainedSchedulerBackend = {
+    new CustomScheduler(scheduler.asInstanceOf[TaskSchedulerImpl], sc, Array(uri.toString))
+  }
+}
+
+class CustomScheduler(scheduler: TaskSchedulerImpl, sc: SparkContext, masters: Array[String])
+    extends CoarseGrainedSchedulerBackend(scheduler, RpcEnv.create("x", "localhost", 0,
+      new SparkConf(), new SecurityManager(new SparkConf())))
 
 class SparkContextSchedulerCreationSuite
   extends SparkFunSuite with LocalSparkContext with PrivateMethodTester with Logging {
@@ -46,6 +65,16 @@ class SparkContextSchedulerCreationSuite
       createTaskScheduler("localhost:1234")
     }
     assert(e.getMessage.contains("Could not parse Master URL"))
+  }
+
+  test("custom") {
+    val sched = createTaskScheduler("custom://1.2.3.4:100", new SparkConf()
+          .set("spark.scheduler.factory.custom", classOf[CustomSchedulerFactory].getCanonicalName))
+    sched.backend match {
+      case s: CustomScheduler =>
+        s.rpcEnv.shutdown()
+      case _ => fail()
+    }
   }
 
   test("local") {

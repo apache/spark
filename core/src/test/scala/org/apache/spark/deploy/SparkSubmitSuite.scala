@@ -302,10 +302,66 @@ class SparkSubmitSuite
     sysProps("spark.ui.enabled") should be ("false")
   }
 
+  test("handles custom cluster mode") {
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "custom://h:p",
+      "--class", "org.SomeClass",
+      "--supervise",
+      "--driver-memory", "4g",
+      "--driver-cores", "5",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.scheduler.factory.custom=some.custom.SchedulerFactory",
+      "--conf", "spark.scheduler.client.custom=some.custom.SchedulerClient",
+      "thejar.jar",
+      "arg1", "arg2")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
+    val childArgsStr = childArgs.mkString(" ")
+    childArgsStr should include regex "launch .*thejar.jar org.SomeClass arg1 arg2"
+    mainClass should be ("some.custom.SchedulerClient")
+    classpath should have size 0
+    sysProps should have size 11
+    sysProps.keys should contain ("SPARK_SUBMIT")
+    sysProps.keys should contain ("spark.master")
+    sysProps.keys should contain ("spark.app.name")
+    sysProps.keys should contain ("spark.jars")
+    sysProps.keys should contain ("spark.driver.memory")
+    sysProps.keys should contain ("spark.driver.cores")
+    sysProps.keys should contain ("spark.driver.supervise")
+    sysProps.keys should contain ("spark.ui.enabled")
+    sysProps.keys should contain ("spark.submit.deployMode")
+    sysProps.keys should contain ("spark.scheduler.factory.custom")
+    sysProps.keys should contain ("spark.scheduler.client.custom")
+    sysProps("spark.ui.enabled") should be ("false")
+  }
+
   test("handles standalone client mode") {
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--master", "spark://h:p",
+      "--executor-memory", "5g",
+      "--total-executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "--conf", "spark.ui.enabled=false",
+      "thejar.jar",
+      "arg1", "arg2")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
+    childArgs.mkString(" ") should be ("arg1 arg2")
+    mainClass should be ("org.SomeClass")
+    classpath should have length (1)
+    classpath(0) should endWith ("thejar.jar")
+    sysProps("spark.executor.memory") should be ("5g")
+    sysProps("spark.cores.max") should be ("5")
+    sysProps("spark.ui.enabled") should be ("false")
+  }
+
+  test("handles custom client mode") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "custom://h:p",
       "--executor-memory", "5g",
       "--total-executor-cores", "5",
       "--class", "org.SomeClass",

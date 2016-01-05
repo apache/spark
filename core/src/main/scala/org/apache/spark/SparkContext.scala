@@ -21,7 +21,7 @@ import scala.language.implicitConversions
 
 import java.io._
 import java.lang.reflect.Constructor
-import java.net.URI
+import java.net.{URL, URI}
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicInteger}
 import java.util.UUID.randomUUID
@@ -31,6 +31,7 @@ import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang.SerializationUtils
@@ -2731,6 +2732,20 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc)
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
+        (backend, scheduler)
+
+      case uri @ SchedulerFactory(name)
+        if SchedulerFactory.getSchedulerFactoryClassName(sc.conf.getAll, name).isDefined =>
+
+        val className = SchedulerFactory.getSchedulerFactoryClassName(sc.conf.getAll, name).get
+        val clazz = Utils.classForName(className)
+        val factory = clazz.newInstance().asInstanceOf[SchedulerFactory]
+        val scheduler = factory.createScheduler(sc)
+        val backend = factory.createSchedulerBackend(scheduler, sc, new URI(uri))
+        scheduler match {
+          case ts: TaskSchedulerImpl => ts.initialize(backend)
+          case _ =>
+        }
         (backend, scheduler)
 
       case zkUrl if zkUrl.startsWith("zk://") =>
