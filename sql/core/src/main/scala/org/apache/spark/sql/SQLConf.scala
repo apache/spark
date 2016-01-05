@@ -107,29 +107,20 @@ private[spark] object SQLConf {
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
-        val isInteger: Option[Int] = try {
-           Some(v.toInt)
+        try {
+           v.toInt
         } catch {
           case _ : NumberFormatException =>
-            None
+           val sizeInBytes = try {
+             Utils.byteStringAsBytes(v)
+           } catch {
+             case _: NumberFormatException =>
+               throw new IllegalArgumentException(s"$key should be int, but was $v")
+           }
+           require(sizeInBytes >= Int.MinValue && sizeInBytes <= Int.MaxValue,
+             s"$v is out of bound")
+           sizeInBytes.toInt
         }
-
-        isInteger.getOrElse(
-            try {
-              val getSizeAsBytes = Utils.byteStringAsBytes(v)
-              if ((getSizeAsBytes <= Int.MaxValue.toLong) &&
-                (getSizeAsBytes >= Int.MinValue.toLong)) {
-                getSizeAsBytes.toInt
-              }
-              else {
-                throw new IllegalArgumentException(s"$v is out of bounds")
-              }
-            } catch {
-              case _: NumberFormatException =>
-                throw new IllegalArgumentException(s"$key should be int, but was $v")
-            }
-        )
-
       }, _.toString, doc, isPublic)
 
     def longConf(
@@ -152,21 +143,17 @@ private[spark] object SQLConf {
         doc: String = "",
         isPublic: Boolean = true): SQLConfEntry[Long] =
       SQLConfEntry(key, defaultValue, { v =>
-        val isLongValue: Option[Long] = try {
-          Some(v.toLong)
+        try {
+          v.toLong
         } catch {
           case _: NumberFormatException =>
-            None
+            try {
+              Utils.byteStringAsBytes(v)
+            } catch {
+              case _: NumberFormatException =>
+                throw new IllegalArgumentException(s"$key should be long, but was $v")
+            }
         }
-
-        isLongValue.getOrElse(
-          try {
-            Utils.byteStringAsBytes(v)
-          } catch {
-            case _: NumberFormatException =>
-              throw new IllegalArgumentException(s"$key should be long, but was $v")
-          }
-        )
       }, _.toString, doc, isPublic)
 
     def doubleConf(
