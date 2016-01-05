@@ -30,13 +30,14 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser._
+import org.apache.spark.sql.catalyst.parser.ParseUtils._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, AnalyzeTable, DropTable, HiveScriptIOSchema}
-import org.apache.spark.sql.parser._
-import org.apache.spark.sql.parser.ParseUtils._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{SparkQl, AnalysisException}
+import org.apache.spark.sql.AnalysisException
 
 
 /**

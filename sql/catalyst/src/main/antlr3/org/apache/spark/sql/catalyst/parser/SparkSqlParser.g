@@ -371,12 +371,11 @@ TOK_SET_AUTOCOMMIT;
 
 // Package headers
 @header {
-package org.apache.spark.sql.parser;
+package org.apache.spark.sql.catalyst.parser;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import org.apache.spark.sql.parser.ParserConf;
 }
 
 

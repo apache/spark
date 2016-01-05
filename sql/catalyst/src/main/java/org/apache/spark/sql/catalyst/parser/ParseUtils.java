@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.parser;
+package org.apache.spark.sql.catalyst.parser;
 
 import java.io.UnsupportedEncodingException;
 

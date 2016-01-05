@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.parser.ParserConf
+import org.apache.spark.sql.catalyst.parser.ParserConf
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.

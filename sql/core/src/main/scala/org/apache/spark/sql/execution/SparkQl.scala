@@ -14,14 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.ExplainCommand
-import org.apache.spark.sql.execution.datasources.DescribeCommand
-import org.apache.spark.sql.parser.{SimpleParserConf, ParserConf, ASTNode}
+import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
   /** Check if a command should not be explained. */
@@ -61,14 +59,14 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
                   // TODO: Actually, a user may mean tableName.columnName. Need to resolve this
                   // issue.
                   val tableIdent = extractTableIdent(nameParts)
-                  DescribeCommand(
+                  datasources.DescribeCommand(
                     UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
                 case Token(".", dbName :: tableName :: colName :: Nil) =>
                   // It is describing a column with the format like "describe db.table column".
                   nodeToDescribeFallback(node)
                 case tableName =>
                   // It is describing a table with the format like "describe table".
-                  DescribeCommand(
+                  datasources.DescribeCommand(
                     UnresolvedRelation(TableIdentifier(tableName.text), None),
                     isExtended = extended.isDefined)
               }

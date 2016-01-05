@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.parser._
+import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -47,7 +47,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   /**
    * Returns the AST for the given SQL string.
    */
-  def getAst(sql: String): ASTNode = ParseDriver.parse(sql, conf)
+  protected def getAst(sql: String): ASTNode = ParseDriver.parse(sql, conf)
 
   /** Creates LogicalPlan for a given HiveQL string. */
   def createPlan(sql: String): LogicalPlan = {
@@ -477,10 +477,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             Token(denominator, Nil) :: Nil) =>
             val fraction = numerator.toDouble / denominator.toDouble
             Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)
-          case a: ASTNode =>
-            throw new NotImplementedError(
-              s"No parse rules for sampling clause: ${a.tokenType}, text: ${a.text} : " +
-                a.treeString)
+          case a =>
+            noParseRule("Sampling", a)
         }.getOrElse(relation)
 
       case Token(allJoinTokens(joinToken), relation1 :: relation2 :: other) =>
@@ -495,8 +493,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case "TOK_LEFTOUTERJOIN" => LeftOuter
           case "TOK_FULLOUTERJOIN" => FullOuter
           case "TOK_LEFTSEMIJOIN" => LeftSemi
-          case "TOK_UNIQUEJOIN" => throw new NotImplementedError("Unique join not supported")
-          case "TOK_ANTIJOIN" => throw new NotImplementedError("Anti join not supported")
+          case "TOK_UNIQUEJOIN" => noParseRule("Unique Join", node)
+          case "TOK_ANTIJOIN" => noParseRule("Anti Join", node)
         }
         Join(nodeToRelation(relation1),
           nodeToRelation(relation2),

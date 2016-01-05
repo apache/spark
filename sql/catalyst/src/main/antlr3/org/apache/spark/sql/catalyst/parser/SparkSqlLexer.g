@@ -19,9 +19,8 @@
 lexer grammar SparkSqlLexer;
 
 @lexer::header {
-package org.apache.spark.sql.parser;
+package org.apache.spark.sql.catalyst.parser;
 
-import org.apache.spark.sql.parser.ParserConf;
 }
 
 @lexer::members {
