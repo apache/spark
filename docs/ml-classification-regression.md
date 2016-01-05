@@ -535,7 +535,9 @@ The main differences between this API and the [original MLlib Decision Tree API]
 * use of DataFrame metadata to distinguish continuous and categorical features
 
 
-The Pipelines API for Decision Trees offers a bit more functionality than the original API.  In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities).
+The Pipelines API for Decision Trees offers a bit more functionality than the original API.  
+In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities); 
+for regression, users can get the biased sample variance of prediction.
 
 Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described below in the [Tree ensembles section](#tree-ensembles).
 
@@ -605,6 +607,13 @@ All output columns are optional; to exclude an output column, set its correspond
       <td>Vector of length # classes equal to rawPrediction normalized to a multinomial distribution</td>
       <td>Classification only</td>
     </tr>
+    <tr>
+      <td>varianceCol</td>
+      <td>Double</td>
+      <td></td>
+      <td>The biased sample variance of prediction</td>
+      <td>Regression only</td>
+      </tr>
   </tbody>
 </table>
 
