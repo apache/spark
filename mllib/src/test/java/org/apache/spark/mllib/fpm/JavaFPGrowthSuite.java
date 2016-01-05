@@ -95,7 +95,6 @@ public class JavaFPGrowthSuite implements Serializable {
 
     try {
       model.save(sc.sc(), outputPath);
-    } finally {
       FPGrowthModel newModel = FPGrowthModel.load(sc.sc(), outputPath);
       List<FPGrowth.FreqItemset<String>> freqItemsets = newModel.freqItemsets().toJavaRDD()
         .collect();
@@ -106,7 +105,7 @@ public class JavaFPGrowthSuite implements Serializable {
         List<String> items = itemset.javaItems();
         long freq = itemset.freq();
       }
-
+    } finally {
       Utils.deleteRecursively(tempDir);
     }
   }

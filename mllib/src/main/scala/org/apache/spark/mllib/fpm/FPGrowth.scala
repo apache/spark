@@ -17,17 +17,17 @@
 
 package org.apache.spark.mllib.fpm
 
-import java.{util => ju}
 import java.lang.{Iterable => JavaIterable}
+import java.{util => ju}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
 
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
-
-import scala.collection.mutable
-import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe._
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -39,8 +39,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
@@ -106,7 +106,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Get the type of item class
-      val sample = model.freqItemsets.take(1)(0).items(0)
+      val sample = model.freqItemsets.first().items(0)
       val className = sample.getClass.getCanonicalName
       val classSymbol = runtimeMirror(getClass.getClassLoader).staticClass(className)
       val tpe = classSymbol.selfType
@@ -121,9 +121,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
     }
 
-    def load(
-        sc: SparkContext,
-        path: String): FPGrowthModel[_] = {
+    def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
       implicit val formats = DefaultFormats
       val sqlContext = SQLContext.getOrCreate(sc)
 
