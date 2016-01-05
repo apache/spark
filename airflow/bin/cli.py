@@ -427,7 +427,8 @@ def kerberos(args):
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(help='sub-command help')
+    subparsers = parser.add_subparsers(help='sub-command help', dest='subcommand')
+    subparsers.required=True
 
     ht = "Run subsections of a DAG for a specified date range"
     parser_backfill = subparsers.add_parser('backfill', help=ht)
