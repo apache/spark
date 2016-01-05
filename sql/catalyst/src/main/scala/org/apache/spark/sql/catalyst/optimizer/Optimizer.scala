@@ -40,7 +40,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
-    Batch("Unions", FixedPoint(100),
+    Batch("Union", FixedPoint(100),
       CombineUnions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
@@ -98,8 +98,8 @@ object SamplePushDown extends Rule[LogicalPlan] {
 /**
  * Pushes certain operations to both sides of a Union, Intersect or Except operator.
  * Operations that are safe to pushdown are listed as follows.
- * Unions:
- * Right now, Unions means UNION ALL, which does not de-duplicate rows. So, it is
+ * Union:
+ * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
  *
@@ -127,7 +127,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Rewrites an expression so that it can be pushed to the right side of a
-   * Unions, Intersect or Except operator. This method relies on the fact that the output attributes
+   * Union, Intersect or Except operator. This method relies on the fact that the output attributes
    * of a union/intersect/except are always equal to the left child's output.
    */
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
@@ -577,18 +577,18 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Combines all adjacent [[Unions]] operators into a single [[Unions]].
+ * Combines all adjacent [[Union]] operators into a single [[Union]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
   private def buildUnionChildren(children: Seq[LogicalPlan]): Seq[LogicalPlan] =
     children.foldLeft(Seq.empty[LogicalPlan]) { (newChildren, child) => child match {
-      case Unions(grandchildren) => newChildren ++ grandchildren
+      case Union(grandchildren) => newChildren ++ grandchildren
       case other => newChildren ++ Seq(other)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case u @ Unions(children) => Unions(buildUnionChildren(children))
+    case u @ Union(children) => Union(buildUnionChildren(children))
   }
 }
 

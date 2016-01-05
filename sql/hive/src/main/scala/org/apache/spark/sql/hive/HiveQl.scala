@@ -1215,7 +1215,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
          if (queries.length == 1) {
            queries.head
          } else {
-           Unions(queries)
+           Union(queries)
          }
 
       // return With plan if there is CTE

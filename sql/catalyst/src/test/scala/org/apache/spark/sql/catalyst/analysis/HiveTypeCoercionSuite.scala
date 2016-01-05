@@ -384,7 +384,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     val wt = HiveTypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val r1 = wt(Union(left, right)).asInstanceOf[Unions]
+    val r1 = wt(Union(left, right)).asInstanceOf[Union]
     val r2 = wt(Except(left, right)).asInstanceOf[Except]
     val r3 = wt(Intersect(left, right)).asInstanceOf[Intersect]
     checkOutput(r1.children.head, expectedTypes)
@@ -410,7 +410,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       AttributeReference("r", DecimalType(5, 5))())
     val expectedType1 = Seq(DecimalType(10, 8))
 
-    val r1 = dp(Union(left1, right1)).asInstanceOf[Unions]
+    val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
     val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
     val r3 = dp(Intersect(left1, right1)).asInstanceOf[Intersect]
 
@@ -431,7 +431,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 
-      val r1 = dp(Union(plan1, plan2)).asInstanceOf[Unions]
+      val r1 = dp(Union(plan1, plan2)).asInstanceOf[Union]
       val r2 = dp(Except(plan1, plan2)).asInstanceOf[Except]
       val r3 = dp(Intersect(plan1, plan2)).asInstanceOf[Intersect]
 
@@ -439,7 +439,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       checkOutput(r2.right, Seq(expectedType))
       checkOutput(r3.right, Seq(expectedType))
 
-      val r4 = dp(Union(plan2, plan1)).asInstanceOf[Unions]
+      val r4 = dp(Union(plan2, plan1)).asInstanceOf[Union]
       val r5 = dp(Except(plan2, plan1)).asInstanceOf[Except]
       val r6 = dp(Intersect(plan2, plan1)).asInstanceOf[Intersect]
 

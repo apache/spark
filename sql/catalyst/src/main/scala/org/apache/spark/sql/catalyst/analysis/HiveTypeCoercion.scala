@@ -196,7 +196,7 @@ object HiveTypeCoercion {
    * - LongType to DoubleType
    * - DecimalType to Double
    *
-   * This rule is only applied to Unions/Except/Intersect
+   * This rule is only applied to Union/Except/Intersect
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
@@ -261,7 +261,7 @@ object HiveTypeCoercion {
         val (newLeft, newRight) = widenOutputTypes(s.nodeName, left, right)
         s.makeCopy(Array(newLeft, newRight))
 
-      case s: Unions if s.childrenResolved &&
+      case s: Union if s.childrenResolved &&
         s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = widenOutputTypes(s.nodeName, s.children)
         s.makeCopy(Array(newChildren))

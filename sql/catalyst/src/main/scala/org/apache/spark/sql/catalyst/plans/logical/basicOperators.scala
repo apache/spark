@@ -116,12 +116,12 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
 
 /** Factory for constructing new `Unions` nodes. */
 object Union {
-  def apply(left: LogicalPlan, right: LogicalPlan): Unions = {
-    Unions (left :: right :: Nil)
+  def apply(left: LogicalPlan, right: LogicalPlan): Union = {
+    Union (left :: right :: Nil)
   }
 }
 
-case class Unions(children: Seq[LogicalPlan]) extends LogicalPlan {
+case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
 
   override def output: Seq[Attribute] = {
     children.tail.foldLeft(children.head.output) { case (currentOutput, child) =>

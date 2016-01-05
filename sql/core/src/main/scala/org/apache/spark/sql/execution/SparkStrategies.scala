@@ -347,7 +347,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         LocalTableScan(output, data) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
-      case logical.Unions(unionChildren) =>
+      case logical.Union(unionChildren) =>
         execution.Union(unionChildren.map(planLater)) :: Nil
       case logical.Except(left, right) =>
         execution.Except(planLater(left), planLater(right)) :: Nil

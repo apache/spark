@@ -50,7 +50,7 @@ class SetOperationPushDownSuite extends PlanTest {
 
     comparePlans(unionOptimized1, unionOptimized2)
 
-    val combinedUnions = Unions(unionOptimized1 :: unionOptimized2 :: Nil)
+    val combinedUnions = Union(unionOptimized1 :: unionOptimized2 :: Nil)
     val combinedUnionsOptimized = Optimize.execute(combinedUnions.analyze)
     val unionQuery3 = Union(unionQuery1, unionQuery2)
     val unionOptimized3 = Optimize.execute(unionQuery3.analyze)
@@ -77,7 +77,7 @@ class SetOperationPushDownSuite extends PlanTest {
     val unionQuery = testUnion.where('a === 1)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Unions(testRelation.where('a === 1) :: testRelation2.where('d === 1) :: Nil).analyze
+      Union(testRelation.where('a === 1), testRelation2.where('d === 1)).analyze
 
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
@@ -86,7 +86,7 @@ class SetOperationPushDownSuite extends PlanTest {
     val unionQuery = testUnion.select('a)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Unions(testRelation.select('a) :: testRelation2.select('d) :: Nil ).analyze
+      Union(testRelation.select('a), testRelation2.select('d)).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 

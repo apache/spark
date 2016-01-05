@@ -609,7 +609,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def union(other: Dataset[T]): Dataset[T] = withPlan[T](other){ (left, right) =>
-    Unions(left :: right :: Nil)
+    Union(left, right)
   }
 
   /**
