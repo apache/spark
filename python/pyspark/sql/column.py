@@ -27,8 +27,7 @@ from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
 
-__all__ = ["DataFrame", "Column", "SchemaRDD", "DataFrameNaFunctions",
-           "DataFrameStatFunctions"]
+__all__ = ["DataFrame", "Column", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
 def _create_column_from_literal(literal):
@@ -271,23 +270,6 @@ class Column(object):
         return Column(jc)
 
     __getslice__ = substr
-
-    @ignore_unicode_prefix
-    @since(1.3)
-    def inSet(self, *cols):
-        """
-        A boolean expression that is evaluated to true if the value of this
-        expression is contained by the evaluated values of the arguments.
-
-        >>> df[df.name.inSet("Bob", "Mike")].collect()
-        [Row(age=5, name=u'Bob')]
-        >>> df[df.age.inSet([1, 2, 3])].collect()
-        [Row(age=2, name=u'Alice')]
-
-        .. note:: Deprecated in 1.5, use :func:`Column.isin` instead.
-        """
-        warnings.warn("inSet is deprecated. Use isin() instead.")
-        return self.isin(*cols)
 
     @ignore_unicode_prefix
     @since(1.5)
