@@ -38,7 +38,6 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return a gradient boosted trees model that can be used for prediction
    */
-  @Since("1.7.0")
   def run(input: RDD[LabeledPoint],
            boostingStrategy: BoostingStrategy): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
@@ -50,16 +49,8 @@ private[ml] object GradientBoostedTrees extends Logging {
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false)
       case _ =>
-        throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
+        throw new IllegalArgumentException(s"$algo is not supported by gradient boosting.")
     }
-  }
-
-  /**
-   * Java-friendly API for [[org.apache.spark.ml.tree.impl.GradientBoostedTrees!#run]].
-   */
-  @Since("1.7.0")
-  def run(input: JavaRDD[LabeledPoint]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
-    run(input.rdd)
   }
 
   /**
@@ -72,7 +63,6 @@ private[ml] object GradientBoostedTrees extends Logging {
    *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
    * @return a gradient boosted trees model that can be used for prediction
    */
-  @Since("1.7.0")
   def runWithValidation(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
@@ -95,16 +85,6 @@ private[ml] object GradientBoostedTrees extends Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#runWithValidation]].
-   */
-  @Since("1.7.0")
-  def runWithValidation(
-      input: JavaRDD[LabeledPoint],
-      validationInput: JavaRDD[LabeledPoint]): (Array[DecisionTreeRegressionModel], Array[Double]) = {
-    runWithValidation(input.rdd, validationInput.rdd)
-  }
-
-  /**
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
    * @param data: training data.
@@ -114,7 +94,6 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
-  @Since("1.7.0")
   def computeInitialPredictionAndError(
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
@@ -138,7 +117,6 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
-  @Since("1.7.0")
   def updatePredictionError(
       data: RDD[LabeledPoint],
       predictionAndError: RDD[(Double, Double)],
@@ -164,7 +142,7 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @param validate whether or not to use the validation dataset.
    * @return a gradient boosted trees model that can be used for prediction
    */
-  private def boost(
+  def boost(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy,
