@@ -127,6 +127,28 @@ class TaskMetrics(
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
 
 
+  /* =================================== *
+   |        SHUFFLE WRITE METRICS        |
+   * =================================== */
+
+  private var _shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
+
+  /**
+   * Metrics related to shuffle write, defined only in shuffle map stages.
+   */
+  def shuffleWriteMetrics: Option[ShuffleWriteMetrics] = _shuffleWriteMetrics
+
+  /**
+   * Get or create a new [[ShuffleWriteMetrics]] associated with this task.
+   */
+  def registerShuffleWriteMetrics(): ShuffleWriteMetrics = {
+    _shuffleWriteMetrics.getOrElse {
+      val metrics = new ShuffleWriteMetrics(accumMap)
+      _shuffleWriteMetrics = Some(metrics)
+      metrics
+    }
+  }
+
   /* ================================== *
    |        SHUFFLE READ METRICS        |
    * ================================== */
@@ -134,7 +156,8 @@ class TaskMetrics(
   private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
 
   /**
-   * Aggregated [[ShuffleReadMetrics]] across all shuffle dependencies.
+   * Metrics related to shuffle read aggregated across all shuffle dependencies.
+   * This is defined only if there are shuffle dependencies in this task.
    */
   def shuffleReadMetrics: Option[ShuffleReadMetrics] = _shuffleReadMetrics
 
@@ -154,8 +177,7 @@ class TaskMetrics(
    * which merges the temporary values synchronously.
    */
   private[spark] def registerTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
-    val tempAccumMap = createShuffleReadAccums().map { acc => (acc.name.get, acc) }.toMap
-    val readMetrics = new ShuffleReadMetrics(tempAccumMap)
+    val readMetrics = ShuffleReadMetrics.createDummy()
     tempShuffleReadMetrics += readMetrics
     readMetrics
   }
@@ -217,12 +239,6 @@ class TaskMetrics(
    * data was written are stored here.
    */
   var outputMetrics: Option[OutputMetrics] = None
-
-  /**
-   * If this task writes to shuffle output, metrics on the written shuffle data will be collected
-   * here
-   */
-  var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
@@ -463,67 +479,78 @@ class ShuffleReadMetrics private (
   private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
 }
 
-
-/**
- * :: DeveloperApi ::
- * Metrics pertaining to shuffle data written in a given task.
- * TODO: REMOVE ME.
- */
-@DeveloperApi
-class ShuffleWriteMetrics extends Serializable {
-  /**
-   * Number of bytes written for the shuffle by this task
-   */
-  @volatile private var _shuffleBytesWritten: Long = _
-  def shuffleBytesWritten: Long = _shuffleBytesWritten
-  private[spark] def incShuffleBytesWritten(value: Long) = _shuffleBytesWritten += value
-  private[spark] def decShuffleBytesWritten(value: Long) = _shuffleBytesWritten -= value
+private[spark] object ShuffleReadMetrics {
 
   /**
-   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
+   * Create a new [[ShuffleReadMetrics]] that is not associated with any particular task.
+   *
+   * This mainly exists for legacy reasons, because we use dummy [[ShuffleReadMetrics]] in
+   * many places only to merge their values together later. In the future, we should revisit
+   * whether this is needed.
    */
-  @volatile private var _shuffleWriteTime: Long = _
-  def shuffleWriteTime: Long = _shuffleWriteTime
-  private[spark] def incShuffleWriteTime(value: Long) = _shuffleWriteTime += value
-
-  /**
-   * Total number of records written to the shuffle by this task
-   */
-  @volatile private var _shuffleRecordsWritten: Long = _
-  def shuffleRecordsWritten: Long = _shuffleRecordsWritten
-  private[spark] def incShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten += value
-  private[spark] def decShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten -= value
+  def createDummy(): ShuffleReadMetrics = {
+    new ShuffleReadMetrics(
+      InternalAccumulator.createShuffleReadAccums().map { acc => (acc.name.get, acc) }.toMap)
+  }
 }
 
 
-///**
-// * Metrics pertaining to shuffle data written in a given task.
-// */
-//@deprecated("ShuffleWriteMetrics will be made private in a future version.", "2.0.0")
-//class ShuffleWriteMetrics private[executor] (
-//    _shuffleBytesWritten: Accumulator[Long],
-//    _shuffleRecordsWritten: Accumulator[Long],
-//    _shuffleWriteTime: Accumulator[Long])
-//  extends Serializable {
-//
-//  /**
-//   * Number of bytes written for the shuffle by this task.
-//   */
-//  def shuffleBytesWritten: Long = _shuffleBytesWritten.value
-//
-//  /**
-//   * Total number of records written to the shuffle by this task.
-//   */
-//  def shuffleRecordsWritten: Long = _shuffleRecordsWritten.value
-//
-//  /**
-//   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
-//   */
-//  def shuffleWriteTime: Long = _shuffleWriteTime.value
-//
-//  private[spark] def incShuffleBytesWritten(v: Long): Unit = _shuffleBytesWritten.add(v)
-//  private[spark] def incShuffleRecordsWritten(v: Long): Unit = _shuffleRecordsWritten.add(v)
-//  private[spark] def incShuffleWriteTime(v: Long): Unit = _shuffleWriteTime.add(v)
-//  private[spark] def decShuffleBytesWritten(v: Long): Unit = _shuffleBytesWritten.sub(v)
-//  private[spark] def decShuffleRecordsWritten(v: Long): Unit = _shuffleRecordsWritten.sub(v)
-//}
+/**
+ * Metrics pertaining to shuffle data written in a given task.
+ */
+@deprecated("ShuffleWriteMetrics will be made private in a future version.", "2.0.0")
+class ShuffleWriteMetrics private (
+    _shuffleBytesWritten: Accumulator[Long],
+    _shuffleRecordsWritten: Accumulator[Long],
+    _shuffleWriteTime: Accumulator[Long])
+  extends Serializable {
+
+  private[executor] def this(accumMap: Map[String, Accumulator[Long]]) {
+    this(
+      accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_BYTES_WRITTEN),
+      accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_RECORDS_WRITTEN),
+      accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_WRITE_TIME))
+  }
+
+  /**
+   * Number of bytes written for the shuffle by this task.
+   */
+  def shuffleBytesWritten: Long = _shuffleBytesWritten.value
+
+  /**
+   * Total number of records written to the shuffle by this task.
+   */
+  def shuffleRecordsWritten: Long = _shuffleRecordsWritten.value
+
+  /**
+   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
+   */
+  def shuffleWriteTime: Long = _shuffleWriteTime.value
+
+  // TODO: these are not thread-safe. Is that OK?
+
+  private[spark] def incShuffleBytesWritten(v: Long): Unit = _shuffleBytesWritten.add(v)
+  private[spark] def incShuffleRecordsWritten(v: Long): Unit = _shuffleRecordsWritten.add(v)
+  private[spark] def incShuffleWriteTime(v: Long): Unit = _shuffleWriteTime.add(v)
+  private[spark] def decShuffleBytesWritten(v: Long): Unit = {
+    _shuffleBytesWritten.setValue(shuffleBytesWritten - v)
+  }
+  private[spark] def decShuffleRecordsWritten(v: Long): Unit = {
+    _shuffleRecordsWritten.setValue(shuffleRecordsWritten - v)
+  }
+}
+
+private[spark] object ShuffleWriteMetrics {
+
+  /**
+   * Create a new [[ShuffleWriteMetrics]] that is not associated with any particular task.
+   *
+   * This mainly exists for legacy reasons, because we use dummy [[ShuffleWriteMetrics]] in
+   * many places only to merge their values together later. In the future, we should revisit
+   * whether this is needed.
+   */
+  def createDummy(): ShuffleWriteMetrics = {
+    new ShuffleWriteMetrics(
+      InternalAccumulator.createShuffleWriteAccums().map { acc => (acc.name.get, acc) }.toMap)
+  }
+}

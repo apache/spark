@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.executor.ShuffleWriteMetrics$;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.storage.BlockManager;
@@ -340,7 +341,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         }
 
         // TODO: use existing ShuffleWriteMetrics
-        ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
+        ShuffleWriteMetrics writeMetrics = ShuffleWriteMetrics$.MODULE$.createDummy();
 
         long released = 0L;
         while (dataPages.size() > 0) {

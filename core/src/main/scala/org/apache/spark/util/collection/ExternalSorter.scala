@@ -245,7 +245,7 @@ private[spark] class ExternalSorter[K, V, C](
     var writer: DiskBlockObjectWriter = null
     def openWriter(): Unit = {
       assert (writer == null && spillMetrics == null)
-      spillMetrics = new ShuffleWriteMetrics
+      spillMetrics = ShuffleWriteMetrics.createDummy()
       writer = blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
     }
     openWriter()
@@ -644,6 +644,8 @@ private[spark] class ExternalSorter[K, V, C](
       blockId: BlockId,
       outputFile: File): Array[Long] = {
 
+    val writeMetrics = context.taskMetrics().registerShuffleWriteMetrics()
+
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
 
@@ -652,8 +654,8 @@ private[spark] class ExternalSorter[K, V, C](
       val collection = if (aggregator.isDefined) map else buffer
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
       while (it.hasNext) {
-        val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-          context.taskMetrics.shuffleWriteMetrics.get)
+        val writer = blockManager.getDiskWriter(
+          blockId, outputFile, serInstance, fileBufferSize, writeMetrics)
         val partitionId = it.nextPartition()
         while (it.hasNext && it.nextPartition() == partitionId) {
           it.writeNext(writer)
@@ -666,8 +668,8 @@ private[spark] class ExternalSorter[K, V, C](
       // We must perform merge-sort; get an iterator by partition and write everything directly.
       for ((id, elements) <- this.partitionedIterator) {
         if (elements.hasNext) {
-          val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-            context.taskMetrics.shuffleWriteMetrics.get)
+          val writer = blockManager.getDiskWriter(
+            blockId, outputFile, serInstance, fileBufferSize, writeMetrics)
           for (elem <- elements) {
             writer.write(elem._1, elem._2)
           }

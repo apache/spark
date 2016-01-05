@@ -271,7 +271,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     def makeTaskMetrics(base: Int): TaskMetrics = {
       val taskMetrics = new TaskMetrics()
       val shuffleReadMetrics = taskMetrics.registerTempShuffleReadMetrics()
-      val shuffleWriteMetrics = new ShuffleWriteMetrics()
+      val shuffleWriteMetrics = taskMetrics.registerShuffleWriteMetrics()
       taskMetrics.shuffleWriteMetrics = Some(shuffleWriteMetrics)
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incLocalBytesRead(base + 9)

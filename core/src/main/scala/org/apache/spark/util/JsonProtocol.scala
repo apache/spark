@@ -728,8 +728,15 @@ private[spark] object JsonProtocol {
       metrics.mergeShuffleReadMetrics()
     }
 
-    metrics.shuffleWriteMetrics =
-      Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
+    // Shuffle write metrics
+    Utils.jsonOption(json \ "Shuffle Write Metrics").foreach { writeJson =>
+      val writeMetrics = metrics.registerShuffleWriteMetrics()
+      writeMetrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
+      writeMetrics.incShuffleRecordsWritten((json \ "Shuffle Records Written")
+        .extractOpt[Long].getOrElse(0))
+      writeMetrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
+    }
+
     metrics.setInputMetrics(
       Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson))
     metrics.outputMetrics =
@@ -742,16 +749,6 @@ private[spark] object JsonProtocol {
           (id, status)
         }
       }
-    metrics
-  }
-
-  // TODO: kill this method
-  private def shuffleWriteMetricsFromJson(json: JValue): ShuffleWriteMetrics = {
-    val metrics = new ShuffleWriteMetrics
-    metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
-    metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
-    metrics.incShuffleRecordsWritten((json \ "Shuffle Records Written")
-      .extractOpt[Long].getOrElse(0))
     metrics
   }
 

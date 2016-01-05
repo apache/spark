@@ -402,9 +402,10 @@ private[spark] object InternalAccumulator {
       MEMORY_BYTES_SPILLED,
       DISK_BYTES_SPILLED,
       PEAK_EXECUTION_MEMORY) ++
-      // For testing only
       sys.props.get("spark.testing").map(_ => TEST_ACCUM).toSeq
-    metricNames.map(newMetric) ++ createShuffleReadAccums()
+    metricNames.map(newMetric) ++
+      createShuffleReadAccums() ++
+      createShuffleWriteAccums()
   }
 
   /**

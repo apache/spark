@@ -44,7 +44,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("verify write metrics") {
     val file = new File(tempDir, "somefile")
-    val writeMetrics = new ShuffleWriteMetrics()
+    val writeMetrics = ShuffleWriteMetrics.createDummy()
     val writer = new DiskBlockObjectWriter(
       file, new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
@@ -118,7 +118,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("commitAndClose() should be idempotent") {
     val file = new File(tempDir, "somefile")
-    val writeMetrics = new ShuffleWriteMetrics()
+    val writeMetrics = ShuffleWriteMetrics.createDummy()
     val writer = new DiskBlockObjectWriter(
       file, new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
     for (i <- 1 to 1000) {
@@ -136,7 +136,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("revertPartialWritesAndClose() should be idempotent") {
     val file = new File(tempDir, "somefile")
-    val writeMetrics = new ShuffleWriteMetrics()
+    val writeMetrics = ShuffleWriteMetrics.createDummy()
     val writer = new DiskBlockObjectWriter(
       file, new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
     for (i <- 1 to 1000) {

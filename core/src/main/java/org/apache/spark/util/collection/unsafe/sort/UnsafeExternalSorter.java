@@ -120,9 +120,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.fileBufferSizeBytes = 32 * 1024;
-    // TODO: metrics tracking + integration with shuffle write metrics
-    // need to connect the write metrics to task metrics so we count the spill IO somewhere.
-    this.writeMetrics = new ShuffleWriteMetrics();
+    this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(

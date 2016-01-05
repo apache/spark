@@ -45,9 +45,6 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var mapStatus: MapStatus = null
 
-  private val writeMetrics = new ShuffleWriteMetrics()
-  context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
-
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
