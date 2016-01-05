@@ -110,7 +110,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.clearFiles"),
         // SPARK-529: private classes were removed, but MiMA complains.
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sql.SQLConf$SQLConfEntry$")
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry$")
         )
     case v if v.startsWith("1.6") =>
       Seq(
