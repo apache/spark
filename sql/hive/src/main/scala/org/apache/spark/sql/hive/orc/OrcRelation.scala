@@ -210,7 +210,7 @@ private[sql] class OrcRelation(
     OrcTableScan(output, this, filters, inputPaths).execute()
   }
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     job.getConfiguration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])

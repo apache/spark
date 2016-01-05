@@ -116,7 +116,7 @@ private[sql] class TextRelation(
   }
 
   /** Write path. */
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,

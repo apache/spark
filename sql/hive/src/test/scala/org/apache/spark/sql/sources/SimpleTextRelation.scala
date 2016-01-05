@@ -181,15 +181,17 @@ class SimpleTextRelation(
     }
   }
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = new BucketedOutputWriterFactory {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     job.setOutputFormatClass(classOf[TextOutputFormat[_, _]])
 
-    override def newInstance(
-        path: String,
-        bucketId: Option[Int],
-        dataSchema: StructType,
-        context: TaskAttemptContext): OutputWriter = {
-      new SimpleTextOutputWriter(path, bucketId, context)
+    new BucketedOutputWriterFactory {
+      override def newInstance(
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new SimpleTextOutputWriter(path, bucketId, context)
+      }
     }
   }
 
@@ -240,16 +242,19 @@ class CommitFailureTestRelation(
     userDefinedPartitionColumns,
     bucketSpec,
     parameters)(sqlContext) {
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = new BucketedOutputWriterFactory {
-    override def newInstance(
-        path: String,
-        bucketId: Option[Int],
-        dataSchema: StructType,
-        context: TaskAttemptContext): OutputWriter = {
-      new SimpleTextOutputWriter(path, bucketId, context) {
-        override def close(): Unit = {
-          super.close()
-          sys.error("Intentional task commitment failure for testing purpose.")
+
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
+    new BucketedOutputWriterFactory {
+      override def newInstance(
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new SimpleTextOutputWriter(path, bucketId, context) {
+          override def close(): Unit = {
+            super.close()
+            sys.error("Intentional task commitment failure for testing purpose.")
+          }
         }
       }
     }

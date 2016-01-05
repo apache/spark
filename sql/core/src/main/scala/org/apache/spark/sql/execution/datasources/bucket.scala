@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.sources.{OutputWriter, OutputWriterFactory, HadoopFsRelationProvider, HadoopFsRelation}
@@ -72,6 +72,8 @@ private[sql] abstract class BucketedHadoopFsRelation(
   def this(parameters: Map[String, String]) = this(None, parameters)
 
   def bucketSpec: Option[BucketSpec]
+
+  def prepareJobForWrite(job: Job): BucketedOutputWriterFactory
 }
 
 private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFactory {

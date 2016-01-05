@@ -224,7 +224,7 @@ private[sql] class ParquetRelation(
 
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
