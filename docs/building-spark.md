@@ -113,13 +113,11 @@ By default Spark will build with Hive 0.13.1 bindings.
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
-# Building for Scala 2.11
-To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
+# Building for Scala 2.10
+To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
 
-    ./dev/change-scala-version.sh 2.11
-    mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
-
-Spark does not yet support its JDBC component for Scala 2.11.
+    ./dev/change-scala-version.sh 2.10
+    mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
 
 # Spark Tests in Maven
 
