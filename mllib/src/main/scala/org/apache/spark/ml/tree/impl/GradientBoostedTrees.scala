@@ -18,8 +18,6 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Since
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
