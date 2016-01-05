@@ -200,7 +200,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("arguments of function hash cannot be empty")
+      TypeCheckResult.TypeCheckFailure("function hash requires at least one argument")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

@@ -99,14 +99,6 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }.collect()
     assert(attemptIdsWithFailedTask.toSet === Set(0, 1))
   }
-
-  test("TaskContext.attemptId returns taskAttemptId for backwards-compatibility (SPARK-4014)") {
-    sc = new SparkContext("local", "test")
-    val attemptIds = sc.parallelize(Seq(1, 2, 3, 4), 4).mapPartitions { iter =>
-      Seq(TaskContext.get().attemptId).iterator
-    }.collect()
-    assert(attemptIds.toSet === Set(0, 1, 2, 3))
-  }
 }
 
 private object TaskContextSuite {
