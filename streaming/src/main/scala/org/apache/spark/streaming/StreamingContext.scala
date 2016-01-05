@@ -897,3 +897,15 @@ object StreamingContext extends Logging {
     result
   }
 }
+
+private class StreamingContextPythonHelper {
+
+  /**
+   * This is a private method only for Python to implement `getOrCreate`.
+   */
+  def tryRecoverFromCheckpoint(checkpointPath: String): Option[StreamingContext] = {
+    val checkpointOption = CheckpointReader.read(
+      checkpointPath, new SparkConf(), SparkHadoopUtil.get.conf, false)
+    checkpointOption.map(new StreamingContext(null, _, null))
+  }
+}
