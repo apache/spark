@@ -420,6 +420,18 @@ test_that("read/write json files", {
   unlink(jsonPath3)
 })
 
+test_that("jsonRDD() on a RDD with json string", {
+  rdd <- parallelize(sc, mockLines)
+  expect_equal(count(rdd), 3)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
+  expect_is(df, "DataFrame")
+  expect_equal(count(df), 3)
+
+  rdd2 <- flatMap(rdd, function(x) c(x, x))
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
+  expect_is(df, "DataFrame")
+  expect_equal(count(df), 6)
+})
 
 test_that("test cache, uncache and clearCache", {
   df <- read.json(sqlContext, jsonPath)
