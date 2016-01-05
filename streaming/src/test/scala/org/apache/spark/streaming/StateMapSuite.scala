@@ -18,13 +18,16 @@
 package org.apache.spark.streaming
 
 import scala.collection.{immutable, mutable, Map}
+import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer._
 import org.apache.spark.streaming.util.{EmptyStateMap, OpenHashMapBasedStateMap, StateMap}
-import org.apache.spark.util.Utils
 
 class StateMapSuite extends SparkFunSuite {
+
+  private val conf = new SparkConf()
 
   test("EmptyStateMap") {
     val map = new EmptyStateMap[Int, Int]
@@ -267,12 +270,17 @@ class StateMapSuite extends SparkFunSuite {
     assertMap(stateMap, refMap.toMap, time, "Final state map does not match reference map")
   }
 
-  private def testSerialization[MapType <: StateMap[Int, Int]](
+  private def testSerialization[MapType <: StateMap[Int, Int] : ClassTag](
     map: MapType, msg: String): MapType = {
-    val deserMap = Utils.deserialize[MapType](
-      Utils.serialize(map), Thread.currentThread().getContextClassLoader)
-    assertMap(deserMap, map, 1, msg)
-    deserMap
+    val deserMaps = Array(new JavaSerializer(conf), new KryoSerializer(conf)).map {
+      (serializer: Serializer) =>
+        val serializerInstance = serializer.newInstance()
+        val deserMap = serializerInstance.deserialize(
+          serializerInstance.serialize(map), Thread.currentThread().getContextClassLoader)
+        assertMap(deserMap, map, 1, msg)
+        deserMap
+    }
+    deserMaps.head
   }
 
   // Assert whether all the data and operations on a state map matches that of a reference state map

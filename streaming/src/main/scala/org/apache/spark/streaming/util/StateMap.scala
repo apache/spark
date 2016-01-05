@@ -21,6 +21,9 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import scala.reflect.ClassTag
 
+import com.esotericsoftware.kryo.DefaultSerializer
+import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap._
 import org.apache.spark.util.collection.OpenHashMap
@@ -77,6 +80,7 @@ private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMa
 }
 
 /** Implementation of StateMap based on Spark's [[org.apache.spark.util.collection.OpenHashMap]] */
+@DefaultSerializer(classOf[KryoJavaSerializer])
 private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     @transient @volatile var parentStateMap: StateMap[K, S],
     initialCapacity: Int = DEFAULT_INITIAL_CAPACITY,
