@@ -1017,6 +1017,17 @@ def sha2(col, numBits):
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
     return Column(jc)
 
+@since(2.0)
+def hash(col):
+    """Calculates the hash code of given columns, and returns the result as a int column.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(hash('a').alias('hash')).collect()
+    [Row(hash=1358996357)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.hash(_to_java_column(col))
+    return Column(jc)
+
 
 # ---------------------- String/Binary functions ------------------------------
 
