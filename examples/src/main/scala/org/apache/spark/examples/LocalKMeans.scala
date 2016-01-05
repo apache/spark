@@ -23,7 +23,7 @@ import java.util.Random
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-import breeze.linalg.{Vector, DenseVector, squaredDistance}
+import breeze.linalg.{squaredDistance, DenseVector, Vector}
 
 import org.apache.spark.SparkContext._
 

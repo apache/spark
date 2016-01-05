@@ -18,9 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql.hive
 
-import com.google.common.io.{ByteStreams, Files}
-
 import java.io.File
+
+import com.google.common.io.{ByteStreams, Files}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._

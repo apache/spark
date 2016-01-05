@@ -22,7 +22,7 @@ import java.io.File
 
 import scala.io.Source._
 
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
 /**
