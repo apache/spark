@@ -1476,7 +1476,7 @@ class Airflow(BaseView):
                 'inverted': True,
                 'height': height,
             },
-            'xAxis': {'categories': tasks},
+            'xAxis': {'categories': tasks, 'alternateGridColor': '#FAFAFA'},
             'yAxis': {'type': 'datetime'},
             'title': {
                 'text': None
