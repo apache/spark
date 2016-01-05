@@ -136,16 +136,27 @@ private[sql] case class InsertIntoHadoopFsRelation(
           val (partitionOutput, dataOutput) =
             output.partition(a => partitionColumns.contains(a.name))
 
-          new DynamicPartitionWriterContainer(
-            relation,
-            job,
-            partitionOutput,
-            bucketSpec,
-            dataOutput,
-            output,
-            PartitioningUtils.DEFAULT_PARTITION_NAME,
-            sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
-            isAppend)
+          if (bucketSpec.isEmpty) {
+            new DynamicPartitionWriterContainer(
+              relation,
+              job,
+              partitionOutput,
+              dataOutput,
+              output,
+              PartitioningUtils.DEFAULT_PARTITION_NAME,
+              sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
+              isAppend)
+          } else {
+            new BucketedPartitionWriterContainer(
+              relation.asInstanceOf[BucketedHadoopFsRelation],
+              job,
+              partitionOutput,
+              bucketSpec.get,
+              dataOutput,
+              output,
+              PartitioningUtils.DEFAULT_PARTITION_NAME,
+              isAppend)
+          }
         }
 
         // This call shouldn't be put into the `try` block below because it only initializes and

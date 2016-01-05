@@ -244,15 +244,15 @@ object ResolvedDataSource extends Logging {
           case provider: BucketedHadoopFsRelationProvider => provider.createRelation(
             sqlContext,
             Array(outputPath.toString),
-            Some(dataSchema.asNullable),
-            Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+            Option(dataSchema.asNullable),
+            Option(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
             bucketSpec,
             caseInsensitiveOptions)
           case provider: HadoopFsRelationProvider => provider.createRelation(
             sqlContext,
             Array(outputPath.toString),
-            Some(dataSchema.asNullable),
-            Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+            Option(dataSchema.asNullable),
+            Option(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
             caseInsensitiveOptions)
         }
 

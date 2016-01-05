@@ -151,7 +151,7 @@ case class CreateMetastoreDataSource(
       tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
-      None,
+      bucketSpec = None,
       provider,
       optionsWithPath,
       isExternal)

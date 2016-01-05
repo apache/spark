@@ -140,7 +140,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   @scala.annotation.varargs
   def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter = {
     this.numBuckets = Option(numBuckets)
-    this.bucketingColumns = Option(colName +: colNames)
+    this.bucketColumnNames = Option(colName +: colNames)
     this
   }
 
@@ -153,7 +153,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   @scala.annotation.varargs
   def sortBy(colName: String, colNames: String*): DataFrameWriter = {
-    this.sortingColumns = Option(colName +: colNames)
+    this.sortColumnNames = Option(colName +: colNames)
     this
   }
 
@@ -224,28 +224,32 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     cols.map(normalize(_, "Partition"))
   }
 
-  private def normalizedBucketCols: Option[Seq[String]] = bucketingColumns.map { cols =>
+  private def normalizedBucketColNames: Option[Seq[String]] = bucketColumnNames.map { cols =>
     cols.map(normalize(_, "Bucketing"))
   }
 
-  private def normalizedSortCols: Option[Seq[String]] = sortingColumns.map { cols =>
+  private def normalizedSortColNames: Option[Seq[String]] = sortColumnNames.map { cols =>
     cols.map(normalize(_, "Sorting"))
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-    if (sortingColumns.isDefined) {
+    if (sortColumnNames.isDefined) {
       require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
     }
 
     for {
       n <- numBuckets
-      cols <- normalizedBucketCols
     } yield {
       require(n > 0, "Bucket number must be greater than 0.")
-      BucketSpec(n, cols, normalizedSortCols)
+      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
     }
   }
 
+  /**
+   * The given column name may not be equal to any of the existing column names if we were in
+   * case-insensitive context.  Normalize the given column name to the real one so that we don't
+   * need to care about case sensitivity afterwards.
+   */
   private def normalize(columnName: String, columnType: String): String = {
     val validColumnNames = df.logicalPlan.output.map(_.name)
     validColumnNames.find(df.sqlContext.analyzer.resolver(_, columnName))
@@ -254,7 +258,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def assertNotBucketed(): Unit = {
-    if (numBuckets.isDefined || sortingColumns.isDefined) {
+    if (numBuckets.isDefined || sortColumnNames.isDefined) {
       throw new IllegalArgumentException(
         "Currently we don't support writing bucketed data to this data source.")
     }
@@ -435,9 +439,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var partitioningColumns: Option[Seq[String]] = None
 
-  private var bucketingColumns: Option[Seq[String]] = None
+  private var bucketColumnNames: Option[Seq[String]] = None
 
   private var numBuckets: Option[Int] = None
 
-  private var sortingColumns: Option[Seq[String]] = None
+  private var sortColumnNames: Option[Seq[String]] = None
 }

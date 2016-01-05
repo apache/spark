@@ -242,17 +242,19 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     }
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
-      val BucketSpec(numBuckets, bucketColumns, sortColumns) = bucketSpec.get
+      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
-      tableProperties.put("spark.sql.sources.schema.numBucketCols", bucketColumns.length.toString)
-      bucketColumns.zipWithIndex.foreach { case (bucketCol, index) =>
+      tableProperties.put("spark.sql.sources.schema.numBucketCols",
+        bucketColumnNames.length.toString)
+      bucketColumnNames.zipWithIndex.foreach { case (bucketCol, index) =>
         tableProperties.put(s"spark.sql.sources.schema.bucketCol.$index", bucketCol)
       }
 
-      if (sortColumns.isDefined) {
-        tableProperties.put("spark.sql.sources.schema.numSortCols", sortColumns.get.length.toString)
-        sortColumns.get.zipWithIndex.foreach { case (sortCol, index) =>
+      if (sortColumnNames.nonEmpty) {
+        tableProperties.put("spark.sql.sources.schema.numSortCols",
+          sortColumnNames.length.toString)
+        sortColumnNames.zipWithIndex.foreach { case (sortCol, index) =>
           tableProperties.put(s"spark.sql.sources.schema.sortCol.$index", sortCol)
         }
       }
@@ -614,7 +616,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
-            None,
+            bucketSpec = None,
             mode,
             options = Map.empty[String, String],
             child

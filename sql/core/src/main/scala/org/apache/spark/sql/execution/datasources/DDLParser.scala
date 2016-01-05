@@ -109,7 +109,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
             provider,
             temp.isDefined,
             Array.empty[String],
-            None,
+            bucketSpec = None,
             mode,
             options,
             queryPlan)

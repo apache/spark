@@ -23,27 +23,19 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.sources.{OutputWriter, OutputWriterFactory, HadoopFsRelationProvider, HadoopFsRelation}
 import org.apache.spark.sql.types.StructType
 
+/**
+ * A container for bucketing information.
+ * Bucketing is a technology for decomposing data sets into more manageable parts, and the number
+ * of buckets is fixed so it does not fluctuate with data.
+ *
+ * @param numBuckets number of buckets.
+ * @param bucketColumnNames the names of the columns that used to generate the bucket id.
+ * @param sortColumnNames the names of the columns that used to sort data in each bucket.
+ */
 private[sql] case class BucketSpec(
     numBuckets: Int,
-    bucketingColumns: Seq[String],
-    sortingColumns: Option[Seq[String]]) {
-
-  def resolvedBucketingColumns(inputSchema: Seq[Attribute]): Seq[Attribute] = {
-    bucketingColumns.map { col =>
-      inputSchema.find(_.name == col).get
-    }
-  }
-
-  def resolvedSortingColumns(inputSchema: Seq[Attribute]): Seq[Attribute] = {
-    if (sortingColumns.isDefined) {
-      sortingColumns.get.map { col =>
-        inputSchema.find(_.name == col).get
-      }
-    } else {
-      Nil
-    }
-  }
-}
+    bucketColumnNames: Seq[String],
+    sortColumnNames: Seq[String])
 
 private[sql] trait BucketedHadoopFsRelationProvider extends HadoopFsRelationProvider {
   final override def createRelation(

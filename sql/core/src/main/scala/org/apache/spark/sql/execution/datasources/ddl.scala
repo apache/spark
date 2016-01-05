@@ -114,7 +114,7 @@ case class CreateTempTableUsingAsSelect(
       sqlContext,
       provider,
       partitionColumns,
-      None,
+      bucketSpec = None,
       mode,
       options,
       df)
