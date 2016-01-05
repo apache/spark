@@ -39,7 +39,7 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @return a gradient boosted trees model that can be used for prediction
    */
   def run(input: RDD[LabeledPoint],
-           boostingStrategy: BoostingStrategy): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      boostingStrategy: BoostingStrategy): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case Regression =>
@@ -189,7 +189,7 @@ private[ml] object GradientBoostedTrees extends Logging {
     // Initialize tree
     timer.start("building tree 0")
     val firstTree = new DecisionTreeRegressor()
-    val firstTreeModel = firstTree.trainOld(input, treeStrategy)
+    val firstTreeModel = firstTree.train(input, treeStrategy)
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = firstTreeWeight
@@ -221,7 +221,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
       val dt = new DecisionTreeRegressor()
-      val model = dt.trainOld(data, treeStrategy)
+      val model = dt.train(data, treeStrategy)
       timer.stop(s"building tree $m")
       // Update partial model
       baseLearners(m) = model

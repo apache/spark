@@ -88,7 +88,7 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
-  private[ml] def trainOld(data: RDD[LabeledPoint],
+  private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, parentUID = Some(uid))

@@ -94,7 +94,7 @@ final class DecisionTreeClassifier @Since("1.4.0") (
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
-  private[ml] def trainOld(data: RDD[LabeledPoint],
+  private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, parentUID = Some(uid))
