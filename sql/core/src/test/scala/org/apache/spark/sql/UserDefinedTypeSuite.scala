@@ -17,14 +17,9 @@
 
 package org.apache.spark.sql
 
-import java.util.concurrent.ConcurrentMap
-
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 
 import scala.beans.{BeanInfo, BeanProperty}
-import scala.reflect.runtime.universe.TypeTag
-
-import com.google.common.collect.MapMaker
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -98,9 +93,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
   }
-
-  private val outers: ConcurrentMap[String, AnyRef] = new MapMaker().weakValues().makeMap()
-  outers.put(getClass.getName, this)
 
   test("UDTs and UDFs") {
     sqlContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
