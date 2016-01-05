@@ -419,7 +419,7 @@ private[execution] final case class RangeBoundOrdering(
 /**
   * An external buffer of rows based on UnsafeExternalSorter
   */
-class ExternalRowBuffer(sorter: UnsafeExternalSorter, numFields: Int) {
+private[execution] class ExternalRowBuffer(sorter: UnsafeExternalSorter, numFields: Int) {
 
   val iter: UnsafeSorterIterator = sorter.getIterator
   val currentRow = new UnsafeRow(numFields)
