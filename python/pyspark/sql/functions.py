@@ -1017,6 +1017,7 @@ def sha2(col, numBits):
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
     return Column(jc)
 
+
 @since(2.0)
 def hash(col):
     """Calculates the hash code of given columns, and returns the result as a int column.
