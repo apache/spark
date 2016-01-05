@@ -20,9 +20,11 @@ package org.apache.spark.ml.tree
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
+import org.apache.spark.sql.types.{DoubleType, DataType, StructType}
 
 /**
  * Parameters for Decision Tree-based algorithms.
@@ -254,6 +256,22 @@ private[ml] trait TreeRegressorParams extends Params {
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+}
+
+private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
+  with TreeRegressorParams with HasVarianceCol {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
+    } else {
+      newSchema
+    }
+  }
 }
 
 /**

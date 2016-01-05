@@ -131,7 +131,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         private ByteOrder nativeOrder = null;
         private byte[][] buffers = null;
-        private UnsafeRow unsafeRow = new UnsafeRow();
+        private UnsafeRow unsafeRow = new UnsafeRow($numFields);
         private BufferHolder bufferHolder = new BufferHolder();
         private UnsafeRowWriter rowWriter = new UnsafeRowWriter();
         private MutableUnsafeRow mutableRow = null;
@@ -183,7 +183,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           bufferHolder.reset();
           rowWriter.initialize(bufferHolder, $numFields);
           ${extractors.mkString("\n")}
-          unsafeRow.pointTo(bufferHolder.buffer, $numFields, bufferHolder.totalSize());
+          unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize());
           return unsafeRow;
         }
       }"""

@@ -341,15 +341,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("deprecated callUdf in SQLContext") {
-    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-    val sqlctx = df.sqlContext
-    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
-    checkAnswer(
-      df.select($"id", callUdf("simpleUdf", $"value")),
-      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
-  }
-
   test("callUDF in SQLContext") {
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
     val sqlctx = df.sqlContext
@@ -1220,5 +1211,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           " _2: struct<_1: bigint," +
           " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
 
+  }
+
+  test("SPARK-12512: support `.` in column name for withColumn()") {
+    val df = Seq("a" -> "b").toDF("col.a", "col.b")
+    checkAnswer(df.select(df("*")), Row("a", "b"))
+    checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
+    checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
   }
 }

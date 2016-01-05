@@ -22,10 +22,10 @@ import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.examples.mllib.AbstractParams
-import org.apache.spark.ml.classification.{OneVsRest, LogisticRegression}
+import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.Vector

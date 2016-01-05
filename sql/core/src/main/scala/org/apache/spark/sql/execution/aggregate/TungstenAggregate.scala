@@ -49,10 +49,6 @@ case class TungstenAggregate(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  override def outputsUnsafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
-
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
   override def producedAttributes: AttributeSet =

@@ -19,8 +19,8 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
@@ -118,6 +118,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     $(estimator).transformSchema(schema)
   }
 
@@ -172,6 +173,7 @@ class TrainValidationSplitModel private[ml] (
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     bestModel.transformSchema(schema)
   }
 
