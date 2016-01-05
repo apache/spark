@@ -17,11 +17,11 @@
 
 package org.apache.spark.examples.ml
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * A simple example demonstrating model selection using TrainValidationSplit.

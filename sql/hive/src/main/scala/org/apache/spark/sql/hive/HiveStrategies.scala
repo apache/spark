@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
-  self: SQLContext#SparkPlanner =>
+  self: SparkPlanner =>
 
   val hiveContext: HiveContext
 

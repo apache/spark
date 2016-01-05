@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{CacheManager, ExecutedCommand, ExtractPythonUDFs, SetCommand}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck, ResolveDataSource}
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
@@ -55,7 +55,6 @@ import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNative
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
 
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
@@ -567,7 +566,7 @@ class HiveContext private[hive](
   }
 
   @transient
-  private val hivePlanner = new SparkPlanner with HiveStrategies {
+  private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
     val hiveContext = self
 
     override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(

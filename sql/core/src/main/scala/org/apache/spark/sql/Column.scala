@@ -713,18 +713,6 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * by the evaluated values of the arguments.
    *
    * @group expr_ops
-   * @since 1.3.0
-   * @deprecated As of 1.5.0. Use isin. This will be removed in Spark 2.0.
-   */
-  @deprecated("use isin. This will be removed in Spark 2.0.", "1.5.0")
-  @scala.annotation.varargs
-  def in(list: Any*): Column = isin(list : _*)
-
-  /**
-   * A boolean expression that is evaluated to true if the value of this expression is contained
-   * by the evaluated values of the arguments.
-   *
-   * @group expr_ops
    * @since 1.5.0
    */
   @scala.annotation.varargs
