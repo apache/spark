@@ -185,6 +185,7 @@ private[kinesis] class KinesisReceiver[T](
     workerThread.setName(s"Kinesis Receiver ${streamId}")
     workerThread.setDaemon(true)
     workerThread.start()
+
     logInfo(s"Started receiver with workerId $workerId")
   }
 
