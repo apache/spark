@@ -1175,7 +1175,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         # proving that the model is updated.
         batches = [[[-0.5], [0.6], [0.8]], [[0.2], [-0.1], [0.3]]]
         batches = [sc.parallelize(batch) for batch in batches]
-        input_stream = self.ssc.queueStream(batches)
+        input_stream = self.ssc.queueStream(batches, default=batches[1])
         predict_results = []
 
         def collect(rdd):
@@ -1190,7 +1190,9 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.ssc.start()
 
         def condition():
-            self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
+            self.assertTrue(predict_results)
+            self.assertEqual(predict_results[0], [0, 1, 1])
+            self.assertEqual(predict_results[-1], [1, 0, 1])
             return True
 
         self._eventually(condition, catch_assertions=True)
