@@ -21,14 +21,18 @@ import java.util.Iterator;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.types.*;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -48,6 +52,7 @@ import org.apache.commons.lang.NotImplementedException;
  */
 public final class ColumnarBatch {
   private static final int DEFAULT_BATCH_SIZE = 4 * 1024;
+  private static MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
 
   private final StructType schema;
   private final int capacity;
@@ -62,6 +67,10 @@ public final class ColumnarBatch {
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
     return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode);
+  }
+
+  public static ColumnarBatch allocate(StructType type) {
+    return new ColumnarBatch(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE);
   }
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
@@ -82,25 +91,53 @@ public final class ColumnarBatch {
    * Adapter class to interop with existing components that expect internal row. A lot of
    * performance is lost with this translation.
    */
-  public final class Row extends InternalRow {
+  public static final class Row extends InternalRow {
     private int rowId;
+    private final ColumnarBatch parent;
+    private final int fixedLenRowSize;
+
+    private Row(ColumnarBatch parent) {
+      this.parent = parent;
+      this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(parent.numCols());
+    }
 
     /**
      * Marks this row as being filtered out. This means a subsequent iteration over the rows
      * in this batch will not include this row.
      */
     public final void markFiltered() {
-      ColumnarBatch.this.markFiltered(rowId);
+      parent.markFiltered(rowId);
     }
 
     @Override
     public final int numFields() {
-      return ColumnarBatch.this.numCols();
+      return parent.numCols();
     }
 
     @Override
+    /**
+     * Revisit this. This is expensive.
+     */
     public final InternalRow copy() {
-      throw new NotImplementedException();
+      UnsafeRow row = new UnsafeRow(parent.numCols());
+      row.pointTo(new byte[fixedLenRowSize], fixedLenRowSize);
+      for (int i = 0; i < parent.numCols(); i++) {
+        if (isNullAt(i)) {
+          row.setNullAt(i);
+        } else {
+          DataType dt = parent.schema.fields()[i].dataType();
+          if (dt instanceof IntegerType) {
+            row.setInt(i, getInt(i));
+          } else if (dt instanceof LongType) {
+            row.setLong(i, getLong(i));
+          } else if (dt instanceof DoubleType) {
+            row.setDouble(i, getDouble(i));
+          } else {
+            throw new RuntimeException("Not implemented.");
+          }
+        }
+      }
+      return row;
     }
 
     @Override
@@ -110,7 +147,7 @@ public final class ColumnarBatch {
 
     @Override
     public final boolean isNullAt(int ordinal) {
-      return ColumnarBatch.this.column(ordinal).getIsNull(rowId);
+      return parent.column(ordinal).getIsNull(rowId);
     }
 
     @Override
@@ -119,9 +156,7 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public final byte getByte(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final byte getByte(int ordinal) { return parent.column(ordinal).getByte(rowId); }
 
     @Override
     public final short getShort(int ordinal) {
@@ -130,13 +165,11 @@ public final class ColumnarBatch {
 
     @Override
     public final int getInt(int ordinal) {
-      return ColumnarBatch.this.column(ordinal).getInt(rowId);
+      return parent.column(ordinal).getInt(rowId);
     }
 
     @Override
-    public final long getLong(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final long getLong(int ordinal) { return parent.column(ordinal).getLong(rowId); }
 
     @Override
     public final float getFloat(int ordinal) {
@@ -145,7 +178,7 @@ public final class ColumnarBatch {
 
     @Override
     public final double getDouble(int ordinal) {
-      return ColumnarBatch.this.column(ordinal).getDouble(rowId);
+      return parent.column(ordinal).getDouble(rowId);
     }
 
     @Override
@@ -155,7 +188,8 @@ public final class ColumnarBatch {
 
     @Override
     public final UTF8String getUTF8String(int ordinal) {
-      throw new NotImplementedException();
+      ColumnVector.Array a = parent.column(ordinal).getByteArray(rowId);
+      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     }
 
     @Override
@@ -170,12 +204,13 @@ public final class ColumnarBatch {
 
     @Override
     public final InternalRow getStruct(int ordinal, int numFields) {
-      throw new NotImplementedException();
+      return ColumnVectorUtils.toRow(parent.column(ordinal).getStruct(rowId));
     }
 
     @Override
     public final ArrayData getArray(int ordinal) {
-      throw new NotImplementedException();
+      ColumnVector.Array array = parent.column(ordinal).getArray(rowId);
+      return ColumnVectorUtils.toGenericArray(array);
     }
 
     @Override
@@ -194,7 +229,7 @@ public final class ColumnarBatch {
    */
   public Iterator<Row> rowIterator() {
     final int maxRows = ColumnarBatch.this.numRows();
-    final Row row = new Row();
+    final Row row = new Row(this);
     return new Iterator<Row>() {
       int rowId = 0;
 
