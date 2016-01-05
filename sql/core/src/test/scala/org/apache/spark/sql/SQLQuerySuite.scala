@@ -2076,7 +2076,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(1) :: Row(2) :: Row(3) :: Nil
     )
     assert(rdd.take(2147483638).size === 3)
-    assert(rdd.takeAsync(2147483638).get.size === 3)
+    assert(rdd.takeAsync(3).get.size === 3)
   }
 
 }
