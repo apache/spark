@@ -496,6 +496,7 @@ def get_parser():
     parser_clear.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
+    ht = "Do not request confirmation"
     parser_clear.add_argument(
         "-c", "--no_confirm", help=ht, action="store_true")
     parser_clear.set_defaults(func=clear)
