@@ -297,6 +297,20 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    def columnSimilarities(self):
+        """
+        Compute all cosine similarities between columns.
+
+        >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
+        ...                        IndexedRow(6, [4, 5, 6])])
+        >>> mat = IndexedRowMatrix(rows)
+        >>> cs = mat.columnSimilarities()
+        >>> print(cs.numCols())
+        3
+        """
+        java_coordinate_matrix = self._java_matrix_wrapper.call("columnSimilarities")
+        return CoordinateMatrix(java_coordinate_matrix)
+
     def toRowMatrix(self):
         """
         Convert this matrix to a RowMatrix.
