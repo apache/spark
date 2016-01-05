@@ -362,7 +362,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Range(start, step, numSlices, r.numElements, output) :: Nil
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         val newPartitioning = HashPartitioning(expressions, nPartitions.getOrElse(numPartitions))
-        val childPlan = self.sqlContext.planner.plan(child).next()
+        val childPlan = self.sqlContext.planner.planLater(child)
         // This is necessary to get the outputPartitioning from EnsureRequirements batch
         val executedChildPlan = sqlContext.prepareForExecution.execute(childPlan)
         if (executedChildPlan.outputPartitioning.guarantees(newPartitioning)) {
