@@ -57,9 +57,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  @deprecated("Use partitions() instead.", "1.1.0")
-  def splits: JList[Partition] = rdd.partitions.toSeq.asJava
-
   /** Set of partitions in this RDD. */
   def partitions: JList[Partition] = rdd.partitions.toSeq.asJava
 
@@ -345,13 +342,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def toLocalIterator(): JIterator[T] =
      asJavaIteratorConverter(rdd.toLocalIterator).asJava
-
-  /**
-   * Return an array that contains all of the elements in this RDD.
-   * @deprecated As of Spark 1.0.0, toArray() is deprecated, use {@link #collect()} instead
-   */
-  @deprecated("use collect()", "1.0.0")
-  def toArray(): JList[T] = collect()
 
   /**
    * Return an array that contains all of the elements in a specific partition of this RDD.

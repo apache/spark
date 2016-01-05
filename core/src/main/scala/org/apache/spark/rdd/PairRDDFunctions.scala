@@ -359,12 +359,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     self.mapPartitions(reducePartition).reduce(mergeMaps).asScala
   }
 
-  /** Alias for reduceByKeyLocally */
-  @deprecated("Use reduceByKeyLocally", "1.0.0")
-  def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = self.withScope {
-    reduceByKeyLocally(func)
-  }
-
   /**
    * Count the number of elements for each key, collecting the results to a local Map.
    *

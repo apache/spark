@@ -688,13 +688,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void toArray() {
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3));
-    List<Integer> list = rdd.toArray();
-    Assert.assertEquals(Arrays.asList(1, 2, 3), list);
-  }
-
-  @Test
   public void cartesian() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));

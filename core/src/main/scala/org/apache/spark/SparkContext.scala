@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicIntege
 import java.util.UUID.randomUUID
 
 import scala.collection.JavaConverters._
-import scala.collection.{Map, Set}
+import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
@@ -123,20 +123,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def this() = this(new SparkConf())
 
   /**
-   * :: DeveloperApi ::
-   * Alternative constructor for setting preferred locations where Spark will create executors.
-   *
-   * @param config a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
-   * @param preferredNodeLocationData not used. Left for backward compatibility.
-   */
-  @deprecated("Passing in preferred locations has no effect at all, see SPARK-8949", "1.5.0")
-  @DeveloperApi
-  def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
-    this(config)
-    logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
-  }
-
-  /**
    * Alternative constructor that allows setting common Spark properties directly
    *
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
@@ -155,21 +141,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
-   * @param preferredNodeLocationData not used. Left for backward compatibility.
    */
-  @deprecated("Passing in preferred locations has no effect at all, see SPARK-10921", "1.6.0")
   def this(
       master: String,
       appName: String,
       sparkHome: String = null,
       jars: Seq[String] = Nil,
-      environment: Map[String, String] = Map(),
-      preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
+      environment: Map[String, String] = Map()) =
   {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
-    if (preferredNodeLocationData.nonEmpty) {
-      logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
-    }
   }
 
   // NOTE: The below constructors could be consolidated using default arguments. Due to
@@ -267,8 +247,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Generate the random name for a temp folder in external block store.
   // Add a timestamp as the suffix here to make it more safe
   val externalBlockStoreFolderName = "spark-" + randomUUID.toString()
-  @deprecated("Use externalBlockStoreFolderName instead.", "1.4.0")
-  val tachyonFolderName = externalBlockStoreFolderName
 
   def isLocal: Boolean = (master == "local" || master.startsWith("local["))
 
@@ -639,11 +617,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def setLocalProperties(props: Properties) {
     localProperties.set(props)
-  }
-
-  @deprecated("Properties no longer need to be explicitly initialized.", "1.0.0")
-  def initLocalProperties() {
-    localProperties.set(new Properties())
   }
 
   /**
@@ -1586,15 +1559,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Clear the job's list of files added by `addFile` so that they do not get downloaded to
-   * any new nodes.
-   */
-  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
-  def clearFiles() {
-    addedFiles.clear()
-  }
-
-  /**
    * Gets the locality information associated with the partition in a particular rdd
    * @param rdd of interest
    * @param partition to be looked up for locality
@@ -1683,15 +1647,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     }
     postEnvironmentUpdate()
-  }
-
-  /**
-   * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
-   * any new nodes.
-   */
-  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
-  def clearJars() {
-    addedJars.clear()
   }
 
   // Shut down the SparkContext.
@@ -1862,63 +1817,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       partitions: Seq[Int]): Array[U] = {
     val cleanedFunc = clean(func)
     runJob(rdd, (ctx: TaskContext, it: Iterator[T]) => cleanedFunc(it), partitions)
-  }
-
-
-  /**
-   * Run a function on a given set of partitions in an RDD and pass the results to the given
-   * handler function. This is the main entry point for all actions in Spark.
-   *
-   * The allowLocal flag is deprecated as of Spark 1.5.0+.
-   */
-  @deprecated("use the version of runJob without the allowLocal parameter", "1.5.0")
-  def runJob[T, U: ClassTag](
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      allowLocal: Boolean,
-      resultHandler: (Int, U) => Unit): Unit = {
-    if (allowLocal) {
-      logWarning("sc.runJob with allowLocal=true is deprecated in Spark 1.5.0+")
-    }
-    runJob(rdd, func, partitions, resultHandler)
-  }
-
-  /**
-   * Run a function on a given set of partitions in an RDD and return the results as an array.
-   *
-   * The allowLocal flag is deprecated as of Spark 1.5.0+.
-   */
-  @deprecated("use the version of runJob without the allowLocal parameter", "1.5.0")
-  def runJob[T, U: ClassTag](
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      allowLocal: Boolean
-      ): Array[U] = {
-    if (allowLocal) {
-      logWarning("sc.runJob with allowLocal=true is deprecated in Spark 1.5.0+")
-    }
-    runJob(rdd, func, partitions)
-  }
-
-  /**
-   * Run a job on a given set of partitions of an RDD, but take a function of type
-   * `Iterator[T] => U` instead of `(TaskContext, Iterator[T]) => U`.
-   *
-   * The allowLocal argument is deprecated as of Spark 1.5.0+.
-   */
-  @deprecated("use the version of runJob without the allowLocal parameter", "1.5.0")
-  def runJob[T, U: ClassTag](
-      rdd: RDD[T],
-      func: Iterator[T] => U,
-      partitions: Seq[Int],
-      allowLocal: Boolean
-      ): Array[U] = {
-    if (allowLocal) {
-      logWarning("sc.runJob with allowLocal=true is deprecated in Spark 1.5.0+")
-    }
-    runJob(rdd, func, partitions)
   }
 
   /**
@@ -2093,10 +1991,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     assertNotStopped()
     taskScheduler.defaultParallelism
   }
-
-  /** Default min number of partitions for Hadoop RDDs when not given by user */
-  @deprecated("use defaultMinPartitions", "1.0.0")
-  def defaultMinSplits: Int = defaultMinPartitions
 
   /**
    * Default min number of partitions for Hadoop RDDs when not given by user
@@ -2364,113 +2258,6 @@ object SparkContext extends Logging {
    */
   private[spark] val LEGACY_DRIVER_IDENTIFIER = "<driver>"
 
-  // The following deprecated objects have already been copied to `object AccumulatorParam` to
-  // make the compiler find them automatically. They are duplicate codes only for backward
-  // compatibility, please update `object AccumulatorParam` accordingly if you plan to modify the
-  // following ones.
-
-  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  object DoubleAccumulatorParam extends AccumulatorParam[Double] {
-    def addInPlace(t1: Double, t2: Double): Double = t1 + t2
-    def zero(initialValue: Double): Double = 0.0
-  }
-
-  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  object IntAccumulatorParam extends AccumulatorParam[Int] {
-    def addInPlace(t1: Int, t2: Int): Int = t1 + t2
-    def zero(initialValue: Int): Int = 0
-  }
-
-  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  object LongAccumulatorParam extends AccumulatorParam[Long] {
-    def addInPlace(t1: Long, t2: Long): Long = t1 + t2
-    def zero(initialValue: Long): Long = 0L
-  }
-
-  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  object FloatAccumulatorParam extends AccumulatorParam[Float] {
-    def addInPlace(t1: Float, t2: Float): Float = t1 + t2
-    def zero(initialValue: Float): Float = 0f
-  }
-
-  // The following deprecated functions have already been moved to `object RDD` to
-  // make the compiler find them automatically. They are still kept here for backward compatibility
-  // and just call the corresponding functions in `object RDD`.
-
-  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): PairRDDFunctions[K, V] =
-    RDD.rddToPairRDDFunctions(rdd)
-
-  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]): AsyncRDDActions[T] =
-    RDD.rddToAsyncRDDActions(rdd)
-
-  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)]): SequenceFileRDDFunctions[K, V] = {
-    val kf = implicitly[K => Writable]
-    val vf = implicitly[V => Writable]
-    // Set the Writable class to null and `SequenceFileRDDFunctions` will use Reflection to get it
-    implicit val keyWritableFactory = new WritableFactory[K](_ => null, kf)
-    implicit val valueWritableFactory = new WritableFactory[V](_ => null, vf)
-    RDD.rddToSequenceFileRDDFunctions(rdd)
-  }
-
-  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
-      rdd: RDD[(K, V)]): OrderedRDDFunctions[K, V, (K, V)] =
-    RDD.rddToOrderedRDDFunctions(rdd)
-
-  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]): DoubleRDDFunctions =
-    RDD.doubleRDDToDoubleRDDFunctions(rdd)
-
-  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]): DoubleRDDFunctions =
-    RDD.numericRDDToDoubleRDDFunctions(rdd)
-
-  // The following deprecated functions have already been moved to `object WritableFactory` to
-  // make the compiler find them automatically. They are still kept here for backward compatibility.
-
-  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
-
-  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  implicit def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
-
-  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  implicit def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
-
-  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  implicit def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
-
-  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  implicit def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
-
-  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  implicit def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
-
-  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  implicit def stringToText(s: String): Text = new Text(s)
-
   private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
     : ArrayWritable = {
     def anyToWritable[U <% Writable](u: U): Writable = u
@@ -2478,50 +2265,6 @@ object SparkContext extends Logging {
     new ArrayWritable(classTag[T].runtimeClass.asInstanceOf[Class[Writable]],
         arr.map(x => anyToWritable(x)).toArray)
   }
-
-  // The following deprecated functions have already been moved to `object WritableConverter` to
-  // make the compiler find them automatically. They are still kept here for backward compatibility
-  // and just call the corresponding functions in `object WritableConverter`.
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def intWritableConverter(): WritableConverter[Int] =
-    WritableConverter.intWritableConverter()
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def longWritableConverter(): WritableConverter[Long] =
-    WritableConverter.longWritableConverter()
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def doubleWritableConverter(): WritableConverter[Double] =
-    WritableConverter.doubleWritableConverter()
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def floatWritableConverter(): WritableConverter[Float] =
-    WritableConverter.floatWritableConverter()
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def booleanWritableConverter(): WritableConverter[Boolean] =
-    WritableConverter.booleanWritableConverter()
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def bytesWritableConverter(): WritableConverter[Array[Byte]] =
-    WritableConverter.bytesWritableConverter()
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def stringWritableConverter(): WritableConverter[String] =
-    WritableConverter.stringWritableConverter()
-
-  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.3.0")
-  def writableWritableConverter[T <: Writable](): WritableConverter[T] =
-    WritableConverter.writableWritableConverter()
 
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass

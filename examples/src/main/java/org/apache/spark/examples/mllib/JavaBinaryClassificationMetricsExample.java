@@ -68,22 +68,22 @@ public class JavaBinaryClassificationMetricsExample {
 
     // Precision by threshold
     JavaRDD<Tuple2<Object, Object>> precision = metrics.precisionByThreshold().toJavaRDD();
-    System.out.println("Precision by threshold: " + precision.toArray());
+    System.out.println("Precision by threshold: " + precision.collect());
 
     // Recall by threshold
     JavaRDD<Tuple2<Object, Object>> recall = metrics.recallByThreshold().toJavaRDD();
-    System.out.println("Recall by threshold: " + recall.toArray());
+    System.out.println("Recall by threshold: " + recall.collect());
 
     // F Score by threshold
     JavaRDD<Tuple2<Object, Object>> f1Score = metrics.fMeasureByThreshold().toJavaRDD();
-    System.out.println("F1 Score by threshold: " + f1Score.toArray());
+    System.out.println("F1 Score by threshold: " + f1Score.collect());
 
     JavaRDD<Tuple2<Object, Object>> f2Score = metrics.fMeasureByThreshold(2.0).toJavaRDD();
-    System.out.println("F2 Score by threshold: " + f2Score.toArray());
+    System.out.println("F2 Score by threshold: " + f2Score.collect());
 
     // Precision-recall curve
     JavaRDD<Tuple2<Object, Object>> prc = metrics.pr().toJavaRDD();
-    System.out.println("Precision-recall curve: " + prc.toArray());
+    System.out.println("Precision-recall curve: " + prc.collect());
 
     // Thresholds
     JavaRDD<Double> thresholds = precision.map(
@@ -96,7 +96,7 @@ public class JavaBinaryClassificationMetricsExample {
 
     // ROC Curve
     JavaRDD<Tuple2<Object, Object>> roc = metrics.roc().toJavaRDD();
-    System.out.println("ROC curve: " + roc.toArray());
+    System.out.println("ROC curve: " + roc.collect());
 
     // AUPRC
     System.out.println("Area under precision-recall curve = " + metrics.areaUnderPR());

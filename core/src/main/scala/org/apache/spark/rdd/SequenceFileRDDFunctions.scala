@@ -38,11 +38,6 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
   extends Logging
   with Serializable {
 
-  @deprecated("It's used to provide backward compatibility for pre 1.3.0.", "1.3.0")
-  def this(self: RDD[(K, V)]) {
-    this(self, null, null)
-  }
-
   private val keyWritableClass =
     if (_keyWritableClass == null) {
       // pre 1.3.0, we need to use Reflection to get the Writable class
