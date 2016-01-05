@@ -1820,8 +1820,8 @@ object functions extends LegacyFunctions {
    * @since 2.0
    */
   @scala.annotation.varargs
-  def hash(col: Column, cols: Column*): Column = withExpr {
-    new Murmur3Hash((col +: cols).map(_.expr))
+  def hash(cols: Column*): Column = withExpr {
+    new Murmur3Hash(cols.map(_.expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
