@@ -380,7 +380,7 @@ class HiveContext private[hive](
 
         def calculateTableSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)
-          val size = if (fileStatus.isDir) {
+          val size = if (fileStatus.isDirectory) {
             fs.listStatus(path)
               .map { status =>
                 if (!status.getPath().getName().startsWith(stagingDir)) {

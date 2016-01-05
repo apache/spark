@@ -199,9 +199,9 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
   override def get(i: Int): Any = values(i)
 
-  override def toSeq: Seq[Any] = values.toSeq
+  override def toSeq: Seq[Any] = values.clone()
 
-  override def copy(): Row = this
+  override def copy(): GenericRow = this
 }
 
 class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
@@ -226,11 +226,11 @@ class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGeneri
 
   override protected def genericGet(ordinal: Int) = values(ordinal)
 
-  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values.clone()
 
   override def numFields: Int = values.length
 
-  override def copy(): InternalRow = new GenericInternalRow(values.clone())
+  override def copy(): GenericInternalRow = this
 }
 
 /**

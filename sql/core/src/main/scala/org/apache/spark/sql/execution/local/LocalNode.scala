@@ -69,18 +69,6 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
    */
   def close(): Unit
 
-  /** Specifies whether this operator outputs UnsafeRows */
-  def outputsUnsafeRows: Boolean = false
-
-  /** Specifies whether this operator is capable of processing UnsafeRows */
-  def canProcessUnsafeRows: Boolean = false
-
-  /**
-   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
-   * that are not UnsafeRows).
-   */
-  def canProcessSafeRows: Boolean = true
-
   /**
    * Returns the content through the [[Iterator]] interface.
    */
