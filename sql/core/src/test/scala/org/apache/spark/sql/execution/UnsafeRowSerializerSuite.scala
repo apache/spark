@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.Utils
+import org.apache.spark.util.testing._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}

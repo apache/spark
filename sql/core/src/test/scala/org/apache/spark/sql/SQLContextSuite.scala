@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.testing.SharedSparkContext
 
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
 
