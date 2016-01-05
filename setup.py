@@ -80,6 +80,7 @@ password = [
     'bcrypt>=2.0.0',
     'flask-bcrypt>=0.7.1',
 ]
+github_enterprise = ['Flask-OAuthlib>=0.9.1']
 
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica
 devel = all_dbs + doc + samba + s3 + ['nose'] + slack + crypto + oracle
@@ -141,6 +142,7 @@ setup(
         'webhdfs': webhdfs,
         'kerberos': kerberos,
         'password': password,
+        'github_enterprise': github_enterprise,
     },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',

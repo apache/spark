@@ -93,6 +93,9 @@ defaults = {
         'reinit_frequency': '3600',
         'kinit_path': 'kinit',
         'keytab': 'airflow.keytab',
+    },
+    'github_enterprise': {
+        'api_rev': 'v3'
     }
 }
 
