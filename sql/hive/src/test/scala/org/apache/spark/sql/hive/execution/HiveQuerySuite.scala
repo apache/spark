@@ -387,9 +387,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("partitioned table scan",
     "SELECT ds, hr, key, value FROM srcpart")
 
-  createQueryTest("hash",
-    "SELECT hash('test') FROM src LIMIT 1")
-
   createQueryTest("create table as",
     """
       |CREATE TABLE createdtable AS SELECT * FROM src;
