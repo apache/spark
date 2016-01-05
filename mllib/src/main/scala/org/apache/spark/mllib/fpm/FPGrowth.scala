@@ -121,37 +121,6 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
     }
 
-    def inferItemType(sc: SparkContext, path: String): FreqItemset[_] = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
-      val itemsetType = freqItemsets.schema("items").dataType
-      val freqType = freqItemsets.schema("freq").dataType
-      require(itemsetType.isInstanceOf[ArrayType],
-        s"items should be ArrayType, but got $itemsetType")
-      require(freqType.isInstanceOf[LongType], s"freq should be LongType, but got $freqType")
-      val itemType = itemsetType.asInstanceOf[ArrayType].elementType
-      val result = itemType match {
-        case BooleanType => new FreqItemset(Array[Boolean](), 0L)
-        case BinaryType => new FreqItemset(Array(Array[Byte]()), 0L)
-        case StringType => new FreqItemset(Array[String](), 0L)
-        case ByteType => new FreqItemset(Array[Byte](), 0L)
-        case ShortType => new FreqItemset(Array[Short](), 0L)
-        case IntegerType => new FreqItemset(Array[Int](), 0L)
-        case LongType => new FreqItemset(Array[Long](), 0L)
-        case FloatType => new FreqItemset(Array[Float](), 0L)
-        case DoubleType => new FreqItemset(Array[Double](), 0L)
-        case DateType => new FreqItemset(Array[java.sql.Date](), 0L)
-        case DecimalType.SYSTEM_DEFAULT => new FreqItemset(Array[java.math.BigDecimal](), 0L)
-        case TimestampType => new FreqItemset(Array[java.sql.Timestamp](), 0L)
-        case _: ArrayType => new FreqItemset(Array[Seq[_]](), 0L)
-        case _: MapType => new FreqItemset(Array[Map[_, _]](), 0L)
-        case _: StructType => new FreqItemset(Array[Row](), 0L)
-        case other =>
-          throw new UnsupportedOperationException(s"Schema for type $other is not supported")
-      }
-      result
-    }
-
     def load(
         sc: SparkContext,
         path: String): FPGrowthModel[_] = {
@@ -163,7 +132,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       assert(formatVersion == thisFormatVersion)
 
       val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
-      val sample = freqItemsets.select("item").head().get(0)
+      val sample = freqItemsets.select("items").head().get(0)
       loadImpl(freqItemsets, sample)
     }
 
