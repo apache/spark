@@ -44,8 +44,6 @@ import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
 import org.slf4j.Logger
-import tachyon.TachyonURI
-import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -947,15 +945,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Delete a file or directory and its contents recursively.
-   */
-  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
-      throw new IOException("Failed to delete the tachyon dir: " + dir)
-    }
-  }
-
-  /**
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
@@ -1707,6 +1696,30 @@ private[spark] object Utils extends Logging {
    */
   def stripDirectory(path: String): String = {
     new File(path).getName
+  }
+
+  /**
+   * Terminates a process waiting for at most the specified duration. Returns whether
+   * the process terminated.
+   */
+  def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
+    try {
+      // Java8 added a new API which will more forcibly kill the process. Use that if available.
+      val destroyMethod = process.getClass().getMethod("destroyForcibly");
+      destroyMethod.setAccessible(true)
+      destroyMethod.invoke(process)
+    } catch {
+      case NonFatal(e) =>
+        if (!e.isInstanceOf[NoSuchMethodException]) {
+          logWarning("Exception when attempting to kill process", e)
+        }
+        process.destroy()
+    }
+    if (waitForProcess(process, timeoutMs)) {
+      Option(process.exitValue())
+    } else {
+      None
+    }
   }
 
   /**

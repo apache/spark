@@ -30,7 +30,7 @@ import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * Chi Squared selector model.

@@ -397,43 +397,6 @@ case class GroupingSets(
     this.copy(aggregations = aggs)
 }
 
-/**
- * Cube is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
- * and eventually will be transformed to Aggregate(.., Expand) in Analyzer
- *
- * @param groupByExprs The Group By expressions candidates.
- * @param child        Child operator
- * @param aggregations The Aggregation expressions, those non selected group by expressions
- *                     will be considered as constant null if it appears in the expressions
- */
-case class Cube(
-    groupByExprs: Seq[Expression],
-    child: LogicalPlan,
-    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
-
-  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
-    this.copy(aggregations = aggs)
-}
-
-/**
- * Rollup is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
- * and eventually will be transformed to Aggregate(.., Expand) in Analyzer
- *
- * @param groupByExprs The Group By expressions candidates, take effective only if the
- *                     associated bit in the bitmask set to 1.
- * @param child        Child operator
- * @param aggregations The Aggregation expressions, those non selected group by expressions
- *                     will be considered as constant null if it appears in the expressions
- */
-case class Rollup(
-    groupByExprs: Seq[Expression],
-    child: LogicalPlan,
-    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
-
-  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
-    this.copy(aggregations = aggs)
-}
-
 case class Pivot(
     groupByExprs: Seq[NamedExpression],
     pivotColumn: Expression,
@@ -526,7 +489,7 @@ case class MapPartitions[T, U](
     uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 /** Factory for constructing new `AppendColumn` nodes. */
@@ -552,7 +515,7 @@ case class AppendColumns[T, U](
     newColumns: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output ++ newColumns
-  override def missingInput: AttributeSet = super.missingInput -- newColumns
+  override def producedAttributes: AttributeSet = AttributeSet(newColumns)
 }
 
 /** Factory for constructing new `MapGroups` nodes. */
@@ -587,7 +550,7 @@ case class MapGroups[K, T, U](
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 /** Factory for constructing new `CoGroup` nodes. */
@@ -630,5 +593,5 @@ case class CoGroup[Key, Left, Right, Result](
     rightGroup: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 }

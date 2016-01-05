@@ -18,11 +18,11 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Since, Experimental}
-import org.apache.spark.ml.param.{ParamMap, Param}
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{SQLContext, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -74,6 +74,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val sc = SparkContext.getOrCreate()
     val sqlContext = SQLContext.getOrCreate(sc)
     val dummyRDD = sc.parallelize(Seq(Row.empty))

@@ -148,7 +148,7 @@ def determine_java_executable():
     return java_exe if java_exe else which("java")
 
 
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch', 'update'])
+JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
 
 
 def determine_java_version(java_exe):
@@ -164,14 +164,13 @@ def determine_java_version(java_exe):
     # find raw version string, eg 'java version "1.8.0_25"'
     raw_version_str = next(x for x in raw_output_lines if " version " in x)
 
-    match = re.search('(\d+)\.(\d+)\.(\d+)_(\d+)', raw_version_str)
+    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
 
     major = int(match.group(1))
     minor = int(match.group(2))
     patch = int(match.group(3))
-    update = int(match.group(4))
 
-    return JavaVersion(major, minor, patch, update)
+    return JavaVersion(major, minor, patch)
 
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
@@ -296,13 +295,14 @@ def exec_sbt(sbt_args=()):
 
 def get_hadoop_profiles(hadoop_version):
     """
-    For the given Hadoop version tag, return a list of SBT profile flags for
+    For the given Hadoop version tag, return a list of Maven/SBT profile flags for
     building and testing against that Hadoop version.
     """
 
     sbt_maven_hadoop_profiles = {
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
+        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
+        "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
         "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
     }
 
@@ -416,6 +416,12 @@ def run_python_tests(test_modules, parallelism):
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
+
+
+def run_build_tests():
+    set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
+    pass
 
 
 def run_sparkr_tests():
@@ -537,6 +543,9 @@ def main():
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
+
+    if any(m.should_run_build_tests for m in test_modules):
+        run_build_tests()
 
     # spark build
     build_apache_spark(build_tool, hadoop_version)
