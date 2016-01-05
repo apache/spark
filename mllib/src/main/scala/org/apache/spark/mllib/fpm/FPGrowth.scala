@@ -97,7 +97,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
     private val thisClassName = "org.apache.spark.mllib.fpm.FPGrowthModel"
 
-    def save[Item: ClassTag](model: FPGrowthModel[Item], path: String): Unit = {
+    def save(model: FPGrowthModel[_], path: String): Unit = {
       val sc = model.freqItemsets.sparkContext
       val sqlContext = SQLContext.getOrCreate(sc)
 
