@@ -17,26 +17,24 @@
 
 package org.apache.spark.util
 
-import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
-import java.util.concurrent.TimeUnit
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -734,4 +732,88 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       conf.set("spark.executor.instances", "0")) === true)
   }
 
+  test("encodeFileNameToURIRawPath") {
+    assert(Utils.encodeFileNameToURIRawPath("abc") === "abc")
+    assert(Utils.encodeFileNameToURIRawPath("abc xyz") === "abc%20xyz")
+    assert(Utils.encodeFileNameToURIRawPath("abc:xyz") === "abc:xyz")
+  }
+
+  test("decodeFileNameInURI") {
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc/xyz")) === "xyz")
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc")) === "abc")
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc%20xyz")) === "abc xyz")
+  }
+
+  test("Kill process") {
+    // Verify that we can terminate a process even if it is in a bad state. This is only run
+    // on UNIX since it does some OS specific things to verify the correct behavior.
+    if (SystemUtils.IS_OS_UNIX) {
+      def getPid(p: Process): Int = {
+        val f = p.getClass().getDeclaredField("pid")
+        f.setAccessible(true)
+        f.get(p).asInstanceOf[Int]
+      }
+
+      def pidExists(pid: Int): Boolean = {
+        val p = Runtime.getRuntime.exec(s"kill -0 $pid")
+        p.waitFor()
+        p.exitValue() == 0
+      }
+
+      def signal(pid: Int, s: String): Unit = {
+        val p = Runtime.getRuntime.exec(s"kill -$s $pid")
+        p.waitFor()
+      }
+
+      // Start up a process that runs 'sleep 10'. Terminate the process and assert it takes
+      // less time and the process is no longer there.
+      val startTimeMs = System.currentTimeMillis()
+      val process = new ProcessBuilder("sleep", "10").start()
+      val pid = getPid(process)
+      try {
+        assert(pidExists(pid))
+        val terminated = Utils.terminateProcess(process, 5000)
+        assert(terminated.isDefined)
+        Utils.waitForProcess(process, 5000)
+        val durationMs = System.currentTimeMillis() - startTimeMs
+        assert(durationMs < 5000)
+        assert(!pidExists(pid))
+      } finally {
+        // Forcibly kill the test process just in case.
+        signal(pid, "SIGKILL")
+      }
+
+      val v: String = System.getProperty("java.version")
+      if (v >= "1.8.0") {
+        // Java8 added a way to forcibly terminate a process. We'll make sure that works by
+        // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
+        // older versions of java, this will *not* terminate.
+        val file = File.createTempFile("temp-file-name", ".tmp")
+        val cmd =
+          s"""
+             |#!/bin/bash
+             |trap "" SIGTERM
+             |sleep 10
+           """.stripMargin
+        Files.write(cmd.getBytes(), file)
+        file.getAbsoluteFile.setExecutable(true)
+
+        val process = new ProcessBuilder(file.getAbsolutePath).start()
+        val pid = getPid(process)
+        assert(pidExists(pid))
+        try {
+          signal(pid, "SIGSTOP")
+          val start = System.currentTimeMillis()
+          val terminated = Utils.terminateProcess(process, 5000)
+          assert(terminated.isDefined)
+          Utils.waitForProcess(process, 5000)
+          val duration = System.currentTimeMillis() - start
+          assert(duration < 5000)
+          assert(!pidExists(pid))
+        } finally {
+          signal(pid, "SIGKILL")
+        }
+      }
+    }
+  }
 }

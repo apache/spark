@@ -82,4 +82,7 @@ INDEX
 gen-java.*
 .*avpr
 org.apache.spark.sql.sources.DataSourceRegister
+org.apache.spark.scheduler.SparkHistoryListenerFactory
 .*parquet
+LZ4BlockInputStream.java
+spark-deps-.*

@@ -21,8 +21,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.util.Utils
 
 /** A helper class with utility functions related to the WriteAheadLog interface */
 private[streaming] object WriteAheadLogUtils extends Logging {
@@ -67,7 +67,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   }
 
   def isBatchingEnabled(conf: SparkConf, isDriver: Boolean): Boolean = {
-    isDriver && conf.getBoolean(DRIVER_WAL_BATCHING_CONF_KEY, defaultValue = false)
+    isDriver && conf.getBoolean(DRIVER_WAL_BATCHING_CONF_KEY, defaultValue = true)
   }
 
   /**

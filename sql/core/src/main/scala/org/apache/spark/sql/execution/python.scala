@@ -121,11 +121,13 @@ object EvaluatePython {
 
   def takeAndServe(df: DataFrame, n: Int): Int = {
     registerPicklers()
-    val iter = new SerDeUtil.AutoBatchedPickler(
-      df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
-        EvaluatePython.toJava(row, df.schema)
-      })
-    PythonRDD.serveIterator(iter, s"serve-DataFrame")
+    df.withNewExecutionId {
+      val iter = new SerDeUtil.AutoBatchedPickler(
+        df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
+          EvaluatePython.toJava(row, df.schema)
+        })
+      PythonRDD.serveIterator(iter, s"serve-DataFrame")
+    }
   }
 
   /**
@@ -349,10 +351,6 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
-  override def outputsUnsafeRows: Boolean = false
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
-
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
@@ -398,13 +396,14 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       val unpickle = new Unpickler
       val row = new GenericMutableRow(1)
       val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(output, output)
 
       outputIterator.flatMap { pickedResult =>
         val unpickledBatch = unpickle.loads(pickedResult)
         unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
       }.map { result =>
         row(0) = EvaluatePython.fromJava(result, udf.dataType)
-        joined(queue.poll(), row)
+        resultProj(joined(queue.poll(), row))
       }
     }
   }

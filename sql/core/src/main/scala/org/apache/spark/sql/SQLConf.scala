@@ -323,13 +323,19 @@ private[spark] object SQLConf {
       "option must be set in Hadoop Configuration.  2. This option overrides " +
       "\"spark.sql.sources.outputCommitterClass\".")
 
+  val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = booleanConf(
+    key = "spark.sql.parquet.enableUnsafeRowRecordReader",
+    defaultValue = Some(true),
+    doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
+
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
     doc = "When true, enable filter pushdown for ORC files.")
 
   val HIVE_VERIFY_PARTITION_PATH = booleanConf("spark.sql.hive.verifyPartitionPath",
     defaultValue = Some(false),
-    doc = "<TODO>")
+    doc = "When true, check all the partition paths under the table\'s root directory " +
+          "when reading data stored in HDFS.")
 
   val HIVE_METASTORE_PARTITION_PRUNING = booleanConf("spark.sql.hive.metastorePartitionPruning",
     defaultValue = Some(false),
@@ -347,7 +353,7 @@ private[spark] object SQLConf {
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
-    doc = "<TODO>")
+    doc = "The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
 
   val BROADCAST_TIMEOUT = intConf("spark.sql.broadcastTimeout",
     defaultValue = Some(5 * 60),
@@ -408,7 +414,8 @@ private[spark] object SQLConf {
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD = intConf(
     key = "spark.sql.sources.parallelPartitionDiscovery.threshold",
     defaultValue = Some(32),
-    doc = "<TODO>")
+    doc = "The degree of parallelism for schema merging and partition discovery of " +
+      "Parquet data sources.")
 
   // Whether to perform eager analysis when constructing a dataframe.
   // Set to false when debugging requires the ability to look at invalid query plans.
@@ -443,18 +450,6 @@ private[spark] object SQLConf {
     isPublic = false,
     doc = "When true, we could use `datasource`.`path` as table in SQL query"
   )
-
-  val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
-    booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
-      defaultValue = Some(true),
-      isPublic = false,
-      doc = "When true, if a query only has a single distinct column and it has " +
-        "grouping expressions, we will use our planner rule to handle this distinct " +
-        "column (other cases are handled by DistinctAggregationRewriter). " +
-        "When false, we will always use DistinctAggregationRewriter to plan " +
-        "aggregation queries with DISTINCT keyword. This is an internal flag that is " +
-        "used to benchmark the performance impact of using DistinctAggregationRewriter to " +
-        "plan aggregation queries with a single distinct column.")
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -573,9 +568,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
-
-  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean =
-    getConf(SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING)
 
   /** ********************** SQLConf functionality methods ************ */
 

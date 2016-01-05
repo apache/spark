@@ -72,13 +72,18 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   var containerNum = 0
 
   override def beforeEach() {
+    super.beforeEach()
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
   }
 
   override def afterEach() {
-    rmClient.stop()
+    try {
+      rmClient.stop()
+    } finally {
+      super.afterEach()
+    }
   }
 
   class MockSplitInfo(host: String) extends SplitInfo(null, host, null, 1, null) {

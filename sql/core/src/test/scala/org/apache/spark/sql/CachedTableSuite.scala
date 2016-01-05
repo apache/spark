@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.PhysicalRDD
 
@@ -27,7 +27,7 @@ import scala.language.postfixOps
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Accumulators
-import org.apache.spark.sql.columnar._
+import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
@@ -280,7 +280,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("CACHE TABLE testData")
     sqlContext.table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
-        val actualSizeInBytes = (1 to 100).map(i => INT.defaultSize + i.toString.length + 4).sum
+        val actualSizeInBytes = (1 to 100).map(i => 4 + i.toString.length + 4).sum
         assert(cached.statistics.sizeInBytes === actualSizeInBytes)
     }
   }
@@ -289,7 +289,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     testData.select('key).registerTempTable("t1")
     sqlContext.table("t1")
     sqlContext.dropTempTable("t1")
-    intercept[NoSuchTableException](sqlContext.table("t1"))
+    intercept[AnalysisException](sqlContext.table("t1"))
   }
 
   test("Drops cached temporary table") {
@@ -301,7 +301,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(sqlContext.isCached("t2"))
 
     sqlContext.dropTempTable("t1")
-    intercept[NoSuchTableException](sqlContext.table("t1"))
+    intercept[AnalysisException](sqlContext.table("t1"))
     assert(!sqlContext.isCached("t2"))
   }
 

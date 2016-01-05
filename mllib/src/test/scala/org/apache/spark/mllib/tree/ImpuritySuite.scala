@@ -19,12 +19,11 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.tree.impurity.{EntropyAggregator, GiniAggregator}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
  * Test suites for [[GiniAggregator]] and [[EntropyAggregator]].
  */
-class ImpuritySuite extends SparkFunSuite with MLlibTestSparkContext {
+class ImpuritySuite extends SparkFunSuite {
   test("Gini impurity does not support negative labels") {
     val gini = new GiniAggregator(2)
     intercept[IllegalArgumentException] {

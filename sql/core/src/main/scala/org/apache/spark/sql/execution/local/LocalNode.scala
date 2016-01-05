@@ -69,18 +69,6 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
    */
   def close(): Unit
 
-  /** Specifies whether this operator outputs UnsafeRows */
-  def outputsUnsafeRows: Boolean = false
-
-  /** Specifies whether this operator is capable of processing UnsafeRows */
-  def canProcessUnsafeRows: Boolean = false
-
-  /**
-   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
-   * that are not UnsafeRows).
-   */
-  def canProcessSafeRows: Boolean = true
-
   /**
    * Returns the content through the [[Iterator]] interface.
    */
@@ -101,24 +89,6 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
       close()
     }
     result
-  }
-
-  protected def newProjection(
-      expressions: Seq[Expression],
-      inputSchema: Seq[Attribute]): Projection = {
-    log.debug(
-      s"Creating Projection: $expressions, inputSchema: $inputSchema")
-    try {
-      GenerateProjection.generate(expressions, inputSchema)
-    } catch {
-      case NonFatal(e) =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate projection, fallback to interpret", e)
-          new InterpretedProjection(expressions, inputSchema)
-        }
-    }
   }
 
   protected def newMutableProjection(

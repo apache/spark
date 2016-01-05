@@ -33,8 +33,6 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -67,7 +65,7 @@ private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
+  extends OutputWriter with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -77,7 +75,7 @@ private[orc] class OrcOutputWriter(
     }.mkString(":"))
 
     val serde = new OrcSerde
-    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val configuration = context.getConfiguration
     serde.initialize(configuration, table)
     serde
   }
@@ -99,9 +97,9 @@ private[orc] class OrcOutputWriter(
   private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
 
-    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val conf = context.getConfiguration
     val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
-    val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+    val taskAttemptId = context.getTaskAttemptID
     val partition = taskAttemptId.getTaskID.getId
     val filename = f"part-r-$partition%05d-$uniqueWriteJobId.orc"
 
@@ -157,7 +155,7 @@ private[sql] class OrcRelation(
     override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(
@@ -208,7 +206,7 @@ private[sql] class OrcRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    SparkHadoopUtil.get.getConfigurationFromJobContext(job) match {
+    job.getConfiguration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
       case conf =>
@@ -289,8 +287,8 @@ private[orc] case class OrcTableScan(
   }
 
   def execute(): RDD[InternalRow] = {
-    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = job.getConfiguration
 
     // Tries to push down filters if ORC filter push-down is enabled
     if (sqlContext.conf.orcFilterPushDown) {

@@ -29,6 +29,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: DeveloperApi ::
@@ -81,16 +82,20 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   def w(value: T): ParamPair[T] = this -> value
 
   /** Creates a param pair with the given value (for Scala). */
+  // scalastyle:off
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
+  // scalastyle:on
 
   /** Encodes a param value into JSON, which can be decoded by [[jsonDecode()]]. */
   def jsonEncode(value: T): String = {
     value match {
       case x: String =>
         compact(render(JString(x)))
+      case v: Vector =>
+        v.toJson
       case _ =>
         throw new NotImplementedError(
-          "The default jsonEncode only supports string. " +
+          "The default jsonEncode only supports string and vector. " +
             s"${this.getClass.getName} must override jsonEncode for ${value.getClass.getName}.")
     }
   }
@@ -100,9 +105,14 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
     parse(json) match {
       case JString(x) =>
         x.asInstanceOf[T]
+      case JObject(v) =>
+        val keys = v.map(_._1)
+        assert(keys.contains("type") && keys.contains("values"),
+          s"Expect a JSON serialized vector but cannot find fields 'type' and 'values' in $json.")
+        Vectors.fromJson(json).asInstanceOf[T]
       case _ =>
         throw new NotImplementedError(
-          "The default jsonDecode only supports string. " +
+          "The default jsonDecode only supports string and vector. " +
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
     }
   }
@@ -849,8 +859,12 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
    * Filters this param map for the given parent.
    */
   def filter(parent: Params): ParamMap = {
-    val filtered = map.filterKeys(_.parent == parent)
-    new ParamMap(filtered.asInstanceOf[mutable.Map[Param[Any], Any]])
+    // Don't use filterKeys because mutable.Map#filterKeys
+    // returns the instance of collections.Map, not mutable.Map.
+    // Otherwise, we get ClassCastException.
+    // Not using filterKeys also avoid SI-6654
+    val filtered = map.filter { case (k, _) => k.parent == parent.uid }
+    new ParamMap(filtered)
   }
 
   /**

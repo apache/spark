@@ -34,6 +34,8 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   private val fileShuffleBlockResolver = new FileShuffleBlockResolver(conf)
 
+  override val shortName: String = "hash"
+
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
   override def registerShuffle[K, V, C](
       shuffleId: Int,

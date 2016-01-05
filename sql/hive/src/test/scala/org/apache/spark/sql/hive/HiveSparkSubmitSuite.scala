@@ -80,6 +80,8 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--conf", "spark.sql.hive.metastore.version=0.12",
+      "--conf", "spark.sql.hive.metastore.jars=maven",
       "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
@@ -361,7 +363,7 @@ object SPARK_11009 extends QueryTest {
       val df = sqlContext.range(1 << 20)
       val df2 = df.select((df("id") % 1000).alias("A"), (df("id") / 1000).alias("B"))
       val ws = Window.partitionBy(df2("A")).orderBy(df2("B"))
-      val df3 = df2.select(df2("A"), df2("B"), rowNumber().over(ws).alias("rn")).filter("rn < 0")
+      val df3 = df2.select(df2("A"), df2("B"), row_number().over(ws).alias("rn")).filter("rn < 0")
       if (df3.rdd.count() != 0) {
         throw new Exception("df3 should have 0 output row.")
       }

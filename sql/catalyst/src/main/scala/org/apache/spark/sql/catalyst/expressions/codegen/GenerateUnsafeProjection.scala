@@ -135,14 +135,21 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => s"$rowWriter.write($index, ${input.value});"
         }
 
-        s"""
-          ${input.code}
-          if (${input.isNull}) {
-            ${setNull.trim}
-          } else {
+        if (input.isNull == "false") {
+          s"""
+            ${input.code}
             ${writeField.trim}
-          }
-        """
+          """
+        } else {
+          s"""
+            ${input.code}
+            if (${input.isNull}) {
+              ${setNull.trim}
+            } else {
+              ${writeField.trim}
+            }
+          """
+        }
     }
 
     s"""
@@ -282,13 +289,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val exprTypes = expressions.map(_.dataType)
 
     val result = ctx.freshName("result")
-    ctx.addMutableState("UnsafeRow", result, s"this.$result = new UnsafeRow();")
+    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
     val bufferHolder = ctx.freshName("bufferHolder")
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
 
-    // Reset the isLoaded flag for each row.
-    val subexprReset = ctx.subExprIsLoadedVariables.map { v => s"${v} = false;" }.mkString("\n")
+    // Reset the subexpression values for each row.
+    val subexprReset = ctx.subExprResetVariables.mkString("\n")
 
     val code =
       s"""
@@ -296,7 +303,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         $subexprReset
         ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
 
-        $result.pointTo($bufferHolder.buffer, ${expressions.length}, $bufferHolder.totalSize());
+        $result.pointTo($bufferHolder.buffer, $bufferHolder.totalSize());
       """
     GeneratedExpressionCode(code, "false", result)
   }
@@ -324,7 +331,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
     val code = s"""
-      public Object generate($exprType[] exprs) {
+      public java.lang.Object generate($exprType[] exprs) {
         return new SpecificUnsafeProjection(exprs);
       }
 
@@ -342,7 +349,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         // Scala.Function1 need this
-        public Object apply(Object row) {
+        public java.lang.Object apply(java.lang.Object row) {
           return apply((InternalRow) row);
         }
 

@@ -148,7 +148,7 @@ printSchema(people)
 </div>
 
 The data sources API can also be used to save out DataFrames into multiple file formats. For example we can save the DataFrame from the previous example
-to a Parquet file using `write.df`
+to a Parquet file using `write.df` (Until Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.7 to `error` to match the Scala API)
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -286,24 +286,37 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of building a gaussian GLM model using SparkR.
+SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
+
+The [summary()](api/R/summary.html) function gives the summary of a model produced by [glm()](api/R/glm.html).
+
+* For gaussian GLM model, it returns a list with 'devianceResiduals' and 'coefficients' components. The 'devianceResiduals' gives the min/max deviance residuals of the estimation; the 'coefficients' gives the estimated coefficients and their estimated standard errors, t values and p-values. (It only available when model fitted by normal solver.)
+* For binomial GLM model, it returns a list with 'coefficients' component which gives the estimated coefficients.
+
+The examples below show the use of building gaussian GLM model and binomial GLM model using SparkR.
+
+## Gaussian GLM model
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 # Create the DataFrame
 df <- createDataFrame(sqlContext, iris)
 
-# Fit a linear model over the dataset.
+# Fit a gaussian GLM model over the dataset.
 model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
 
-# Model coefficients are returned in a similar format to R's native glm().
+# Model summary are returned in a similar format to R's native glm().
 summary(model)
+##$devianceResiduals
+## Min       Max     
+## -1.307112 1.412532
+##
 ##$coefficients
-##                    Estimate
-##(Intercept)        2.2513930
-##Sepal_Width        0.8035609
-##Species_versicolor 1.4587432
-##Species_virginica  1.9468169
+##                   Estimate  Std. Error t value  Pr(>|t|)    
+##(Intercept)        2.251393  0.3697543  6.08889  9.568102e-09
+##Sepal_Width        0.8035609 0.106339   7.556598 4.187317e-12
+##Species_versicolor 1.458743  0.1121079  13.01195 0           
+##Species_virginica  1.946817  0.100015   19.46525 0           
 
 # Make predictions based on the model.
 predictions <- predict(model, newData = df)
@@ -317,3 +330,67 @@ head(select(predictions, "Sepal_Length", "prediction"))
 ##6          5.4   5.385281
 {% endhighlight %}
 </div>
+
+## Binomial GLM model
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Create the DataFrame
+df <- createDataFrame(sqlContext, iris)
+training <- filter(df, df$Species != "setosa")
+
+# Fit a binomial GLM model over the dataset.
+model <- glm(Species ~ Sepal_Length + Sepal_Width, data = training, family = "binomial")
+
+# Model coefficients are returned in a similar format to R's native glm().
+summary(model)
+##$coefficients
+##               Estimate
+##(Intercept)  -13.046005
+##Sepal_Length   1.902373
+##Sepal_Width    0.404655
+{% endhighlight %}
+</div>
+
+# R Function Name Conflicts
+
+When loading and attaching a new package in R, it is possible to have a name [conflict](https://stat.ethz.ch/R-manual/R-devel/library/base/html/library.html), where a
+function is masking another function.
+
+The following functions are masked by the SparkR package:
+
+<table class="table">
+  <tr><th>Masked function</th><th>How to Access</th></tr>
+  <tr>
+    <td><code>cov</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::cov(x, y = NULL, use = "everything",
+           method = c("pearson", "kendall", "spearman"))</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>filter</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::filter(x, filter, method = c("convolution", "recursive"),
+              sides = 2, circular = FALSE, init)</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>sample</code> in <code>package:base</code></td>
+    <td><code>base::sample(x, size, replace = FALSE, prob = NULL)</code></td>
+  </tr>
+  <tr>
+    <td><code>table</code> in <code>package:base</code></td>
+    <td><code><pre>base::table(...,
+            exclude = if (useNA == "no") c(NA, NaN),
+            useNA = c("no", "ifany", "always"),
+            dnn = list.names(...), deparse.level = 1)</pre></code></td>
+  </tr>
+</table>
+
+Since part of SparkR is modeled on the `dplyr` package, certain functions in SparkR share the same names with those in `dplyr`. Depending on the load order of the two packages, some functions from the package loaded first are masked by those in the package loaded after. In such case, prefix such calls with the package name, for instance, `SparkR::cume_dist(x)` or `dplyr::cume_dist(x)`.
+
+You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/search.html)
+
+
+# Migration Guide
+
+## Upgrading From SparkR 1.5.x to 1.6
+
+ - Before Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.

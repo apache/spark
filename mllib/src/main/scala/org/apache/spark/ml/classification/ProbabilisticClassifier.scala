@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.mllib.linalg.{DenseVector, Vector, VectorUDT, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}

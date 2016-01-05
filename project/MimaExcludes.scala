@@ -30,9 +30,37 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  * It is also possible to exclude Spark classes and packages. This should be used sparingly:
  *
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
+ *
+ * For a new Spark version, please update MimaBuild.scala to reflect the previous version.
  */
 object MimaExcludes {
   def excludes(version: String) = version match {
+    case v if v.startsWith("2.0") =>
+      Seq(
+        excludePackage("org.apache.spark.rpc"),
+        excludePackage("org.spark-project.jetty"),
+        excludePackage("org.apache.spark.unused"),
+        excludePackage("org.apache.spark.sql.catalyst"),
+        excludePackage("org.apache.spark.sql.execution"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
+        // SPARK-12600 Remove SQL deprecated methods
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$QueryExecution"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$SparkPlanner"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.applySchema"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.parquetFile"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.jdbc"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.jsonFile"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.jsonRDD"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.load")
+      ) ++ Seq(
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
+        ) ++
+      Seq(
+        // SPARK-12481 Remove Hadoop 1.x
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.mapred.SparkHadoopMapRedUtil")
+      )
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
@@ -54,14 +82,12 @@ object MimaExcludes {
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
       MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
       Seq(
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticCostFun.this"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.add"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.count"),
+        // MiMa does not deal properly with sealed traits
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
+      ) ++ Seq(
+        // SPARK-11530
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this")
       ) ++ Seq(
         // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
         // This class is marked as `private` but MiMa still seems to be confused by the change.
@@ -113,7 +139,8 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
         ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$")
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSQLParser")
       ) ++ Seq(
         // SPARK-11485
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df"),
@@ -136,8 +163,39 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
       ) ++ Seq (
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.status.api.v1.ApplicationInfo.this")
-      )
+          "org.apache.spark.status.api.v1.ApplicationInfo.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.StageData.this")
+      ) ++ Seq(
+        // SPARK-11766 add toJson to Vector
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.mllib.linalg.Vector.toJson")
+      ) ++ Seq(
+        // SPARK-9065 Support message handler in Kafka Python API
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
+      ) ++ Seq(
+        // SPARK-4557 Changed foreachRDD to use VoidFunction
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.api.java.JavaDStreamLike.foreachRDD")
+      ) ++ Seq(
+        // SPARK-11996 Make the executor thread dump work again
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
+      ) ++ Seq(
+        // SPARK-3580 Add getNumPartitions method to JavaRDD
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
+      ) ++
+      // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
+      // private class.
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),

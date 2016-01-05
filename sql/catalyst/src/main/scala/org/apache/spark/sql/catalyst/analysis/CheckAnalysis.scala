@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, AggregateExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -57,7 +57,7 @@ trait CheckAnalysis {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns: [$from]")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -70,15 +70,32 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
-          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
-            failAnalysis(
-              s"Could not resolve window function '$name'. " +
-              "Note that, using window functions currently requires a HiveContext")
+          case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
+            failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
-            // The window spec is not valid.
-            val reason = windowSpec.validate.get
-            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
+          case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
+               SpecifiedWindowFrame(frame,
+                 FrameBoundary(l),
+                 FrameBoundary(h))))
+             if order.isEmpty || frame != RowFrame || l != h =>
+            failAnalysis("An offset window function can only be evaluated in an ordered " +
+              s"row-based window frame with a single offset: $w")
+
+          case w @ WindowExpression(e, s) =>
+            // Only allow window functions with an aggregate expression or an offset window
+            // function.
+            e match {
+              case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+              case _ =>
+                failAnalysis(s"Expression '$e' not supported within a window function.")
+            }
+            // Make sure the window specification is valid.
+            s.validate match {
+              case Some(m) =>
+                failAnalysis(s"Window specification $s is not valid because $m")
+              case None => w
+            }
+
         }
 
         operator match {
@@ -137,32 +154,14 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            def checkSupportedGroupingDataType(
-                expressionString: String,
-                dataType: DataType): Unit = dataType match {
-              case BinaryType =>
-                failAnalysis(s"expression $expressionString cannot be used in " +
-                  s"grouping expression because it is in binary type or its inner field is " +
-                  s"in binary type")
-              case a: ArrayType =>
-                failAnalysis(s"expression $expressionString cannot be used in " +
-                  s"grouping expression because it is in array type or its inner field is " +
-                  s"in array type")
-              case m: MapType =>
-                failAnalysis(s"expression $expressionString cannot be used in " +
-                  s"grouping expression because it is in map type or its inner field is " +
-                  s"in map type")
-              case s: StructType =>
-                s.fields.foreach { f =>
-                  checkSupportedGroupingDataType(expressionString, f.dataType)
-                }
-              case udt: UserDefinedType[_] =>
-                checkSupportedGroupingDataType(expressionString, udt.sqlType)
-              case _ => // OK
-            }
-
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              checkSupportedGroupingDataType(expr.prettyString, expr.dataType)
+              // Check if the data type of expr is orderable.
+              if (!RowOrdering.isOrderable(expr.dataType)) {
+                failAnalysis(
+                  s"expression ${expr.prettyString} cannot be used as a grouping expression " +
+                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"data type.")
+              }
 
               if (!expr.deterministic) {
                 // This is just a sanity check, our analysis rule PullOutNondeterministic should
@@ -222,10 +221,12 @@ trait CheckAnalysis {
               s"unresolved operator ${operator.simpleString}")
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] & !o.isInstanceOf[Aggregate] =>
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
-              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+              s"""nondeterministic expressions are only allowed in
+                 |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.prettyString).mkString(",")}
                  |in operator ${operator.simpleString}
              """.stripMargin)

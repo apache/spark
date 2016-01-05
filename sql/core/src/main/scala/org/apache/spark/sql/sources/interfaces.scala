@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
+import org.apache.hadoop.mapred.{JobConf, FileInputFormat}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.{Logging, SparkContext}
@@ -235,9 +236,11 @@ abstract class BaseRelation {
   def needConversion: Boolean = true
 
   /**
-   * Given an array of [[Filter]]s, returns an array of [[Filter]]s that this data source relation
-   * cannot handle.  Spark SQL will apply all returned [[Filter]]s against rows returned by this
-   * data source relation.
+   * Returns the list of [[Filter]]s that this datasource may not be able to handle.
+   * These returned [[Filter]]s will be evaluated by Spark SQL after data is output by a scan.
+   * By default, this function will return all filters, as it is always safe to
+   * double evaluate a [[Filter]]. However, specific implementations can override this function to
+   * avoid double filtering when they are capable of processing a filter internally.
    *
    * @since 1.6.0
    */
@@ -414,12 +417,19 @@ abstract class OutputWriter {
  * @since 1.4.0
  */
 @Experimental
-abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
+abstract class HadoopFsRelation private[sql](
+    maybePartitionSpec: Option[PartitionSpec],
+    parameters: Map[String, String])
   extends BaseRelation with FileRelation with Logging {
 
-  override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
+  override def toString: String = getClass.getSimpleName
 
-  def this() = this(None)
+  def this() = this(None, Map.empty[String, String])
+
+  def this(parameters: Map[String, String]) = this(None, parameters)
+
+  private[sql] def this(maybePartitionSpec: Option[PartitionSpec]) =
+    this(maybePartitionSpec, Map.empty[String, String])
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
@@ -438,15 +448,21 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-
           logInfo(s"Listing $qualified on driver")
-          Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+          // Dummy jobconf to get to the pathFilter defined in configuration
+          val jobConf = new JobConf(hadoopConf, this.getClass())
+          val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+          if (pathFilter != null) {
+            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
+          } else {
+            Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+          }
         }.filterNot { status =>
           val name = status.getPath.getName
           name.toLowerCase == "_temporary" || name.startsWith(".")
         }
 
-        val (dirs, files) = statuses.partition(_.isDir)
+        val (dirs, files) = statuses.partition(_.isDirectory)
 
         // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
         if (dirs.isEmpty) {
@@ -517,12 +533,36 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   /**
-   * Base paths of this relation.  For partitioned relations, it should be either root directories
+   * Paths of this relation.  For partitioned relations, it should be root directories
    * of all partition directories.
    *
    * @since 1.4.0
    */
   def paths: Array[String]
+
+  /**
+   * Contains a set of paths that are considered as the base dirs of the input datasets.
+   * The partitioning discovery logic will make sure it will stop when it reaches any
+   * base path. By default, the paths of the dataset provided by users will be base paths.
+   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
+   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
+   * `something`. If users want to override the basePath. They can set `basePath` in the options
+   * to pass the new base path to the data source.
+   * For the above example, if the user-provided base path is `/path/`, the returned
+   * DataFrame will have the column of `something`.
+   */
+  private def basePaths: Set[Path] = {
+    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
+    userDefinedBasePath.getOrElse {
+      // If the user does not provide basePath, we will just use paths.
+      val pathSet = paths.toSet
+      pathSet.map(p => new Path(p))
+    }.map { hdfsPath =>
+      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+      val fs = hdfsPath.getFileSystem(hadoopConf)
+      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    }
+  }
 
   override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
@@ -557,14 +597,17 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     userDefinedPartitionColumns match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
-          leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference = false)
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = false,
+          basePaths = basePaths)
 
         // Without auto inference, all of value in the `row` should be null or in StringType,
         // we need to cast into the data type that user specified.
         def castPartitionValuesToUserSchema(row: InternalRow) = {
           InternalRow((0 until row.numFields).map { i =>
             Cast(
-              Literal.create(row.getString(i), StringType),
+              Literal.create(row.getUTF8String(i), StringType),
               userProvidedSchema.fields(i).dataType).eval()
           }: _*)
         }
@@ -575,8 +618,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
       case _ =>
         // user did not provide a partitioning schema
-        PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled())
+        PartitioningUtils.parsePartitions(
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
+          basePaths = basePaths)
     }
   }
 
@@ -808,8 +854,16 @@ private[sql] object HadoopFsRelation extends Logging {
     if (name == "_temporary" || name.startsWith(".")) {
       Array.empty
     } else {
-      val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-      files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+      // Dummy jobconf to get to the pathFilter defined in configuration
+      val jobConf = new JobConf(fs.getConf, this.getClass())
+      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+      if (pathFilter != null) {
+        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
+        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+      } else {
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+      }
     }
   }
 
@@ -842,7 +896,7 @@ private[sql] object HadoopFsRelation extends Logging {
       FakeFileStatus(
         status.getPath.toString,
         status.getLen,
-        status.isDir,
+        status.isDirectory,
         status.getReplication,
         status.getBlockSize,
         status.getModificationTime,

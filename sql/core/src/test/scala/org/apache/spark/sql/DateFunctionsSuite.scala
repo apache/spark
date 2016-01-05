@@ -38,15 +38,21 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
   }
 
-  // This is a bad test. SPARK-9196 will fix it and re-enable it.
-  ignore("function current_timestamp") {
+  test("function current_timestamp and now") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
     checkAnswer(df1.select(countDistinct(current_timestamp())), Row(1))
+
     // Execution in one query should return the same value
-    checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""),
-      Row(true))
-    assert(math.abs(sql("""SELECT CURRENT_TIMESTAMP()""").collect().head.getTimestamp(
-      0).getTime - System.currentTimeMillis()) < 5000)
+    checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""), Row(true))
+
+    // Current timestamp should return the current timestamp ...
+    val before = System.currentTimeMillis
+    val got = sql("SELECT CURRENT_TIMESTAMP()").collect().head.getTimestamp(0).getTime
+    val after = System.currentTimeMillis
+    assert(got >= before && got <= after)
+
+    // Now alias
+    checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = NOW()"""), Row(true))
   }
 
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
@@ -442,6 +448,9 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
     checkAnswer(df.selectExpr(s"unix_timestamp(s, '$fmt')"), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+
+    val now = sql("select unix_timestamp()").collect().head.getLong(0)
+    checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
   }
 
   test("to_unix_timestamp") {

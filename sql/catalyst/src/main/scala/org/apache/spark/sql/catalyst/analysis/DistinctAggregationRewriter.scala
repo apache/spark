@@ -123,15 +123,8 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
-      // When the flag is set to specialize single distinct agg planning,
-      // we will rely on our Aggregation strategy to handle queries with a single
-      // distinct column and this aggregate operator does have grouping expressions.
-      distinctAggGroups.size > 1 || (distinctAggGroups.size == 1 && a.groupingExpressions.isEmpty)
-    } else {
-      distinctAggGroups.size >= 1
-    }
-    if (shouldRewrite) {
+    // Aggregation strategy can handle the query with single distinct
+    if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {

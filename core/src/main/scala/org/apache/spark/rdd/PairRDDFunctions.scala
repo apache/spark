@@ -33,15 +33,14 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat,
-  RecordWriter => NewRecordWriter}
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, TaskType, TaskAttemptID}
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
-import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -53,10 +52,7 @@ import org.apache.spark.util.random.StratifiedSamplingUtils
  */
 class PairRDDFunctions[K, V](self: RDD[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
-  extends Logging
-  with SparkHadoopMapReduceUtil
-  with Serializable
-{
+  extends Logging with Serializable {
 
   /**
    * :: Experimental ::
@@ -65,9 +61,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note that V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
    *
-   * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
-   * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
-   * - `mergeCombiners`, to combine two C's into a single one.
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
+   *  - `mergeCombiners`, to combine two C's into a single one.
    *
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
@@ -985,11 +981,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       conf: Configuration = self.context.hadoopConfiguration): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val job = new NewAPIHadoopJob(hadoopConf)
+    val job = NewAPIHadoopJob.getInstance(hadoopConf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
-    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val jobConfiguration = job.getConfiguration
     jobConfiguration.set("mapred.output.dir", path)
     saveAsNewAPIHadoopDataset(jobConfiguration)
   }
@@ -1074,11 +1070,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val job = new NewAPIHadoopJob(hadoopConf)
+    val job = NewAPIHadoopJob.getInstance(hadoopConf)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
-    val jobConfiguration = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val jobConfiguration = job.getConfiguration
     val wrappedConf = new SerializableConfiguration(jobConfiguration)
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
@@ -1091,9 +1087,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val writeShard = (context: TaskContext, iter: Iterator[(K, V)]) => {
       val config = wrappedConf.value
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
+      val attemptId = new TaskAttemptID(jobtrackerID, stageId, TaskType.REDUCE, context.partitionId,
         context.attemptNumber)
-      val hadoopContext = newTaskAttemptContext(config, attemptId)
+      val hadoopContext = new TaskAttemptContextImpl(config, attemptId)
       val format = outfmt.newInstance
       format match {
         case c: Configurable => c.setConf(config)
@@ -1125,8 +1121,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       1
     } : Int
 
-    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
-    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobAttemptId = new TaskAttemptID(jobtrackerID, stageId, TaskType.MAP, 0, 0)
+    val jobTaskContext = new TaskAttemptContextImpl(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
 
     // When speculation is on and output committer class name contains "Direct", we should warn

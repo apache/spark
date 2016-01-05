@@ -18,9 +18,10 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 
@@ -39,10 +40,24 @@ object LDASuite {
     }.map(v => new TestRow(v))
     sql.createDataFrame(rdd)
   }
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "k" -> 3,
+    "maxIter" -> 2,
+    "checkpointInterval" -> 30,
+    "learningOffset" -> 1023.0,
+    "learningDecay" -> 0.52,
+    "subsamplingRate" -> 0.051
+  )
 }
 
 
-class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
+class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   val k: Int = 5
   val vocabSize: Int = 30
@@ -156,7 +171,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     MLTestingUtils.checkCopy(model)
 
-    assert(!model.isInstanceOf[DistributedLDAModel])
+    assert(model.isInstanceOf[LocalLDAModel])
     assert(model.vocabSize === vocabSize)
     assert(model.estimatedDocConcentration.size === k)
     assert(model.topicsMatrix.numRows === vocabSize)
@@ -210,12 +225,37 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.isDistributed)
 
     val localModel = model.toLocal
-    assert(!localModel.isInstanceOf[DistributedLDAModel])
+    assert(localModel.isInstanceOf[LocalLDAModel])
 
     // training logLikelihood, logPrior
     val ll = model.trainingLogLikelihood
     assert(ll <= 0.0 && ll != Double.NegativeInfinity)
     val lp = model.logPrior
     assert(lp <= 0.0 && lp != Double.NegativeInfinity)
+  }
+
+  test("read/write LocalLDAModel") {
+    def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
+      assert(model.vocabSize === model2.vocabSize)
+      assert(Vectors.dense(model.topicsMatrix.toArray) ~==
+        Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
+      assert(Vectors.dense(model.getDocConcentration) ~==
+        Vectors.dense(model2.getDocConcentration) absTol 1e-6)
+    }
+    val lda = new LDA()
+    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings, checkModelData)
+  }
+
+  test("read/write DistributedLDAModel") {
+    def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
+      assert(model.vocabSize === model2.vocabSize)
+      assert(Vectors.dense(model.topicsMatrix.toArray) ~==
+        Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
+      assert(Vectors.dense(model.getDocConcentration) ~==
+        Vectors.dense(model2.getDocConcentration) absTol 1e-6)
+    }
+    val lda = new LDA()
+    testEstimatorAndModelReadWrite(lda, dataset,
+      LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
   }
 }

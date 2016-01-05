@@ -75,8 +75,11 @@ class FileServerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   override def afterAll() {
-    super.afterAll()
-    Utils.deleteRecursively(tmpDir)
+    try {
+      Utils.deleteRecursively(tmpDir)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("Distributing files locally") {

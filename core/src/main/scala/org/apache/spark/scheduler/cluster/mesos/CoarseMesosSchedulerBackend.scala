@@ -31,7 +31,7 @@ import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
 import org.apache.spark.{SecurityManager, SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
-import org.apache.spark.rpc.RpcAddress
+import org.apache.spark.rpc.{RpcEndpointAddress, RpcAddress}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -109,7 +109,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
     if (shuffleServiceEnabled) {
       Some(new MesosExternalShuffleClient(
-        SparkTransportConf.fromSparkConf(conf),
+        SparkTransportConf.fromSparkConf(conf, "shuffle"),
         securityManager,
         securityManager.isAuthenticationEnabled(),
         securityManager.isSaslEncryptionEnabled()))
@@ -215,10 +215,10 @@ private[spark] class CoarseMesosSchedulerBackend(
     if (conf.contains("spark.testing")) {
       "driverURL"
     } else {
-      sc.env.rpcEnv.uriOf(
-        SparkEnv.driverActorSystemName,
-        RpcAddress(conf.get("spark.driver.host"), conf.get("spark.driver.port").toInt),
-        CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+      RpcEndpointAddress(
+        conf.get("spark.driver.host"),
+        conf.get("spark.driver.port").toInt,
+        CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     }
   }
 

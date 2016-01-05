@@ -37,10 +37,12 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   private var tempDir: File = _
 
   override def beforeAll() {
+    super.beforeAll()
     conf.set("spark.shuffle.manager", "sort")
   }
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     tempDir = Utils.createTempDir()
     conf.set("spark.local.dir", tempDir.getAbsolutePath)
   }

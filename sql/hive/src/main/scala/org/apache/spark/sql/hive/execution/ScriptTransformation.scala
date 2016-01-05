@@ -58,7 +58,9 @@ case class ScriptTransformation(
     ioschema: HiveScriptIOSchema)(@transient private val sc: HiveContext)
   extends UnaryNode {
 
-  override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
+  override protected def otherCopyArgs: Seq[HiveContext] = sc :: Nil
+
+  override def producedAttributes: AttributeSet = outputSet -- inputSet
 
   private val serializedHiveConf = new SerializableConfiguration(sc.hiveconf)
 
@@ -211,7 +213,8 @@ case class ScriptTransformation(
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
-        processIterator(iter)
+        val proj = UnsafeProjection.create(schema)
+        processIterator(iter).map(proj)
       } else {
         // If the input iterator has no rows then do not launch the external script.
         Iterator.empty

@@ -89,31 +89,11 @@ case class SortMergeOuterJoin(
     keys.map(SortOrder(_, Ascending))
   }
 
-  private def isUnsafeMode: Boolean = {
-    UnsafeProjection.canSupport(leftKeys) &&
-      UnsafeProjection.canSupport(rightKeys) &&
-      UnsafeProjection.canSupport(schema)
-  }
+  private def createLeftKeyGenerator(): Projection =
+    UnsafeProjection.create(leftKeys, left.output)
 
-  override def outputsUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessSafeRows: Boolean = !isUnsafeMode
-
-  private def createLeftKeyGenerator(): Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(leftKeys, left.output)
-    } else {
-      newProjection(leftKeys, left.output)
-    }
-  }
-
-  private def createRightKeyGenerator(): Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(rightKeys, right.output)
-    } else {
-      newProjection(rightKeys, right.output)
-    }
-  }
+  private def createRightKeyGenerator(): Projection =
+    UnsafeProjection.create(rightKeys, right.output)
 
   override def doExecute(): RDD[InternalRow] = {
     val numLeftRows = longMetric("numLeftRows")
@@ -130,13 +110,7 @@ case class SortMergeOuterJoin(
           (r: InternalRow) => true
         }
       }
-      val resultProj: InternalRow => InternalRow = {
-        if (isUnsafeMode) {
-          UnsafeProjection.create(schema)
-        } else {
-          identity[InternalRow]
-        }
-      }
+      val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
         case LeftOuter =>

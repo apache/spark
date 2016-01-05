@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Since, DeveloperApi}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -241,6 +241,12 @@ abstract class RDD[T: ClassTag](
       partitions_
     }
   }
+
+  /**
+    * Returns the number of partitions of this RDD.
+    */
+  @Since("1.6.0")
+  final def getNumPartitions: Int = partitions.length
 
   /**
    * Get the preferred locations of a partition, taking into account whether the
@@ -702,6 +708,24 @@ abstract class RDD[T: ClassTag](
     new MapPartitionsRDD(
       this,
       (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(iter),
+      preservesPartitioning)
+  }
+
+  /**
+   * [performance] Spark's internal mapPartitions method which skips closure cleaning. It is a
+   * performance API to be used carefully only if we are sure that the RDD elements are
+   * serializable and don't require closure cleaning.
+   *
+   * @param preservesPartitioning indicates whether the input function preserves the partitioner,
+   * which should be `false` unless this is a pair RDD and the input function doesn't modify
+   * the keys.
+   */
+  private[spark] def mapPartitionsInternal[U: ClassTag](
+      f: Iterator[T] => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter),
       preservesPartitioning)
   }
 
@@ -1309,7 +1333,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the top k (largest) elements from this RDD as defined by the specified
-   * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
+   * implicit Ordering[T] and maintains the ordering. This does the opposite of
+   * [[takeOrdered]]. For example:
    * {{{
    *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
    *   // returns Array(12)

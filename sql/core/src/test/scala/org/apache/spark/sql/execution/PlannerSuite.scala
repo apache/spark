@@ -44,10 +44,10 @@ class PlannerSuite extends SharedSQLContext {
         fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
-    // For the new aggregation code path, there will be three aggregate operator for
+    // For the new aggregation code path, there will be four aggregate operator for
     // distinct aggregations.
     assert(
-      aggregations.size == 2 || aggregations.size == 3,
+      aggregations.size == 2 || aggregations.size == 4,
       s"The plan of query $query does not have partial aggregations.")
   }
 
@@ -156,6 +156,20 @@ class PlannerSuite extends SharedSQLContext {
         assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
 
         sqlContext.clearCache()
+      }
+    }
+  }
+
+  test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      testData.write.parquet(path)
+      val df = sqlContext.read.parquet(path)
+      sqlContext.registerDataFrameAsTable(df, "testPushed")
+
+      withTempTable("testPushed") {
+        val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
+        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
       }
     }
   }
@@ -365,7 +379,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+    if (outputPlan.collect { case s: Sort => true }.isEmpty) {
       fail(s"Sort should have been added:\n$outputPlan")
     }
   }
@@ -381,7 +395,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.nonEmpty) {
+    if (outputPlan.collect { case s: Sort => true }.nonEmpty) {
       fail(s"No sorts should have been added:\n$outputPlan")
     }
   }
@@ -398,7 +412,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+    if (outputPlan.collect { case s: Sort => true }.isEmpty) {
       fail(s"Sort should have been added:\n$outputPlan")
     }
   }

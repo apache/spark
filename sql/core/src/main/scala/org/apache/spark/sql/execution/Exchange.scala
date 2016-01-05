@@ -28,7 +28,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
@@ -50,28 +49,13 @@ case class Exchange(
       case None => ""
     }
 
-    val simpleNodeName = if (tungstenMode) "TungstenExchange" else "Exchange"
-    s"${simpleNodeName}${extraInfo}"
-  }
-
-  /**
-   * Returns true iff we can support the data type, and we are not doing range partitioning.
-   */
-  private lazy val tungstenMode: Boolean = {
-    GenerateUnsafeProjection.canSupport(child.schema) &&
-      !newPartitioning.isInstanceOf[RangePartitioning]
+    val simpleNodeName = "Exchange"
+    s"$simpleNodeName$extraInfo"
   }
 
   override def outputPartitioning: Partitioning = newPartitioning
 
   override def output: Seq[Attribute] = child.output
-
-  // This setting is somewhat counterintuitive:
-  // If the schema works with UnsafeRow, then we tell the planner that we don't support safe row,
-  // so the planner inserts a converter to convert data into UnsafeRow if needed.
-  override def outputsUnsafeRows: Boolean = tungstenMode
-  override def canProcessSafeRows: Boolean = !tungstenMode
-  override def canProcessUnsafeRows: Boolean = tungstenMode
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
@@ -133,15 +117,7 @@ case class Exchange(
     }
   }
 
-  @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
-
-  private val serializer: Serializer = {
-    if (tungstenMode) {
-      new UnsafeRowSerializer(child.output.size)
-    } else {
-      new SparkSqlSerializer(sparkConf)
-    }
-  }
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
   override protected def doPrepare(): Unit = {
     // If an ExchangeCoordinator is needed, we register this Exchange operator
@@ -171,7 +147,7 @@ case class Exchange(
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
-        val rddForSampling = rdd.mapPartitions { iter =>
+        val rddForSampling = rdd.mapPartitionsInternal { iter =>
           val mutablePair = new MutablePair[InternalRow, Null]()
           iter.map(row => mutablePair.update(row.copy(), null))
         }
@@ -203,12 +179,12 @@ case class Exchange(
     }
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
       if (needToCopyObjectsBeforeShuffle(part, serializer)) {
-        rdd.mapPartitions { iter =>
+        rdd.mapPartitionsInternal { iter =>
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
         }
       } else {
-        rdd.mapPartitions { iter =>
+        rdd.mapPartitionsInternal { iter =>
           val getPartitionKey = getPartitionKeyExtractor()
           val mutablePair = new MutablePair[Int, InternalRow]()
           iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
@@ -478,10 +454,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
         if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
-          sqlContext.planner.BasicOperators.getSortOperator(
-            requiredOrdering,
-            global = false,
-            child)
+          Sort(requiredOrdering, global = false, child = child)
         } else {
           child
         }

@@ -25,22 +25,19 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.collection.JavaConverters._
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
-
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.util.Utils
+import org.apache.spark.util.ThreadUtils
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -96,6 +93,10 @@ private[yarn] class YarnAllocator(
   // was lost.
   private val pendingLossReasonRequests = new HashMap[String, mutable.Buffer[RpcCallContext]]
 
+  // Maintain loss reasons for already released executors, it will be added when executor loss
+  // reason is got from AM-RM call, and be removed after querying this loss reason.
+  private val releasedExecutorLossReasons = new HashMap[String, ExecutorLossReason]
+
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
   private[yarn] val executorIdToContainer = new HashMap[String, Container]
@@ -113,13 +114,9 @@ private[yarn] class YarnAllocator(
   // Resource capability requested for each executors
   private[yarn] val resource = Resource.newInstance(executorMemory + memoryOverhead, executorCores)
 
-  private val launcherPool = new ThreadPoolExecutor(
-    // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
-    sparkConf.getInt("spark.yarn.containerLauncherMaxThreads", 25), Integer.MAX_VALUE,
-    1, TimeUnit.MINUTES,
-    new LinkedBlockingQueue[Runnable](),
-    new ThreadFactoryBuilder().setNameFormat("ContainerLauncher #%d").setDaemon(true).build())
-  launcherPool.allowCoreThreadTimeOut(true)
+  private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
+    "ContainerLauncher",
+    sparkConf.getInt("spark.yarn.containerLauncherMaxThreads", 25))
 
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)
@@ -202,8 +199,7 @@ private[yarn] class YarnAllocator(
    */
   def killExecutor(executorId: String): Unit = synchronized {
     if (executorIdToContainer.contains(executorId)) {
-      val container = executorIdToContainer.remove(executorId).get
-      containerIdToExecutorId.remove(container.getId)
+      val container = executorIdToContainer.get(executorId).get
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
     } else {
@@ -478,7 +474,7 @@ private[yarn] class YarnAllocator(
             (true, memLimitExceededLogMessage(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
-          case unknown =>
+          case _ =>
             numExecutorsFailed += 1
             (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
@@ -490,7 +486,7 @@ private[yarn] class YarnAllocator(
         } else {
           logInfo(containerExitReason)
         }
-        ExecutorExited(0, exitCausedByApp, containerExitReason)
+        ExecutorExited(exitStatus, exitCausedByApp, containerExitReason)
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed
@@ -514,9 +510,18 @@ private[yarn] class YarnAllocator(
 
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
-        pendingLossReasonRequests.remove(eid).foreach { pendingRequests =>
-          // Notify application of executor loss reasons so it can decide whether it should abort
-          pendingRequests.foreach(_.reply(exitReason))
+        pendingLossReasonRequests.remove(eid) match {
+          case Some(pendingRequests) =>
+            // Notify application of executor loss reasons so it can decide whether it should abort
+            pendingRequests.foreach(_.reply(exitReason))
+
+          case None =>
+            // We cannot find executor for pending reasons. This is because completed container
+            // is processed before querying pending result. We should store it for later query.
+            // This is usually happened when explicitly killing a container, the result will be
+            // returned in one AM-RM communication. So query RPC will be later than this completed
+            // container process.
+            releasedExecutorLossReasons.put(eid, exitReason)
         }
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
@@ -538,8 +543,14 @@ private[yarn] class YarnAllocator(
     if (executorIdToContainer.contains(eid)) {
       pendingLossReasonRequests
         .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
+    } else if (releasedExecutorLossReasons.contains(eid)) {
+      // Executor is already released explicitly before getting the loss reason, so directly send
+      // the pre-stored lost reason
+      context.reply(releasedExecutorLossReasons.remove(eid).get)
     } else {
       logWarning(s"Tried to get the loss reason for non-existent executor $eid")
+      context.sendFailure(
+        new SparkException(s"Fail to find loss reason for non-existent executor $eid"))
     }
   }
 
