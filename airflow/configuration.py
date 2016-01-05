@@ -56,6 +56,7 @@ defaults = {
         's3_log_folder': '',
         'dag_concurrency': 16,
         'max_active_runs_per_dag': 16,
+        'executor': 'SequentialExecutor',
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
