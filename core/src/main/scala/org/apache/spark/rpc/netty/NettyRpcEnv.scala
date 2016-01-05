@@ -182,7 +182,11 @@ private[netty] class NettyRpcEnv(
     val remoteAddr = message.receiver.address
     if (remoteAddr == address) {
       // Message to a local RPC endpoint.
-      dispatcher.postOneWayMessage(message)
+      try {
+        dispatcher.postOneWayMessage(message)
+      } catch {
+        case NonFatal(e) => logWarning(e.getMessage, e)
+      }
     } else {
       // Message to a remote RPC endpoint.
       postToOutbox(message.receiver, OneWayOutboxMessage(serialize(message)))
@@ -506,12 +510,7 @@ private[netty] class NettyRpcEndpointRef(
 
   override def send(message: Any): Unit = {
     require(message != null, "Message is null")
-    try {
-      nettyEnv.send(RequestMessage(nettyEnv.address, this, message))
-    } catch {
-      case NonFatal(e) =>
-        logWarning(e.getMessage, e)
-    }
+    nettyEnv.send(RequestMessage(nettyEnv.address, this, message))
   }
 
   override def toString: String = s"NettyRpcEndpointRef(${_address})"
