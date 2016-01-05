@@ -136,7 +136,7 @@ trait UnresolvedFunctionLike extends Expression {
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
-  override def prettyString: String = s"$name(${children.map(_.prettyString).mkString(",")})"
+  override def prettyString: String = s"'$name(${children.map(_.prettyString).mkString(",")})"
 
   override def toString: String = s"'$name(${children.mkString(",")})"
 }

@@ -448,8 +448,7 @@ class Analyzer(
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
-      case g @ Generate(generator, join, outer, qualifier, output, child)
-        if child.resolved && !generator.resolved =>
+      case g @ Generate(generator, join, outer, qualifier, output, child) if child.resolved =>
         val newG = generator transformUp {
           case u @ UnresolvedAttribute(nameParts) =>
             withPosition(u) { child.resolve(nameParts, resolver).getOrElse(u) }
