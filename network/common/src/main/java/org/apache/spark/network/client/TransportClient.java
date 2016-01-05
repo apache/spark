@@ -288,7 +288,7 @@ public class TransportClient implements Closeable {
   /**
    * Removes any state associated with the given RPC.
    *
-   * @param requestId The RPC id returned by {@link #sendRpc(byte[], RpcResponseCallback)}.
+   * @param requestId The RPC id returned by {@link #sendRpc(ByteBuffer, RpcResponseCallback)}.
    */
   public void removeRpcRequest(long requestId) {
     handler.removeRpcRequest(requestId);

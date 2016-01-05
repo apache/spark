@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * This creates an iterator of (BlockID, InputStream) tuples so the caller can handle blocks
  * in a pipelined fashion as they are received.
  *
- * The implementation throttles the remote fetches to they don't exceed maxBytesInFlight to avoid
+ * The implementation throttles the remote fetches so they don't exceed maxBytesInFlight to avoid
  * using too much memory.
  *
  * @param context [[TaskContext]], used for metrics update
@@ -329,7 +329,7 @@ final class ShuffleBlockFetcherIterator(
 }
 
 /**
- * Helper class that ensures a ManagedBuffer is release upon InputStream.close()
+ * Helper class that ensures a ManagedBuffer is released upon InputStream.close()
  */
 private class BufferReleasingInputStream(
     private val delegate: InputStream,

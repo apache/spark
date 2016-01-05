@@ -747,7 +747,7 @@ class DAGScheduler(
   }
 
   /**
-   * Check for waiting or failed stages which are now eligible for resubmission.
+   * Check for waiting stages which are now eligible for resubmission.
    * Ordinarily run on every iteration of the event loop.
    */
   private def submitWaitingStages() {
