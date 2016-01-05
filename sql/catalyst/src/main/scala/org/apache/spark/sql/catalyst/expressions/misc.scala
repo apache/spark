@@ -22,6 +22,8 @@ import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -175,5 +177,47 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
         ${ev.value} = checksum.getValue();
       """
     })
+  }
+}
+
+/**
+ * A function that calculates hash value for a group of expressions.  Note that the `seed` argument
+ * is not exposed to users and should only be set inside spark SQL.
+ *
+ * Internally this function will write arguments into an [[UnsafeRow]], and calculate hash code of
+ * the unsafe row using murmur3 hasher with a seed.
+ * We should use this hash function for both shuffle and bucket, so that we can guarantee shuffle
+ * and bucketing have same data distribution.
+ */
+case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression {
+  def this(arguments: Seq[Expression]) = this(arguments, 42)
+
+  override def dataType: DataType = IntegerType
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def nullable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      TypeCheckResult.TypeCheckFailure("arguments of function hash cannot be empty")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  private lazy val unsafeProjection = UnsafeProjection.create(children)
+
+  override def eval(input: InternalRow): Any = {
+    unsafeProjection(input).hashCode(seed)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val unsafeRow = GenerateUnsafeProjection.createCode(ctx, children)
+    ev.isNull = "false"
+    s"""
+      ${unsafeRow.code}
+      final int ${ev.value} = ${unsafeRow.value}.hashCode($seed);
+    """
   }
 }
