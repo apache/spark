@@ -58,13 +58,23 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
-import org.apache.spark.util.testing.LocalJavaSparkContext;
+import org.apache.spark.util.testing.SharedJavaSparkContext;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
-public class JavaAPISuite extends LocalJavaSparkContext implements Serializable {
+public class JavaAPISuite extends SharedJavaSparkContext implements Serializable {
   private transient File tempDir;
+
+  // Override the SparkConf to use a single threaded master required for some of the tests.
+  private static SparkConf _conf = new SparkConf()
+    .setMaster("local")
+    .setAppName("test");
+
+  @Override
+  public SparkConf conf() {
+    return _conf;
+  }
 
   @Before
   public void setUp() {
@@ -1783,32 +1793,6 @@ public class JavaAPISuite extends LocalJavaSparkContext implements Serializable 
       Assert.assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
     }
     Assert.assertTrue(future.isDone());
-  }
-
-
-  /**
-   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
-   * since that's the only artifact where Guava classes have been relocated.
-   */
-  @Test
-  public void testGuavaOptional() {
-    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
-    // assembly.
-    jsc().stop();
-    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,1024]", "JavaAPISuite");
-    try {
-      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
-      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
-        new Function<Integer, Optional<Integer>>() {
-          @Override
-          public Optional<Integer> call(Integer i) {
-            return Optional.fromNullable(i);
-          }
-        });
-      rdd2.collect();
-    } finally {
-      localCluster.stop();
-    }
   }
 
   static class Class1 {}

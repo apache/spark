@@ -30,15 +30,15 @@ import org.junit.*;
 public class SharedJavaSparkContext {
   private static transient SparkContext _sc;
   private static transient JavaSparkContext _jsc;
+  private static SparkConf _conf = new SparkConf().
+    setMaster("local[4]").
+    setAppName("test");
+
   /**
    * SparkConf used to create the SparkContext for testing.
    * Override to change the master, application name, disable web ui
    * or other changes.
    */
-  public static SparkConf _conf = new SparkConf().
-    setMaster("local[4]").
-    setAppName("test");
-
   public SparkConf conf() {
     return _conf;
   }
@@ -53,7 +53,6 @@ public class SharedJavaSparkContext {
 
   @Before
   public synchronized void runBefore() {
-    System.out.println("runBefore called");
     if (_sc == null) {
       _sc = new SparkContext(conf());
       _jsc = new JavaSparkContext(_sc);

@@ -63,7 +63,7 @@ import org.apache.spark.util.testing.LocalJavaSparkContext;
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
-public class GauvaSuite implements Serializable {
+public class GuavaSuite implements Serializable {
   /**
    * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
    * since that's the only artifact where Guava classes have been relocated.
