@@ -80,12 +80,12 @@ class HasFeaturesCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.", None)
+    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.", str)
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
         #: param for features column name.
-        self.featuresCol = Param(self, "featuresCol", "features column name.", None)
+        self.featuresCol = Param(self, "featuresCol", "features column name.", str)
         self._setDefault(featuresCol='features')
 
     def setFeaturesCol(self, value):
@@ -274,12 +274,12 @@ class HasOutputCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    outputCol = Param(Params._dummy(), "outputCol", "output column name.", None)
+    outputCol = Param(Params._dummy(), "outputCol", "output column name.", str)
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
         #: param for output column name.
-        self.outputCol = Param(self, "outputCol", "output column name.", None)
+        self.outputCol = Param(self, "outputCol", "output column name.", str)
         self._setDefault(outputCol=self.uid + '__output')
 
     def setOutputCol(self, value):
@@ -438,12 +438,12 @@ class HasHandleInvalid(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", bool)
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", str)
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
         #: param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
-        self.handleInvalid = Param(self, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", bool)
+        self.handleInvalid = Param(self, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", str)
 
     def setHandleInvalid(self, value):
         """

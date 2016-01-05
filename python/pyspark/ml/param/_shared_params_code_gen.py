@@ -111,7 +111,7 @@ if __name__ == "__main__":
     shared = [
         ("maxIter", "max number of iterations (>= 0).", None, int),
         ("regParam", "regularization parameter (>= 0).", None, float),
-        ("featuresCol", "features column name.", "'features'", None),
+        ("featuresCol", "features column name.", "'features'", str),
         ("labelCol", "label column name.", "'label'", str),
         ("predictionCol", "prediction column name.", "'prediction'", str),
         ("probabilityCol", "Column name for predicted class conditional probabilities. " +
@@ -121,7 +121,7 @@ if __name__ == "__main__":
          str),
         ("inputCol", "input column name.", None, str),
         ("inputCols", "input column names.", None, None),
-        ("outputCol", "output column name.", "self.uid + '__output'", None),
+        ("outputCol", "output column name.", "self.uid + '__output'", str),
         ("numFeatures", "number of features.", None, int),
         ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
          "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None, int),
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         ("stepSize", "Step size to be used for each iteration of optimization.", None, float),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
          "out rows with bad values), or error (which will throw an errror). More options may be " +
-         "added later.", None, bool),
+         "added later.", None, str),
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
          "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0", float),
         ("fitIntercept", "whether to fit an intercept term.", "True", bool),
