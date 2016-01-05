@@ -58,12 +58,12 @@ import org.apache.spark.rdd.RDD;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
-import org.apache.spark.util.testing.SharedJavaSparkContext;
+import org.apache.spark.util.testing.LocalJavaSparkContext;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
-public class JavaAPISuite extends SharedJavaSparkContext implements Serializable {
+public class JavaAPISuite extends LocalJavaSparkContext implements Serializable {
   private transient File tempDir;
 
   @Before

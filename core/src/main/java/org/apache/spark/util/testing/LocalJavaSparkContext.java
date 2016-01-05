@@ -21,13 +21,13 @@ import org.apache.spark.api.java.*;
 import org.junit.*;
 
 /**
- * Shares a local `SparkContext` and `JavaSparkContext` between all tests in a suite and
- * shutting down the SparkContext at the end. The `conf` variable is used when constructing the
- * `SparkContext` and defaults to  mode with 4 cores.
- * Extend this class to provide a JavaSparkContext for use with JUnit based tests.
- * See `SharedSparkContext` for a Scala version of this API.
+ * Creates a local `SparkContext` and `JavaSparkContext` for each test in a suite and
+ * shutting down the SparkContext. The `conf` variable is used when constructing the
+ * `SparkContext` and defaults to  mode with 1 core.
+ * Extend this class to provide a JavaSparkContext for use with JUnit based tests
+ * when individual tests may be destructive to the SparkContext.
  */
-public class SharedJavaSparkContext {
+public class LocalJavaSparkContext {
   private static transient SparkContext _sc;
   private static transient JavaSparkContext _jsc;
   /**
@@ -36,7 +36,7 @@ public class SharedJavaSparkContext {
    * or other changes.
    */
   public static SparkConf _conf = new SparkConf().
-    setMaster("local[4]").
+    setMaster("local").
     setAppName("test");
 
   public SparkConf conf() {
@@ -52,16 +52,13 @@ public class SharedJavaSparkContext {
   }
 
   @Before
-  public synchronized void runBefore() {
-    System.out.println("runBefore called");
-    if (_sc == null) {
-      _sc = new SparkContext(conf());
-      _jsc = new JavaSparkContext(_sc);
-    }
+  public void runBefore() {
+    _sc = new SparkContext(conf());
+    _jsc = new JavaSparkContext(_sc);
   }
 
-  @AfterClass
-  static public void runAfterClass() {
+  @After
+  public void runAfterClass() {
     LocalSparkContext$.MODULE$.stop(_sc);
     _sc = null;
     _jsc = null;
