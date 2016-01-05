@@ -160,6 +160,9 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   productTest(OptionalData(None, None, None, None, None, None, None, None))
 
+  encodeDecodeTest(Seq(Some(1), None), "Option in array")
+  encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
+
   productTest(BoxedData(1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true))
 
   productTest(BoxedData(null, null, null, null, null, null, null))
