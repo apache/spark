@@ -18,8 +18,11 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.column.{Encoding, ParquetProperties}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.util.Utils
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -638,6 +641,77 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
             assert(hash1 == unsafeRows(0).hashCode())
             assert(hash2 == unsafeRows(1).hashCode())
           }
+        }
+      }
+    }
+  }
+
+  test("UnsafeRowParquetRecordReader - direct path read") {
+    val data = (0 to 10).map(i => (i, ((i + 'a').toChar.toString)))
+    withTempPath { dir =>
+      sqlContext.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
+      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, null)
+          val result = mutable.ArrayBuffer.empty[(Int, String)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue
+            val v = (row.getInt(0), row.getString(1))
+            result += v
+          }
+          assert(data == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Project just one column
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, ("_2" :: Nil).asJava)
+          val result = mutable.ArrayBuffer.empty[(String)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue
+            result += row.getString(0)
+          }
+          assert(data.map(_._2) == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Project columns in opposite order
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
+          val result = mutable.ArrayBuffer.empty[(String, Int)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue
+            val v = (row.getString(0), row.getInt(1))
+            result += v
+          }
+          assert(data.map { x => (x._2, x._1) } == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Empty projection
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, List[String]().asJava)
+          var result = 0
+          while (reader.nextKeyValue()) {
+            result += 1
+          }
+          assert(result == data.length)
+        } finally {
+          reader.close()
         }
       }
     }
