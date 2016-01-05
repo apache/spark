@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.parser._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -34,7 +35,10 @@ import org.apache.spark.util.random.RandomSampler
  */
 private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   object Token {
-    def unapply(node: ASTNode): Some[(String, List[ASTNode])] = node.pattern
+    def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
+      CurrentOrigin.setPosition(node.line, node.positionInLine)
+      node.pattern
+    }
   }
 
   // TODO improve the parse error - so we don't need this anymore.
