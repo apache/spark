@@ -119,7 +119,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
   private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
-    (bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
+    assert(bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
     assert(bn.left.output.size == bn.right.output.size)
 
     AttributeMap(bn.left.output.zip(bn.right.output))
@@ -580,13 +580,15 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * Combines all adjacent [[Unions]] operators into a single [[Unions]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
-  private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case Unions(children) => children.flatMap(collectUnionChildren)
-    case other => other :: Nil
+  private def buildUnionChildren(children: Seq[LogicalPlan]): Seq[LogicalPlan] =
+    children.foldLeft(Seq.empty[LogicalPlan]) { (newChildren, child) => child match {
+      case Unions(grandchildren) => newChildren ++ grandchildren
+      case other => newChildren ++ Seq(other)
+    }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case u: Unions => Unions(collectUnionChildren(u))
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case u @ Unions(children) => Unions(buildUnionChildren(children))
   }
 }
 

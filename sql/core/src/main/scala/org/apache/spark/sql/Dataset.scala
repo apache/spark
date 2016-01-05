@@ -608,7 +608,9 @@ class Dataset[T] private[sql](
    * duplicate items.  As such, it is analogous to `UNION ALL` in SQL.
    * @since 1.6.0
    */
-  def union(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Union)
+  def union(other: Dataset[T]): Dataset[T] = withPlan[T](other){ (left, right) =>
+    Unions(left :: right :: Nil)
+  }
 
   /**
    * Returns a new [[Dataset]] where any elements present in `other` have been removed.

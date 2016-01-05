@@ -114,8 +114,8 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override def output: Seq[Attribute] = left.output
 }
 
-/** Factory for constructing new `AppendColumn` nodes. */
-object Unions {
+/** Factory for constructing new `Unions` nodes. */
+object Union {
   def apply(left: LogicalPlan, right: LogicalPlan): Unions = {
     Unions (left :: right :: Nil)
   }
@@ -130,6 +130,12 @@ case class Unions(children: Seq[LogicalPlan]) extends LogicalPlan {
       }
     }
   }
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      children.forall(_.output.length == children.head.output.length) &&
+      children.forall(_.output.zip(children.head.output).forall {
+        case (l, r) => l.dataType == r.dataType })
 
   override def statistics: Statistics = {
     val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
