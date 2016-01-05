@@ -53,7 +53,7 @@ object HiveTypeCoercion {
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
-  private val numericPrecedence =
+  private[sql] val numericPrecedence =
     IndexedSeq(
       ByteType,
       ShortType,
@@ -281,6 +281,12 @@ object HiveTypeCoercion {
       case p @ BinaryComparison(left @ DateType(), right @ TimestampType()) =>
         p.makeCopy(Array(Cast(left, StringType), Cast(right, StringType)))
 
+      // Checking NullType
+      case p @ BinaryComparison(left @ StringType(), right @ NullType()) =>
+        p.makeCopy(Array(left, Literal.create(null, StringType)))
+      case p @ BinaryComparison(left @ NullType(), right @ StringType()) =>
+        p.makeCopy(Array(Literal.create(null, StringType), right))
+
       case p @ BinaryComparison(left @ StringType(), right) if right.dataType != StringType =>
         p.makeCopy(Array(Cast(left, DoubleType), right))
       case p @ BinaryComparison(left, right @ StringType()) if left.dataType != StringType =>
@@ -297,8 +303,10 @@ object HiveTypeCoercion {
 
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
-      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
+      case StddevPop(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        StddevPop(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
+      case StddevSamp(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        StddevSamp(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
       case VariancePop(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
         VariancePop(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
       case VarianceSamp(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
@@ -584,6 +592,20 @@ object HiveTypeCoercion {
         findWiderCommonType(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None => c
+        }
+
+      case g @ Greatest(children) if children.map(_.dataType).distinct.size > 1 =>
+        val types = children.map(_.dataType)
+        findTightestCommonType(types) match {
+          case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
+          case None => g
+        }
+
+      case l @ Least(children) if children.map(_.dataType).distinct.size > 1 =>
+        val types = children.map(_.dataType)
+        findTightestCommonType(types) match {
+          case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
+          case None => l
         }
 
       case NaNvl(l, r) if l.dataType == DoubleType && r.dataType == FloatType =>

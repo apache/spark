@@ -18,13 +18,14 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.util.DataTypeParser
+import org.apache.spark.sql.catalyst.util.{LegacyTypeStringParser, DataTypeParser}
 
 
 /**
@@ -278,6 +279,23 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     s"struct<${fieldTypes.mkString(",")}>"
   }
 
+  private[sql] override def simpleString(maxNumberFields: Int): String = {
+    val builder = new StringBuilder
+    val fieldTypes = fields.take(maxNumberFields).map {
+      case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
+    }
+    builder.append("struct<")
+    builder.append(fieldTypes.mkString(", "))
+    if (fields.length > 2) {
+      if (fields.length - fieldTypes.size == 1) {
+        builder.append(" ... 1 more field")
+      } else {
+        builder.append(" ... " + (fields.length - 2) + " more fields")
+      }
+    }
+    builder.append(">").toString()
+  }
+
   /**
    * Merges with another schema (`StructType`).  For a struct field A from `this` and a struct field
    * B from `that`,
@@ -320,15 +338,18 @@ object StructType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "struct"
 
-  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
-    case t: StructType => t
-    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+  private[sql] def fromString(raw: String): StructType = {
+    Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
+      case t: StructType => t
+      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+    }
   }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {
-    StructType(fields.toArray.asInstanceOf[Array[StructField]])
+    import scala.collection.JavaConverters._
+    StructType(fields.asScala)
   }
 
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =

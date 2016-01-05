@@ -21,15 +21,14 @@ import java.io._
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.apache.spark.streaming.scheduler.JobGenerator
-
+import org.apache.spark.util.{MetadataCleaner, Utils}
 
 private[streaming]
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
@@ -187,16 +186,30 @@ class CheckpointWriter(
   private var stopped = false
   private var fs_ : FileSystem = _
 
+  @volatile private var latestCheckpointTime: Time = null
+
   class CheckpointWriteHandler(
       checkpointTime: Time,
       bytes: Array[Byte],
       clearCheckpointDataLater: Boolean) extends Runnable {
     def run() {
+      if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
+        latestCheckpointTime = checkpointTime
+      }
       var attempts = 0
       val startTime = System.currentTimeMillis()
       val tempFile = new Path(checkpointDir, "temp")
-      val checkpointFile = Checkpoint.checkpointFile(checkpointDir, checkpointTime)
-      val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, checkpointTime)
+      // We will do checkpoint when generating a batch and completing a batch. When the processing
+      // time of a batch is greater than the batch interval, checkpointing for completing an old
+      // batch may run after checkpointing of a new batch. If this happens, checkpoint of an old
+      // batch actually has the latest information, so we want to recovery from it. Therefore, we
+      // also use the latest checkpoint time as the file name, so that we can recovery from the
+      // latest checkpoint file.
+      //
+      // Note: there is only one thread writting the checkpoint files, so we don't need to worry
+      // about thread-safety.
+      val checkpointFile = Checkpoint.checkpointFile(checkpointDir, latestCheckpointTime)
+      val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, latestCheckpointTime)
 
       while (attempts < MAX_ATTEMPTS && !stopped) {
         attempts += 1
@@ -263,7 +276,7 @@ class CheckpointWriter(
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
         checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
-      logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
+      logInfo("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
         logError("Could not submit checkpoint task to the thread pool executor", rej)

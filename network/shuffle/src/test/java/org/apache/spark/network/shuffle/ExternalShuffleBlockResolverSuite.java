@@ -42,7 +42,7 @@ public class ExternalShuffleBlockResolverSuite {
 
   static TestShuffleDataContext dataContext;
 
-  static TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+  static TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
   @BeforeClass
   public static void beforeAll() throws IOException {
@@ -83,7 +83,7 @@ public class ExternalShuffleBlockResolverSuite {
 
     // Nonexistent shuffle block
     resolver.registerExecutor("app0", "exec3",
-      dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
+      dataContext.createExecutorInfo("sort"));
     try {
       resolver.getBlockData("app0", "exec3", "shuffle_1_1_0");
       fail("Should have failed");
@@ -96,7 +96,7 @@ public class ExternalShuffleBlockResolverSuite {
   public void testSortShuffleBlocks() throws IOException {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     resolver.registerExecutor("app0", "exec0",
-      dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
+      dataContext.createExecutorInfo("sort"));
 
     InputStream block0Stream =
       resolver.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
@@ -115,7 +115,7 @@ public class ExternalShuffleBlockResolverSuite {
   public void testHashShuffleBlocks() throws IOException {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     resolver.registerExecutor("app0", "exec0",
-      dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
+      dataContext.createExecutorInfo("hash"));
 
     InputStream block0Stream =
       resolver.getBlockData("app0", "exec0", "shuffle_1_0_0").createInputStream();

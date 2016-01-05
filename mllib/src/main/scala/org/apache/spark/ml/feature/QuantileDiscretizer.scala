@@ -20,14 +20,14 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntParam, _}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -60,7 +60,7 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
  */
 @Experimental
 final class QuantileDiscretizer(override val uid: String)
-  extends Estimator[Bucketizer] with QuantileDiscretizerBase {
+  extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
@@ -74,6 +74,7 @@ final class QuantileDiscretizer(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     val inputFields = schema.fields
     require(inputFields.forall(_.name != $(outputCol)),
@@ -95,11 +96,12 @@ final class QuantileDiscretizer(override val uid: String)
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
 }
 
-private[feature] object QuantileDiscretizer extends Logging {
+@Since("1.6.0")
+object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] with Logging {
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
-  def getSampledInput(dataset: DataFrame, numBins: Int): Array[Row] = {
+  private[feature] def getSampledInput(dataset: DataFrame, numBins: Int): Array[Row] = {
     val totalSamples = dataset.count()
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
@@ -111,6 +113,7 @@ private[feature] object QuantileDiscretizer extends Logging {
   /**
    * Compute split points with respect to the sample distribution.
    */
+  private[feature]
   def findSplitCandidates(samples: Array[Double], numSplits: Int): Array[Double] = {
     val valueCountMap = samples.foldLeft(Map.empty[Double, Int]) { (m, x) =>
       m + ((x, m.getOrElse(x, 0) + 1))
@@ -150,7 +153,7 @@ private[feature] object QuantileDiscretizer extends Logging {
    * Adjust split candidates to proper splits by: adding positive/negative infinity to both sides as
    * needed, and adding a default split value of 0 if no good candidates are found.
    */
-  def getSplits(candidates: Array[Double]): Array[Double] = {
+  private[feature] def getSplits(candidates: Array[Double]): Array[Double] = {
     val effectiveValues = if (candidates.size != 0) {
       if (candidates.head == Double.NegativeInfinity
         && candidates.last == Double.PositiveInfinity) {
@@ -172,5 +175,7 @@ private[feature] object QuantileDiscretizer extends Logging {
       Array(Double.NegativeInfinity) ++ effectiveValues ++ Array(Double.PositiveInfinity)
     }
   }
-}
 
+  @Since("1.6.0")
+  override def load(path: String): QuantileDiscretizer = super.load(path)
+}

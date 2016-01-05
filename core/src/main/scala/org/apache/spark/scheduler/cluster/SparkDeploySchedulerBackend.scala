@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.spark.rpc.RpcAddress
+import org.apache.spark.rpc.{RpcEndpointAddress, RpcAddress}
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
@@ -54,9 +54,10 @@ private[spark] class SparkDeploySchedulerBackend(
     launcherBackend.connect()
 
     // The endpoint for executors to talk to us
-    val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
-      RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    val driverUrl = RpcEndpointAddress(
+      sc.conf.get("spark.driver.host"),
+      sc.conf.get("spark.driver.port").toInt,
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     val args = Seq(
       "--driver-url", driverUrl,
       "--executor-id", "{{EXECUTOR_ID}}",
@@ -191,17 +192,19 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
-    stopping = true
+    try {
+      stopping = true
 
-    launcherBackend.setState(finalState)
-    launcherBackend.close()
+      super.stop()
+      client.stop()
 
-    super.stop()
-    client.stop()
-
-    val callback = shutdownCallback
-    if (callback != null) {
-      callback(this)
+      val callback = shutdownCallback
+      if (callback != null) {
+        callback(this)
+      }
+    } finally {
+      launcherBackend.setState(finalState)
+      launcherBackend.close()
     }
   }
 

@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.encoders.Encoder
-import org.apache.spark.sql.functions._
 
 import scala.language.postfixOps
 
 import org.apache.spark.sql.test.SharedSQLContext
-
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Aggregator
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
-class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializable {
+class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {
   val numeric = implicitly[Numeric[N]]
 
   override def zero: N = numeric.zero
@@ -36,10 +34,10 @@ class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializ
 
   override def merge(b1: N, b2: N): N = numeric.plus(b1, b2)
 
-  override def present(reduction: N): N = reduction
+  override def finish(reduction: N): N = reduction
 }
 
-object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with Serializable {
+object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] {
   override def zero: (Long, Long) = (0, 0)
 
   override def reduce(countAndSum: (Long, Long), input: (String, Int)): (Long, Long) = {
@@ -50,11 +48,10 @@ object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with
     (b1._1 + b2._1, b1._2 + b2._2)
   }
 
-  override def present(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
+  override def finish(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
 }
 
-object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)]
-  with Serializable {
+object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
 
   override def zero: (Long, Long) = (0, 0)
 
@@ -66,7 +63,51 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
     (b1._1 + b2._1, b1._2 + b2._2)
   }
 
-  override def present(reduction: (Long, Long)): (Long, Long) = reduction
+  override def finish(reduction: (Long, Long)): (Long, Long) = reduction
+}
+
+case class AggData(a: Int, b: String)
+object ClassInputAgg extends Aggregator[AggData, Int, Int] {
+  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
+  override def zero: Int = 0
+
+  /**
+   * Combine two values to produce a new value.  For performance, the function may modify `b` and
+   * return it instead of constructing new object for b.
+   */
+  override def reduce(b: Int, a: AggData): Int = b + a.a
+
+  /**
+   * Transform the output of the reduction.
+   */
+  override def finish(reduction: Int): Int = reduction
+
+  /**
+   * Merge two intermediate values
+   */
+  override def merge(b1: Int, b2: Int): Int = b1 + b2
+}
+
+object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
+  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
+  override def zero: (Int, AggData) = 0 -> AggData(0, "0")
+
+  /**
+   * Combine two values to produce a new value.  For performance, the function may modify `b` and
+   * return it instead of constructing new object for b.
+   */
+  override def reduce(b: (Int, AggData), a: AggData): (Int, AggData) = (b._1 + 1, a)
+
+  /**
+   * Transform the output of the reduction.
+   */
+  override def finish(reduction: (Int, AggData)): Int = reduction._1
+
+  /**
+   * Merge two intermediate values
+   */
+  override def merge(b1: (Int, AggData), b2: (Int, AggData)): (Int, AggData) =
+    (b1._1 + b2._1, b1._2)
 }
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
@@ -90,9 +131,9 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.groupBy(_._1).agg(
         sum(_._2),
-        expr("sum(_2)").as[Int],
+        expr("sum(_2)").as[Long],
         count("*")),
-      ("a", 30, 30, 2L), ("b", 3, 3, 2L), ("c", 1, 1, 1L))
+      ("a", 30, 30L, 2L), ("b", 3, 3L, 2L), ("c", 1, 1L, 1L))
   }
 
   test("typed aggregation: complex case") {
@@ -113,5 +154,57 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         expr("avg(_2)").as[Double],
         ComplexResultAgg.toColumn),
       ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
+  }
+
+  test("typed aggregation: in project list") {
+    val ds = Seq(1, 3, 2, 5).toDS()
+
+    checkAnswer(
+      ds.select(sum((i: Int) => i)),
+      11)
+    checkAnswer(
+      ds.select(sum((i: Int) => i), sum((i: Int) => i * 2)),
+      11 -> 22)
+  }
+
+  test("typed aggregation: class input") {
+    val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
+
+    checkAnswer(
+      ds.select(ClassInputAgg.toColumn),
+      3)
+  }
+
+  test("typed aggregation: class input with reordering") {
+    val ds = sql("SELECT 'one' AS b, 1 as a").as[AggData]
+
+    checkAnswer(
+      ds.select(ClassInputAgg.toColumn),
+      1)
+
+    checkAnswer(
+      ds.select(expr("avg(a)").as[Double], ClassInputAgg.toColumn),
+      (1.0, 1))
+
+    checkAnswer(
+      ds.groupBy(_.b).agg(ClassInputAgg.toColumn),
+      ("one", 1))
+  }
+
+  test("typed aggregation: complex input") {
+    val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
+
+    checkAnswer(
+      ds.select(ComplexBufferAgg.toColumn),
+      2
+    )
+
+    checkAnswer(
+      ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn),
+      (1.5, 2))
+
+    checkAnswer(
+      ds.groupBy(_.b).agg(ComplexBufferAgg.toColumn),
+      ("one", 1), ("two", 1))
   }
 }

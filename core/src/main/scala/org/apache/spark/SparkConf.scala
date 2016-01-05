@@ -544,7 +544,8 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
-          "are no longer accepted. To specify the equivalent now, one may use '64k'.")
+          "are no longer accepted. To specify the equivalent now, one may use '64k'."),
+      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -597,7 +598,9 @@ private[spark] object SparkConf extends Logging {
     "spark.streaming.fileStream.minRememberDuration" -> Seq(
       AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
     "spark.yarn.max.executor.failures" -> Seq(
-      AlternateConfig("spark.yarn.max.worker.failures", "1.5"))
+      AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
+    "spark.memory.offHeap.enabled" -> Seq(
+      AlternateConfig("spark.unsafe.offHeap", "1.6"))
     )
 
   /**
