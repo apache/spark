@@ -159,7 +159,7 @@
     <profile>
       <id>scala-2.10</id>
       <activation>
-        <property><name>!scala-2.11</name></property>
+        <property><name>scala-2.10</name></property>
       </activation>
       <dependencies>
         <dependency>
@@ -173,7 +173,7 @@
     <profile>
       <id>scala-2.11</id>
       <activation>
-        <property><name>scala-2.11</name></property>
+        <property><name>!scala-2.10</name></property>
       </activation>
       <properties>
         <extra.source.dir>scala-2.11/src/main/scala</extra.source.dir>

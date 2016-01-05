@@ -108,11 +108,11 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
-    if (System.getProperty("scala-2.11") == "") {
-      // To activate scala-2.11 profile, replace empty property value to non-empty value
+    if (System.getProperty("scala-2.10") == "") {
+      // To activate scala-2.10 profile, replace empty property value to non-empty value
       // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
       // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
-      System.setProperty("scala-2.11", "true")
+      System.setProperty("scala-2.10", "true")
     }
     profiles
   }
@@ -660,7 +660,7 @@ object Java8TestSettings {
   lazy val settings = Seq(
     javacJVMVersion := "1.8",
     // Targeting Java 8 bytecode is only supported in Scala 2.11.4 and higher:
-    scalacJVMVersion := (if (System.getProperty("scala-2.11") == "true") "1.8" else "1.7")
+    scalacJVMVersion := (if (System.getProperty("scala-2.10") == "true") "1.7" else "1.8")
   )
 }
 

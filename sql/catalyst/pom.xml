@@ -105,13 +105,4 @@
       </plugin>
     </plugins>
   </build>
-  <profiles>
-    <!-- Quasiquotes are merged into scala reflect from scala 2.11 onwards. -->
-    <profile>
-      <id>scala-2.10</id>
-      <activation>
-        <property><name>!scala-2.11</name></property>
-      </activation>
-    </profile>
-  </profiles>
 </project>

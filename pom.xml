@@ -2513,7 +2513,7 @@
     <profile>
       <id>scala-2.10</id>
       <activation>
-        <property><name>!scala-2.11</name></property>
+        <property><name>scala-2.10</name></property>
       </activation>
       <properties>
         <scala.version>2.10.5</scala.version>
@@ -2545,7 +2545,7 @@
     <profile>
       <id>scala-2.11</id>
       <activation>
-        <property><name>scala-2.11</name></property>
+        <property><name>!scala-2.10</name></property>
       </activation>
       <properties>
         <scala.version>2.11.7</scala.version>
