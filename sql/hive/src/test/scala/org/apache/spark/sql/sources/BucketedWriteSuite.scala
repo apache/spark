@@ -63,16 +63,14 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("write bucketed data") {
     val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketedTable") {
+    withTable("bucketed_table") {
       df.write
         .format("parquet")
         .partitionBy("i")
         .bucketBy(8, "j", "k")
-        .saveAsTable("bucketedTable")
+        .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
-      logWarning(hiveContext.warehousePath.getAbsolutePath)
-      logWarning(hiveContext.warehousePath.listFiles().map(_.getAbsolutePath).mkString("\n"))
+      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
       for (i <- 0 until 5) {
         val allBucketFiles = new File(tableDir, s"i=$i").listFiles().filter(!_.isHidden)
         val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
@@ -96,15 +94,15 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("write bucketed data with sortBy") {
     val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketedTable") {
+    withTable("bucketed_table") {
       df.write
         .format("parquet")
         .partitionBy("i")
         .bucketBy(8, "j")
         .sortBy("k")
-        .saveAsTable("bucketedTable")
+        .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
       for (i <- 0 until 5) {
         val allBucketFiles = new File(tableDir, s"i=$i").listFiles()
           .filter(_.getName.startsWith("part"))
@@ -130,13 +128,13 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("write bucketed data without partitionBy") {
     val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketedTable") {
+    withTable("bucketed_table") {
       df.write
         .format("parquet")
         .bucketBy(8, "i", "j")
-        .saveAsTable("bucketedTable")
+        .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
       val allBucketFiles = tableDir.listFiles().filter(_.getName.startsWith("part"))
       val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
       assert(groupedBucketFiles.size <= 8)
@@ -158,14 +156,14 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("write bucketed data without partitionBy with sortBy") {
     val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    withTable("bucketedTable") {
+    withTable("bucketed_table") {
       df.write
         .format("parquet")
         .bucketBy(8, "i", "j")
         .sortBy("k")
-        .saveAsTable("bucketedTable")
+        .saveAsTable("bucketed_table")
 
-      val tableDir = new File(hiveContext.warehousePath, "bucketedTable")
+      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
       val allBucketFiles = tableDir.listFiles().filter(_.getName.startsWith("part"))
       val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
       assert(groupedBucketFiles.size <= 8)
