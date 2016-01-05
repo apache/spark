@@ -662,9 +662,7 @@ private[spark] object Utils extends Logging {
 
   private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
     // These environment variables are set by YARN.
-    // For Hadoop 0.23.X, we check for YARN_LOCAL_DIRS (we use this below in getYarnLocalDirs())
-    // For Hadoop 2.X, we check for CONTAINER_ID.
-    conf.getenv("CONTAINER_ID") != null || conf.getenv("YARN_LOCAL_DIRS") != null
+    conf.getenv("CONTAINER_ID") != null
   }
 
   /**
@@ -740,17 +738,12 @@ private[spark] object Utils extends Logging {
           logError(s"Failed to create local root dir in $root. Ignoring this directory.")
           None
       }
-    }.toArray
+    }
   }
 
   /** Get the Yarn approved local directories. */
   private def getYarnLocalDirs(conf: SparkConf): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
+    val localDirs = Option(conf.getenv("LOCAL_DIRS")).getOrElse("")
 
     if (localDirs.isEmpty) {
       throw new Exception("Yarn Local dirs can't be empty")
@@ -1696,6 +1689,30 @@ private[spark] object Utils extends Logging {
    */
   def stripDirectory(path: String): String = {
     new File(path).getName
+  }
+
+  /**
+   * Terminates a process waiting for at most the specified duration. Returns whether
+   * the process terminated.
+   */
+  def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
+    try {
+      // Java8 added a new API which will more forcibly kill the process. Use that if available.
+      val destroyMethod = process.getClass().getMethod("destroyForcibly");
+      destroyMethod.setAccessible(true)
+      destroyMethod.invoke(process)
+    } catch {
+      case NonFatal(e) =>
+        if (!e.isInstanceOf[NoSuchMethodException]) {
+          logWarning("Exception when attempting to kill process", e)
+        }
+        process.destroy()
+    }
+    if (waitForProcess(process, timeoutMs)) {
+      Option(process.exitValue())
+    } else {
+      None
+    }
   }
 
   /**

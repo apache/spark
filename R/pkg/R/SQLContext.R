@@ -256,9 +256,12 @@ jsonFile <- function(sqlContext, path) {
 
 # TODO: support schema
 jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
+  .Deprecated("read.json")
   rdd <- serializeToString(rdd)
   if (is.null(schema)) {
-    sdf <- callJMethod(sqlContext, "jsonRDD", callJMethod(getJRDD(rdd), "rdd"), samplingRatio)
+    read <- callJMethod(sqlContext, "read")
+    # samplingRatio is deprecated
+    sdf <- callJMethod(read, "json", callJMethod(getJRDD(rdd), "rdd"))
     dataFrame(sdf)
   } else {
     stop("not implemented")
@@ -289,10 +292,7 @@ read.parquet <- function(sqlContext, path) {
 # TODO: Implement saveasParquetFile and write examples for both
 parquetFile <- function(sqlContext, ...) {
   .Deprecated("read.parquet")
-  # Allow the user to have a more flexible definiton of the text file path
-  paths <- lapply(list(...), function(x) suppressWarnings(normalizePath(x)))
-  sdf <- callJMethod(sqlContext, "parquetFile", paths)
-  dataFrame(sdf)
+  read.parquet(sqlContext, unlist(list(...)))
 }
 
 #' SQL Query
