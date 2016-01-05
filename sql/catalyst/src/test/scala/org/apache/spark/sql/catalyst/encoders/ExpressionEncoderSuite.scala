@@ -77,6 +77,8 @@ class JavaSerializable(val value: Int) extends Serializable {
 }
 
 class ExpressionEncoderSuite extends SparkFunSuite {
+  OuterScopes.outerScopes.put(getClass.getName, this)
+
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
   // test flat encoders
@@ -242,6 +244,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
+  productTest(("UDT", new ExamplePoint(0.1, 0.2)))
+
   test("nullable of encoder schema") {
     def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {
       assert(implicitly[ExpressionEncoder[T]].schema.map(_.nullable) === nullable.toSeq)
@@ -278,8 +282,6 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     }
   }
 
-  private val outers: ConcurrentMap[String, AnyRef] = new MapMaker().weakValues().makeMap()
-  outers.put(getClass.getName, this)
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
@@ -287,7 +289,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.resolve(schema, outers).bind(schema)
+      val boundEncoder = encoder.defaultBinding
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
