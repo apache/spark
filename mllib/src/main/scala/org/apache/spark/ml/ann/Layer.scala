@@ -780,7 +780,7 @@ private[ml] class FeedForwardTrainer(
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)
   private var _gradient: Gradient = new ANNGradient(topology, dataStacker)
   private var _updater: Updater = new ANNUpdater()
-  private var optimizer: Optimizer = LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(100)
+  private var optimizer: Optimizer = setLBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(100)
 
   /**
    * Returns weights
@@ -813,22 +813,20 @@ private[ml] class FeedForwardTrainer(
    * Sets the SGD optimizer
    * @return SGD optimizer
    */
-  def SGDOptimizer: GradientDescent = {
-    if (!optimizer.isInstanceOf[GradientDescent]){
-      optimizer = new GradientDescent(_gradient, _updater)
-    }
-    optimizer.asInstanceOf[GradientDescent]
+  def setSGDOptimizer: GradientDescent = {
+    val sgd = new GradientDescent(_gradient, _updater)
+    optimizer = sgd
+    sgd
   }
 
   /**
    * Sets the LBFGS optimizer
-   * @return LBGS optimizer
+   * @return LBFGS optimizer
    */
-  def LBFGSOptimizer: LBFGS = {
-    if (!optimizer.isInstanceOf[LBFGS]){
-      optimizer = new LBFGS(_gradient, _updater)
-    }
-    optimizer.asInstanceOf[LBFGS]
+  def setLBFGSOptimizer: LBFGS = {
+    val lbfgs = new LBFGS(_gradient, _updater)
+    optimizer = lbfgs
+    lbfgs
   }
 
   /**
