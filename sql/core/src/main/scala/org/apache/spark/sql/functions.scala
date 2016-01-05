@@ -1813,6 +1813,17 @@ object functions extends LegacyFunctions {
    */
   def crc32(e: Column): Column = withExpr { Crc32(e.expr) }
 
+  /**
+   * Calculates the hash code of given columns, and returns the result as a int column.
+   *
+   * @group misc_funcs
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def hash(col: Column, cols: Column*): Column = withExpr {
+    new Murmur3Hash((col +: cols).map(_.expr))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
