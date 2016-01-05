@@ -2068,7 +2068,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake"){
+  test("SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake") {
     val rdd = sqlContext.sparkContext.parallelize(1 to 3 , 3 )
     rdd.toDF("key").registerTempTable("spark12340")
     checkAnswer(
@@ -2076,7 +2076,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(1) :: Row(2) :: Row(3) :: Nil
     )
     assert(rdd.take(2147483638).size === 3)
-    assert(rdd.takeAsync(3).get.size === 3)
+    assert(rdd.takeAsync(2147483638).get.size === 3)
   }
 
 }

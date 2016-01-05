@@ -68,7 +68,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     val localProperties = self.context.getLocalProperties
     // Cached thread pool to handle aggregation of subtasks.
     implicit val executionContext = AsyncRDDActions.futureExecutionContext
-    val results = new ArrayBuffer[T](num)
+    val results = new ArrayBuffer[T]
     val totalParts = self.partitions.length
 
     /*
