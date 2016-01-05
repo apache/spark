@@ -246,14 +246,13 @@ private[spark] class MesosSchedulerBackend(
         val slaveId = o.getSlaveId.getValue
         val offerAttributes = toAttributeMap(o.getAttributesList)
 
-        // check offers for
-        //  1. Memory requirements
-        //  2. CPU requirements - need at least 1 for executor, 1 for task
-        val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
-        val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
+        // check if Attribute constraints is satisfied
+        val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+
         val meetsRequirements =
-          (meetsMemoryRequirements && meetsCPURequirements) ||
-          (slaveIdToExecutorInfo.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
+          isOfferSatisfiesRequirements(cpus, mem, slaveId, sc)
+
+        // add some debug messaging
         val debugstr = if (meetsRequirements) "Accepting" else "Declining"
         logDebug(s"$debugstr offer: ${o.getId.getValue} with attributes: "
           + s"$offerAttributes mem: $mem cpu: $cpus")
@@ -326,6 +325,18 @@ private[spark] class MesosSchedulerBackend(
         d.declineOffer(o.getId)
       }
     }
+  }
+
+  // check if all constraints are satisfied
+  //  1. Memory requirements
+  //  2. CPU requirements - need at least 1 for executor, 1 for task
+  def isOfferSatisfiesRequirements(cpusOffered: Double, memory : Double,
+                                slaveId: String, sc : SparkContext): Boolean = {
+    val meetsMemoryRequirements = memory >= calculateTotalMemory(sc)
+    val meetsCPURequirements = cpusOffered >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
+
+    (meetsMemoryRequirements && meetsCPURequirements) ||
+        (slaveIdToExecutorInfo.contains(slaveId) && cpusOffered >= scheduler.CPUS_PER_TASK)
   }
 
   /** Turn a Spark TaskDescription into a Mesos task and also resources unused by the task */

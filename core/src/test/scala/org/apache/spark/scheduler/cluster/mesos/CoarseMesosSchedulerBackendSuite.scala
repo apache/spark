@@ -58,7 +58,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
   private def createSchedulerBackend(
       taskScheduler: TaskSchedulerImpl,
-      driver: SchedulerDriver): CoarseMesosSchedulerBackend = {
+      driver: SchedulerDriver, sc: SparkContext): CoarseMesosSchedulerBackend = {
     val securityManager = mock[SecurityManager]
     val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(
@@ -77,6 +77,14 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     backend
   }
 
+  private def createSchedulerBackendForGivenSparkConf(sc : SparkContext) = {
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+    createSchedulerBackend(taskScheduler, driver, sc)
+  }
+
   var sparkConf: SparkConf = _
 
   before {
@@ -84,9 +92,10 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
       .setMaster("local[*]")
       .setAppName("test-mesos-dynamic-alloc")
       .setSparkHome("/path")
+      .set("spark.cores.max", "10")
 
     sc = new SparkContext(sparkConf)
-  }
+ }
 
   test("mesos supports killing and limiting executors") {
     val driver = mock[SchedulerDriver]
@@ -97,7 +106,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     sparkConf.set("spark.driver.host", "driverHost")
     sparkConf.set("spark.driver.port", "1234")
 
-    val backend = createSchedulerBackend(taskScheduler, driver)
+    val backend = createSchedulerBackend(taskScheduler, driver, sc)
     val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
 
@@ -145,7 +154,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
 
-    val backend = createSchedulerBackend(taskScheduler, driver)
+    val backend = createSchedulerBackend(taskScheduler, driver, sc)
     val minMem = backend.calculateTotalMemory(sc) + 1024
     val minCpu = 4
 
@@ -153,7 +162,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     val offer1 = createOffer("o1", "s1", minMem, minCpu)
     mesosOffers.add(offer1)
 
-    val offer2 = createOffer("o2", "s1", minMem, 1);
+    val offer2 = createOffer("o2", "s1", minMem, 1)
 
     backend.resourceOffers(driver, mesosOffers)
 
@@ -183,5 +192,48 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
       anyObject[Filters])
 
     verify(driver, times(1)).reviveOffers()
+  }
+
+  test("isOfferSatisfiesRequirements return true when there is a valid offer") {
+    val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
+
+    assert(schedulerBackend.isOfferSatisfiesRequirements("Slave1", 10000, 5, sc))
+  }
+
+
+  test("isOfferSatisfiesRequirements return false when memory in offer is less" +
+    " than required memory") {
+    val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
+
+    assert(schedulerBackend.isOfferSatisfiesRequirements("Slave1", 1, 5, sc) === false)
+  }
+
+  test("isOfferSatisfiesRequirements return false when cpu in offer is less than required cpu") {
+    val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
+
+    assert(schedulerBackend.isOfferSatisfiesRequirements("Slave1", 10000, 0, sc) === false)
+  }
+
+  test("isOfferSatisfiesRequirements return false when offer is from slave already running" +
+    " an executor") {
+    val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
+    schedulerBackend.slaveIdsWithExecutors += "Slave2"
+
+    assert(schedulerBackend.isOfferSatisfiesRequirements("Slave2", 10000, 5, sc) === false)
+  }
+
+  test("isOfferSatisfiesRequirements return false when task is failed more than " +
+    "MAX_SLAVE_FAILURES times on the given slave") {
+    val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
+    schedulerBackend.failuresBySlaveId("Slave3") = 2
+
+    assert(schedulerBackend.isOfferSatisfiesRequirements("Slave3", 10000, 5, sc) === false)
+  }
+
+  test("isOfferSatisfiesRequirements return false when max core is already acquired") {
+    val schedulerBackend = createSchedulerBackendForGivenSparkConf(sc)
+    schedulerBackend.totalCoresAcquired = 10
+
+    assert(schedulerBackend.isOfferSatisfiesRequirements("Slave1", 10000, 5, sc) === false)
   }
 }
