@@ -163,6 +163,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Coalesce(Seq('intField, 'booleanField)),
       "input to function coalesce should all be the same type")
     assertError(Coalesce(Nil), "input to function coalesce cannot be empty")
+    assertError(new Murmur3Hash(Nil), "arguments of function hash cannot be empty")
     assertError(Explode('intField),
       "input to function explode should be array or map type")
   }
