@@ -286,6 +286,10 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
 
+    // grouping sets
+    expression[Cube]("cube"),
+    expression[Rollup]("rollup"),
+
     // window functions
     expression[Lead]("lead"),
     expression[Lag]("lag"),

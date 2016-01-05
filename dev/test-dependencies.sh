@@ -22,23 +22,39 @@ set -e
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
+# Explicitly set locale in order to make `sort` output consistent across machines.
+# See https://stackoverflow.com/questions/28881 for more details.
+export LC_ALL=C
+
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
 # NOTE: These should match those in the release publishing script
 HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
 MVN="build/mvn --force"
 HADOOP_PROFILES=(
+    hadoop-2.2
     hadoop-2.3
     hadoop-2.4
+    hadoop-2.6
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
 # the old version. We need to do this because the `dependency:build-classpath` task needs to
 # resolve Spark's internal submodule dependencies.
 
-# See http://stackoverflow.com/a/3545363 for an explanation of this one-liner:
-OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version|grep -Ev '(^\[|Download\w+:)')
-TEMP_VERSION="spark-$(date +%s | tail -c6)"
+# From http://stackoverflow.com/a/26514030
+set +e
+OLD_VERSION=$($MVN -q \
+    -Dexec.executable="echo" \
+    -Dexec.args='${project.version}' \
+    --non-recursive \
+    org.codehaus.mojo:exec-maven-plugin:1.3.1:exec)
+if [ $? != 0 ]; then
+    echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
+    exit 1
+fi
+set -e
+TEMP_VERSION="spark-$(python -S -c "import random; print(random.randrange(100000, 999999))")"
 
 function reset_version {
   # Delete the temporary POMs that we wrote to the local Maven repo:
@@ -100,3 +116,5 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
     exit 1
   fi
 done
+
+exit 0

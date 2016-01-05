@@ -20,17 +20,17 @@ package org.apache.spark.streaming.kafka
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
-import org.apache.spark.partial.{PartialResult, BoundedDouble}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.util.NextIterator
-
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
 import kafka.consumer.SimpleConsumer
 import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
+
+import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.partial.{BoundedDouble, PartialResult}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.NextIterator
 
 /**
  * A batch-oriented interface for consuming from Kafka.

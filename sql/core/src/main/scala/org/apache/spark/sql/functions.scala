@@ -2855,6 +2855,20 @@ object functions extends LegacyFunctions {
   // scalastyle:on line.size.limit
 
   /**
+   * Defines a user-defined function (UDF) using a Scala closure. For this variant, the caller must
+   * specifcy the output data type, and there is no automatic input type coercion.
+   *
+   * @param f  A closure in Scala
+   * @param dataType  The output data type of the UDF
+   *
+   * @group udf_funcs
+   * @since 2.0.0
+   */
+  def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    UserDefinedFunction(f, dataType, None)
+  }
+
+  /**
    * Call an user-defined function.
    * Example:
    * {{{
