@@ -67,18 +67,23 @@ class BisectingKMeansModel(JavaModelWrapper):
     True
     >>> model.k
     2
+
+    .. versionadded:: 2.0.0
     """
 
     @property
+    @since('2.0.0')
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self.call("clusterCenters")]
 
     @property
+    @since('2.0.0')
     def k(self):
         """Get the number of clusters"""
         return self.call("k")
 
+    @since('2.0.0')
     def predict(self, x):
         """
         Find the cluster to which x belongs in this model.
@@ -92,6 +97,7 @@ class BisectingKMeansModel(JavaModelWrapper):
         x = _convert_to_vector(x)
         return self.call("predict", x)
 
+    @since('2.0.0')
     def computeCost(self, point):
         """
         Return the Bisecting K-means cost (sum of squared distances of points to
@@ -104,6 +110,8 @@ class BisectingKMeansModel(JavaModelWrapper):
 
 class BisectingKMeans:
     """
+    .. note:: Experimental
+
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
     The algorithm starts from a single cluster that contains all points.
@@ -116,8 +124,11 @@ class BisectingKMeans:
     Based on [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
     KDD Workshop on Text Mining, 2000.]]
+
+    .. versionadded:: 2.0.0
     """
 
+    @since('2.0.0')
     def train(self, rdd, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=-1888008604):
         """
         Runs the bisecting k-means algorithm return the model.
