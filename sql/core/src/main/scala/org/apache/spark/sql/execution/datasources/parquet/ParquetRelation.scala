@@ -45,6 +45,7 @@ import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -648,7 +649,7 @@ private[sql] object ParquetRelation extends Logging {
             logInfo(
               s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
                 "falling back to the deprecated DataType.fromCaseClassString parser.")
-            DataType.fromCaseClassString(serializedSchema.get)
+            LegacyTypeStringParser.parse(serializedSchema.get)
           }
           .recover { case cause: Throwable =>
             logWarning(
@@ -831,7 +832,7 @@ private[sql] object ParquetRelation extends Logging {
         logInfo(
           s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
             "falling back to the deprecated DataType.fromCaseClassString parser.")
-        DataType.fromCaseClassString(schemaString).asInstanceOf[StructType]
+        LegacyTypeStringParser.parse(schemaString).asInstanceOf[StructType]
     }.recoverWith {
       case cause: Throwable =>
         logWarning(

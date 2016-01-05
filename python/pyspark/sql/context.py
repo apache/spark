@@ -274,33 +274,6 @@ class SQLContext(object):
             schema = rdd.map(_infer_schema).reduce(_merge_type)
         return schema
 
-    @ignore_unicode_prefix
-    def inferSchema(self, rdd, samplingRatio=None):
-        """
-        .. note:: Deprecated in 1.3, use :func:`createDataFrame` instead.
-        """
-        warnings.warn("inferSchema is deprecated, please use createDataFrame instead.")
-
-        if isinstance(rdd, DataFrame):
-            raise TypeError("Cannot apply schema to DataFrame")
-
-        return self.createDataFrame(rdd, None, samplingRatio)
-
-    @ignore_unicode_prefix
-    def applySchema(self, rdd, schema):
-        """
-        .. note:: Deprecated in 1.3, use :func:`createDataFrame` instead.
-        """
-        warnings.warn("applySchema is deprecated, please use createDataFrame instead")
-
-        if isinstance(rdd, DataFrame):
-            raise TypeError("Cannot apply schema to DataFrame")
-
-        if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType, but got %s" % type(schema))
-
-        return self.createDataFrame(rdd, schema)
-
     def _createFromRDD(self, rdd, schema, samplingRatio):
         """
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
@@ -449,90 +422,6 @@ class SQLContext(object):
         >>> sqlContext.dropTempTable("table1")
         """
         self._ssql_ctx.dropTempTable(tableName)
-
-    def parquetFile(self, *paths):
-        """Loads a Parquet file, returning the result as a :class:`DataFrame`.
-
-        .. note:: Deprecated in 1.4, use :func:`DataFrameReader.parquet` instead.
-
-        >>> sqlContext.parquetFile('python/test_support/sql/parquet_partitioned').dtypes
-        [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
-        """
-        warnings.warn("parquetFile is deprecated. Use read.parquet() instead.")
-        gateway = self._sc._gateway
-        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
-        for i in range(0, len(paths)):
-            jpaths[i] = paths[i]
-        jdf = self._ssql_ctx.parquetFile(jpaths)
-        return DataFrame(jdf, self)
-
-    def jsonFile(self, path, schema=None, samplingRatio=1.0):
-        """Loads a text file storing one JSON object per line as a :class:`DataFrame`.
-
-        .. note:: Deprecated in 1.4, use :func:`DataFrameReader.json` instead.
-
-        >>> sqlContext.jsonFile('python/test_support/sql/people.json').dtypes
-        [('age', 'bigint'), ('name', 'string')]
-        """
-        warnings.warn("jsonFile is deprecated. Use read.json() instead.")
-        if schema is None:
-            df = self._ssql_ctx.jsonFile(path, samplingRatio)
-        else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
-            df = self._ssql_ctx.jsonFile(path, scala_datatype)
-        return DataFrame(df, self)
-
-    @ignore_unicode_prefix
-    @since(1.0)
-    def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
-        """Loads an RDD storing one JSON object per string as a :class:`DataFrame`.
-
-        If the schema is provided, applies the given schema to this JSON dataset.
-        Otherwise, it samples the dataset with ratio ``samplingRatio`` to determine the schema.
-
-        >>> df1 = sqlContext.jsonRDD(json)
-        >>> df1.first()
-        Row(field1=1, field2=u'row1', field3=Row(field4=11, field5=None), field6=None)
-
-        >>> df2 = sqlContext.jsonRDD(json, df1.schema)
-        >>> df2.first()
-        Row(field1=1, field2=u'row1', field3=Row(field4=11, field5=None), field6=None)
-
-        >>> from pyspark.sql.types import *
-        >>> schema = StructType([
-        ...     StructField("field2", StringType()),
-        ...     StructField("field3",
-        ...                 StructType([StructField("field5", ArrayType(IntegerType()))]))
-        ... ])
-        >>> df3 = sqlContext.jsonRDD(json, schema)
-        >>> df3.first()
-        Row(field2=u'row1', field3=Row(field5=None))
-        """
-
-        def func(iterator):
-            for x in iterator:
-                if not isinstance(x, basestring):
-                    x = unicode(x)
-                if isinstance(x, unicode):
-                    x = x.encode("utf-8")
-                yield x
-        keyed = rdd.mapPartitions(func)
-        keyed._bypass_serializer = True
-        jrdd = keyed._jrdd.map(self._jvm.BytesToString())
-        if schema is None:
-            df = self._ssql_ctx.jsonRDD(jrdd.rdd(), samplingRatio)
-        else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
-            df = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
-        return DataFrame(df, self)
-
-    def load(self, path=None, source=None, schema=None, **options):
-        """Returns the dataset in a data source as a :class:`DataFrame`.
-
-        .. note:: Deprecated in 1.4, use :func:`DataFrameReader.load` instead.
-        """
-        warnings.warn("load is deprecated. Use read.load() instead.")
-        return self.read.load(path, source, schema, **options)
 
     @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
