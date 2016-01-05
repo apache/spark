@@ -20,27 +20,45 @@ package org.apache.spark.sql.hive
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.sequenceOption
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
+  def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
+
   def toSQL: Option[String] = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
+    val maybeSQL = toSQL(canonicalizedPlan)
 
-    logDebug(
-      s"""Building SQL query string from given logical plan:
-         |
-         |# Original logical plan:
-         |${logicalPlan.treeString}
-         |# Canonicalized logical plan:
-         |${canonicalizedPlan.treeString}
-       """.stripMargin)
+    if (maybeSQL.isDefined) {
+      logDebug(
+        s"""Built SQL query string successfully from given logical plan:
+           |
+           |# Original logical plan:
+           |${logicalPlan.treeString}
+           |# Canonicalized logical plan:
+           |${canonicalizedPlan.treeString}
+           |# Built SQL query string:
+           |${maybeSQL.get}
+         """.stripMargin)
+    } else {
+      logDebug(
+        s"""Failed to build SQL query string from given logical plan:
+           |
+           |# Original logical plan:
+           |${logicalPlan.treeString}
+           |# Canonicalized logical plan:
+           |${canonicalizedPlan.treeString}
+         """.stripMargin)
+    }
 
-    toSQL(canonicalizedPlan)
+    maybeSQL
   }
 
   private def toSQL(node: LogicalPlan): Option[String] = node match {
@@ -89,6 +107,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         leftSQL <- toSQL(left)
         rightSQL <- toSQL(right)
       } yield s"$leftSQL UNION ALL $rightSQL"
+
+    // ParquetRelation converted from Hive metastore table
+    case Subquery(alias, LogicalRelation(r: ParquetRelation, _)) =>
+      Some(s"`$alias`")
 
     case plan @ Subquery(alias, child) =>
       toSQL(child).map(childSQL => s"($childSQL) AS $alias")
@@ -176,5 +198,5 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 object SQLBuilder {
   private val nextSubqueryId = new AtomicLong(0)
 
-  private def newSubqueryName: String = s"subquery_${nextSubqueryId.getAndIncrement()}__"
+  private def newSubqueryName: String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
 }

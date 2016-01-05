@@ -23,7 +23,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 // All test cases in this test suite are ignored for now because currently `SQLBuilder` only handles
 // resolved logical plans parsed directly from HiveQL query strings.
-class LogicalPlanSQLGenerationSuite extends SQLGenerationTest with SQLTestUtils {
+class LogicalPlanSQLBuilderSuite extends SQLBuilderTest with SQLTestUtils {
   import hiveContext.implicits._
 
   protected override def beforeAll(): Unit = {

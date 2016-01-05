@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.{DataFrame, QueryTest}
 
-abstract class SQLGenerationTest extends QueryTest with TestHiveSingleton {
+abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
   protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
     val maybeSQL = e.sql
 

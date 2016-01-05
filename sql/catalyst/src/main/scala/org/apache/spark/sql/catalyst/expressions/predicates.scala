@@ -236,7 +236,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override def sql: Option[String] = for {
-    valueSQL :: listSQL <- sequenceOption(children.map(_.sql))
+    valueSQL <- child.sql
+    listSQL <- sequenceOption(hset.toSeq.map(Literal(_).sql))
   } yield s"($valueSQL IN (${listSQL.mkString(", ")}))"
 }
 

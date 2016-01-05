@@ -130,6 +130,9 @@ package object util {
     ret
   }
 
+  /**
+   * Converts a `Seq` of `Option[T]` to an `Option` of `Seq[T]`.
+   */
   def sequenceOption[T](seq: Seq[Option[T]]): Option[Seq[T]] = seq match {
     case xs if xs.isEmpty =>
       Option(Seq.empty[T])

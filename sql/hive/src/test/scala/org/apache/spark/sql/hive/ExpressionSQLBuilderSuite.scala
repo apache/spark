@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.hive
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 
-class ExpressionSQLGenerationSuite extends SQLGenerationTest {
-
+class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("literal") {
     checkSQL(Literal("foo"), "\"foo\"")
     checkSQL(Literal("\"foo\""), "\"\\\"foo\\\"\"")
@@ -31,6 +32,9 @@ class ExpressionSQLGenerationSuite extends SQLGenerationTest {
     checkSQL(Literal(8: Long), "CAST(8 AS BIGINT)")
     checkSQL(Literal(1.5F), "CAST(1.5 AS FLOAT)")
     checkSQL(Literal(2.5D), "2.5")
+    checkSQL(
+      Literal(Timestamp.valueOf("2016-01-01 00:00:00")),
+      "CAST('2016-01-01 00:00:00.0' AS TIMESTAMP)")
     // TODO tests for decimals
   }
 
@@ -68,5 +72,4 @@ class ExpressionSQLGenerationSuite extends SQLGenerationTest {
     checkSQL(-'a.int, "(-`a`)")
     checkSQL(-('a.int + 'b.int), "(-(`a` + `b`))")
   }
-
 }
