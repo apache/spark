@@ -690,12 +690,6 @@ public class JavaAPISuite extends SharedJavaSparkContext implements Serializable
         }).isEmpty());
   }
 
-  @Test
-  public void toArray() {
-    JavaRDD<Integer> rdd = jsc().parallelize(Arrays.asList(1, 2, 3));
-    List<Integer> list = rdd.toArray();
-    Assert.assertEquals(Arrays.asList(1, 2, 3), list);
-  }
 
   @Test
   public void cartesian() {
