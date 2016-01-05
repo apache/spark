@@ -443,6 +443,9 @@ object Hive {
         val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
         log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
         antlr.addGrammarFile(relGFilePath)
+        // We will set library directory multiple times here. However, only the
+        // last one has effect. Because the grammar files are located under the same directory,
+        // We assume there is only one library directory.
         antlr.setLibDirectory(gFilePath.getParent)
       }
 
