@@ -32,4 +32,3 @@ object StreamingRelation {
 case class StreamingRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
   override def toString: String = source.toString
 }
-

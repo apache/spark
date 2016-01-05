@@ -43,6 +43,11 @@ object MemoryStream {
     new MemoryStream[A](memoryStreamId.getAndIncrement())
 }
 
+/**
+ * A [[Source]] that produces value stored in memory as they are added by the user.  This [[Source]]
+ * is primarily intended for use in unit tests as it can only replay data when the object is still
+ * available.
+ */
 case class MemoryStream[A : Encoder](id: Int) extends Source with Logging {
   protected val encoder = encoderFor[A]
   protected val logicalPlan = StreamingRelation(this)
@@ -92,20 +97,32 @@ case class MemoryStream[A : Encoder](id: Int) extends Source with Logging {
   override def toString: String = s"MemoryStream[${output.mkString(",")}]"
 }
 
+/**
+ * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
+ * tests and does not provide durablility.
+ */
 class MemorySink(schema: StructType) extends Sink with Logging {
+  /** An order list of batches that have been written to this [[Sink]]. */
   private var batches = new ArrayBuffer[(StreamProgress, Seq[Row])]()
-  private val output = schema.toAttributes
 
-  def currentOffsets: StreamProgress = batches.lastOption.map(_._1).getOrElse(new StreamProgress)
-  def currentOffset(source: Source): Option[Offset] = currentOffsets.get(source)
+  /** Used to convert an [[InternalRow]] to an external [[Row]] for comparison in testing. */
+  private val externalRowConverter = RowEncoder(schema)
 
-  def allData: Seq[Row] = batches.flatMap(_._2)
+  override def currentProgress: StreamProgress =
+    batches.lastOption.map(_._1).getOrElse(new StreamProgress)
 
-  val externalRowConverter = RowEncoder(schema)
-  def addBatch(currentState: StreamProgress, rdd: RDD[InternalRow]): Unit = {
+  override def addBatch(currentState: StreamProgress, rdd: RDD[InternalRow]): Unit = {
     batches.append((currentState, rdd.collect().map(externalRowConverter.fromRow)))
   }
 
+  /** Returns all rows that are stored in this [[Sink]]. */
+  def allData: Seq[Row] = batches.flatMap(_._2)
+
+  /**
+   * Atomically drops the most recent `num` batches and resets the [[StreamProgress]] to the
+   * corresponding point in the input. This function can be used when testing to simulate data
+   * that has been lost due to buffering.
+   */
   def dropBatches(num: Int): Unit = {
     batches.remove(batches.size - num, num)
   }

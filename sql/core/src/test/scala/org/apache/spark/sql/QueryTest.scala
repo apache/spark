@@ -358,17 +358,16 @@ object QueryTest {
       isSorted: Boolean = false): Option[String] = {
     if (prepareAnswer(expectedAnswer, isSorted) != prepareAnswer(sparkAnswer, isSorted)) {
       val errorMessage =
-          s"""
-           |== Results ==
-           |${sideBySide(
-          s"== Correct Answer - ${expectedAnswer.size} ==" +:
-              prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
-          s"== Spark Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
-          """.stripMargin
+        s"""
+         |== Results ==
+         |${sideBySide(
+        s"== Correct Answer - ${expectedAnswer.size} ==" +:
+         prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+         prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
+        """.stripMargin
       return Some(errorMessage)
     }
-
     None
   }
 

@@ -43,9 +43,12 @@ class StreamExecution(
 
   // Start the execution at the current Offset for the sink. (i.e. avoid reprocessing data
   // that we have already processed).
-  sources.foreach { s =>
-    sink.currentOffset(s).foreach { offset =>
-      currentOffsets.update(s, offset)
+  {
+    val storedProgress = sink.currentProgress
+    sources.foreach { s =>
+      storedProgress.get(s).foreach { offset =>
+        currentOffsets.update(s, offset)
+      }
     }
   }
 

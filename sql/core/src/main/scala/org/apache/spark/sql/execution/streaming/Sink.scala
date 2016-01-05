@@ -21,7 +21,31 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
+/**
+ * An interface for systems that can collect the results of a streaming query.
+ *
+ * When new data is produced by a query, a [[Sink]] must be able to transactionally collect the
+ * data and update the [[StreamProgress]]. In the case of a failure, the sink will be recreated
+ * and must be able to return the [[StreamProgress]] for all of the data that is made durable.
+ * This contract allows Spark to process data with exactly-once semantics, even in the case
+ * of failures that require the computation to be restarted.
+ */
 trait Sink {
-  def currentOffset(source: Source): Option[Offset]
+  /**
+   * Returns the [[StreamProgress]] for all data that is currently present in the sink. This
+   * function will be called by Spark when restarting a stream in order to determine at which point
+   * in streamed input data computation should be resumed from.
+   */
+  def currentProgress: StreamProgress
+
+  /**
+   * Accepts a new batch of data as well as a [[StreamProgress]] that denotes how far in the input
+   * data computation has progressed to.  When computation restarts after a failure, it is important
+   * that a [[Sink]] returns the same [[StreamProgress]] as the most recent batch of data that
+   * has been persisted durrably.  Note that this does not necessarily have to be the
+   * [[StreamProgress]] for the most recent batch of data that was given to the sink.  For example,
+   * it is valid to buffer data before persisting, as long as the [[StreamProgress]] is stored
+   * transactionally as data is eventually persisted.
+   */
   def addBatch(currentState: StreamProgress, rdd: RDD[InternalRow]): Unit
 }

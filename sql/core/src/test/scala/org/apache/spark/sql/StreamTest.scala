@@ -32,9 +32,9 @@ import org.apache.spark.sql.execution.streaming._
 /**
  * A framework for implementing tests for streaming queries and sources.
  *
- * A test consists of a set of steps (i.e. a [[StreamAction]]) that are executed in order, blocking
- * as necessary to let the stream catch up.  For example, the following adds some data to a stream
- * and verifies that
+ * A test consists of a set of steps (expressed as a `StreamAction`) that are executed in order,
+ * blocking as necessary to let the stream catch up.  For example, the following adds some data to
+ * a stream, blocking until it can verify that the correct values are eventually produced.
  *
  * {{{
  *  val inputData = MemoryStream[Int]
@@ -46,8 +46,12 @@ import org.apache.spark.sql.execution.streaming._
  * }}}
  *
  * Note that while we do sleep to allow the other thread to progress without spinning,
- * [[StreamAction]] checks should not depend on the amount of time spent sleeping.  Instead they
+ * `StreamAction` checks should not depend on the amount of time spent sleeping.  Instead they
  * should check the actual progress of the stream before verifying the required test condition.
+ *
+ * Currently it is assumed that all streaming queries will eventually complete in 10 seconds to
+ * avoid hanging forever in the case of failures. However, individual suites can change this
+ * by overriding `streamingTimeout`.
  */
 trait StreamTest extends QueryTest with Timeouts {
 
@@ -76,6 +80,11 @@ trait StreamTest extends QueryTest with Timeouts {
   /** A trait that can be extended when testing other sources. */
   trait AddData extends StreamAction {
     def source: Source
+
+    /**
+     * Called to trigger adding the data.  Should return the offset that will denote when this
+     * new data has been processed.
+     */
     def addData(): Offset
   }
 
