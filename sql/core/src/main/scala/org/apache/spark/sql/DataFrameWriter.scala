@@ -119,6 +119,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning schema.
    *
+   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -131,6 +133,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Buckets the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's bucketing schema.
    *
+   * This is applicable for Parquet, JSON, text, ORC and avro.
+   *
    * @since 2.0
    */
   @scala.annotation.varargs
@@ -142,6 +146,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Sorts the bucketed output by the given columns.
+   *
+   * This is applicable for Parquet, JSON, text, ORC and avro.
    *
    * @since 2.0
    */
@@ -331,7 +337,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     }
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnection(url, props)
+    val conn = JdbcUtils.createConnectionFactory(url, props)()
 
     try {
       var tableExists = JdbcUtils.tableExists(conn, url, table)
