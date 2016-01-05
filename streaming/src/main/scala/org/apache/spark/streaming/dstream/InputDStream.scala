@@ -28,7 +28,8 @@ import org.apache.spark.util.Utils
 
 /**
  * This is the abstract base class for all input streams. This class provides methods
- * start() and stop() which is called by Spark Streaming system to start and stop receiving data.
+ * start() and stop() which are called by Spark Streaming system to start and stop
+ * receiving data, respectively.
  * Input streams that can generate RDDs from new data by running a service/thread only on
  * the driver node (that is, without running a receiver on worker nodes), can be
  * implemented by directly inheriting this InputDStream. For example,
