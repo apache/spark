@@ -274,7 +274,7 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.validateAtStart())
 
     logInfo("Slide time = " + slideDuration)
-    logInfo("Storage level = " + storageLevel)
+    logInfo("Storage level = " + storageLevel.description)
     logInfo("Checkpoint interval = " + checkpointDuration)
     logInfo("Remember duration = " + rememberDuration)
     logInfo("Initialized and validated " + this)
