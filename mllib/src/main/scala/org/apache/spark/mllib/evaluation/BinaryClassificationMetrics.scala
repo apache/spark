@@ -227,23 +227,22 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   /**
    * Returns the calibration or reliability curve,
    * which is an RDD of (average score in bin, fraction of positive examples in bin).
-   * @see http://en.wikipedia.org/wiki/Calibration_%28statistics%29#In_classification
    *
-   * References:
+   * @see [[http://en.wikipedia.org/wiki/Calibration_%28statistics%29#In_classification Wikipedia article on calibration in classification]]
    *
-   * Mahdi Pakdaman Naeini, Gregory F. Cooper, Milos Hauskrecht.
+   * @see Mahdi Pakdaman Naeini, Gregory F. Cooper, Milos Hauskrecht.
    * Binary Classifier Calibration: Non-parametric approach.
-   * http://arxiv.org/abs/1401.3390
+   * [[http://arxiv.org/abs/1401.3390 Link to paper]]
    *
-   * Alexandru Niculescu-Mizil, Rich Caruana.
+   * @see Alexandru Niculescu-Mizil, Rich Caruana.
    * Predicting Good Probabilities With Supervised Learning.
    * Appearing in Proceedings of the 22nd International Conference on Machine Learning,
    * Bonn, Germany, 2005.
-   * http://www.cs.cornell.edu/~alexn/papers/calibration.icml05.crc.rev3.pdf
+   * [[http://www.cs.cornell.edu/~alexn/papers/calibration.icml05.crc.rev3.pdf Link to paper]]
    *
-   * Properties and benefits of calibrated classifiers.
+   * @see Properties and benefits of calibrated classifiers.
    * Ira Cohen, Moises Goldszmidt.
-   * http://www.hpl.hp.com/techreports/2004/HPL-2004-22R1.pdf
+   * [[http://www.hpl.hp.com/techreports/2004/HPL-2004-22R1.pdf Link to paper]]
    */
   def calibration(): RDD[((Double, Double), (Double, Long))] = {
     assessedCalibration
