@@ -119,7 +119,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme.
    *
-   * This is only applicable for Parquet at the moment.
+   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
    *
    * @since 1.4.0
    */
@@ -275,7 +275,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     }
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnection(url, props)
+    val conn = JdbcUtils.createConnectionFactory(url, props)()
 
     try {
       var tableExists = JdbcUtils.tableExists(conn, url, table)
@@ -297,7 +297,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
-        conn.createStatement.executeUpdate(sql)
+        val statement = conn.createStatement
+        try {
+          statement.executeUpdate(sql)
+        } finally {
+          statement.close()
+        }
       }
     } finally {
       conn.close()

@@ -61,7 +61,7 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Re-used pointer to the current aggregation buffer
    */
-  private final UnsafeRow currentAggregationBuffer = new UnsafeRow();
+  private final UnsafeRow currentAggregationBuffer;
 
   private final boolean enablePerfMetrics;
 
@@ -98,6 +98,7 @@ public final class UnsafeFixedWidthAggregationMap {
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.aggregationBufferSchema = aggregationBufferSchema;
+    this.currentAggregationBuffer = new UnsafeRow(aggregationBufferSchema.length());
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map =
@@ -147,7 +148,6 @@ public final class UnsafeFixedWidthAggregationMap {
     currentAggregationBuffer.pointTo(
       address.getBaseObject(),
       address.getBaseOffset(),
-      aggregationBufferSchema.length(),
       loc.getValueLength()
     );
     return currentAggregationBuffer;
@@ -165,8 +165,8 @@ public final class UnsafeFixedWidthAggregationMap {
 
       private final BytesToBytesMap.MapIterator mapLocationIterator =
         map.destructiveIterator();
-      private final UnsafeRow key = new UnsafeRow();
-      private final UnsafeRow value = new UnsafeRow();
+      private final UnsafeRow key = new UnsafeRow(groupingKeySchema.length());
+      private final UnsafeRow value = new UnsafeRow(aggregationBufferSchema.length());
 
       @Override
       public boolean next() {
@@ -177,13 +177,11 @@ public final class UnsafeFixedWidthAggregationMap {
           key.pointTo(
             keyAddress.getBaseObject(),
             keyAddress.getBaseOffset(),
-            groupingKeySchema.length(),
             loc.getKeyLength()
           );
           value.pointTo(
             valueAddress.getBaseObject(),
             valueAddress.getBaseOffset(),
-            aggregationBufferSchema.length(),
             loc.getValueLength()
           );
           return true;

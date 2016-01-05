@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import java.io.{ObjectOutputStream, ByteArrayOutputStream, ByteArrayInputStream, File}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectOutputStream}
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
@@ -34,9 +34,31 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
-import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{MutableURLClassLoader, Clock, ManualClock, Utils}
+import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties,
+  Utils}
+
+/**
+ * A input stream that records the times of restore() invoked
+ */
+private[streaming]
+class CheckpointInputDStream(ssc_ : StreamingContext) extends InputDStream[Int](ssc_) {
+  protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
+  override def start(): Unit = { }
+  override def stop(): Unit = { }
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.makeRDD(Seq(1)))
+  private[streaming]
+  class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
+    @transient
+    var restoredTimes = 0
+    override def restore() {
+      restoredTimes += 1
+      super.restore()
+    }
+  }
+}
 
 /**
  * A trait of that can be mixed in to get methods for testing DStream operations under
@@ -110,7 +132,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     new StreamingContext(SparkContext.getOrCreate(conf), batchDuration)
   }
 
-  private def generateOutput[V: ClassTag](
+  protected def generateOutput[V: ClassTag](
       ssc: StreamingContext,
       targetBatchTime: Time,
       checkpointDir: String,
@@ -175,7 +197,8 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
  * the checkpointing of a DStream's RDDs as well as the checkpointing of
  * the whole DStream graph.
  */
-class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
+class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
+  with ResetSystemProperties {
 
   var ssc: StreamingContext = null
 
@@ -187,9 +210,12 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
   }
 
   override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) { ssc.stop() }
-    Utils.deleteRecursively(new File(checkpointDir))
+    try {
+      if (ssc != null) { ssc.stop() }
+      Utils.deleteRecursively(new File(checkpointDir))
+    } finally {
+      super.afterFunction()
+    }
   }
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
@@ -712,6 +738,33 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
       }
     } finally {
       Utils.deleteRecursively(testDir)
+    }
+  }
+
+  test("DStreamCheckpointData.restore invoking times") {
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      ssc.checkpoint(checkpointDir)
+      val inputDStream = new CheckpointInputDStream(ssc)
+      val checkpointData = inputDStream.checkpointData
+      val mappedDStream = inputDStream.map(_ + 100)
+      val outputStream = new TestOutputStreamWithPartitions(mappedDStream)
+      outputStream.register()
+      // do two more times output
+      mappedDStream.foreachRDD(rdd => rdd.count())
+      mappedDStream.foreachRDD(rdd => rdd.count())
+      assert(checkpointData.restoredTimes === 0)
+      val batchDurationMillis = ssc.progressListener.batchDuration
+      generateOutput(ssc, Time(batchDurationMillis * 3), checkpointDir, stopSparkContext = true)
+      assert(checkpointData.restoredTimes === 0)
+    }
+    logInfo("*********** RESTARTING ************")
+    withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
+      val checkpointData =
+        ssc.graph.getInputStreams().head.asInstanceOf[CheckpointInputDStream].checkpointData
+      assert(checkpointData.restoredTimes === 1)
+      ssc.start()
+      ssc.stop()
+      assert(checkpointData.restoredTimes === 1)
     }
   }
 

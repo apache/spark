@@ -30,9 +30,29 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  * It is also possible to exclude Spark classes and packages. This should be used sparingly:
  *
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
+ *
+ * For a new Spark version, please update MimaBuild.scala to reflect the previous version.
  */
 object MimaExcludes {
   def excludes(version: String) = version match {
+    case v if v.startsWith("2.0") =>
+      Seq(
+        excludePackage("org.apache.spark.rpc"),
+        excludePackage("org.spark-project.jetty"),
+        excludePackage("org.apache.spark.unused"),
+        excludePackage("org.apache.spark.sql.catalyst"),
+        excludePackage("org.apache.spark.sql.execution"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this")
+      ) ++ Seq(
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
+        ) ++
+      Seq(
+        // SPARK-12481 Remove Hadoop 1.x
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+          "org.apache.spark.mapred.SparkHadoopMapRedUtil")
+      )
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
@@ -57,6 +77,9 @@ object MimaExcludes {
         // MiMa does not deal properly with sealed traits
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
+      ) ++ Seq(
+        // SPARK-11530
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this")
       ) ++ Seq(
         // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
         // This class is marked as `private` but MiMa still seems to be confused by the change.

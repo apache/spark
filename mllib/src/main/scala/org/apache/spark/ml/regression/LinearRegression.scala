@@ -25,9 +25,9 @@ import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
-import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -529,7 +529,7 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val model: LinearRegressionModel,
-    val diagInvAtWA: Array[Double]) extends Serializable {
+    private val diagInvAtWA: Array[Double]) extends Serializable {
 
   @transient private val metrics = new RegressionMetrics(
     predictions

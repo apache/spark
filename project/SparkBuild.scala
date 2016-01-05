@@ -34,10 +34,10 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
+  val allProjects@Seq(catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
     sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
     streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
-    Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
+    Seq("catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
       "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
@@ -352,7 +352,7 @@ object OldDeps {
     scalaVersion := "2.10.5",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
       "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
+      "spark-streaming", "spark-mllib", "spark-graphx",
       "spark-core").map(versionArtifact(_).get intransitive())
   )
 }
@@ -414,9 +414,51 @@ object Hive {
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
-    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
-  )
+    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") },
+    // ANTLR code-generation step.
+    //
+    // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
+    // build errors in the current plugin.
+    // Create Parser from ANTLR grammar files.
+    sourceGenerators in Compile += Def.task {
+      val log = streams.value.log
 
+      val grammarFileNames = Seq(
+        "SparkSqlLexer.g",
+        "SparkSqlParser.g")
+      val sourceDir = (sourceDirectory in Compile).value / "antlr3"
+      val targetDir = (sourceManaged in Compile).value
+
+      // Create default ANTLR Tool.
+      val antlr = new org.antlr.Tool
+
+      // Setup input and output directories.
+      antlr.setInputDirectory(sourceDir.getPath)
+      antlr.setOutputDirectory(targetDir.getPath)
+      antlr.setForceRelativeOutput(true)
+      antlr.setMake(true)
+
+      // Add grammar files.
+      grammarFileNames.flatMap(gFileName => (sourceDir ** gFileName).get).foreach { gFilePath =>
+        val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
+        log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
+        antlr.addGrammarFile(relGFilePath)
+      }
+
+      // Generate the parser.
+      antlr.process
+      if (antlr.getNumErrors > 0) {
+        log.error("ANTLR: Caught %d build errors.".format(antlr.getNumErrors))
+      }
+
+      // Return all generated java files.
+      (targetDir ** "*.java").get.toSeq
+    }.taskValue,
+    // Include ANTLR tokens files.
+    resourceGenerators in Compile += Def.task {
+      ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
+    }.taskValue
+  )
 }
 
 object Assembly {
@@ -556,7 +598,7 @@ object Unidoc {
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.

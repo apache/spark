@@ -1233,6 +1233,13 @@ infer the data types of the partitioning columns. For these use cases, the autom
 can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, which is default to
 `true`. When type inference is disabled, string type will be used for the partitioning columns.
 
+Starting from Spark 1.6.0, partition discovery only finds partitions under the given paths
+by default. For the above example, if users pass `path/to/table/gender=male` to either 
+`SQLContext.read.parquet` or `SQLContext.read.load`, `gender` will not be considered as a
+partitioning column. If users need to specify the base path that partition discovery
+should start with, they can set `basePath` in the data source options. For example,
+when `path/to/table/gender=male` is the path of the data and
+users set `basePath` to `path/to/table/`, `gender` will be a partitioning column.
 
 ### Schema Merging
 
@@ -1888,9 +1895,7 @@ the Data Sources API. The following options are supported:
   <tr>
     <td><code>driver</code></td>
     <td>
-      The class name of the JDBC driver needed to connect to this URL. This class will be loaded
-      on the master and workers before running an JDBC commands to allow the driver to
-      register itself with the JDBC subsystem.
+      The class name of the JDBC driver to use to connect to this URL.
     </td>
   </tr>
   

@@ -23,7 +23,8 @@ import java.nio.channels.ReadableByteChannel
 import scala.concurrent.Future
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.rpc.netty.NettyRpcEnvFactory
+import org.apache.spark.util.RpcUtils
 
 
 /**
@@ -32,15 +33,6 @@ import org.apache.spark.util.{RpcUtils, Utils}
  */
 private[spark] object RpcEnv {
 
-  private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
-    val rpcEnvNames = Map(
-      "akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory",
-      "netty" -> "org.apache.spark.rpc.netty.NettyRpcEnvFactory")
-    val rpcEnvName = conf.get("spark.rpc", "netty")
-    val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
-  }
-
   def create(
       name: String,
       host: String,
@@ -48,9 +40,8 @@ private[spark] object RpcEnv {
       conf: SparkConf,
       securityManager: SecurityManager,
       clientMode: Boolean = false): RpcEnv = {
-    // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
     val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
-    getRpcEnvFactory(conf).create(config)
+    new NettyRpcEnvFactory().create(config)
   }
 }
 
@@ -98,12 +89,11 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   }
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
+   * Retrieve the [[RpcEndpointRef]] represented by `address` and `endpointName`.
    * This is a blocking action.
    */
-  def setupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
-    setupEndpointRefByURI(uriOf(systemName, address, endpointName))
+  def setupEndpointRef(address: RpcAddress, endpointName: String): RpcEndpointRef = {
+    setupEndpointRefByURI(RpcEndpointAddress(address, endpointName).toString)
   }
 
   /**
@@ -123,12 +113,6 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * TODO do we need a timeout parameter?
    */
   def awaitTermination(): Unit
-
-  /**
-   * Create a URI used to create a [[RpcEndpointRef]]. Use this one to create the URI instead of
-   * creating it manually because different [[RpcEnv]] may have different formats.
-   */
-  def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
 
   /**
    * [[RpcEndpointRef]] cannot be deserialized without [[RpcEnv]]. So when deserializing any object
@@ -178,6 +162,24 @@ private[spark] trait RpcEnvFileServer {
    * @return A URI for the location of the file.
    */
   def addJar(file: File): String
+
+  /**
+   * Adds a local directory to be served via this file server.
+   *
+   * @param baseUri Leading URI path (files can be retrieved by appending their relative
+   *                path to this base URI). This cannot be "files" nor "jars".
+   * @param path Path to the local directory.
+   * @return URI for the root of the directory in the file server.
+   */
+  def addDirectory(baseUri: String, path: File): String
+
+  /** Validates and normalizes the base URI for directories. */
+  protected def validateDirectoryUri(baseUri: String): String = {
+    val fixedBaseUri = "/" + baseUri.stripPrefix("/").stripSuffix("/")
+    require(fixedBaseUri != "/files" && fixedBaseUri != "/jars",
+      "Directory URI cannot be /files nor /jars.")
+    fixedBaseUri
+  }
 
 }
 

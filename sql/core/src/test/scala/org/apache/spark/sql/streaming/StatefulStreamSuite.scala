@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.{StreamTest, Row, QueryTest}
 import org.apache.spark.sql.functions._
 
 import org.apache.spark.sql.execution.streaming._
@@ -28,7 +28,7 @@ object FailureCounter {
   var shouldFail: Boolean = true
 }
 
-class StatefulStreamSuite extends QueryTest with SharedSQLContext {
+class StatefulStreamSuite extends StreamTest with SharedSQLContext {
 
   import testImplicits._
 

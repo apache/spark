@@ -245,8 +245,8 @@ private[joins] final class UnsafeHashedRelation(
           val sizeInBytes = Platform.getInt(base, offset + 4)
           offset += 8
 
-          val row = new UnsafeRow
-          row.pointTo(base, offset, numFields, sizeInBytes)
+          val row = new UnsafeRow(numFields)
+          row.pointTo(base, offset, sizeInBytes)
           buffer += row
           offset += sizeInBytes
         }
@@ -334,7 +334,11 @@ private[joins] final class UnsafeHashedRelation(
     // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "false"), Long.MaxValue, Long.MaxValue, 1), 0)
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))

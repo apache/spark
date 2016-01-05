@@ -29,8 +29,8 @@ import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 
 import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -892,12 +892,13 @@ object StreamingContext extends Logging {
   }
 
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
-    if (prefix == null) {
-      time.milliseconds.toString
-    } else if (suffix == null || suffix.length ==0) {
-      prefix + "-" + time.milliseconds
-    } else {
-      prefix + "-" + time.milliseconds + "." + suffix
+    var result = time.milliseconds.toString
+    if (prefix != null && prefix.length > 0) {
+      result = s"$prefix-$result"
     }
+    if (suffix != null && suffix.length > 0) {
+      result = s"$result.$suffix"
+    }
+    result
   }
 }

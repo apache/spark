@@ -63,15 +63,18 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
   }
 
   override def afterAll(): Unit = {
-    workerRpcEnvs.foreach(_.shutdown())
-    masterRpcEnv.shutdown()
-    workers.foreach(_.stop())
-    master.stop()
-    workerRpcEnvs = null
-    masterRpcEnv = null
-    workers = null
-    master = null
-    super.afterAll()
+    try {
+      workerRpcEnvs.foreach(_.shutdown())
+      masterRpcEnv.shutdown()
+      workers.foreach(_.stop())
+      master.stop()
+      workerRpcEnvs = null
+      masterRpcEnv = null
+      workers = null
+      master = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("interface methods of AppClient using local Master") {
@@ -144,7 +147,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     (0 until numWorkers).map { i =>
       val rpcEnv = workerRpcEnvs(i)
       val worker = new Worker(rpcEnv, 0, cores, memory, Array(masterRpcEnv.address),
-        Worker.SYSTEM_NAME + i, Worker.ENDPOINT_NAME, null, conf, securityManager)
+        Worker.ENDPOINT_NAME, null, conf, securityManager)
       rpcEnv.setupEndpoint(Worker.ENDPOINT_NAME, worker)
       worker
     }

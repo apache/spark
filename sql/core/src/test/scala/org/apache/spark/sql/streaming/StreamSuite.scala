@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.{StreamTest, Row}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 
-class StreamSuite extends QueryTest with SharedSQLContext {
+class StreamSuite extends StreamTest with SharedSQLContext {
 
   import testImplicits._
 

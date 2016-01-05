@@ -64,6 +64,7 @@ private object PostgresDialect extends JdbcDialect {
       getJDBCType(et).map(_.databaseTypeDefinition)
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
         .map(typeName => JdbcType(s"$typeName[]", java.sql.Types.ARRAY))
+    case ByteType => throw new IllegalArgumentException(s"Unsupported type in postgresql: $dt");
     case _ => None
   }
 

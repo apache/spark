@@ -20,11 +20,11 @@ package org.apache.spark.sql.streaming
 import java.io.{BufferedWriter, OutputStreamWriter, File}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{StreamTest, QueryTest}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 
-class FileSourceSuite extends QueryTest with SharedSQLContext {
+class FileSourceSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
   case class AddFileData(fileSource: FileStream, blocking: Boolean, data: String*) extends AddData {

@@ -36,14 +36,18 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder[StringLongClass]
     val cls = classOf[StringLongClass]
 
+
     {
       val attrs = Seq('a.string, 'b.int)
       val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
       val expected: Expression = NewInstance(
         cls,
-        toExternalString('a.string) :: 'b.int.cast(LongType) :: Nil,
-        false,
-        ObjectType(cls))
+        Seq(
+          toExternalString('a.string),
+          AssertNotNull('b.int.cast(LongType), cls.getName, "b", "Long")
+        ),
+        ObjectType(cls),
+        propagateNull = false)
       compareExpressions(fromRowExpr, expected)
     }
 
@@ -52,9 +56,12 @@ class EncoderResolutionSuite extends PlanTest {
       val fromRowExpr = encoder.resolve(attrs, null).fromRowExpression
       val expected = NewInstance(
         cls,
-        toExternalString('a.int.cast(StringType)) :: 'b.long :: Nil,
-        false,
-        ObjectType(cls))
+        Seq(
+          toExternalString('a.int.cast(StringType)),
+          AssertNotNull('b.long, cls.getName, "b", "Long")
+        ),
+        ObjectType(cls),
+        propagateNull = false)
       compareExpressions(fromRowExpr, expected)
     }
   }
@@ -64,27 +71,28 @@ class EncoderResolutionSuite extends PlanTest {
     val innerCls = classOf[StringLongClass]
     val cls = classOf[ComplexClass]
 
-    val structType = new StructType().add("a", IntegerType).add("b", LongType)
-    val attrs = Seq('a.int, 'b.struct(structType))
+    val attrs = Seq('a.int, 'b.struct('a.int, 'b.long))
     val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
     val expected: Expression = NewInstance(
       cls,
       Seq(
-        'a.int.cast(LongType),
+        AssertNotNull('a.int.cast(LongType), cls.getName, "a", "Long"),
         If(
-          'b.struct(structType).isNull,
+          'b.struct('a.int, 'b.long).isNull,
           Literal.create(null, ObjectType(innerCls)),
           NewInstance(
             innerCls,
             Seq(
               toExternalString(
-                GetStructField('b.struct(structType), 0, Some("a")).cast(StringType)),
-              GetStructField('b.struct(structType), 1, Some("b"))),
-            false,
-            ObjectType(innerCls))
+                GetStructField('b.struct('a.int, 'b.long), 0, Some("a")).cast(StringType)),
+              AssertNotNull(
+                GetStructField('b.struct('a.int, 'b.long), 1, Some("b")),
+                innerCls.getName, "b", "Long")),
+            ObjectType(innerCls),
+            propagateNull = false)
         )),
-      false,
-      ObjectType(cls))
+      ObjectType(cls),
+      propagateNull = false)
     compareExpressions(fromRowExpr, expected)
   }
 
@@ -94,8 +102,7 @@ class EncoderResolutionSuite extends PlanTest {
       ExpressionEncoder[Long])
     val cls = classOf[StringLongClass]
 
-    val structType = new StructType().add("a", StringType).add("b", ByteType)
-    val attrs = Seq('a.struct(structType), 'b.int)
+    val attrs = Seq('a.struct('a.string, 'b.byte), 'b.int)
     val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
     val expected: Expression = NewInstance(
       classOf[Tuple2[_, _]],
@@ -103,14 +110,60 @@ class EncoderResolutionSuite extends PlanTest {
         NewInstance(
           cls,
           Seq(
-            toExternalString(GetStructField('a.struct(structType), 0, Some("a"))),
-            GetStructField('a.struct(structType), 1, Some("b")).cast(LongType)),
-          false,
-          ObjectType(cls)),
+            toExternalString(GetStructField('a.struct('a.string, 'b.byte), 0, Some("a"))),
+            AssertNotNull(
+              GetStructField('a.struct('a.string, 'b.byte), 1, Some("b")).cast(LongType),
+              cls.getName, "b", "Long")),
+          ObjectType(cls),
+          propagateNull = false),
         'b.int.cast(LongType)),
-      false,
-      ObjectType(classOf[Tuple2[_, _]]))
+      ObjectType(classOf[Tuple2[_, _]]),
+      propagateNull = false)
     compareExpressions(fromRowExpr, expected)
+  }
+
+  test("the real number of fields doesn't match encoder schema: tuple encoder") {
+    val encoder = ExpressionEncoder[(String, Long)]
+
+    {
+      val attrs = Seq('a.string, 'b.long, 'c.int)
+      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+        "Try to map struct<a:string,b:bigint,c:int> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string,b:bigint,c:int>\n" +
+          " - Target schema: struct<_1:string,_2:bigint>")
+    }
+
+    {
+      val attrs = Seq('a.string)
+      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+        "Try to map struct<a:string> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string>\n" +
+          " - Target schema: struct<_1:string,_2:bigint>")
+    }
+  }
+
+  test("the real number of fields doesn't match encoder schema: nested tuple encoder") {
+    val encoder = ExpressionEncoder[(String, (Long, String))]
+
+    {
+      val attrs = Seq('a.string, 'b.struct('x.long, 'y.string, 'z.int))
+      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+        "Try to map struct<x:bigint,y:string,z:int> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string,b:struct<x:bigint,y:string,z:int>>\n" +
+          " - Target schema: struct<_1:string,_2:struct<_1:bigint,_2:string>>")
+    }
+
+    {
+      val attrs = Seq('a.string, 'b.struct('x.long))
+      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+        "Try to map struct<x:bigint> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string,b:struct<x:bigint>>\n" +
+          " - Target schema: struct<_1:string,_2:struct<_1:bigint,_2:string>>")
+    }
   }
 
   private def toExternalString(e: Expression): Expression = {
