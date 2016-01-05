@@ -38,7 +38,7 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.types._
 
@@ -88,8 +88,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
   @Since("2.0.0")
   override def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
-    val inferredItemset = FPGrowthModel.SaveLoadV1_0.inferItemType(sc, path)
-    FPGrowthModel.SaveLoadV1_0.load(sc, path, inferredItemset)
+    FPGrowthModel.SaveLoadV1_0.load(sc, path)
   }
 
   private[fpm] object SaveLoadV1_0 {
@@ -153,10 +152,9 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       result
     }
 
-    def load[Item: ClassTag](
+    def load(
         sc: SparkContext,
-        path: String,
-        inferredItemset: FreqItemset[Item]): FPGrowthModel[Item] = {
+        path: String): FPGrowthModel[_] = {
       implicit val formats = DefaultFormats
       val sqlContext = SQLContext.getOrCreate(sc)
 
@@ -165,6 +163,11 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       assert(formatVersion == thisFormatVersion)
 
       val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
+      val sample = freqItemsets.select("item").head().get(0)
+      loadImpl(freqItemsets, sample)
+    }
+
+    def loadImpl[Item : ClassTag](freqItemsets: DataFrame, sample: Item): FPGrowthModel[Item] = {
       val freqItemsetsRDD = freqItemsets.select("items", "freq").map { x =>
         val items = x.getAs[Seq[Item]](0).toArray
         val freq = x.getLong(1)
