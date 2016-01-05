@@ -99,7 +99,7 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
-      .add("udt", new ExamplePointUDT, false))
+      .add("udt", new ExamplePointUDT))
 
   encodeDecodeTest(
     new StructType()
