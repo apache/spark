@@ -136,12 +136,19 @@ abstract class HiveComparisonTest
   private var numTotalQueries: Int = 0
 
   override protected def afterAll(): Unit = {
-    logInfo(
+    logInfo({
+      val percentage = if (numTotalQueries > 0) {
+        numConvertibleQueries.toDouble / numTotalQueries * 100
+      } else {
+        0D
+      }
+
       s"""SQLBuiler statistics:
          |- Total query number:                $numTotalQueries
          |- Number of convertible queries:     $numConvertibleQueries
-         |- Percentage of convertible queries: ${numConvertibleQueries.toDouble / numTotalQueries}
-       """.stripMargin)
+         |- Percentage of convertible queries: $percentage%
+       """.stripMargin
+    })
 
     super.afterAll()
   }
@@ -388,46 +395,49 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = {
-            val originalQuery = new TestHive.QueryExecution(queryString)
-            val containsCommands = originalQuery.analyzed.collectFirst {
-              case _: Command => ()
-              case _: LogicalInsertIntoHiveTable => ()
-            }.nonEmpty
+          var query: TestHive.QueryExecution = null
+          try {
+            query = {
+              val originalQuery = new TestHive.QueryExecution(queryString)
+              val containsCommands = originalQuery.analyzed.collectFirst {
+                case _: Command => ()
+                case _: LogicalInsertIntoHiveTable => ()
+              }.nonEmpty
 
-            if (containsCommands) {
-              originalQuery
-            } else {
-              numTotalQueries += 1
-              new SQLBuilder(originalQuery.analyzed, TestHive).toSQL.map { sql =>
-                numConvertibleQueries += 1
-                logInfo(
-                  s"""
-                     |### Running SQL generation round-trip test {{{
-                     |${originalQuery.analyzed.treeString}
-                     |Original SQL:
-                     |$queryString
-                     |
-                     |Generated SQL:
-                     |$sql
-                     |}}}
-                   """.stripMargin.trim)
-                new TestHive.QueryExecution(sql)
-              }.getOrElse {
-                logInfo(
-                  s"""
-                     |### Cannot convert the following logical plan back to SQL {{{
-                     |${originalQuery.analyzed.treeString}
-                     |Original SQL:
-                     |$queryString
-                     |}}}
-                   """.stripMargin.trim)
+              if (containsCommands) {
                 originalQuery
+              } else {
+                numTotalQueries += 1
+                new SQLBuilder(originalQuery.analyzed, TestHive).toSQL.map { sql =>
+                  numConvertibleQueries += 1
+                  logInfo(
+                    s"""
+                       |### Running SQL generation round-trip test {{{
+                       |${originalQuery.analyzed.treeString}
+                       |Original SQL:
+                       |$queryString
+                       |
+                     |Generated SQL:
+                       |$sql
+                       |}}}
+                   """.stripMargin.trim)
+                  new TestHive.QueryExecution(sql)
+                }.getOrElse {
+                  logInfo(
+                    s"""
+                       |### Cannot convert the following logical plan back to SQL {{{
+                       |${originalQuery.analyzed.treeString}
+                       |Original SQL:
+                       |$queryString
+                       |}}}
+                   """.stripMargin.trim)
+                  originalQuery
+                }
               }
             }
-          }
 
-          try { (query, prepareAnswer(query, query.stringResult())) } catch {
+            (query, prepareAnswer(query, query.stringResult()))
+          } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
