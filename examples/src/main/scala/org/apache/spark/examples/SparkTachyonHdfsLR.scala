@@ -22,13 +22,12 @@ import java.util.Random
 
 import scala.math.exp
 
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
 import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * Logistic regression based classification.
