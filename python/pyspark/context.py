@@ -101,6 +101,7 @@ class Py4jCallbackConnectionCleaner(object):
         with self._lock:
             if not self._stopped:
                 self._timer = Timer(30.0, f)
+                self._timer.daemon = True
                 self._timer.start()
 
     def stop(self):
