@@ -2028,7 +2028,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(false) :: Row(true) :: Nil)
   }
 
-<<<<<<< 1cdc42d2b99edfec01066699a7620cca02b61f0e
   test("rollup") {
     checkAnswer(
       sql("select course, year, sum(earnings) from courseSales group by rollup(course, year)" +
