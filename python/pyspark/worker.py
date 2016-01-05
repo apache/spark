@@ -50,7 +50,7 @@ def add_path(path):
         sys.path.insert(1, path)
 
 
-def main(infile, outfile):
+def main(infile, infile2, outfile):
     try:
         boot_time = time.time()
         split_index = read_int(infile)
@@ -98,13 +98,18 @@ def main(infile, outfile):
         command = pickleSer._read_with_length(infile)
         if isinstance(command, Broadcast):
             command = pickleSer.loads(command.value)
-        func, profiler, deserializer, serializer = command
+        func, profiler, deserializers, serializer = command
         init_time = time.time()
 
-        def process():
-            iterator = deserializer.load_stream(infile)
-            serializer.dump_stream(func(split_index, iterator), outfile)
+        # Spark SQL can construct a command without a list of deserializers
+        try:
+            _ = (d for d in deserializers)
+        except TypeError:
+            deserializers = [deserializers]
 
+        def process():
+            iterators = [d.load_stream(i) for (d, i) in zip(deserializers, [infile, infile2])]
+            serializer.dump_stream(func(split_index, *iterators), outfile)
         if profiler:
             profiler.profile(process)
         else:
@@ -132,8 +137,11 @@ def main(infile, outfile):
     for (aid, accum) in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
 
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
+    # check end of stream(s)
+    end_of_infile = read_int(infile) == SpecialLengths.END_OF_STREAM
+    if (len(deserializers) == 1 and end_of_infile) or \
+        (len(deserializers) == 2 and end_of_infile and
+            read_int(infile2) == SpecialLengths.END_OF_STREAM):
         write_int(SpecialLengths.END_OF_STREAM, outfile)
     else:
         # write a different value to tell JVM to not reuse this worker
@@ -147,4 +155,10 @@ if __name__ == '__main__':
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect(("127.0.0.1", java_port))
     sock_file = sock.makefile("rwb", 65536)
-    main(sock_file, sock_file)
+
+    # Open the second port
+    second_socket_java_port = read_int(sock_file)
+    second_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    second_socket.connect(("127.0.0.1", second_socket_java_port))
+    infile2 = os.fdopen(os.dup(second_socket.fileno()), "rb", 65536)
+    main(sock_file, infile2, sock_file)

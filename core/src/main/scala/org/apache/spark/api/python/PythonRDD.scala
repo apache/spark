@@ -36,7 +36,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{ZippedPartitionsPartition, ZippedPartitionsBaseRDD, RDD}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -67,9 +67,49 @@ private[spark] class PythonRDD(
     val runner = new PythonRunner(
       command, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator,
       bufferSize, reuse_worker)
-    runner.compute(firstParent.iterator(split, context), split.index, context)
+    runner.compute(firstParent.iterator(split, context), inputIterator2 = null,
+      split.index, context)
   }
 }
+
+
+private[spark] class PythonZippedRDD(
+    var parent1: RDD[_],
+    var parent2: RDD[_],
+    var command: Array[Byte],
+    envVars: JMap[String, String],
+    pythonIncludes: JList[String],
+    preservePartitoning: Boolean,
+    pythonExec: String,
+    pythonVer: String,
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
+    accumulator: Accumulator[JList[Array[Byte]]])
+  extends ZippedPartitionsBaseRDD[Array[Byte]](parent1.context,
+    List(parent1, parent2),
+    preservePartitoning) {
+
+  val bufferSize = conf.getInt("spark.buffer.size", 65536)
+  val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    parent1 = null
+    parent2 = null
+  }
+
+  val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
+
+  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+    val partitions = split.asInstanceOf[ZippedPartitionsPartition].partitions
+    val runner = new PythonRunner(
+      command, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator,
+      bufferSize, reuse_worker)
+    val iterator1 = parent1.iterator(partitions(0), context)
+    val iterator2 = parent2.iterator(partitions(1), context)
+    runner.compute(iterator1, iterator2, split.index, context)
+  }
+}
+
 
 
 /**
@@ -89,6 +129,7 @@ private[spark] class PythonRunner(
 
   def compute(
       inputIterator: Iterator[_],
+      inputIterator2: Iterator[_],
       partitionIndex: Int,
       context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
@@ -98,15 +139,23 @@ private[spark] class PythonRunner(
     if (reuse_worker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
+    val worker: SocketPair = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool
     @volatile var released = false
 
     // Start a thread to feed the process input from our parent's iterator
-    val writerThread = new WriterThread(env, worker, inputIterator, partitionIndex, context)
+    val writerThread = new WriterThread(env, worker.primary, inputIterator, partitionIndex, context)
+    val writerThread2: WriterThread =
+      if (inputIterator2 != null) {
+        new WriterThread(env, worker.secondary, inputIterator2, partitionIndex, context,
+          writePreamble = false)
+      } else {
+        null
+      }
 
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
+      if (writerThread2 != null) { writerThread2.shutdownOnTaskCompletion() }
       if (!reuse_worker || !released) {
         try {
           worker.close()
@@ -118,10 +167,12 @@ private[spark] class PythonRunner(
     }
 
     writerThread.start()
+    if (writerThread2 != null) { writerThread2.start() }
     new MonitorThread(env, worker, context).start()
 
     // Return an iterator that read lines from the process's stdout
-    val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
+    val stream = new DataInputStream(new BufferedInputStream(worker.primary.getInputStream,
+      bufferSize))
     val stdoutIterator = new Iterator[Array[Byte]] {
       override def next(): Array[Byte] = {
         val obj = _nextObj
@@ -220,7 +271,8 @@ private[spark] class PythonRunner(
       worker: Socket,
       inputIterator: Iterator[_],
       partitionIndex: Int,
-      context: TaskContext)
+      context: TaskContext,
+      writePreamble: Boolean = true)
     extends Thread(s"stdout writer for $pythonExec") {
 
     @volatile private var _exception: Exception = null
@@ -241,41 +293,43 @@ private[spark] class PythonRunner(
         TaskContext.setTaskContext(context)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
-        // Partition index
-        dataOut.writeInt(partitionIndex)
-        // Python version of driver
-        PythonRDD.writeUTF(pythonVer, dataOut)
-        // sparkFilesDir
-        PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
-        // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.size())
-        for (include <- pythonIncludes.asScala) {
-          PythonRDD.writeUTF(include, dataOut)
-        }
-        // Broadcast variables
-        val oldBids = PythonRDD.getWorkerBroadcasts(worker)
-        val newBids = broadcastVars.asScala.map(_.id).toSet
-        // number of different broadcasts
-        val toRemove = oldBids.diff(newBids)
-        val cnt = toRemove.size + newBids.diff(oldBids).size
-        dataOut.writeInt(cnt)
-        for (bid <- toRemove) {
-          // remove the broadcast from worker
-          dataOut.writeLong(- bid - 1)  // bid >= 0
-          oldBids.remove(bid)
-        }
-        for (broadcast <- broadcastVars.asScala) {
-          if (!oldBids.contains(broadcast.id)) {
-            // send new broadcast
-            dataOut.writeLong(broadcast.id)
-            PythonRDD.writeUTF(broadcast.value.path, dataOut)
-            oldBids.add(broadcast.id)
+        if (writePreamble) {
+          // Partition index
+          dataOut.writeInt(partitionIndex)
+          // Python version of driver
+          PythonRDD.writeUTF(pythonVer, dataOut)
+          // sparkFilesDir
+          PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
+          // Python includes (*.zip and *.egg files)
+          dataOut.writeInt(pythonIncludes.size())
+          for (include <- pythonIncludes.asScala) {
+            PythonRDD.writeUTF(include, dataOut)
           }
+          // Broadcast variables
+          val oldBids = PythonRDD.getWorkerBroadcasts(worker)
+          val newBids = broadcastVars.asScala.map(_.id).toSet
+          // number of different broadcasts
+          val toRemove = oldBids.diff(newBids)
+          val cnt = toRemove.size + newBids.diff(oldBids).size
+          dataOut.writeInt(cnt)
+          for (bid <- toRemove) {
+            // remove the broadcast from worker
+            dataOut.writeLong(- bid - 1)  // bid >= 0
+            oldBids.remove(bid)
+          }
+          for (broadcast <- broadcastVars.asScala) {
+            if (!oldBids.contains(broadcast.id)) {
+              // send new broadcast
+              dataOut.writeLong(broadcast.id)
+              PythonRDD.writeUTF(broadcast.value.path, dataOut)
+              oldBids.add(broadcast.id)
+            }
+          }
+          dataOut.flush()
+          // Serialized command:
+          dataOut.writeInt(command.length)
+          dataOut.write(command)
         }
-        dataOut.flush()
-        // Serialized command:
-        dataOut.writeInt(command.length)
-        dataOut.write(command)
         // Data values
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
@@ -304,7 +358,7 @@ private[spark] class PythonRunner(
    * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
    * threads can block indefinitely.
    */
-  class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
+  class MonitorThread(env: SparkEnv, worker: SocketPair, context: TaskContext)
     extends Thread(s"Worker Monitor for $pythonExec") {
 
     setDaemon(true)

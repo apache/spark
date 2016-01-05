@@ -329,6 +329,47 @@ class RDD(object):
         """
         return PipelinedRDD(self, f, preservesPartitioning)
 
+    def zipPartitions(self, other, f, preservesPartitioning=False):
+        """
+        Return a new RDD by zipping the partitions of this and the other RDD,
+        and then applying the user defined function.
+
+        The user defined function f takes two iterators one for this and the
+        other RDD respectively and returns a new iterator.
+
+        Note both RDDs must have the same number of partitions.
+
+        >>> rddA = sc.parallelize(range(10), 4)
+        >>> rddB = rddA.map(lambda a: str(a))
+        >>> def f(iterA, iterB): return ((a, next(iterB)) for a in iterA)
+        >>> zippedRDD = rddA.zipPartitions(rddB, f)
+        >>> result = zippedRDD.collect()
+
+        """
+        def func(ind, iter1, iter2):
+            return f(iter1, iter2)
+        return ZippedRDD(self, other, func, preservesPartitioning)
+
+    def zipPartitionsWithIndex(self, other, f, preservesPartitioning=False):
+        """
+        Return a new RDD by zipping the partitions of this and the other RDD,
+        and then applying the user defined function.
+
+        The user defined function f takes the partition index as well as
+        two iterators one for this and the other RDD respectively and
+        returns a new iterator.
+
+        Note both RDDs must have the same number of partitions.
+
+        >>> rddA = sc.parallelize(range(10), 4)
+        >>> rddB = rddA.map(lambda a: str(a))
+        >>> def f(index, iterA, iterB): return ((a, next(iterB)) for a in iterA)
+        >>> zippedRDD = rddA.zipPartitionsWithIndex(rddB, f)
+        >>> result = zippedRDD.collect()
+
+        """
+        return ZippedRDD(self, other, f, preservesPartitioning)
+
     def mapPartitionsWithSplit(self, f, preservesPartitioning=False):
         """
         Deprecated: use mapPartitionsWithIndex instead.
@@ -2374,7 +2415,7 @@ class PipelinedRDD(RDD):
         else:
             profiler = None
 
-        command = (self.func, profiler, self._prev_jrdd_deserializer,
+        command = (self.func, profiler, [self._prev_jrdd_deserializer],
                    self._jrdd_deserializer)
         pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
@@ -2396,6 +2437,58 @@ class PipelinedRDD(RDD):
 
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
+
+
+class ZippedRDD(RDD):
+
+    def __init__(self, prev1, prev2, func, preservesPartitioning=False):
+        self.func = func
+        self.preservesPartitioning = preservesPartitioning
+        self._prevs = [prev1, prev2]
+        self._prev_jrdds = [p._jrdd for p in self._prevs]
+        self._prev_jrdd_deserializers = [p._jrdd_deserializer for p in self._prevs]
+        self.is_cached = False
+        self.is_checkpointed = False
+        self.ctx = prev1.ctx
+        assert prev1.ctx == prev2.ctx
+        self._jrdd_val = None
+        self._id = None
+        self._jrdd_deserializer = self.ctx.serializer
+        self._bypass_serializer = False
+        self.partitioner = prev.partitioner if self.preservesPartitioning else None
+
+    def getNumPartitions(self):
+        return self._prev_jrdds[0].partitions().size()
+
+    @property
+    def _jrdd(self):
+        if self._jrdd_val:
+            return self._jrdd_val
+        if self.ctx.profiler_collector:
+            profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
+        else:
+            profiler = None
+
+        command = (self.func, profiler, self._prev_jrdd_deserializers,
+                   self._jrdd_deserializer)
+        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
+        python_rdd = self.ctx._jvm.PythonZippedRDD(self._prev_jrdds[0].rdd(),
+                                                   self._prev_jrdds[1].rdd(),
+                                                   bytearray(pickled_cmd),
+                                                   env, includes, self.preservesPartitioning,
+                                                   self.ctx.pythonExec, self.ctx.pythonVer,
+                                                   bvars, self.ctx._javaAccumulator)
+        self._jrdd_val = python_rdd.asJavaRDD()
+
+        if profiler:
+            self._id = self._jrdd_val.id()
+            self.ctx.profiler_collector.add_profiler(self._id, profiler)
+        return self._jrdd_val
+
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
 
 
 def _test():
