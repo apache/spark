@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftSemi, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -41,6 +41,7 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
+        PushLimitThroughOuterJoin,
         ColumnPruning,
         ProjectCollapsing) :: Nil
   }
@@ -747,6 +748,76 @@ class FilterPushdownSuite extends PlanTest {
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
       .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("limit: push down left outer join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, LeftOuter)
+        .limit(1)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.limit(1)
+    val correctAnswer =
+      left.join(y, LeftOuter).limit(1).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("limit: push down right outer join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, RightOuter)
+        .limit(1)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val right = testRelation.limit(1)
+    val correctAnswer =
+      x.join(right, RightOuter).limit(1).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("limit: push down full outer join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, FullOuter)
+        .limit(1)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation
+    val right = testRelation.limit(1)
+    val correctAnswer =
+      left.join(right, FullOuter).limit(1).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("limit: push down full outer join + project") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y, FullOuter).select('a, 'b, 'd)
+        .limit(1)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.select('a, 'b)
+    val right = testRelation1.limit(1)
+    val correctAnswer =
+      left.join(right, FullOuter).select('a, 'b, 'd).limit(1).analyze
 
     comparePlans(optimized, correctAnswer)
   }

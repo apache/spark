@@ -49,6 +49,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
+      PushLimitThroughOuterJoin,
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
@@ -865,6 +866,60 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           Join(newLeft, newRight, LeftOuter, newJoinCond)
         case FullOuter => f
       }
+  }
+}
+
+/**
+  * Push [[Limit]] operators through [[Join]] operators or [[Project]] + [[Join]] operators,
+  * iff the join type is outer joins.
+  * Case 1: If the type is [[LeftOuter]] or [[RightOuter]], add extra [[Limit]] operators
+  *         on top of the outer-side child.
+  * Case 2: If the type is [[FullOuter]] and only one child is [[Limit]], add extra [[Limit]]
+  *         operators on the child that is not [[Limit]]
+  * Case 3: If the type is [[FullOuter]] and no child is [[Limit]], add extra [[Limit]]
+  *         operators on the child whose statistics is higher.
+  */
+object PushLimitThroughOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
+
+  private def makeNewJoinWithLimit(j: Join, limitExpr: Expression): Join = {
+    j.joinType match {
+      // RightOuter join:
+      //   Add extra Limit in the right child
+      case RightOuter =>
+        Join(j.left, CombineLimits(Limit(limitExpr, j.right)), j.joinType, j.condition)
+      // LeftOuter join:
+      //   Add extra Limit in the left child
+      case LeftOuter =>
+        Join(CombineLimits(Limit(limitExpr, j.left)), j.right, j.joinType, j.condition)
+      // FullOuter join whose left child is not Limit but right child is Limit
+      //   Add extra Limit in the right child
+      case FullOuter if !j.left.isInstanceOf[Limit] && j.right.isInstanceOf[Limit] =>
+        Join(j.left, CombineLimits(Limit(limitExpr, j.right)), j.joinType, j.condition)
+      // FullOuter join whose left child is Limit but right child is not Limit
+      //   Add extra Limit in the left child
+      case FullOuter if j.left.isInstanceOf[Limit] && !j.right.isInstanceOf[Limit] =>
+        Join(CombineLimits(Limit(limitExpr, j.left)), j.right, j.joinType, j.condition)
+      // FullOuter join whose left and right children are not Limit:
+      //   Add extra Limit in the child whose statistics is higher
+      case FullOuter if !j.left.isInstanceOf[Limit] && !j.right.isInstanceOf[Limit] =>
+        if (j.left.statistics.sizeInBytes <= j.right.statistics.sizeInBytes) {
+          Join(j.left, CombineLimits(Limit(limitExpr, j.right)), j.joinType, j.condition)
+        } else {
+          Join(CombineLimits(Limit(limitExpr, j.left)), j.right, j.joinType, j.condition)
+        }
+      // DO Nothing for the other cases
+      case _ => j
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Limit(limitExpr, j: Join) =>
+      Limit(limitExpr,
+        makeNewJoinWithLimit(j, limitExpr))
+    case Limit(limitExpr, Project(projectList, j: Join)) =>
+      Limit(limitExpr,
+        Project(projectList,
+          makeNewJoinWithLimit(j, limitExpr)))
   }
 }
 
