@@ -25,7 +25,7 @@
     <version>14</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent_2.10</artifactId>
+  <artifactId>spark-parent_2.11</artifactId>
   <version>2.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -164,7 +164,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.10.5</scala.version>
-    <scala.binary.version>2.10</scala.binary.version>
+    <scala.binary.version>2.11</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
