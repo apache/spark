@@ -381,6 +381,12 @@ private[spark] object InternalAccumulator {
     val SHUFFLE_WRITE_TIME = "metrics.shuffle.write.shuffleWriteTime"
   }
 
+  // Names of output metrics
+  object output {
+    val BYTES_WRITTEN = "metrics.output.bytesWritten"
+    val RECORDS_WRITTEN = "metrics.output.recordsWritten"
+  }
+
   /**
    * Create a new internal Long accumulator with the specified name.
    */
@@ -405,7 +411,8 @@ private[spark] object InternalAccumulator {
       sys.props.get("spark.testing").map(_ => TEST_ACCUM).toSeq
     metricNames.map(newMetric) ++
       createShuffleReadAccums() ++
-      createShuffleWriteAccums()
+      createShuffleWriteAccums() ++
+      createOutputAccums()
   }
 
   /**
@@ -423,7 +430,7 @@ private[spark] object InternalAccumulator {
   }
 
   /**
-   * Accumulators for tracking shuffle read metrics.
+   * Accumulators for tracking shuffle write metrics.
    * Note: this method does not register accumulators for cleanup.
    */
   def createShuffleWriteAccums(): Seq[Accumulator[Long]] = {
@@ -431,6 +438,16 @@ private[spark] object InternalAccumulator {
       shuffleWrite.SHUFFLE_BYTES_WRITTEN,
       shuffleWrite.SHUFFLE_RECORDS_WRITTEN,
       shuffleWrite.SHUFFLE_WRITE_TIME).map(newMetric)
+  }
+
+  /**
+   * Accumulators for tracking output metrics.
+   * Note: this method does not register accumulators for cleanup.
+   */
+  private def createOutputAccums(): Seq[Accumulator[Long]] = {
+    Seq[String](
+      output.BYTES_WRITTEN,
+      output.RECORDS_WRITTEN).map(newMetric)
   }
 
   /**

@@ -274,14 +274,13 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
-  test("ShuffleReadMetrics: Local bytes read and time taken backwards compatibility") {
-    // Metrics about local shuffle bytes read and local read time were added in 1.3.1.
+  test("ShuffleReadMetrics: Local bytes read backwards compatibility") {
+    // Metrics about local shuffle bytes read were added in 1.3.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     assert(metrics.shuffleReadMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Local Bytes Read" }
-      .removeField { case (field, _) => field == "Local Read Time" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
   }
@@ -788,16 +787,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
-      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
+      val outputMetrics = t.registerOutputMetrics(DataWriteMethod.Hadoop)
       outputMetrics.setBytesWritten(a + b + c)
       outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c)/100 else -1)
-      t.outputMetrics = Some(outputMetrics)
     } else {
-      val sw = new ShuffleWriteMetrics
+      val sw = t.registerShuffleWriteMetrics()
       sw.incShuffleBytesWritten(a + b + c)
       sw.incShuffleWriteTime(b + c + d)
       sw.incShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
-      t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>

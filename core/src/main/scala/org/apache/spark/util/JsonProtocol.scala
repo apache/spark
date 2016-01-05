@@ -724,23 +724,28 @@ private[spark] object JsonProtocol {
       readMetrics.setRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
       readMetrics.setLocalBytesRead((readJson \ "Local Bytes Read").extractOpt[Long].getOrElse(0L))
       readMetrics.setFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
-      readMetrics.setRecordsRead((readJson \ "Total Records Read").extractOpt[Long].getOrElse(0L))
+      readMetrics.setRecordsRead((readJson \ "Total Records Read").extract[Long])
       metrics.mergeShuffleReadMetrics()
     }
 
     // Shuffle write metrics
     Utils.jsonOption(json \ "Shuffle Write Metrics").foreach { writeJson =>
       val writeMetrics = metrics.registerShuffleWriteMetrics()
-      writeMetrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
-      writeMetrics.incShuffleRecordsWritten((json \ "Shuffle Records Written")
-        .extractOpt[Long].getOrElse(0))
-      writeMetrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
+      writeMetrics.incShuffleBytesWritten((writeJson \ "Shuffle Bytes Written").extract[Long])
+      writeMetrics.incShuffleRecordsWritten((writeJson \ "Shuffle Records Written").extract[Long])
+      writeMetrics.incShuffleWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
+    }
+
+    // Output metrics
+    Utils.jsonOption(json \ "Output Metrics").foreach { outJson =>
+      val writeMethod = DataWriteMethod.withName((outJson \ "Data Write Method").extract[String])
+      val outputMetrics = metrics.registerOutputMetrics(writeMethod)
+      outputMetrics.setBytesWritten((outJson \ "Bytes Written").extract[Long])
+      outputMetrics.setRecordsWritten((outJson \ "Records Written").extract[Long])
     }
 
     metrics.setInputMetrics(
       Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson))
-    metrics.outputMetrics =
-      Utils.jsonOption(json \ "Output Metrics").map(outputMetricsFromJson)
     metrics.updatedBlocks =
       Utils.jsonOption(json \ "Updated Blocks").map { value =>
         value.extract[List[JValue]].map { block =>
@@ -758,15 +763,6 @@ private[spark] object JsonProtocol {
       DataReadMethod.withName((json \ "Data Read Method").extract[String]))
     metrics.incBytesRead((json \ "Bytes Read").extract[Long])
     metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(0))
-    metrics
-  }
-
-  // TODO: kill this method
-  private def outputMetricsFromJson(json: JValue): OutputMetrics = {
-    val metrics = new OutputMetrics(
-      DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
-    metrics.setBytesWritten((json \ "Bytes Written").extract[Long])
-    metrics.setRecordsWritten((json \ "Records Written").extractOpt[Long].getOrElse(0))
     metrics
   }
 

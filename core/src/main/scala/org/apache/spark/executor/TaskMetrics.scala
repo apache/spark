@@ -200,11 +200,28 @@ class TaskMetrics(
     agg.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
   }
 
+  /* ============================ *
+   |        OUTPUT METRICS        |
+   * ============================ */
 
+  private var _outputMetrics: Option[OutputMetrics] = None
 
+  /**
+   * Metrics related to writing data externally (e.g. to a distributed filesystem),
+   * defined only tasks with output.
+   */
+  def outputMetrics: Option[OutputMetrics] = _outputMetrics
 
-
-
+  /**
+   * Get or create a new [[OutputMetrics]] associated with this task.
+   */
+  def registerOutputMetrics(writeMethod: DataWriteMethod.Value): OutputMetrics = {
+    _outputMetrics.getOrElse {
+      val metrics = new OutputMetrics(writeMethod, accumMap)
+      _outputMetrics = Some(metrics)
+      metrics
+    }
+  }
 
 
 
@@ -233,12 +250,6 @@ class TaskMetrics(
   private[spark] def setInputMetrics(inputMetrics: Option[InputMetrics]) {
     _inputMetrics = inputMetrics
   }
-
-  /**
-   * If this task writes data externally (e.g. to a distributed filesystem), metrics on how much
-   * data was written are stored here.
-   */
-  var outputMetrics: Option[OutputMetrics] = None
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
@@ -378,24 +389,36 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
 
 
 /**
- * :: DeveloperApi ::
  * Metrics about writing output data.
  */
-@DeveloperApi
-case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
-  /**
-   * Total bytes written
-   */
-  private var _bytesWritten: Long = _
-  def bytesWritten: Long = _bytesWritten
-  private[spark] def setBytesWritten(value : Long): Unit = _bytesWritten = value
+@deprecated("OutputMetrics will be made private in a future version.", "2.0.0")
+class OutputMetrics private (
+    val writeMethod: DataWriteMethod.Value,
+    _bytesWritten: Accumulator[Long],
+    _recordsWritten: Accumulator[Long])
+  extends Serializable {
+
+  private[executor] def this(
+      writeMethod: DataWriteMethod.Value,
+      accumMap: Map[String, Accumulator[Long]]) {
+    this(
+      writeMethod,
+      accumMap(InternalAccumulator.output.BYTES_WRITTEN),
+      accumMap(InternalAccumulator.output.RECORDS_WRITTEN))
+  }
 
   /**
-   * Total records written
+   * Total number of bytes written.
    */
-  private var _recordsWritten: Long = 0L
-  def recordsWritten: Long = _recordsWritten
-  private[spark] def setRecordsWritten(value: Long): Unit = _recordsWritten = value
+  def bytesWritten: Long = _bytesWritten.value
+
+  /**
+   * Total number of records written.
+   */
+  def recordsWritten: Long = _recordsWritten.value
+
+  private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
+  private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
 }
 
 

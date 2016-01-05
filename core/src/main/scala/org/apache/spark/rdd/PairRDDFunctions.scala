@@ -1098,8 +1098,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
 
-      val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
-
+      val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
+      val outputMetrics = context.taskMetrics().registerOutputMetrics(DataWriteMethod.Hadoop)
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K, V]]
       require(writer != null, "Unable to obtain RecordWriter")
       var recordsWritten = 0L
@@ -1183,8 +1183,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
-      val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
-
+      val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
+      val outputMetrics = context.taskMetrics().registerOutputMetrics(DataWriteMethod.Hadoop)
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
       var recordsWritten = 0L
@@ -1210,17 +1210,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     writer.commitJob()
   }
 
-  private def initHadoopOutputMetrics(context: TaskContext): (OutputMetrics, Option[() => Long]) = {
-    val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
-    val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
-    if (bytesWrittenCallback.isDefined) {
-      context.taskMetrics.outputMetrics = Some(outputMetrics)
-    }
-    (outputMetrics, bytesWrittenCallback)
-  }
-
-  private def maybeUpdateOutputMetrics(bytesWrittenCallback: Option[() => Long],
-      outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
+  private def maybeUpdateOutputMetrics(
+      bytesWrittenCallback: Option[() => Long],
+      outputMetrics: OutputMetrics,
+      recordsWritten: Long): Unit = {
     if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
       outputMetrics.setRecordsWritten(recordsWritten)
