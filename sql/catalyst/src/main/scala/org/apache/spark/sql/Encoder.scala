@@ -71,7 +71,8 @@ import org.apache.spark.sql.types._
 @Experimental
 @implicitNotFound("Unable to find encoder for type stored in a Dataset.  Primitive types " +
   "(Int, String, etc) and Product types (case classes) are supported by importing " +
-  "sqlContext.implicits._  Use Encoder.kryo[T] to build an encoder for other objects.")
+  "sqlContext.implicits._  Support for serializing other types will be added in future " +
+  "releases.")
 trait Encoder[T] extends Serializable {
 
   /** Returns the schema of encoding this type of object as a Row. */
@@ -155,8 +156,6 @@ object Encoders {
     * @since 1.6.0
     */
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
-
-  def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
 
   /**
    * Creates an encoder for Java Bean of type T.

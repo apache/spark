@@ -2132,7 +2132,7 @@ class DataFrame private[sql](
   }
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
-  @inline private[sql] def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
+  @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan)
   }
 

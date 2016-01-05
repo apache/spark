@@ -17,35 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.{LongType, DataType, StructField, StructType}
-import org.apache.spark.{Accumulator, Logging}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.execution.streaming.state.{GroupWindows, StatefulPlanner}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
-
-class EventTimeSource(val max: Accumulator[LongOffset]) extends Source with Serializable {
-
-  override def schema: StructType = StructType(Seq(
-    StructField("watermark", LongType, nullable = false)))
-
-  override def offset: Offset = max.value
-
-  override def getSlice(
-      sqlContext: SQLContext, start: Option[Offset], end: Offset): RDD[InternalRow] = ???
-
-  // HACK
-  override def equals(other: Any): Boolean = other.isInstanceOf[EventTimeSource]
-  override def hashCode: Int = 0
-
-  override def restart(): Source = this
-
-  override def toString: String = "EventTime"
-}
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occuring in a separate thread.
@@ -61,15 +37,9 @@ class StreamExecution(
   /** Tracks how much data we have processed from each input source. */
   private[sql] val currentOffsets = new StreamProgress
 
-  import org.apache.spark.sql.execution.streaming.state.MaxOffset
-  private[sql] val maxEventTime =
-    sqlContext.sparkContext.accumulator(LongOffset(-1))
-
-  private[sql] val eventTimeSource = new EventTimeSource(maxEventTime)
-
   /** All stream sources present the query plan. */
   private val sources =
-    logicalPlan.collect { case s: StreamingRelation => s.source } :+ eventTimeSource
+    logicalPlan.collect { case s: StreamingRelation => s.source }
 
   // Start the execution at the current Offset for the sink. (i.e. avoid reprocessing data
   // that we have already processed).
@@ -79,12 +49,7 @@ class StreamExecution(
     }
   }
 
-  // Restore the position of the eventtime Offset accumulator
-  currentOffsets.get(eventTimeSource).foreach {
-    case w: LongOffset => eventTimeSource.max.setValue(w)
-  }
-
-  println(s"Stream running at $currentOffsets")
+  logInfo(s"Stream running at $currentOffsets")
 
   /** When false, signals to the microBatchThread that it should stop running. */
   @volatile private var shouldRun = true
@@ -98,7 +63,6 @@ class StreamExecution(
   }
   microBatchThread.setDaemon(true)
   microBatchThread.start()
-  println("started")
 
   var lastExecution: QueryExecution = null
 
@@ -124,7 +88,8 @@ class StreamExecution(
       val newPlan = logicalPlan transform {
         case StreamingRelation(source, output) =>
           if (newData.contains(source)) {
-            val batchInput = source.getSlice(sqlContext, currentOffsets.get(source), newData(source))
+            val batchInput =
+              source.getSlice(sqlContext, currentOffsets.get(source), newData(source))
             LogicalRDD(output, batchInput)(sqlContext)
           } else {
             LocalRelation(output)
@@ -133,22 +98,7 @@ class StreamExecution(
 
       val optimizerStart = System.nanoTime()
 
-      lastExecution = new QueryExecution(sqlContext, newPlan) {
-        // Skip the optimizer for now cause the streaming planner is not great.
-        override lazy val optimizedPlan: LogicalPlan = EliminateSubQueries(analyzed)
-        override lazy val sparkPlan: SparkPlan = {
-          SQLContext.setActive(sqlContext)
-          val batchPlanner = new StatefulPlanner(
-            sqlContext,
-            maxEventTime,
-            currentOffsets.copy(),
-            currentOffsets ++ newData)
-
-          logInfo(s"BatchPlanner initialized: $currentOffsets, $maxEventTime")
-
-          batchPlanner.plan(optimizedPlan).next()
-        }
-      }
+      lastExecution = new QueryExecution(sqlContext, newPlan)
       val executedPlan = lastExecution.executedPlan
       val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
       logDebug(s"Optimized batch in ${optimizerTime}ms")
@@ -157,7 +107,6 @@ class StreamExecution(
       newData.foreach(currentOffsets.update)
       sink.addBatch(currentOffsets.copy(), results)
 
-      logInfo(s"EventTime Offset: ${maxEventTime.value}")
       StreamExecution.this.synchronized {
         StreamExecution.this.notifyAll()
       }

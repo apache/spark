@@ -87,8 +87,6 @@ trait StreamTest extends QueryTest with Timeouts {
     }
   }
 
-  case class AwaitEventTime(time: Long) extends StreamAction with StreamMustBeRunning
-
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
    * This operation automatically blocks untill all added data has been processed.
@@ -170,7 +168,6 @@ trait StreamTest extends QueryTest with Timeouts {
          |== Stream ==
          |Stream state: $currentOffsets
          |Thread state: $threadState
-         |Event time trigger: ${if (currentStream != null) currentStream.maxEventTime else ""}
          |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
          |
          |== Sink ==
@@ -240,11 +237,6 @@ trait StreamTest extends QueryTest with Timeouts {
           case a: AddData =>
             awaiting.put(a.source, a.addData())
 
-          case AwaitEventTime(time) =>
-            checkState(currentStream != null, "stream not running")
-            failAfter(streamingTimout) {
-              currentStream.awaitOffset(currentStream.eventTimeSource, LongOffset(time))
-            }
           case CheckAnswerRows(expectedAnswer) =>
             checkState(currentStream != null, "stream not running")
 
