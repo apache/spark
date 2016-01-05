@@ -744,8 +744,14 @@ private[spark] object JsonProtocol {
       outputMetrics.setRecordsWritten((outJson \ "Records Written").extract[Long])
     }
 
-    metrics.setInputMetrics(
-      Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson))
+    // Input metrics
+    Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
+      val readMethod = DataReadMethod.withName((json \ "Data Read Method").extract[String])
+      val inputMetrics = metrics.registerInputMetrics(readMethod)
+      inputMetrics.setBytesRead((json \ "Bytes Read").extract[Long])
+      inputMetrics.incRecordsRead((json \ "Records Read").extract[Long])
+    }
+
     metrics.updatedBlocks =
       Utils.jsonOption(json \ "Updated Blocks").map { value =>
         value.extract[List[JValue]].map { block =>
@@ -754,15 +760,6 @@ private[spark] object JsonProtocol {
           (id, status)
         }
       }
-    metrics
-  }
-
-  // TODO: kill this method
-  private def inputMetricsFromJson(json: JValue): InputMetrics = {
-    val metrics = new InputMetrics(
-      DataReadMethod.withName((json \ "Data Read Method").extract[String]))
-    metrics.incBytesRead((json \ "Bytes Read").extract[Long])
-    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }
 

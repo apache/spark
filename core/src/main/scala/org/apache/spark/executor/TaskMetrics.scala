@@ -127,6 +127,66 @@ class TaskMetrics(
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
 
 
+  /* ============================ *
+   |        OUTPUT METRICS        |
+   * ============================ */
+
+  private var _outputMetrics: Option[OutputMetrics] = None
+
+  /**
+   * Metrics related to writing data externally (e.g. to a distributed filesystem),
+   * defined only in tasks with output.
+   */
+  def outputMetrics: Option[OutputMetrics] = _outputMetrics
+
+  /**
+   * Get or create a new [[OutputMetrics]] associated with this task.
+   */
+  def registerOutputMetrics(writeMethod: DataWriteMethod.Value): OutputMetrics = synchronized {
+    _outputMetrics.getOrElse {
+      val metrics = new OutputMetrics(writeMethod, accumMap)
+      _outputMetrics = Some(metrics)
+      metrics
+    }
+  }
+
+
+  /* ========================== *
+   |        INPUT METRICS       |
+   * ========================== */
+
+  private var _inputMetrics: Option[InputMetrics] = None
+
+  /**
+   * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
+   * data, defined only in tasks with input.
+   */
+  def inputMetrics: Option[InputMetrics] = _inputMetrics
+
+  /**
+   * Get or create a new [[InputMetrics]] associated with this task.
+   */
+  private[spark] def registerInputMetrics(readMethod: DataReadMethod): InputMetrics = {
+    synchronized {
+      val metrics = _inputMetrics.getOrElse {
+        val metrics = new InputMetrics(readMethod, accumMap)
+        _inputMetrics = Some(metrics)
+        metrics
+      }
+      // If there already exists an InputMetric with the same read method, we can just return
+      // that one. Otherwise, if the read method is different from the one previously seen by
+      // this task, we return a new dummy one to avoid clobbering the values of the old metrics.
+      // In the future we should try to store input metrics from all different read methods at
+      // the same time (SPARK-5225).
+      if (metrics.readMethod == readMethod) {
+        metrics
+      } else {
+        new InputMetrics(readMethod)
+      }
+    }
+  }
+
+
   /* =================================== *
    |        SHUFFLE WRITE METRICS        |
    * =================================== */
@@ -141,13 +201,14 @@ class TaskMetrics(
   /**
    * Get or create a new [[ShuffleWriteMetrics]] associated with this task.
    */
-  def registerShuffleWriteMetrics(): ShuffleWriteMetrics = {
+  def registerShuffleWriteMetrics(): ShuffleWriteMetrics = synchronized {
     _shuffleWriteMetrics.getOrElse {
       val metrics = new ShuffleWriteMetrics(accumMap)
       _shuffleWriteMetrics = Some(metrics)
       metrics
     }
   }
+
 
   /* ================================== *
    |        SHUFFLE READ METRICS        |
@@ -177,7 +238,7 @@ class TaskMetrics(
    * which merges the temporary values synchronously.
    */
   private[spark] def registerTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
-    val readMetrics = ShuffleReadMetrics.createDummy()
+    val readMetrics = new ShuffleReadMetrics
     tempShuffleReadMetrics += readMetrics
     readMetrics
   }
@@ -200,90 +261,15 @@ class TaskMetrics(
     agg.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
   }
 
-  /* ============================ *
-   |        OUTPUT METRICS        |
-   * ============================ */
-
-  private var _outputMetrics: Option[OutputMetrics] = None
-
-  /**
-   * Metrics related to writing data externally (e.g. to a distributed filesystem),
-   * defined only tasks with output.
-   */
-  def outputMetrics: Option[OutputMetrics] = _outputMetrics
-
-  /**
-   * Get or create a new [[OutputMetrics]] associated with this task.
-   */
-  def registerOutputMetrics(writeMethod: DataWriteMethod.Value): OutputMetrics = {
-    _outputMetrics.getOrElse {
-      val metrics = new OutputMetrics(writeMethod, accumMap)
-      _outputMetrics = Some(metrics)
-      metrics
-    }
-  }
-
-
-
-
-
-
-
-
 
   /* ================================== *
    |        OTHER THINGS... WIP         |
    * ================================== */
 
   /**
-   * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
-   * are stored here.
-   */
-  private var _inputMetrics: Option[InputMetrics] = None
-
-  def inputMetrics: Option[InputMetrics] = _inputMetrics
-
-  /**
-   * This should only be used when recreating TaskMetrics, not when updating input metrics in
-   * executors
-   */
-  private[spark] def setInputMetrics(inputMetrics: Option[InputMetrics]) {
-    _inputMetrics = inputMetrics
-  }
-
-  /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
-
-  /**
-   * Returns the input metrics object that the task should use. Currently, if
-   * there exists an input metric with the same readMethod, we return that one
-   * so the caller can accumulate bytes read. If the readMethod is different
-   * than previously seen by this task, we return a new InputMetric but don't
-   * record it.
-   *
-   * Once https://issues.apache.org/jira/browse/SPARK-5225 is addressed,
-   * we can store all the different inputMetrics (one per readMethod).
-   */
-  private[spark] def getInputMetricsForReadMethod(readMethod: DataReadMethod): InputMetrics = {
-    synchronized {
-      _inputMetrics match {
-        case None =>
-          val metrics = new InputMetrics(readMethod)
-          _inputMetrics = Some(metrics)
-          metrics
-        case Some(metrics @ InputMetrics(method)) if method == readMethod =>
-          metrics
-        case Some(InputMetrics(method)) =>
-          new InputMetrics(readMethod)
-      }
-    }
-  }
-
-  private[spark] def updateInputMetrics(): Unit = synchronized {
-    inputMetrics.foreach(_.updateBytesRead())
-  }
 
   private var _accumulatorUpdates: Map[Long, Any] = Map.empty
   @transient private var _accumulatorsUpdater: () => Map[Long, Any] = null
@@ -303,29 +289,11 @@ class TaskMetrics(
 }
 
 
-private[spark] object TaskMetrics {
-  private val hostNameCache = new ConcurrentHashMap[String, String]()
-
-  def empty: TaskMetrics = new TaskMetrics
-
-  /**
-   * Get the hostname from cached data, since hostname is the order of number of nodes in cluster,
-   * so using cached hostname will decrease the object number and alleviate the GC overhead.
-   */
-  def getCachedHostName: String = {
-    val host = Utils.localHostName()
-    val canonicalHost = hostNameCache.putIfAbsent(host, host)
-    if (canonicalHost != null) canonicalHost else host
-  }
-}
-
-
 /**
- * :: DeveloperApi ::
  * Method by which input data was read.  Network means that the data was read over the network
  * from a remote block manager (which may have stored the data on-disk or in-memory).
  */
-@DeveloperApi
+@deprecated("DataReadMethod will be made private in a future version.", "2.0.0")
 object DataReadMethod extends Enumeration with Serializable {
   type DataReadMethod = Value
   val Memory, Disk, Hadoop, Network = Value
@@ -333,10 +301,9 @@ object DataReadMethod extends Enumeration with Serializable {
 
 
 /**
- * :: DeveloperApi ::
  * Method by which output data was written.
  */
-@DeveloperApi
+@deprecated("DataWriteMethod will be made private in a future version.", "2.0.0")
 object DataWriteMethod extends Enumeration with Serializable {
   type DataWriteMethod = Value
   val Hadoop = Value
@@ -344,47 +311,51 @@ object DataWriteMethod extends Enumeration with Serializable {
 
 
 /**
- * :: DeveloperApi ::
  * Metrics about reading input data.
  */
-@DeveloperApi
-case class InputMetrics(readMethod: DataReadMethod.Value) {
+@deprecated("InputMetrics will be made private in a future version.", "2.0.0")
+class InputMetrics private (
+    val readMethod: DataReadMethod.Value,
+    _bytesRead: Accumulator[Long],
+    _recordsRead: Accumulator[Long])
+  extends Serializable {
 
-  /**
-   * This is volatile so that it is visible to the updater thread.
-   */
-  @volatile @transient var bytesReadCallback: Option[() => Long] = None
-
-  /**
-   * Total bytes read.
-   */
-  private var _bytesRead: Long = _
-  def bytesRead: Long = _bytesRead
-  def incBytesRead(bytes: Long): Unit = _bytesRead += bytes
-
-  /**
-   * Total records read.
-   */
-  private var _recordsRead: Long = _
-  def recordsRead: Long = _recordsRead
-  def incRecordsRead(records: Long): Unit = _recordsRead += records
-
-  /**
-   * Invoke the bytesReadCallback and mutate bytesRead.
-   */
-  def updateBytesRead() {
-    bytesReadCallback.foreach { c =>
-      _bytesRead = c()
-    }
+  private[executor] def this(
+      readMethod: DataReadMethod.Value,
+      accumMap: Map[String, Accumulator[Long]]) {
+    this(
+      readMethod,
+      accumMap(InternalAccumulator.input.BYTES_READ),
+      accumMap(InternalAccumulator.input.RECORDS_READ))
   }
 
- /**
-  * Register a function that can be called to get up-to-date information on how many bytes the task
-  * has read from an input source.
-  */
-  def setBytesReadCallback(f: Option[() => Long]) {
-    bytesReadCallback = f
+  /**
+   * Create a new [[InputMetrics]] that is not associated with any particular task.
+   *
+   * This mainly exists because of SPARK-5225, where we are forced to use a dummy [[InputMetrics]]
+   * because we want to ignore metrics from a second read method. In the future, we should revisit
+   * whether this is needed.
+   *
+   * A better alternative to use is [[TaskMetrics.registerInputMetrics]].
+   */
+  private[spark] def this(readMethod: DataReadMethod.Value) {
+    this(
+      readMethod,
+      InternalAccumulator.createInputAccums().map { acc => (acc.name.get, acc) }.toMap)
   }
+
+  /**
+   * Total number of bytes read.
+   */
+  def bytesRead: Long = _bytesRead.value
+
+  /**
+   * Total number of records read.
+   */
+  def recordsRead: Long = _recordsRead.value
+
+  private[spark] def setBytesRead(v: Long): Unit = _bytesRead.add(v)
+  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
 }
 
 
@@ -446,6 +417,19 @@ class ShuffleReadMetrics private (
   }
 
   /**
+   * Create a new [[ShuffleReadMetrics]] that is not associated with any particular task.
+   *
+   * This mainly exists for legacy reasons, because we use dummy [[ShuffleReadMetrics]] in
+   * many places only to merge their values together later. In the future, we should revisit
+   * whether this is needed.
+   *
+   * * A better alternative to use is [[TaskMetrics.registerTempShuffleReadMetrics]].
+   */
+  private[spark] def this() {
+    this(InternalAccumulator.createShuffleReadAccums().map { acc => (acc.name.get, acc) }.toMap)
+  }
+
+  /**
    * Number of remote blocks fetched in this shuffle by this task.
    */
   def remoteBlocksFetched: Long = _remoteBlocksFetched.value
@@ -502,21 +486,6 @@ class ShuffleReadMetrics private (
   private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
 }
 
-private[spark] object ShuffleReadMetrics {
-
-  /**
-   * Create a new [[ShuffleReadMetrics]] that is not associated with any particular task.
-   *
-   * This mainly exists for legacy reasons, because we use dummy [[ShuffleReadMetrics]] in
-   * many places only to merge their values together later. In the future, we should revisit
-   * whether this is needed.
-   */
-  def createDummy(): ShuffleReadMetrics = {
-    new ShuffleReadMetrics(
-      InternalAccumulator.createShuffleReadAccums().map { acc => (acc.name.get, acc) }.toMap)
-  }
-}
-
 
 /**
  * Metrics pertaining to shuffle data written in a given task.
@@ -533,6 +502,19 @@ class ShuffleWriteMetrics private (
       accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_BYTES_WRITTEN),
       accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_RECORDS_WRITTEN),
       accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_WRITE_TIME))
+  }
+
+  /**
+   * Create a new [[ShuffleWriteMetrics]] that is not associated with any particular task.
+   *
+   * This mainly exists for legacy reasons, because we use dummy [[ShuffleWriteMetrics]] in
+   * many places only to merge their values together later. In the future, we should revisit
+   * whether this is needed.
+   *
+   * A better alternative to use is [[TaskMetrics.registerShuffleWriteMetrics]].
+   */
+  private[spark] def this() {
+    this(InternalAccumulator.createShuffleWriteAccums().map { acc => (acc.name.get, acc) }.toMap)
   }
 
   /**
@@ -563,17 +545,19 @@ class ShuffleWriteMetrics private (
   }
 }
 
-private[spark] object ShuffleWriteMetrics {
+
+private[spark] object TaskMetrics {
+  private val hostNameCache = new ConcurrentHashMap[String, String]()
+
+  def empty: TaskMetrics = new TaskMetrics
 
   /**
-   * Create a new [[ShuffleWriteMetrics]] that is not associated with any particular task.
-   *
-   * This mainly exists for legacy reasons, because we use dummy [[ShuffleWriteMetrics]] in
-   * many places only to merge their values together later. In the future, we should revisit
-   * whether this is needed.
+   * Get the hostname from cached data, since hostname is the order of number of nodes in cluster,
+   * so using cached hostname will decrease the object number and alleviate the GC overhead.
    */
-  def createDummy(): ShuffleWriteMetrics = {
-    new ShuffleWriteMetrics(
-      InternalAccumulator.createShuffleWriteAccums().map { acc => (acc.name.get, acc) }.toMap)
+  def getCachedHostName: String = {
+    val host = Utils.localHostName()
+    val canonicalHost = hostNameCache.putIfAbsent(host, host)
+    if (canonicalHost != null) canonicalHost else host
   }
 }

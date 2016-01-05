@@ -61,7 +61,7 @@ object StoragePerfTester {
 
     def writeOutputBytes(mapId: Int, total: AtomicLong): Unit = {
       val shuffle = hashShuffleManager.shuffleBlockResolver.forMapTask(1, mapId, numOutputSplits,
-        new KryoSerializer(sc.conf), ShuffleWriteMetrics.createDummy())
+        new KryoSerializer(sc.conf), new ShuffleWriteMetrics)
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
         writers(i % numOutputSplits).write(writeKey, writeValue)

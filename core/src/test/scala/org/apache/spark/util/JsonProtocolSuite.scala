@@ -772,10 +772,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     t.incMemoryBytesSpilled(a + c)
 
     if (hasHadoopInput) {
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.incBytesRead(d + e + f)
+      val inputMetrics = t.registerInputMetrics(DataReadMethod.Hadoop)
+      inputMetrics.setBytesRead(d + e + f)
       inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
-      t.setInputMetrics(Some(inputMetrics))
     } else {
       val sr = t.registerTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)

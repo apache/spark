@@ -31,7 +31,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
-import org.apache.spark.executor.ShuffleWriteMetrics$;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.DummySerializerInstance;
@@ -139,7 +138,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       // We're spilling, so bytes written should be counted towards spill rather than write.
       // Create a dummy WriteMetrics object to absorb these metrics, since we don't want to count
       // them towards shuffle bytes written.
-      writeMetricsToUse = ShuffleWriteMetrics$.MODULE$.createDummy();
+      writeMetricsToUse = new ShuffleWriteMetrics();
     }
 
     // This call performs the actual sort.

@@ -387,6 +387,12 @@ private[spark] object InternalAccumulator {
     val RECORDS_WRITTEN = "metrics.output.recordsWritten"
   }
 
+  // Names of input metrics
+  object input {
+    val BYTES_READ = "metrics.input.bytesRead"
+    val RECORDS_READ = "metrics.input.recordsRead"
+  }
+
   /**
    * Create a new internal Long accumulator with the specified name.
    */
@@ -412,6 +418,7 @@ private[spark] object InternalAccumulator {
     metricNames.map(newMetric) ++
       createShuffleReadAccums() ++
       createShuffleWriteAccums() ++
+      createInputAccums() ++
       createOutputAccums()
   }
 
@@ -441,13 +448,19 @@ private[spark] object InternalAccumulator {
   }
 
   /**
+   * Accumulators for tracking input metrics.
+   * Note: this method does not register accumulators for cleanup.
+   */
+  def createInputAccums(): Seq[Accumulator[Long]] = {
+    Seq[String](input.BYTES_READ, input.RECORDS_READ).map(newMetric)
+  }
+
+  /**
    * Accumulators for tracking output metrics.
    * Note: this method does not register accumulators for cleanup.
    */
   private def createOutputAccums(): Seq[Accumulator[Long]] = {
-    Seq[String](
-      output.BYTES_WRITTEN,
-      output.RECORDS_WRITTEN).map(newMetric)
+    Seq[String](output.BYTES_WRITTEN, output.RECORDS_WRITTEN).map(newMetric)
   }
 
   /**

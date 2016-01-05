@@ -245,7 +245,7 @@ private[spark] class ExternalSorter[K, V, C](
     var writer: DiskBlockObjectWriter = null
     def openWriter(): Unit = {
       assert (writer == null && spillMetrics == null)
-      spillMetrics = ShuffleWriteMetrics.createDummy()
+      spillMetrics = new ShuffleWriteMetrics
       writer = blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
     }
     openWriter()
