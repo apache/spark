@@ -199,6 +199,15 @@ case class ExpressionEncoder[T](
   private lazy val constructProjection = GenerateSafeProjection.generate(fromRowExpression :: Nil)
 
   /**
+   * Returns this encoder where it has been bound to its own output (i.e. no remaping of columns
+   * is performed).
+   */
+  def defaultBinding: ExpressionEncoder[T] = {
+    val attrs = schema.toAttributes
+    resolve(attrs, OuterScopes.outerScopes).bind(attrs)
+  }
+
+  /**
    * Returns an encoded version of `t` as a Spark SQL row.  Note that multiple calls to
    * toRow are allowed to return the same actual [[InternalRow]] object.  Thus, the caller should
    * copy the result before making another call if required.
