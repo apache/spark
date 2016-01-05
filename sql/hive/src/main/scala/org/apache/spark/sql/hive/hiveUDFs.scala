@@ -232,20 +232,6 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
     udfType != null && udfType.deterministic()
   }
 
-  override def semanticEquals(other: Expression): Boolean = {
-    val eqClass = other.isInstanceOf[HiveGenericUDF] &&
-      funcWrapper.functionClassName ==
-        other.asInstanceOf[HiveGenericUDF].funcWrapper.functionClassName
-
-     val isEqual = eqClass &&
-       children.length == other.asInstanceOf[HiveGenericUDF].children.length &&
-       children.zip(other.asInstanceOf[HiveGenericUDF].children).forall {
-      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
-      case (i1, i2) => i1 == i2
-    }
-    isEqual
-  }
-
   @transient
   private lazy val deferedObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
     new DeferredObjectAdapter(inspect, child.dataType)

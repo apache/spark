@@ -123,6 +123,12 @@ private[hive] object HiveShim {
     // for Serialization
     def this() = this(null)
 
+    override def equals(other: Any): Boolean = other match {
+      case a: HiveFunctionWrapper =>
+        functionClassName == a.functionClassName
+      case _ => false
+    }
+
     @transient
     def deserializeObjectByKryo[T: ClassTag](
         kryo: Kryo,
