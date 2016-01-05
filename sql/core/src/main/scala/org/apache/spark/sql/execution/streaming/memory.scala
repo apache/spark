@@ -54,7 +54,7 @@ case class MemoryStream[A : Encoder](id: Int) extends Source with Logging {
 
   def schema: StructType = encoder.schema
 
-  def offset: Offset = currentOffset
+  def getCurrentOffset: Offset = currentOffset
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
     new Dataset(sqlContext, logicalPlan)

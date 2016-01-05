@@ -114,9 +114,6 @@ trait StreamTest extends QueryTest with Timeouts {
   /** Starts the stream, resuming if data has already been processed.  It must not be running. */
   case object StartStream extends StreamAction
 
-  /** Restarts all sources that implement a `restart()` method. */
-  case object RestartSources extends StreamAction
-
   /** Signals that a failure is expected and should not kill the test. */
   case object ExpectFailure extends StreamAction
 
@@ -192,11 +189,6 @@ trait StreamTest extends QueryTest with Timeouts {
         action match {
           case StartStream =>
             checkState(currentStream == null, "stream already running")
-
-            currentPlan = currentPlan transform {
-              case StreamingRelation(s, _) =>
-                StreamingRelation(s.restart())
-            }
 
             currentStream = new StreamExecution(sqlContext, stream.logicalPlan, sink)
             currentStream.microBatchThread.setUncaughtExceptionHandler(

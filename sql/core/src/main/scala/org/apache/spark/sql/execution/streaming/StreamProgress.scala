@@ -23,28 +23,26 @@ class StreamProgress extends Serializable {
   private val currentOffsets = new mutable.HashMap[Source, Offset]
     with mutable.SynchronizedMap[Source, Offset]
 
-  def isEmpty: Boolean = currentOffsets.filterNot(_._2.isEmpty).isEmpty
-
-  def update(source: Source, newOffset: Offset): Unit = {
+  private[streaming] def update(source: Source, newOffset: Offset): Unit = {
     currentOffsets.get(source).foreach(old => assert(newOffset > old))
     currentOffsets.put(source, newOffset)
   }
 
-  def update(newOffset: (Source, Offset)): Unit =
+  private[streaming] def update(newOffset: (Source, Offset)): Unit =
     update(newOffset._1, newOffset._2)
 
-  def apply(source: Source): Offset = currentOffsets(source)
-  def get(source: Source): Option[Offset] = currentOffsets.get(source)
-  def contains(source: Source): Boolean = currentOffsets.contains(source)
+  private[streaming] def apply(source: Source): Offset = currentOffsets(source)
+  private[streaming] def get(source: Source): Option[Offset] = currentOffsets.get(source)
+  private[streaming] def contains(source: Source): Boolean = currentOffsets.contains(source)
 
-  def ++(updates: Map[Source, Offset]): StreamProgress = {
+  private[streaming] def ++(updates: Map[Source, Offset]): StreamProgress = {
     val updated = new StreamProgress
     currentOffsets.foreach(updated.update)
     updates.foreach(updated.update)
     updated
   }
 
-  def copy(): StreamProgress = {
+  private[streaming] def copy(): StreamProgress = {
     val copied = new StreamProgress
     currentOffsets.foreach(copied.update)
     copied

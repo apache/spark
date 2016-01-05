@@ -21,30 +21,22 @@ package org.apache.spark.sql.execution.streaming
 
 /**
  * A offset is a monotonically increasing metric used to track progress in the computation of a
- * stream.  In addition to being comparable, a [[Offset]] must have a notion of being empty
- * which is used to denote a stream where no processing has yet occurred.
+ * stream. An [[Offset]] must be comparable.
  */
 trait Offset extends Serializable {
-  def isEmpty: Boolean
-
   def >(other: Offset): Boolean
 
   def <(other: Offset): Boolean
 }
 
-object LongOffset {
-  val empty = LongOffset(-1)
-}
-
 case class LongOffset(offset: Long) extends Offset {
-  def isEmpty: Boolean = offset == -1
-
-  def >(other: Offset): Boolean = other match {
+  override def >(other: Offset): Boolean = other match {
     case l: LongOffset => offset > l.offset
     case _ =>
       throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")
   }
-  def <(other: Offset): Boolean = other match {
+
+  override def <(other: Offset): Boolean = other match {
     case l: LongOffset => offset < l.offset
     case _ =>
       throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")

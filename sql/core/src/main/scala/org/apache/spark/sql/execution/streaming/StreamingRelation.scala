@@ -17,23 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 
-
-trait Source  {
-
-  /** Returns the schema of the data from this source */
-  def schema: StructType
-
-  /** Returns the maximum offset that can be retrieved from the source. */
-  def getCurrentOffset: Offset
-
-  /**
-   * Returns the data between the `start` and `end` offsets.  This function must always return
-   * the same set of data for any given pair of offsets.
-   */
-  def getSlice(sqlContext: SQLContext, start: Option[Offset], end: Offset): RDD[InternalRow]
+object StreamingRelation {
+  def apply(source: Source): StreamingRelation =
+    StreamingRelation(source, source.schema.toAttributes)
 }
+
+/**
+ * Used to link a streaming [[Source]] of data into a
+ * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
+ */
+case class StreamingRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
+  override def toString: String = source.toString
+}
+

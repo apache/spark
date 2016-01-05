@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occuring in a separate thread.
- * Unlike a standard query, a streaming query executes repeatedly each time new data arrives at
+ * Unlike a standard query, a streaming query executes repeatedly each time new data arrives at any
  * [[Source]] present in the query plan. Whenever new data arrives, a [[QueryExecution]] is created
  * and the results are committed transactionally to the given [[Sink]].
  */
@@ -74,7 +74,7 @@ class StreamExecution(
 
     val newData = sources.flatMap { s =>
       val prevOffset = currentOffsets.get(s)
-      val latestOffset = s.offset
+      val latestOffset = s.getCurrentOffset
       if (prevOffset.isEmpty || latestOffset > prevOffset.get) {
         Some(s -> latestOffset)
       } else None
