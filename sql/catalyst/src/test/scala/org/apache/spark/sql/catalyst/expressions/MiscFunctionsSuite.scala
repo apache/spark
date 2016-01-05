@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{IntegerType, StringType, BinaryType}
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType}
 
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 

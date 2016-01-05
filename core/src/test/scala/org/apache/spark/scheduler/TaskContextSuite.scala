@@ -17,17 +17,15 @@
 
 package org.apache.spark.scheduler
 
-import org.mockito.Mockito._
 import org.mockito.Matchers.any
-
+import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
-import org.apache.spark.metrics.source.JvmSource
-
 
 class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 

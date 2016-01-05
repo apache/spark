@@ -28,9 +28,9 @@ import org.scalatest.PrivateMethodTester
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends SparkFunSuite

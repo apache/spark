@@ -19,9 +19,9 @@ package org.apache.spark.streaming.kafka
 
 import scala.util.Random
 
-import kafka.serializer.StringDecoder
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
+import kafka.serializer.StringDecoder
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._

@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
-import org.apache.spark.sql.catalyst.TableIdentifier
 
 class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
   import testImplicits._
