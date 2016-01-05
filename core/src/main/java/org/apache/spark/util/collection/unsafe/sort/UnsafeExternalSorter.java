@@ -184,7 +184,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
           inMemSorter.numRecords());
       spillWriters.add(spillWriter);
-      final UnsafeSorterIterator sortedRecords = inMemSorter.getSortedIterator();
+      UnsafeSorterIterator sortedRecords;
+      if (recordComparator != null) {
+        sortedRecords = inMemSorter.getSortedIterator();
+      } else {
+        sortedRecords = inMemSorter.getIterator();
+      }
       while (sortedRecords.hasNext()) {
         sortedRecords.loadNext();
         final Object baseObject = sortedRecords.getBaseObject();
@@ -400,6 +405,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * after consuming this iterator.
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
+    assert (recordComparator != null);
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
       readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
@@ -430,7 +436,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     public SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
       this.upstream = inMemIterator;
-      this.numRecords = inMemIterator.numRecordsLeft();
+      this.numRecords = inMemIterator.getNumRecords();
+    }
+
+    public int getNumRecords() {
+      return numRecords;
     }
 
     public long spill() throws IOException {
@@ -531,6 +541,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    *
    * It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
+   *
+   * TODO: support forced spilling
    */
   public UnsafeSorterIterator getIterator() throws IOException {
     if (spillWriters.isEmpty()) {
@@ -555,11 +567,21 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     private final Queue<UnsafeSorterIterator> iterators;
     private UnsafeSorterIterator current;
+    private int numRecords;
 
     public ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
       assert iterators.size() > 0;
+      this.numRecords = 0;
+      for (UnsafeSorterIterator iter: iterators) {
+        this.numRecords += iter.getNumRecords();
+      }
       this.iterators = iterators;
       this.current = iterators.remove();
+    }
+
+    @Override
+    public int getNumRecords() {
+      return numRecords;
     }
 
     @Override
@@ -572,6 +594,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public void loadNext() throws IOException {
+      while (!current.hasNext() && !iterators.isEmpty()) {
+        current = iterators.remove();
+      }
       current.loadNext();
     }
 

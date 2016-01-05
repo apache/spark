@@ -186,6 +186,11 @@ public final class UnsafeInMemorySorter {
     }
 
     @Override
+    public int getNumRecords() {
+      return numRecords;
+    }
+
+    @Override
     public boolean hasNext() {
       return position / 2 < numRecords;
     }
