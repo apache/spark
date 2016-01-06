@@ -28,6 +28,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.tuning.bandit.Controllable
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg._
@@ -159,7 +160,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 class LogisticRegression @Since("1.2.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with DefaultParamsWritable with Logging {
+  with LogisticRegressionParams with DefaultParamsWritable with Logging with Controllable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("logreg"))
@@ -211,6 +212,13 @@ class LogisticRegression @Since("1.2.0") (
   @Since("1.4.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
+
+  /**
+   * Set initial Logistic Regression model.
+   * Default is None.
+   * @group setParam
+   */
+  def setInitialModel(model: LogisticRegressionModel): this.type = set(initialModel, Some(model))
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -322,11 +330,20 @@ class LogisticRegression @Since("1.2.0") (
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
     }
 
-    val initialCoefficientsWithIntercept =
-      Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
+    val initialCoefficientsWithIntercept = if ($(initialModel).isDefined) {
+      if ($(fitIntercept)) {
+        Vectors.dense(
+          $(initialModel).get.asInstanceOf[LogisticRegressionModel].coefficients.toArray ++
+            Array($(initialModel).get.asInstanceOf[LogisticRegressionModel].intercept))
+      } else {
+        $(initialModel).get.asInstanceOf[LogisticRegressionModel].coefficients
+      }
+    } else {
+      val coefficientsWithIntercept =
+        Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
 
-    if ($(fitIntercept)) {
-      /*
+      if ($(fitIntercept)) {
+        /*
          For binary logistic regression, when we initialize the coefficients as zeros,
          it will converge faster if we initialize the intercept such that
          it follows the distribution of the labels.
@@ -339,8 +356,10 @@ class LogisticRegression @Since("1.2.0") (
          b = \log{P(1) / P(0)} = \log{count_1 / count_0}
          }}}
        */
-      initialCoefficientsWithIntercept.toArray(numFeatures)
-        = math.log(histogram(1) / histogram(0))
+        coefficientsWithIntercept.toArray(numFeatures)
+          = math.log(histogram(1) / histogram(0))
+      }
+      coefficientsWithIntercept
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
