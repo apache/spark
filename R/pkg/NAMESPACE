@@ -94,7 +94,8 @@ exportMethods("arrange",
               "withColumnRenamed",
               "write.df",
               "write.json",
-              "write.parquet")
+              "write.parquet",
+              "write.text")
 
 exportClasses("Column")
 
@@ -274,6 +275,7 @@ export("as.DataFrame",
        "parquetFile",
        "read.df",
        "read.parquet",
+       "read.text",
        "sql",
        "table",
        "tableNames",
