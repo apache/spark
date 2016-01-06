@@ -1428,7 +1428,7 @@ Apart from these, the following properties are also available, and may be useful
         <td>
             A comma separated list of ciphers. The specified ciphers must be supported by JVM.
             The reference list of protocols one can find on
-            a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
+            <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
         </td>
     </tr>
