@@ -27,11 +27,9 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
     val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
-      case Some(value) => if (value.length == 1) {
-        value.charAt(0)
-      } else {
-        throw new RuntimeException(s"$paramName cannot be more than one character")
-      }
+      case Some(value) if value.length == 0 => '\0'
+      case Some(value) if value.length == 1 => value.charAt(0)
+      case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
     }
   }
 
@@ -49,8 +47,6 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
   val delimiter = CSVTypeCast.toChar(parameters.getOrElse("delimiter", ","))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("charset", Charset.forName("UTF-8").name())
-  // TODO validate charset?
-  val codec = parameters.getOrElse("codec", null)
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')

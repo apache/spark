@@ -58,7 +58,6 @@ private[csv] class CSVRelation(
     if (Charset.forName(params.charset) == Charset.forName("UTF-8")) {
       sqlContext.sparkContext.textFile(location)
     } else {
-      // TODO: maybe use mapPartitions instead?
       sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions { _.map { pair =>
             new String(pair._2.getBytes, 0, pair._2.getLength, params.charset)
@@ -142,14 +141,14 @@ private[csv] class CSVRelation(
   /**
     * Returns the first line of the first non-empty file in path
     */
-  private def findFirstLine(rdd: RDD[String]) = {
+  private def findFirstLine(rdd: RDD[String]): String = {
     if (params.isCommentSet) {
-      rdd.first()
-    } else {
       rdd.take(params.MAX_COMMENT_LINES_IN_HEADER)
         .find(!_.startsWith(params.comment.toString))
         .getOrElse(sys.error(s"No uncommented header line in " +
           s"first ${params.MAX_COMMENT_LINES_IN_HEADER} lines"))
+    } else {
+      rdd.first()
     }
   }
 }
