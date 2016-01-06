@@ -362,19 +362,19 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("WidenSetOperationTypes for union except and intersect") {
-    def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
-      logical.output.zip(expectTypes).foreach { case (attr, dt) =>
-        assert(attr.dataType === dt)
-      }
+  private def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
+    logical.output.zip(expectTypes).foreach { case (attr, dt) =>
+      assert(attr.dataType === dt)
     }
+  }
 
-    val left = LocalRelation(
+  test("WidenSetOperationTypes for except and intersect") {
+    val firstTable = LocalRelation(
       AttributeReference("i", IntegerType)(),
       AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("b", ByteType)(),
       AttributeReference("d", DoubleType)())
-    val right = LocalRelation(
+    val secondTable = LocalRelation(
       AttributeReference("s", StringType)(),
       AttributeReference("d", DecimalType(2, 1))(),
       AttributeReference("f", FloatType)(),
@@ -383,15 +383,65 @@ class HiveTypeCoercionSuite extends PlanTest {
     val wt = HiveTypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val r1 = wt(Union(left, right)).asInstanceOf[Union]
-    val r2 = wt(Except(left, right)).asInstanceOf[Except]
-    val r3 = wt(Intersect(left, right)).asInstanceOf[Intersect]
+    val r1 = wt(Except(firstTable, secondTable)).asInstanceOf[Except]
+    val r2 = wt(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
     checkOutput(r1.left, expectedTypes)
     checkOutput(r1.right, expectedTypes)
     checkOutput(r2.left, expectedTypes)
     checkOutput(r2.right, expectedTypes)
-    checkOutput(r3.left, expectedTypes)
-    checkOutput(r3.right, expectedTypes)
+
+    // Check if a Project is added
+    assert(r1.left.isInstanceOf[Project])
+    assert(r1.right.isInstanceOf[Project])
+    assert(r2.left.isInstanceOf[Project])
+    assert(r2.right.isInstanceOf[Project])
+
+    val r3 = wt(Except(firstTable, firstTable)).asInstanceOf[Except]
+    checkOutput(r3.left, Seq(IntegerType, DecimalType.SYSTEM_DEFAULT, ByteType, DoubleType))
+    checkOutput(r3.right, Seq(IntegerType, DecimalType.SYSTEM_DEFAULT, ByteType, DoubleType))
+
+    // Check if no Project is added
+    assert(r3.left.isInstanceOf[LocalRelation])
+    assert(r3.right.isInstanceOf[LocalRelation])
+  }
+
+  test("WidenSetOperationTypes for union") {
+    val firstTable = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)())
+    val secondTable = LocalRelation(
+      AttributeReference("s", StringType)(),
+      AttributeReference("d", DecimalType(2, 1))(),
+      AttributeReference("f", FloatType)(),
+      AttributeReference("l", LongType)())
+    val thirdTable = LocalRelation(
+      AttributeReference("m", StringType)(),
+      AttributeReference("n", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("p", FloatType)(),
+      AttributeReference("q", DoubleType)())
+    val forthTable = LocalRelation(
+      AttributeReference("m", StringType)(),
+      AttributeReference("n", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("p", ByteType)(),
+      AttributeReference("q", DoubleType)())
+
+    val wt = HiveTypeCoercion.WidenSetOperationTypes
+    val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
+
+    val unionRelation = wt(
+      Union(firstTable :: secondTable :: thirdTable :: forthTable :: Nil)).asInstanceOf[Union]
+    assert(unionRelation.children.length == 4)
+    checkOutput(unionRelation.children.head, expectedTypes)
+    checkOutput(unionRelation.children(1), expectedTypes)
+    checkOutput(unionRelation.children(2), expectedTypes)
+    checkOutput(unionRelation.children(3), expectedTypes)
+
+    assert(unionRelation.children.head.isInstanceOf[Project])
+    assert(unionRelation.children(1).isInstanceOf[Project])
+    assert(unionRelation.children(2).isInstanceOf[LocalRelation])
+    assert(unionRelation.children(3).isInstanceOf[Project])
   }
 
   test("Transform Decimal precision/scale for union except and intersect") {
@@ -413,8 +463,8 @@ class HiveTypeCoercionSuite extends PlanTest {
     val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
     val r3 = dp(Intersect(left1, right1)).asInstanceOf[Intersect]
 
-    checkOutput(r1.left, expectedType1)
-    checkOutput(r1.right, expectedType1)
+    checkOutput(r1.children.head, expectedType1)
+    checkOutput(r1.children.last, expectedType1)
     checkOutput(r2.left, expectedType1)
     checkOutput(r2.right, expectedType1)
     checkOutput(r3.left, expectedType1)
@@ -426,7 +476,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     val expectedTypes = Seq(DecimalType(10, 5), DecimalType(10, 5), DecimalType(15, 5),
       DecimalType(25, 5), DoubleType, DoubleType)
 
-    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+    rightTypes.zip(expectedTypes).foreach { case (rType, expectedType) =>
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 
@@ -434,7 +484,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       val r2 = dp(Except(plan1, plan2)).asInstanceOf[Except]
       val r3 = dp(Intersect(plan1, plan2)).asInstanceOf[Intersect]
 
-      checkOutput(r1.right, Seq(expectedType))
+      checkOutput(r1.children.last, Seq(expectedType))
       checkOutput(r2.right, Seq(expectedType))
       checkOutput(r3.right, Seq(expectedType))
 
@@ -442,7 +492,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       val r5 = dp(Except(plan2, plan1)).asInstanceOf[Except]
       val r6 = dp(Intersect(plan2, plan1)).asInstanceOf[Intersect]
 
-      checkOutput(r4.left, Seq(expectedType))
+      checkOutput(r4.children.last, Seq(expectedType))
       checkOutput(r5.left, Seq(expectedType))
       checkOutput(r6.left, Seq(expectedType))
     }

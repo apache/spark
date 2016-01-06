@@ -108,19 +108,48 @@ private[sql] object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
-case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-
-  override def statistics: Statistics = {
-    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
-    Statistics(sizeInBytes = sizeInBytes)
-  }
-}
-
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
+}
+
+/** Factory for constructing new `Union` nodes. */
+object Union {
+  def apply(left: LogicalPlan, right: LogicalPlan): Union = {
+    Union (left :: right :: Nil)
+  }
+}
+
+case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
+
+  override def output: Seq[Attribute] = {
+    // updating nullability to make all the children consistent
+    children.tail.foldLeft(children.head.output) { case (currentOutput, child) =>
+      currentOutput.zip(child.output).map { case (a1, a2) =>
+        a1.withNullability(a1.nullable || a2.nullable)
+      }
+    }
+  }
+
+  override lazy val resolved: Boolean = {
+    val allChildrenCompatible: Boolean =
+      children.tail.forall( child =>
+        // compare the attribute number with the first child
+        child.output.length == children.head.output.length &&
+        // compare the data types with the first child
+        child.output.zip(children.head.output).forall {
+          case (l, r) => l.dataType == r.dataType }
+      )
+
+    childrenResolved && allChildrenCompatible
+  }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Join(

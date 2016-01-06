@@ -30,42 +30,67 @@ class SetOperationPushDownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Union Pushdown", Once,
+        CombineUnions,
         SetOperationPushDown,
         SimplifyFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-  val testUnion = Union(testRelation, testRelation2)
+  val testRelation3 = LocalRelation('g.int, 'h.int, 'i.int)
+  val testUnion = Union(testRelation :: testRelation2 :: testRelation3 :: Nil)
   val testIntersect = Intersect(testRelation, testRelation2)
   val testExcept = Except(testRelation, testRelation2)
 
-  test("union/intersect/except: filter to each side") {
-    val unionQuery = testUnion.where('a === 1)
+  test("union: combine unions into one unions") {
+    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation)
+    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation))
+    val unionOptimized1 = Optimize.execute(unionQuery1.analyze)
+    val unionOptimized2 = Optimize.execute(unionQuery2.analyze)
+
+    comparePlans(unionOptimized1, unionOptimized2)
+
+    val combinedUnions = Union(unionOptimized1 :: unionOptimized2 :: Nil)
+    val combinedUnionsOptimized = Optimize.execute(combinedUnions.analyze)
+    val unionQuery3 = Union(unionQuery1, unionQuery2)
+    val unionOptimized3 = Optimize.execute(unionQuery3.analyze)
+    comparePlans(combinedUnionsOptimized, unionOptimized3)
+  }
+
+  test("intersect/except: filter to each side") {
     val intersectQuery = testIntersect.where('b < 10)
     val exceptQuery = testExcept.where('c >= 5)
 
-    val unionOptimized = Optimize.execute(unionQuery.analyze)
     val intersectOptimized = Optimize.execute(intersectQuery.analyze)
     val exceptOptimized = Optimize.execute(exceptQuery.analyze)
 
-    val unionCorrectAnswer =
-      Union(testRelation.where('a === 1), testRelation2.where('d === 1)).analyze
     val intersectCorrectAnswer =
       Intersect(testRelation.where('b < 10), testRelation2.where('e < 10)).analyze
     val exceptCorrectAnswer =
       Except(testRelation.where('c >= 5), testRelation2.where('f >= 5)).analyze
 
-    comparePlans(unionOptimized, unionCorrectAnswer)
     comparePlans(intersectOptimized, intersectCorrectAnswer)
     comparePlans(exceptOptimized, exceptCorrectAnswer)
+  }
+
+  test("union: filter to each side") {
+    val unionQuery = testUnion.where('a === 1)
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.where('a === 1) ::
+        testRelation2.where('d === 1) ::
+        testRelation3.where('g === 1) :: Nil).analyze
+
+    comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("union: project to each side") {
     val unionQuery = testUnion.select('a)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.select('a), testRelation2.select('d)).analyze
+      Union(testRelation.select('a) ::
+        testRelation2.select('d) ::
+        testRelation3.select('g) :: Nil).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 

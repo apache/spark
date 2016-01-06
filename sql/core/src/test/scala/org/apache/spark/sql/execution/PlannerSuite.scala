@@ -51,18 +51,6 @@ class PlannerSuite extends SharedSQLContext {
       s"The plan of query $query does not have partial aggregations.")
   }
 
-  test("unions are collapsed") {
-    val planner = sqlContext.planner
-    import planner._
-    val query = testData.unionAll(testData).unionAll(testData).logicalPlan
-    val planned = BasicOperators(query).head
-    val logicalUnions = query collect { case u: logical.Union => u }
-    val physicalUnions = planned collect { case u: execution.Union => u }
-
-    assert(logicalUnions.size === 2)
-    assert(physicalUnions.size === 1)
-  }
-
   test("count is partially aggregated") {
     val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)

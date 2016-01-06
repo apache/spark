@@ -22,7 +22,7 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{Unions, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -37,6 +37,12 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
+    // - Do the first call of CombineUnions before starting the major Optimizer rules,
+    //   since they could add/move extra operators between two adjacent Union operators.
+    // - Call CombineUnions again in Batch("Operator Optimizations"),
+    //   since the other rules might make two separate Unions operators adjacent.
+    Batch("Union", FixedPoint(100),
+      CombineUnions) ::
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
@@ -54,6 +60,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ProjectCollapsing,
       CombineFilters,
       CombineLimits,
+      CombineUnions,
       // Constant folding
       NullPropagation,
       OptimizeIn,
@@ -115,11 +122,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
-  private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
-    assert(bn.isInstanceOf[Union] || bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
-    assert(bn.left.output.size == bn.right.output.size)
-
-    AttributeMap(bn.left.output.zip(bn.right.output))
+  private def buildRewrites(left: LogicalPlan, right: LogicalPlan): AttributeMap[Attribute] = {
+    assert(left.output.size == right.output.size)
+    AttributeMap(left.output.zip(right.output))
   }
 
   /**
@@ -153,32 +158,38 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down filter into union
-    case Filter(condition, u @ Union(left, right)) =>
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(u)
-      Filter(nondeterministic,
-        Union(
-          Filter(deterministic, left),
-          Filter(pushToRight(deterministic, rewrites), right)
-        )
-      )
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, u @ Union(left, right)) =>
+    case p @ Project(projectList, Union(children)) =>
+      assert(children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
-        val rewrites = buildRewrites(u)
-        Union(
-          Project(projectList, left),
-          Project(projectList.map(pushToRight(_, rewrites)), right))
+        val newFirstChild = Project(projectList, children.head)
+        val newOtherChildren = children.tail.map ( child => {
+          val rewrites = buildRewrites(children.head, child)
+          Project(projectList.map(pushToRight(_, rewrites)), child)
+        } )
+        Union(newFirstChild +: newOtherChildren)
       } else {
         p
       }
 
-    // Push down filter through INTERSECT
-    case Filter(condition, i @ Intersect(left, right)) =>
+    // Push down filter into union
+    case Filter(condition, Union(children)) =>
+      assert(children.nonEmpty)
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(i)
+      val newFirstChild = Filter(deterministic, children.head)
+      val newOtherChildren = children.tail.map {
+        child => {
+          val rewrites = buildRewrites(children.head, child)
+          Filter(pushToRight(deterministic, rewrites), child)
+        }
+      }
+      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
+
+    // Push down filter through INTERSECT
+    case Filter(condition, Intersect(left, right)) =>
+      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Intersect(
           Filter(deterministic, left),
@@ -187,9 +198,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       )
 
     // Push down filter through EXCEPT
-    case Filter(condition, e @ Except(left, right)) =>
+    case Filter(condition, Except(left, right)) =>
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(e)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Except(
           Filter(deterministic, left),
@@ -591,6 +602,15 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // if (false) a else b  =>  b
       case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
     }
+  }
+}
+
+/**
+ * Combines all adjacent [[Union]] operators into a single [[Union]].
+ */
+object CombineUnions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Unions(children) => Union(children)
   }
 }
 
