@@ -86,3 +86,5 @@ org.apache.spark.scheduler.SparkHistoryListenerFactory
 .*parquet
 LZ4BlockInputStream.java
 spark-deps-.*
+.*csv
+.*tsv

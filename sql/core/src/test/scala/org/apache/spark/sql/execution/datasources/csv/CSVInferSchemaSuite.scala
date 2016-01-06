@@ -60,4 +60,13 @@ class InferSchemaSuite extends SparkFunSuite {
         Array(LongType)).deep == Array(DoubleType).deep)
   }
 
+  test("Null fields are handled properly when a nullValue is specified") {
+    assert(CSVInferSchema.inferField(NullType, "null", "null") == NullType)
+    assert(CSVInferSchema.inferField(StringType, "null", "null") == StringType)
+    assert(CSVInferSchema.inferField(LongType, "null", "null") == LongType)
+    assert(CSVInferSchema.inferField(IntegerType, "\\N", "\\N") == IntegerType)
+    assert(CSVInferSchema.inferField(DoubleType, "\\N", "\\N") == DoubleType)
+    assert(CSVInferSchema.inferField(TimestampType, "\\N", "\\N") == TimestampType)
+  }
+
 }

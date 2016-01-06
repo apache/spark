@@ -32,6 +32,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsTsvFile = "cars.tsv"
   private val carsAltFile = "cars-alternative.csv"
   private val carsUnbalancedQuotesFile = "cars-unbalanced-quotes.csv"
+  private val carsNullFile = "cars-null.csv"
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
@@ -312,4 +313,26 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     assert(results.toSeq.map(_.toSeq) === expected)
   }
+
+  test("nullable fields with user defined null value of \"null\"") {
+
+    // year,make,model,comment,blank
+    val dataSchema = StructType(List(
+      StructField("year", IntegerType, nullable = true),
+      StructField("make", StringType, nullable = false),
+      StructField("model", StringType, nullable = false),
+      StructField("comment", StringType, nullable = true),
+      StructField("blank", StringType, nullable = true)))
+    val cars = sqlContext.read
+      .format("csv")
+      .schema(dataSchema)
+      .options(Map("header" -> "true", "nullValue" -> "null"))
+      .load(testFile(carsNullFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
+    val results = cars.collect()
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+  }
+
 }

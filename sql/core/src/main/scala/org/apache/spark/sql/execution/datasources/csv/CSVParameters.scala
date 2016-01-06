@@ -54,7 +54,6 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 
   val headerFlag = getBool("header")
   val inferSchemaFlag = getBool("inferSchema")
-  val treatEmptyValuesAsNullsFlag = getBool("treatEmptyValuesAsNulls")
   val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
   val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
 

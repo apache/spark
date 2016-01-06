@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.Charset
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{Text, NullWritable, LongWritable}
 import org.apache.hadoop.mapred.TextInputFormat
@@ -128,7 +130,7 @@ private[csv] class CSVRelation(
 
     val parsedRdd = tokenRdd(header, paths)
     if (params.inferSchemaFlag) {
-      CSVInferSchema(parsedRdd, header)
+      CSVInferSchema(parsedRdd, header, params.nullValue)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
@@ -224,17 +226,13 @@ object CSVRelation extends Logging {
                 indexSafeTokens(index),
                 field.dataType,
                 field.nullable,
-                params.treatEmptyValuesAsNullsFlag)
+                params.nullValue)
               subIndex = subIndex + 1
             }
             Some(Row.fromSeq(rowArray.take(requiredSize)))
           } catch {
-            case nfe: java.lang.NumberFormatException if params.dropMalformed =>
-              logWarning("Number format exception. " +
-                s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-              None
-            case pe: java.text.ParseException if params.dropMalformed =>
-              logWarning("Parse Exception. " +
+            case NonFatal(e) if params.dropMalformed =>
+              logWarning("Parse exception. " +
                 s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
               None
           }
