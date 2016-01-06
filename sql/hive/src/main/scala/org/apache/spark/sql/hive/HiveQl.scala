@@ -25,12 +25,12 @@ import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.ParseUtils._
@@ -441,12 +441,13 @@ private[hive] object HiveQl extends SparkQl with Logging {
             tableDesc = tableDesc.copy(
               serdeProperties = tableDesc.serdeProperties ++ serdeParams.asScala)
           case Token("TOK_TABLELOCATION", child :: Nil) =>
-            val location = unescapeSQLString(child.text)
+            val location = EximUtil.relativeToAbsolutePath(hiveConf, unescapeSQLString(child.text))
             tableDesc = tableDesc.copy(location = Option(location))
           case Token("TOK_TABLESERIALIZER", child :: Nil) =>
             tableDesc = tableDesc.copy(
               serde = Option(unescapeSQLString(child.children.head.text)))
             if (child.numChildren == 2) {
+              // This is based on org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.readProps(..)
               val serdeParams = child.children(1).children.head.children.map {
                 case Token(_, Token(prop, Nil) :: valueNode) =>
                   val value = valueNode.headOption
@@ -671,6 +672,7 @@ private[hive] object HiveQl extends SparkQl with Logging {
     case other => super.nodeToGenerator(node)
   }
 
+  // This is based on org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.getColumns(..)
   protected def nodeToColumns(node: ASTNode, lowerCase: Boolean): Seq[HiveColumn] = {
     node.children.map(_.children).collect {
       case Token(rawColName, Nil) :: colTypeNode :: comment =>
@@ -683,9 +685,10 @@ private[hive] object HiveQl extends SparkQl with Logging {
     }
   }
 
-  /**
-   *
-   */
+  // This is based on the following methods in org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer:
+  // getTypeStringFromAST
+  // getStructTypeStringFromAST
+  // getUnionTypeStringFromAST
   protected def nodeToTypeString(node: ASTNode): String = node.tokenType match {
     case SparkSqlParser.TOK_LIST =>
       val listType :: Nil = node.children
