@@ -142,7 +142,7 @@ class AnalysisSuite extends AnalysisTest {
       Project(testRelation.output ++ testRelation2.output,
         Join(Project(testRelation.output, testRelation),
           Project(testRelation2.output :+ projected, testRelation2), Inner,
-          Some(And(EqualTo(a, Cast(e, IntegerType)), EqualTo(projected.toAttribute * c, c)))))
+            Some(And(EqualTo(a, Cast(e, IntegerType)), EqualTo(projected.toAttribute * c, c)))))
     checkAnalysis(plan, expected)
   }
 

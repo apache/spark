@@ -1050,8 +1050,8 @@ class Analyzer(
      * split the expression by given logicalPlan
      */
     private def split(expressions: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-      //split the expressions to otherExpressions and restExpressions
-      //because otherExpression is not AttributeReference
+      // split the expressions to otherExpressions and restExpressions
+      // because otherExpression is not AttributeReference
       val (otherExpressions, restExpressions) =
         expressions.partition(_.references.size == 0)
       val (leftEvaluateExpressions, rest) =
