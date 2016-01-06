@@ -169,7 +169,7 @@ private[ui] class ExecutorsPage(
         }
       }>{info.failedTasks}</td>
       <td style={
-        if (info.completedTasks > 0 && (info.activeTasks > 0 || info.failedTasks > 0)) {
+        if (info.completedTasks > 0) {
           "background:hsla(120, 100%, 25%, " + completedTasksAlpha + ");color:white"
         } else {
           ""
