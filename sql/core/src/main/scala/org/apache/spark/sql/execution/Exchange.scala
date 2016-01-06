@@ -28,7 +28,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
@@ -50,25 +49,13 @@ case class Exchange(
       case None => ""
     }
 
-    val simpleNodeName = if (tungstenMode) "TungstenExchange" else "Exchange"
+    val simpleNodeName = "Exchange"
     s"$simpleNodeName$extraInfo"
   }
-
-  /**
-   * Returns true iff we can support the data type, and we are not doing range partitioning.
-   */
-  private lazy val tungstenMode: Boolean = !newPartitioning.isInstanceOf[RangePartitioning]
 
   override def outputPartitioning: Partitioning = newPartitioning
 
   override def output: Seq[Attribute] = child.output
-
-  // This setting is somewhat counterintuitive:
-  // If the schema works with UnsafeRow, then we tell the planner that we don't support safe row,
-  // so the planner inserts a converter to convert data into UnsafeRow if needed.
-  override def outputsUnsafeRows: Boolean = tungstenMode
-  override def canProcessSafeRows: Boolean = !tungstenMode
-  override def canProcessUnsafeRows: Boolean = tungstenMode
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
@@ -130,15 +117,7 @@ case class Exchange(
     }
   }
 
-  @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
-
-  private val serializer: Serializer = {
-    if (tungstenMode) {
-      new UnsafeRowSerializer(child.output.size)
-    } else {
-      new SparkSqlSerializer(sparkConf)
-    }
-  }
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
   override protected def doPrepare(): Unit = {
     // If an ExchangeCoordinator is needed, we register this Exchange operator
@@ -488,6 +467,12 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
+    case operator @ Exchange(partitioning, child, _) =>
+      child.children match {
+        case Exchange(childPartitioning, baseChild, _)::Nil =>
+          if (childPartitioning.guarantees(partitioning)) child else operator
+        case _ => operator
+      }
     case operator: SparkPlan => ensureDistributionAndOrdering(operator)
   }
 }

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.metric
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
+import org.apache.spark.util.Utils
 
 /**
  * Create a layer for specialized metric. We cannot add `@specialized` to

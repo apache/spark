@@ -126,6 +126,7 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
     val dataType = new VectorUDT
@@ -354,6 +355,7 @@ class VectorIndexerModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val dataType = new VectorUDT
     require(isDefined(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")

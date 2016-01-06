@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import com.fasterxml.jackson.core.{JsonParser, JsonFactory}
+import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
 /**
  * Options for the JSON data source.
@@ -31,7 +31,8 @@ case class JSONOptions(
     allowUnquotedFieldNames: Boolean = false,
     allowSingleQuotes: Boolean = true,
     allowNumericLeadingZeros: Boolean = false,
-    allowNonNumericNumbers: Boolean = false) {
+    allowNonNumericNumbers: Boolean = false,
+    allowBackslashEscapingAnyCharacter: Boolean = false) {
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
@@ -40,6 +41,8 @@ case class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, allowSingleQuotes)
     factory.configure(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS, allowNumericLeadingZeros)
     factory.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
+    factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
+      allowBackslashEscapingAnyCharacter)
   }
 }
 
@@ -59,6 +62,8 @@ object JSONOptions {
     allowNumericLeadingZeros =
       parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false),
     allowNonNumericNumbers =
-      parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
+      parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true),
+    allowBackslashEscapingAnyCharacter =
+      parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
   )
 }

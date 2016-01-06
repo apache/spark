@@ -423,12 +423,12 @@ test_that("read/write json files", {
 test_that("jsonRDD() on a RDD with json string", {
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
-  df <- jsonRDD(sqlContext, rdd)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
 
   rdd2 <- flatMap(rdd, function(x) c(x, x))
-  df <- jsonRDD(sqlContext, rdd2)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 6)
 })
@@ -498,9 +498,11 @@ test_that("table() returns a new DataFrame", {
   expect_equal(count(tabledf), 3)
   dropTempTable(sqlContext, "table1")
 
+  # nolint start
   # Test base::table is working
   #a <- letters[1:3]
   #expect_equal(class(table(a, sample(a))), "table")
+  # nolint end
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -766,8 +768,10 @@ test_that("sample on a DataFrame", {
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 
+  # nolint start
   # Test base::sample is working
   #expect_equal(length(sample(1:12)), 12)
+  # nolint end
 })
 
 test_that("select operators", {
@@ -1052,8 +1056,8 @@ test_that("string operators", {
   df2 <- createDataFrame(sqlContext, l2)
   expect_equal(collect(select(df2, locate("aa", df2$a)))[1, 1], 1)
   expect_equal(collect(select(df2, locate("aa", df2$a, 1)))[1, 1], 2)
-  expect_equal(collect(select(df2, lpad(df2$a, 8, "#")))[1, 1], "###aaads")
-  expect_equal(collect(select(df2, rpad(df2$a, 8, "#")))[1, 1], "aaads###")
+  expect_equal(collect(select(df2, lpad(df2$a, 8, "#")))[1, 1], "###aaads") # nolint
+  expect_equal(collect(select(df2, rpad(df2$a, 8, "#")))[1, 1], "aaads###") # nolint
 
   l3 <- list(list(a = "a.b.c.d"))
   df3 <- createDataFrame(sqlContext, l3)
@@ -1259,7 +1263,7 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered6), 2)
 
   # Test stats::filter is working
-  #expect_true(is.ts(filter(1:100, rep(1, 3))))
+  #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
 })
 
 test_that("join() and merge() on a DataFrame", {
@@ -1493,6 +1497,27 @@ test_that("read/write Parquet files", {
   unlink(parquetPath4)
 })
 
+test_that("read/write text files", {
+  # Test write.df and read.df
+  df <- read.df(sqlContext, jsonPath, "text")
+  expect_is(df, "DataFrame")
+  expect_equal(colnames(df), c("value"))
+  expect_equal(count(df), 3)
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.df(df, textPath, "text", mode="overwrite")
+
+  # Test write.text and read.text
+  textPath2 <- tempfile(pattern = "textPath2", fileext = ".txt")
+  write.text(df, textPath2)
+  df2 <- read.text(sqlContext, c(textPath, textPath2))
+  expect_is(df2, "DataFrame")
+  expect_equal(colnames(df2), c("value"))
+  expect_equal(count(df2), count(df) * 2)
+
+  unlink(textPath)
+  unlink(textPath2)
+})
+
 test_that("describe() and summarize() on a DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   stats <- describe(df, "age")
@@ -1659,7 +1684,7 @@ test_that("cov() and corr() on a DataFrame", {
   expect_true(abs(result - 1.0) < 1e-12)
 
   # Test stats::cov is working
-  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3)
+  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3) # nolint
 })
 
 test_that("freqItems() on a DataFrame", {

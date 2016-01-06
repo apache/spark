@@ -165,6 +165,7 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with M
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val theStages = $(stages)
     require(theStages.toSet.size == theStages.length,
       "Cannot have duplicate components in a pipeline.")
@@ -296,6 +297,7 @@ class PipelineModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur))
   }
 

@@ -13,6 +13,8 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+   This file is an adaptation of Hive's org/apache/hadoop/hive/ql/IdentifiersParser.g grammar.
 */
 parser grammar IdentifiersParser;
 
@@ -33,7 +35,7 @@ k=3;
   @Override
   public void displayRecognitionError(String[] tokenNames,
       RecognitionException e) {
-    gParent.errors.add(new ParseError(gParent, e, tokenNames));
+    gParent.displayRecognitionError(tokenNames, e);
   }
   protected boolean useSQL11ReservedKeywordsForIdentifier() {
     return gParent.useSQL11ReservedKeywordsForIdentifier();
@@ -195,7 +197,7 @@ function
     RPAREN (KW_OVER ws=window_specification)?
            -> {$star != null}? ^(TOK_FUNCTIONSTAR functionName $ws?)
            -> {$dist == null}? ^(TOK_FUNCTION functionName (selectExpression+)? $ws?)
-                            -> ^(TOK_FUNCTIONDI functionName (selectExpression+)?)
+                            -> ^(TOK_FUNCTIONDI functionName (selectExpression+)? $ws?)
     ;
 
 functionName

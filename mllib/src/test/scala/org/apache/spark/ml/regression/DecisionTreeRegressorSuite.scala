@@ -20,13 +20,13 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
-
+import org.apache.spark.sql.{DataFrame, Row}
 
 class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -71,6 +71,29 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setMaxDepth(2)
       .setMaxBins(8).fit(df)
     MLTestingUtils.checkCopy(model)
+  }
+
+  test("predictVariance") {
+    val dt = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(100)
+      .setPredictionCol("")
+      .setVarianceCol("variance")
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
+
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val model = dt.fit(df)
+
+    val predictions = model.transform(df)
+      .select(model.getFeaturesCol, model.getVarianceCol)
+      .collect()
+
+    predictions.foreach { case Row(features: Vector, variance: Double) =>
+      val expectedVariance = model.rootNode.predictImpl(features).impurityStats.calculate()
+      assert(variance === expectedVariance,
+        s"Expected variance $expectedVariance but got $variance.")
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

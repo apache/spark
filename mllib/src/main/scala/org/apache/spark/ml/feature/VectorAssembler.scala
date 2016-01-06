@@ -106,6 +106,7 @@ class VectorAssembler(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
