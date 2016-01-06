@@ -103,6 +103,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-30g")
      }
 
+    // Test invalid input
+    intercept[IllegalArgumentException] {
+      // This value exceeds Long.MaxValue
+      // Utils.byteStringAsBytes("-1g")
+      sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1g")
+     }
     sqlContext.conf.clear()
 
   }
