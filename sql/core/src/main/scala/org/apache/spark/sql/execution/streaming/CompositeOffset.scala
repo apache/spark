@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
+/**
+ * An ordered collection of offsets, used to track the progress of processing data from one or more
+ * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
+ * vector clock that must progress linearly forward.
+ */
 case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
   /**
    * Returns a negative integer, zero, or a positive integer as this object is less than, equal to,
@@ -27,13 +32,13 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
       val comparisons = offsets.zip(otherComposite.offsets).map {
         case (Some(a), Some(b)) => a compareTo b
         case (None, None) => 0
-        case (None, _) => 1
-        case (_, None) => -1
+        case (None, _) => -1
+        case (_, None) => 1
        }
       val signs = comparisons.map(sign).distinct
       if (signs.size != 1) {
         throw new IllegalArgumentException(
-          s"Invalid comparision between non-linear histories: $this <=> $other")
+          s"Invalid comparison between non-linear histories: $this <=> $other")
       }
       signs.head
     case _ =>

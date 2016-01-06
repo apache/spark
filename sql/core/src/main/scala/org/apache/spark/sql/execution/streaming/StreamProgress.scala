@@ -20,9 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable
 
 /**
- * Tracks the progress of processing data from one or more [[Source]]s that are present in a
- * streaming query. This is similar to simplified, single-instance vector clock that progresses
- * monotonically forward.
+ * A helper class that looks like a Map[Source, Offset].
  */
 class StreamProgress extends Serializable {
   private val currentOffsets = new mutable.HashMap[Source, Offset]

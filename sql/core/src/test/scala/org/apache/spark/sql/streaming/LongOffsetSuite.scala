@@ -19,20 +19,36 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.StreamTest
-import org.apache.spark.sql.execution.streaming.LongOffset
+import org.apache.spark.sql.execution.streaming.{CompositeOffset, Offset, LongOffset}
 
 
-class LongOffsetSuite extends SparkFunSuite {
+trait OffsetSuite extends SparkFunSuite {
+  /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
+  def compare(one: Offset, two: Offset): Unit = {
+    test(s"comparision $one <=> $two") {
+      assert(one < two)
+      assert(one <= two)
+      assert(one <= one)
+      assert(two > one)
+      assert(two >= one)
+      assert(one >= one)
+      assert(one == one)
+    }
+  }
+}
+
+class LongOffsetSuite extends OffsetSuite {
   val one = new LongOffset(1)
   val two = new LongOffset(2)
+  compare(one, two)
+}
 
-  test("comparisions") {
-    assert(one < two)
-    assert(one <= two)
-    assert(one <= one)
-    assert(two > one)
-    assert(two >= one)
-    assert(one >= one)
-    assert(one == one)
-  }
+class CompositeOffsetSuite extends OffsetSuite {
+  compare(
+    one = CompositeOffset(Some(new LongOffset(1)) :: Nil),
+    two = CompositeOffset(Some(new LongOffset(2)) :: Nil))
+
+  compare(
+    one = CompositeOffset(None :: Nil),
+    two = CompositeOffset(Some(new LongOffset(2)) :: Nil))
 }

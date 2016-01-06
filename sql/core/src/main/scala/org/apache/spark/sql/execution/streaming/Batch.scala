@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.DataFrame
 
 /**
- * Used to pass a batch of data through a streaming query execution.
+ * Used to pass a batch of data through a streaming query execution along with an indication
+ * of progress in the stream.
  */
 class Batch(val end: Offset, val data: DataFrame)

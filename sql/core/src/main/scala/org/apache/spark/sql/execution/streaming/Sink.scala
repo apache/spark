@@ -32,7 +32,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  */
 trait Sink {
   /**
-   * Returns the [[StreamProgress]] for all data that is currently present in the sink. This
+   * Returns the [[Offset]] for all data that is currently present in the sink, if any. This
    * function will be called by Spark when restarting a stream in order to determine at which point
    * in streamed input data computation should be resumed from.
    */
@@ -41,10 +41,10 @@ trait Sink {
   /**
    * Accepts a new batch of data as well as a [[StreamProgress]] that denotes how far in the input
    * data computation has progressed to.  When computation restarts after a failure, it is important
-   * that a [[Sink]] returns the same [[StreamProgress]] as the most recent batch of data that
+   * that a [[Sink]] returns the same [[Offset]] as the most recent batch of data that
    * has been persisted durrably.  Note that this does not necessarily have to be the
-   * [[StreamProgress]] for the most recent batch of data that was given to the sink.  For example,
-   * it is valid to buffer data before persisting, as long as the [[StreamProgress]] is stored
+   * [[Offset]] for the most recent batch of data that was given to the sink.  For example,
+   * it is valid to buffer data before persisting, as long as the [[Offset]] is stored
    * transactionally as data is eventually persisted.
    */
   def addBatch(batch: Batch): Unit
