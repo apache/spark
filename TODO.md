@@ -22,6 +22,7 @@
 #### Wishlist
 * Pause flag at the task level
 * Increase unit test coverage
+* Stats logging interface with support for stats and sqlalchemy to collect detailed information from the scheduler and dag processing times
 
 #### Other
 * deprecate TimeSensor
