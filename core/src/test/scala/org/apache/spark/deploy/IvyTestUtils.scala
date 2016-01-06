@@ -24,10 +24,8 @@ import java.util.jar.Manifest
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.{Files, ByteStreams}
-
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
-
 import org.apache.ivy.core.settings.IvySettings
 
 import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}

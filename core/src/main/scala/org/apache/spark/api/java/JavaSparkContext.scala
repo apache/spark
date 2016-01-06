@@ -27,7 +27,6 @@ import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.input.PortableDataStream
 import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
@@ -35,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.AccumulatorParam._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
 
 /**
@@ -102,7 +102,7 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment.asScala, Map()))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment.asScala))
 
   private[spark] val env = sc.env
 
@@ -125,14 +125,6 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: java.lang.Integer = sc.defaultParallelism
-
-  /**
-   * Default min number of partitions for Hadoop RDDs when not given by user.
-   * @deprecated As of Spark 1.0.0, defaultMinSplits is deprecated, use
-   *            {@link #defaultMinPartitions()} instead
-   */
-  @deprecated("use defaultMinPartitions", "1.0.0")
-  def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
@@ -669,24 +661,6 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def addJar(path: String) {
     sc.addJar(path)
-  }
-
-  /**
-   * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
-   * any new nodes.
-   */
-  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
-  def clearJars() {
-    sc.clearJars()
-  }
-
-  /**
-   * Clear the job's list of files added by `addFile` so that they do not get downloaded to
-   * any new nodes.
-   */
-  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
-  def clearFiles() {
-    sc.clearFiles()
   }
 
   /**

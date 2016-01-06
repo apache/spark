@@ -21,11 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.ManualClock
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.

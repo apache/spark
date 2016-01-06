@@ -22,9 +22,9 @@ import java.net.URL
 import scala.collection.mutable
 import scala.io.Source
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListenerExecutorAdded, SparkListener}
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.SparkConfWithEnv
 
 class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {

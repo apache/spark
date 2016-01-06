@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, MetastoreRelation}
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 
 /**
  * Create table and insert the query result into it.

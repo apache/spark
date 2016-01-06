@@ -23,9 +23,9 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, ThreadSafeRpcEndpoint}
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}

@@ -24,16 +24,16 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.mesos.{Scheduler, SchedulerDriver}
+import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
-import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
-import org.apache.mesos.{Scheduler, SchedulerDriver}
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
-import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
-
 
 /**
  * Tracks the current state of a Mesos Task that runs a Spark driver.

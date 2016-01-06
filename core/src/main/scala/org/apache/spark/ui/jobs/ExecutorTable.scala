@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
-import scala.xml.{Unparsed, Node}
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.ui.jobs.UIData.StageUIData

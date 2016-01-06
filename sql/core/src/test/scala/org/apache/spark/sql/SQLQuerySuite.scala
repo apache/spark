@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
@@ -2055,6 +2055,28 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(null, 2013, 78000.0) ::
         Row(null, null, 113000.0) :: Nil
     )
+  }
+
+  test("hash function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempTable("tbl") {
+      df.registerTempTable("tbl")
+      checkAnswer(
+        df.select(hash($"i", $"j")),
+        sql("SELECT hash(i, j) from tbl")
+      )
+    }
+  }
+
+  test("SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake") {
+    val rdd = sqlContext.sparkContext.parallelize(1 to 3 , 3 )
+    rdd.toDF("key").registerTempTable("spark12340")
+    checkAnswer(
+      sql("select key from spark12340 limit 2147483638"),
+      Row(1) :: Row(2) :: Row(3) :: Nil
+    )
+    assert(rdd.take(2147483638).size === 3)
+    assert(rdd.takeAsync(2147483638).get.size === 3)
   }
 
 }
