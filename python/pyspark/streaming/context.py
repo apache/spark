@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import sys
+from threading import RLock, Timer
 
 from py4j.java_gateway import java_import, JavaObject
 
@@ -74,6 +75,63 @@ def _daemonize_callback_server():
     py4j.java_gateway.CallbackServer.start = start
 
 
+class Py4jCallbackConnectionCleaner(object):
+
+    """
+    A cleaner to clean up callback connections that are not closed by Py4j. See SPARK-12617.
+    It will scan all callback connections every 30 seconds and close the dead connections.
+    """
+
+    def __init__(self, gateway):
+        self._gateway = gateway
+        self._stopped = False
+        self._timer = None
+        self._lock = RLock()
+
+    def start(self):
+        if self._stopped:
+            return
+
+        def clean_closed_connections():
+            from py4j.java_gateway import quiet_close, quiet_shutdown
+
+            callback_server = self._gateway._callback_server
+            if callback_server:
+                with callback_server.lock:
+                    try:
+                        closed_connections = []
+                        for connection in callback_server.connections:
+                            if not connection.isAlive():
+                                quiet_close(connection.input)
+                                quiet_shutdown(connection.socket)
+                                quiet_close(connection.socket)
+                                closed_connections.append(connection)
+
+                        for closed_connection in closed_connections:
+                            callback_server.connections.remove(closed_connection)
+                    except Exception:
+                        import traceback
+                        traceback.print_exc()
+
+            self._start_timer(clean_closed_connections)
+
+        self._start_timer(clean_closed_connections)
+
+    def _start_timer(self, f):
+        with self._lock:
+            if not self._stopped:
+                self._timer = Timer(30.0, f)
+                self._timer.daemon = True
+                self._timer.start()
+
+    def stop(self):
+        with self._lock:
+            self._stopped = True
+            if self._timer:
+                self._timer.cancel()
+                self._timer = None
+
+
 class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext
@@ -88,6 +146,9 @@ class StreamingContext(object):
 
     # Reference to a currently active StreamingContext
     _activeContext = None
+
+    # A cleaner to clean leak sockets of callback server every 30 seconds
+    _py4j_cleaner = None
 
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
@@ -133,6 +194,8 @@ class StreamingContext(object):
             jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
             # update the port of CallbackClient with real port
             gw.jvm.PythonDStream.updatePythonGatewayPort(jgws, gw._python_proxy_port)
+            _py4j_cleaner = Py4jCallbackConnectionCleaner(gw)
+            _py4j_cleaner.start()
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
