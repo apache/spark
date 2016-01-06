@@ -37,11 +37,15 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
+    // - Do the first call of CombineUnions before starting the major Optimizer rules,
+    //   since they could add/move extra operators between two adjacent Union operators.
+    // - Call CombineUnions again in Batch("Operator Optimizations"),
+    //   since the other rules might make two separate Unions operators adjacent.
+    Batch("Union", FixedPoint(100),
+      CombineUnions) ::
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
-    Batch("Union", FixedPoint(100),
-      CombineUnions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -160,14 +164,11 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       assert(children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
         val newFirstChild = Project(projectList, children.head)
-        val newOtherChildren = children.tail.map {
-          child => {
-            val rewrites = buildRewrites(children.head, child)
-            Project(projectList.map(pushToRight(_, rewrites)), child)
-          }
-        }
-        Union(
-          newFirstChild +: newOtherChildren)
+        val newOtherChildren = children.tail.map ( child => {
+          val rewrites = buildRewrites(children.head, child)
+          Project(projectList.map(pushToRight(_, rewrites)), child)
+        } )
+        Union(newFirstChild +: newOtherChildren)
       } else {
         p
       }
@@ -183,11 +184,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           Filter(pushToRight(deterministic, rewrites), child)
         }
       }
-      Filter(nondeterministic,
-        Union(
-          newFirstChild +: newOtherChildren
-        )
-      )
+      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
 
     // Push down filter through INTERSECT
     case Filter(condition, Intersect(left, right)) =>
