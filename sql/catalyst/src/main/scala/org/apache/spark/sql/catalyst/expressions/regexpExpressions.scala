@@ -59,6 +59,11 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
   }
+
+  override def sql: Option[String] = for {
+    leftSQL <- left.sql
+    rightSQL <- right.sql
+  } yield s"$leftSQL ${prettyName.toUpperCase} $rightSQL"
 }
 
 

@@ -933,7 +933,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   override def sql: Option[String] = {
-    child.sql.map(childSQL => s"CAST($childSQL AS ${dataType.sql})")
+    if (foldable) {
+      Literal.create(eval(), dataType).sql
+    } else {
+      child.sql.map(childSQL => s"CAST($childSQL AS ${dataType.sql})")
+    }
   }
 }
 

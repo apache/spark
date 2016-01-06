@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.sql.Timestamp
-
-import org.apache.spark.sql.catalyst.expressions.{Literal, Alias}
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.functions._
 
@@ -35,10 +31,14 @@ class HiveQLSQLBuilderSuite extends SQLBuilderTest with SQLTestUtils {
       .select('id as 'key, concat(lit("val_"), 'id) as 'value)
       .write
       .saveAsTable("t1")
+
+    sqlContext.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write.saveAsTable("t2")
   }
 
   override protected def afterAll(): Unit = {
     sql("DROP TABLE IF EXISTS t0")
+    sql("DROP TABLE IF EXISTS t1")
+    sql("DROP TABLE IF EXISTS t2")
   }
 
   private def checkHiveQl(hiveQl: String): Unit = {
@@ -83,5 +83,47 @@ class HiveQLSQLBuilderSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("type widening in union") {
     checkHiveQl("SELECT id FROM t0 UNION ALL SELECT CAST(id AS INT) AS id FROM t0")
+  }
+
+  test("case") {
+    checkHiveQl("SELECT CASE WHEN id % 2 > 0 THEN 0 WHEN id % 2 = 0 THEN 1 END FROM t0")
+  }
+
+  test("case with else") {
+    checkHiveQl("SELECT CASE WHEN id % 2 > 0 THEN 0 ELSE 1 END FROM t0")
+  }
+
+  test("case with key") {
+    checkHiveQl("SELECT CASE id WHEN 0 THEN 'foo' WHEN 1 THEN 'bar' END FROM t0")
+  }
+
+  test("case with key and else") {
+    checkHiveQl("SELECT CASE id WHEN 0 THEN 'foo' WHEN 1 THEN 'bar' ELSE 'baz' END FROM t0")
+  }
+
+  test("select distinct without aggregate functions") {
+    checkHiveQl("SELECT DISTINCT id FROM t0")
+  }
+
+  test("cluster by") {
+    checkHiveQl("SELECT id FROM t0 CLUSTER BY id")
+  }
+
+  test("distribute by") {
+    checkHiveQl("SELECT id FROM t0 DISTRIBUTE BY id")
+  }
+
+  test("distribute by with sort by") {
+    checkHiveQl("SELECT id FROM t0 DISTRIBUTE BY id SORT BY id")
+  }
+
+  test("distinct aggregation") {
+    checkHiveQl("SELECT COUNT(DISTINCT id) FROM t0")
+  }
+
+  // TODO Enable this
+  // Query plans transformed by DistinctAggregationRewriter are not recognized yet
+  ignore("distinct and non-distinct aggregation") {
+    checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM t2 GROUP BY a")
   }
 }

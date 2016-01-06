@@ -23,6 +23,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -61,6 +62,10 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       }
     """
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 
@@ -153,6 +158,10 @@ case class ConcatWs(children: Seq[Expression])
       """
     }
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 trait String2StringExpression extends ImplicitCastInputTypes {
@@ -165,6 +174,10 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
   protected override def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
+
+  override def sql: Option[String] = for {
+    childSQL <- child.sql
+  } yield s"${prettyName.toUpperCase}($childSQL)"
 }
 
 /**
@@ -221,6 +234,10 @@ case class Contains(left: Expression, right: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -232,6 +249,10 @@ case class StartsWith(left: Expression, right: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -243,6 +264,10 @@ case class EndsWith(left: Expression, right: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 object StringTranslate {
@@ -318,6 +343,10 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
   override def children: Seq[Expression] = srcExpr :: matchingExpr :: replaceExpr :: Nil
   override def prettyName: String = "translate"
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -340,6 +369,12 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   }
 
   override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "find_in_set"
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -412,6 +447,10 @@ case class StringInstr(str: Expression, substr: Expression)
     defineCodeGen(ctx, ev, (l, r) =>
       s"($l).indexOf($r, 0) + 1")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -613,6 +652,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   }
 
   override def prettyName: String = "format_string"
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -630,6 +673,10 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -652,6 +699,10 @@ case class StringRepeat(str: Expression, times: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -687,6 +738,10 @@ case class StringSpace(child: Expression)
   }
 
   override def prettyName: String = "space"
+
+  override def sql: Option[String] = for {
+    childSQL <- child.sql
+  } yield s"${prettyName.toUpperCase}($childSQL)"
 }
 
 /**
@@ -745,6 +800,10 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }
+
+  override def sql: Option[String] = for {
+    childSQL <- child.sql
+  } yield s"${prettyName.toUpperCase}($childSQL)"
 }
 
 /**
@@ -763,6 +822,10 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
     nullSafeCodeGen(ctx, ev, (left, right) =>
       s"${ev.value} = $left.levenshteinDistance($right);")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -779,6 +842,10 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
+
+  override def sql: Option[String] = for {
+    childSQL <- child.sql
+  } yield s"${prettyName.toUpperCase}($childSQL)"
 }
 
 /**
@@ -810,6 +877,10 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
         }
        """})
   }
+
+  override def sql: Option[String] = for {
+    childSQL <- child.sql
+  } yield s"${prettyName.toUpperCase}($childSQL)"
 }
 
 /**
@@ -833,6 +904,9 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
        """})
   }
 
+  override def sql: Option[String] = for {
+    childSQL <- child.sql
+  } yield s"${prettyName.toUpperCase}($childSQL)"
 }
 
 /**
@@ -852,6 +926,10 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
          ${ev.value} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
        """})
   }
+
+  override def sql: Option[String] = for {
+    childSQL <- child.sql
+  } yield s"${prettyName.toUpperCase}($childSQL)"
 }
 
 /**
@@ -882,6 +960,10 @@ case class Decode(bin: Expression, charset: Expression)
         }
       """)
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -911,6 +993,10 @@ case class Encode(value: Expression, charset: Expression)
           org.apache.spark.unsafe.Platform.throwException(e);
         }""")
   }
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }
 
 /**
@@ -1026,4 +1112,8 @@ case class FormatNumber(x: Expression, d: Expression)
   }
 
   override def prettyName: String = "format_number"
+
+  override def sql: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield s"${prettyName.toUpperCase}(${childrenSQL.mkString(", ")})"
 }

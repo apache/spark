@@ -216,8 +216,11 @@ case class Literal protected (value: Any, dataType: DataType)
   }
 
   override def sql: Option[String] = Option((value, dataType) match {
+    case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null =>
+      "NULL"
+
     case _ if value == null =>
-      if (dataType == NullType) "NULL" else s"CAST(NULL AS ${dataType.sql})"
+      s"CAST(NULL AS ${dataType.sql})"
 
     case (v: UTF8String, StringType) =>
       // Escapes all backslashes and double quotes.
@@ -242,7 +245,7 @@ case class Literal protected (value: Any, dataType: DataType)
       s"DATE '${DateTimeUtils.toJavaDate(v)}'"
 
     case (v: Long, TimestampType) =>
-      s"CAST('${DateTimeUtils.toJavaTimestamp(v)}' AS TIMESTAMP)"
+      s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
 
     case _ => value.toString
   })

@@ -309,6 +309,8 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
   }
+
+  override def prettyName: String = "to_unix_timestamp"
 }
 
 /**
@@ -332,6 +334,8 @@ case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTi
   def this() = {
     this(CurrentTimestamp())
   }
+
+  override def prettyName: String = "unix_timestamp"
 }
 
 abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {

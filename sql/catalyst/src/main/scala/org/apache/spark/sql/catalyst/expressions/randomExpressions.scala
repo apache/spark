@@ -49,6 +49,8 @@ abstract class RDG extends LeafExpression with Nondeterministic {
   override def nullable: Boolean = false
 
   override def dataType: DataType = DoubleType
+
+  override def sql: Option[String] = Some(s"${prettyName.toUpperCase}($seed)")
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */

@@ -60,10 +60,6 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
   override lazy val evaluateExpression = count
 
   override def defaultResult: Option[Literal] = Option(Literal(0L))
-
-  override def argumentsSQL: Option[String] = {
-    sequenceOption(children.map(_.sql)).map(_.mkString(", "))
-  }
 }
 
 object Count {

@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -106,7 +107,7 @@ private[sql] case class AggregateExpression(
 }
 
 /**
- * AggregateFunction2 is the superclass of two aggregation function interfaces:
+ * AggregateFunction is the superclass of two aggregation function interfaces:
  *
  *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
  *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
@@ -175,7 +176,9 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
 
   override def sql: Option[String] = argumentsSQL.map(sql => s"${prettyName.toUpperCase}($sql)")
 
-  def argumentsSQL: Option[String] = None
+  def argumentsSQL: Option[String] = for {
+    childrenSQL <- sequenceOption(children.map(_.sql))
+  } yield childrenSQL.mkString(", ")
 }
 
 /**
