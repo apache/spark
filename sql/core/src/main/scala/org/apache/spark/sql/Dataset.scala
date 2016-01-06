@@ -19,13 +19,14 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
@@ -608,7 +609,9 @@ class Dataset[T] private[sql](
    * duplicate items.  As such, it is analogous to `UNION ALL` in SQL.
    * @since 1.6.0
    */
-  def union(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Union)
+  def union(other: Dataset[T]): Dataset[T] = withPlan[T](other){ (left, right) =>
+    CombineUnions(Union(left, right))
+  }
 
   /**
    * Returns a new [[Dataset]] where any elements present in `other` have been removed.

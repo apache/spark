@@ -212,20 +212,46 @@ object HiveTypeCoercion {
         case other => None
       }
 
-      def castOutput(plan: LogicalPlan): LogicalPlan = {
-        val casted = plan.output.zip(castedTypes).map {
-          case (e, Some(dt)) if e.dataType != dt =>
-            Alias(Cast(e, dt), e.name)()
-          case (e, _) => e
-        }
-        Project(casted, plan)
-      }
-
       if (castedTypes.exists(_.isDefined)) {
-        (castOutput(left), castOutput(right))
+        (castOutput(left, castedTypes), castOutput(right, castedTypes))
       } else {
         (left, right)
       }
+    }
+
+    private[this] def widenOutputTypes(
+        planName: String,
+        children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+      require(children.forall(_.output.length == children.head.output.length))
+
+      val castedTypes: Seq[Option[DataType]] =
+        children.foldLeft(children.head.output.map(a => Option(a.dataType))) {
+          case (currentOutputDataTypes, child) => {
+            currentOutputDataTypes.zip(child.output).map {
+              case (Some(dt), ar) if dt != ar.dataType =>
+                findWiderTypeForTwo(dt, ar.dataType)
+              case (Some(dt), ar) if dt == ar.dataType => Option(dt)
+              case other => None
+            }
+          }
+        }
+
+      if (castedTypes.exists(_.isDefined)) {
+        children.map(castOutput(_, castedTypes))
+      } else {
+        children
+      }
+    }
+
+    private[this] def castOutput(
+        plan: LogicalPlan,
+        castedTypes: Seq[Option[DataType]]): LogicalPlan = {
+      val casted = plan.output.zip(castedTypes).map {
+        case (e, Some(dt)) if e.dataType != dt =>
+          Alias(Cast(e, dt), e.name)()
+        case (e, _) => e
+      }
+      Project(casted, plan)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -235,6 +261,11 @@ object HiveTypeCoercion {
           && left.output.length == right.output.length && !s.resolved =>
         val (newLeft, newRight) = widenOutputTypes(s.nodeName, left, right)
         s.makeCopy(Array(newLeft, newRight))
+
+      case s: Union if s.childrenResolved &&
+        s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = widenOutputTypes(s.nodeName, s.children)
+        s.makeCopy(Array(newChildren))
     }
   }
 
