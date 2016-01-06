@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy

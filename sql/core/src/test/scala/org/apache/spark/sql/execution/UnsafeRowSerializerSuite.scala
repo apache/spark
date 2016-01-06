@@ -17,20 +17,19 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{File, ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 
+import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.Utils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
-import org.apache.spark._
-
+import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.util.Utils
 
 /**
  * used to test close InputStream in UnsafeRowSerializer

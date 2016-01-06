@@ -17,10 +17,11 @@
 
 package org.apache.spark.network.netty
 
-import org.apache.spark.network.BlockDataManager
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.mockito.Mockito.mock
 import org.scalatest._
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.network.BlockDataManager
 
 class NettyBlockTransferServiceSuite
   extends SparkFunSuite

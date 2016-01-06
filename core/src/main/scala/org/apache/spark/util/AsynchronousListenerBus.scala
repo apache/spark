@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.util.DynamicVariable
 
 import org.apache.spark.SparkContext

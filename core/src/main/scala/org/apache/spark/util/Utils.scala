@@ -22,8 +22,8 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
-import java.util.concurrent._
 import java.util.{Locale, Properties, Random, UUID}
+import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
 import scala.collection.JavaConverters._
@@ -662,9 +662,7 @@ private[spark] object Utils extends Logging {
 
   private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
     // These environment variables are set by YARN.
-    // For Hadoop 0.23.X, we check for YARN_LOCAL_DIRS (we use this below in getYarnLocalDirs())
-    // For Hadoop 2.X, we check for CONTAINER_ID.
-    conf.getenv("CONTAINER_ID") != null || conf.getenv("YARN_LOCAL_DIRS") != null
+    conf.getenv("CONTAINER_ID") != null
   }
 
   /**
@@ -740,17 +738,12 @@ private[spark] object Utils extends Logging {
           logError(s"Failed to create local root dir in $root. Ignoring this directory.")
           None
       }
-    }.toArray
+    }
   }
 
   /** Get the Yarn approved local directories. */
   private def getYarnLocalDirs(conf: SparkConf): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
+    val localDirs = Option(conf.getenv("LOCAL_DIRS")).getOrElse("")
 
     if (localDirs.isEmpty) {
       throw new Exception("Yarn Local dirs can't be empty")

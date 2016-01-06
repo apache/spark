@@ -21,9 +21,9 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{QueryTest, Row}
 
 case class OrcData(intField: Int, stringField: String)
 

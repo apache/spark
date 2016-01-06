@@ -17,8 +17,8 @@
 package org.apache.spark.status.api.v1
 
 import java.util.{Arrays, Date, List => JList}
-import javax.ws.rs.core.MediaType
 import javax.ws.rs.{GET, Produces, QueryParam}
+import javax.ws.rs.core.MediaType
 
 import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}

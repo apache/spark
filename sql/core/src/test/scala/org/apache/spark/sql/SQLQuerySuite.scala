@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
@@ -2026,6 +2026,57 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |) my_view
         """.stripMargin),
       Row(false) :: Row(true) :: Nil)
+  }
+
+  test("rollup") {
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by rollup(course, year)" +
+        " order by course, year"),
+      Row(null, null, 113000.0) ::
+        Row("Java", null, 50000.0) ::
+        Row("Java", 2012, 20000.0) ::
+        Row("Java", 2013, 30000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row("dotNET", 2012, 15000.0) ::
+        Row("dotNET", 2013, 48000.0) :: Nil
+    )
+  }
+
+  test("cube") {
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by cube(course, year)"),
+      Row("Java", 2012, 20000.0) ::
+        Row("Java", 2013, 30000.0) ::
+        Row("Java", null, 50000.0) ::
+        Row("dotNET", 2012, 15000.0) ::
+        Row("dotNET", 2013, 48000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row(null, 2012, 35000.0) ::
+        Row(null, 2013, 78000.0) ::
+        Row(null, null, 113000.0) :: Nil
+    )
+  }
+
+  test("hash function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempTable("tbl") {
+      df.registerTempTable("tbl")
+      checkAnswer(
+        df.select(hash($"i", $"j")),
+        sql("SELECT hash(i, j) from tbl")
+      )
+    }
+  }
+
+  test("SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake") {
+    val rdd = sqlContext.sparkContext.parallelize(1 to 3 , 3 )
+    rdd.toDF("key").registerTempTable("spark12340")
+    checkAnswer(
+      sql("select key from spark12340 limit 2147483638"),
+      Row(1) :: Row(2) :: Row(3) :: Nil
+    )
+    assert(rdd.take(2147483638).size === 3)
+    assert(rdd.takeAsync(2147483638).get.size === 3)
   }
 
 }

@@ -27,6 +27,8 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
+
+import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
@@ -34,8 +36,6 @@ import org.apache.spark.sql.{SQLConf, SQLContext}
 import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
-import org.apache.spark.{Partition => SparkPartition, _}
-
 
 private[spark] class SqlNewHadoopPartition(
     rddId: Int,

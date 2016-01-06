@@ -52,9 +52,6 @@ private[spark] class TaskContextImpl(
   // Future ones will be registered through `registerAccumulator`.
   internalAccumulators.foreach { a => _accumulators(a.id) = a }
 
-  // For backwards-compatibility; this method is now deprecated as of 1.3.0.
-  override val attemptId: Long = taskAttemptId
-
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
 
@@ -74,13 +71,6 @@ private[spark] class TaskContextImpl(
       override def onTaskCompletion(context: TaskContext): Unit = f(context)
     }
     this
-  }
-
-  @deprecated("use addTaskCompletionListener", "1.1.0")
-  override def addOnCompleteCallback(f: () => Unit) {
-    onCompleteCallbacks += new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = f()
-    }
   }
 
   /** Marks the task as completed and triggers the listeners. */

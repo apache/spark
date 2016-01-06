@@ -17,18 +17,17 @@
 
 package org.apache.spark.rdd
 
-import scala.language.existentials
-
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
-import org.apache.spark.serializer.Serializer
 
 /** The references to rdd and splitIndex are transient because redundant information is stored
   * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from

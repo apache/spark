@@ -398,6 +398,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * after consuming this iterator.
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
+    assert(recordComparator != null);
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
       readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
@@ -529,18 +530,20 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    *
    * It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
+   *
+   * TODO: support forced spilling
    */
   public UnsafeSorterIterator getIterator() throws IOException {
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
-      return inMemSorter.getIterator();
+      return inMemSorter.getSortedIterator();
     } else {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         queue.add(spillWriter.getReader(blockManager));
       }
       if (inMemSorter != null) {
-        queue.add(inMemSorter.getIterator());
+        queue.add(inMemSorter.getSortedIterator());
       }
       return new ChainedIterator(queue);
     }

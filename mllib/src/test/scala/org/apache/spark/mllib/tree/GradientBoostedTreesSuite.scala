@@ -19,14 +19,13 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
+import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.Variance
-import org.apache.spark.mllib.tree.loss.{AbsoluteError, SquaredError, LogLoss}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError, LogLoss, SquaredError}
 import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
-
 
 /**
  * Test suite for [[GradientBoostedTrees]].
