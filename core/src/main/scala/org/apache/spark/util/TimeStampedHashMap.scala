@@ -17,8 +17,8 @@
 
 package org.apache.spark.util
 
-import java.util.Set
 import java.util.Map.Entry
+import java.util.Set
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._

@@ -22,8 +22,8 @@ import java.io.IOException
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 
-import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.executor.CommitDeniedException
 
 object SparkHadoopMapRedUtil extends Logging {
   /**

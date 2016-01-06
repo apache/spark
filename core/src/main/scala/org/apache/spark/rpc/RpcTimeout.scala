@@ -19,12 +19,11 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.{Awaitable, Await}
+import scala.concurrent.{Await, Awaitable}
 import scala.concurrent.duration._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
-
 
 /**
  * An exception thrown if RpcTimeout modifies a [[TimeoutException]].

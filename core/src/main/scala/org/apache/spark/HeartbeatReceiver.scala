@@ -23,9 +23,9 @@ import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext}
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**

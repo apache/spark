@@ -23,15 +23,15 @@ import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
-import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.base.Charsets
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.util.Utils
 
 /**
  * A client that submits applications to a [[RestSubmissionServer]].

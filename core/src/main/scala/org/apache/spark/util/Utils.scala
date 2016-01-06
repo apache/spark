@@ -22,8 +22,8 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
-import java.util.concurrent._
 import java.util.{Locale, Properties, Random, UUID}
+import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
 import scala.collection.JavaConverters._

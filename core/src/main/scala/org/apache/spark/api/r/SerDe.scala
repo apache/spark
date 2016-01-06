@@ -18,7 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.sql.{Timestamp, Date, Time}
+import java.sql.{Date, Time, Timestamp}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.WrappedArray

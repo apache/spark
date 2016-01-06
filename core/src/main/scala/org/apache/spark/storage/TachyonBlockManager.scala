@@ -25,7 +25,6 @@ import java.util.{Date, Random}
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
-
 import tachyon.{Constants, TachyonURI}
 import tachyon.client.ClientContext
 import tachyon.client.file.{TachyonFile, TachyonFileSystem}
@@ -37,7 +36,6 @@ import tachyon.exception.{FileAlreadyExistsException, FileDoesNotExistException}
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.util.Utils
-
 
 /**
  * Creates and maintains the logical mapping between logical blocks and tachyon fs locations. By

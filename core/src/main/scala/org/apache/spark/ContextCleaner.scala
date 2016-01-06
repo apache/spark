@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
-import java.util.concurrent.{TimeUnit, ScheduledExecutorService}
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 

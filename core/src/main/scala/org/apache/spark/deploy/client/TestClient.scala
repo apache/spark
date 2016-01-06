@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.client
 
-import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
 private[spark] object TestClient {
