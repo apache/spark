@@ -22,8 +22,8 @@ import scala.reflect.ClassTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext}
+import org.apache.spark.sql.{QueryTest, SQLConf, SQLContext}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{SQLConf, SQLContext, QueryTest}
 
 /**
  * Test various broadcast join operators.

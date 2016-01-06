@@ -16,7 +16,7 @@
  */
 package org.apache.spark.rdd
 
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.io.compress.CompressionCodec

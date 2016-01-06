@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{Row, RandomDataGenerator}
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.types._
 

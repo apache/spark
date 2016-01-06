@@ -35,7 +35,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{StringType, IntegralType}
+import org.apache.spark.sql.types.{IntegralType, StringType}
 
 /**
  * A shim that defines the interface between ClientWrapper and the underlying Hive library used to
