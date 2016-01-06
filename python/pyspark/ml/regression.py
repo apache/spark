@@ -397,7 +397,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> dt = DecisionTreeRegressor(maxDepth=2, seed=42)
+    >>> dt = DecisionTreeRegressor(maxDepth=2)
     >>> model = dt.fit(df)
     >>> model.depth
     1
