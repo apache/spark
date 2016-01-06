@@ -67,7 +67,7 @@ private[csv] class CSVRelation(
     }
   }
 
-  private def baseRDD(inputPaths: Array[String]): RDD[String] = {
+  private def baseRdd(inputPaths: Array[String]): RDD[String] = {
     inputRDD.getOrElse {
       cachedRDD.getOrElse {
         val rdd = readText(inputPaths.mkString(","))
@@ -78,7 +78,7 @@ private[csv] class CSVRelation(
   }
 
   private def tokenRdd(header: Array[String], inputPaths: Array[String]): RDD[Array[String]] = {
-    val rdd = baseRDD(inputPaths)
+    val rdd = baseRdd(inputPaths)
     // Make sure firstLine is materialized before sending to executors
     val firstLine = if (params.headerFlag) findFirstLine(rdd) else null
     CSVRelation.univocityTokenizer(rdd, header, firstLine, params)
@@ -89,6 +89,7 @@ private[csv] class CSVRelation(
     * containing all of its tuples as Row objects. This reads all the tokens of each line
     * and then drop unneeded tokens without casting and type-checking by mapping
     * both the indices produced by `requiredColumns` and the ones of tokens.
+    * TODO: Switch to using buildInternalScan
     */
   override def buildScan(requiredColumns: Array[String], inputs: Array[FileStatus]): RDD[Row] = {
     val pathsString = inputs.map(_.getPath.toUri.toString)
@@ -116,7 +117,7 @@ private[csv] class CSVRelation(
   }
 
   private def inferSchema(paths: Array[String]): StructType = {
-    val rdd = baseRDD(Array(paths.head))
+    val rdd = baseRdd(Array(paths.head))
     val firstLine = findFirstLine(rdd)
     val firstRow = new LineCsvReader(params).parseLine(firstLine)
 
@@ -151,8 +152,6 @@ private[csv] class CSVRelation(
           s"first ${params.MAX_COMMENT_LINES_IN_HEADER} lines"))
     }
   }
-
-
 }
 
 object CSVRelation extends Logging {
@@ -280,7 +279,7 @@ private[sql] class CsvOutputWriter(
 
   private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
 
-  private def rowToString(row: Seq[Any]): Seq[String] =  row.map { field =>
+  private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
     if (field != null) {
       field.toString
     } else {
@@ -291,6 +290,7 @@ private[sql] class CsvOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
+    // TODO: Instead of converting and writing every row, we should use the univocity buffer
     val resultString = csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), firstRow)
     if (firstRow) {
       firstRow = false

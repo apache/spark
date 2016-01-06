@@ -22,8 +22,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 
 /**
-  * Provides access to CSV data from pure SQL statements (i.e. for users of the
-  * JDBC server).
+  * Provides access to CSV data from pure SQL statements.
   */
 class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
@@ -31,7 +30,6 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
   /**
     * Creates a new relation for data store in CSV given parameters and user supported schema.
-    * Parameters have to include 'path' and optionally 'delimiter', 'quote', and 'header'
     */
   override def createRelation(
       sqlContext: SQLContext,

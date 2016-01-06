@@ -53,6 +53,12 @@ private[sql] abstract class CsvReader(params: CSVParameters, headers: Seq[String
 }
 
 
+/**
+  * Converts a sequence of string to CSV string
+  *
+  * @param params Parameters object for configuration
+  * @param headers headers for columns
+  */
 private[sql] class LineCsvWriter(params: CSVParameters, headers: Seq[String]) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
