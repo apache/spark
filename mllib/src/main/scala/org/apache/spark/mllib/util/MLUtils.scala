@@ -86,7 +86,8 @@ object MLUtils {
         val indicesLength = indices.length
         while (i < indicesLength) {
           val current = indices(i)
-          require(current > previous, "indices should be one-based and in ascending order; found current=" + current + ", previous=" + previous + "; line=\"" + line + "\"")
+          require(current > previous, s"indices should be one-based and in ascending order;"
+            + " found current=$current, previous=$previous; line=\"$line\"")
           previous = current
           i += 1
         }
