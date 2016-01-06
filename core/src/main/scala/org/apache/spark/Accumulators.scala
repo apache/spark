@@ -69,7 +69,7 @@ class Accumulable[R, T] private[spark] (
   val id: Long = Accumulators.newId()
 
   @volatile private var value_ : R = initialValue
-  val zero = param.zero(initialValue)  // Zero value to be passed to workers
+  val zero = param.zero(initialValue)
 
   Accumulators.register(this)
 
@@ -138,6 +138,13 @@ class Accumulable[R, T] private[spark] (
    */
   def setValue(newValue: R): Unit = {
     this.value = newValue
+  }
+
+  /**
+   * Reset the accumulator's value to zero.
+   */
+  private[spark] def resetValue(): Unit = {
+    setValue(zero)
   }
 
   // Called by Java when deserializing an object

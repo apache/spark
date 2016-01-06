@@ -116,10 +116,17 @@ private[spark] class TaskContextImpl(
   }
 
   private[spark] override val internalMetricsToAccumulators: Map[String, Accumulator[Long]] = {
-    // Explicitly register internal accumulators here because these are
-    // not captured in the task closure and are already deserialized
-    internalAccumulators.foreach(registerAccumulator)
-    internalAccumulators.map { a => (a.name.get, a) }.toMap
+    // Explicitly register internal accumulators here because these are not captured in the
+    // task closure and are already deserialized. Additionally, since the driver expects
+    // us to update these accumulators and report back partial values, we should reset
+    // each accumulator to zero. Otherwise, we may end up double counting in local mode.
+    internalAccumulators.map { a =>
+      registerAccumulator(a)
+      a.resetValue()
+      assert(a.name.isDefined, "internal accumulator is expected to be named")
+      assert(a.isInternal, "internal accumulator is not marked as 'internal'!")
+      (a.name.get, a)
+    }.toMap
   }
 
   /**
