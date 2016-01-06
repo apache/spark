@@ -111,6 +111,13 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.defaultMinSplits"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.clearJars"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.clearFiles")
+      ) ++
+      // SPARK-12665 Remove deprecated and unused classes
+      Seq(
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.graphx.GraphKryoRegistrator"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$")
       )
     case v if v.startsWith("1.6") =>
       Seq(
