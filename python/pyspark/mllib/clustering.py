@@ -846,7 +846,7 @@ class LDA(object):
         :param rdd:
           Train with a RDD of data points.
         :param k:
-          Number of clusters.
+          Number of topics to infer.  I.e., the number of soft cluster centers.
           (default: 10)
         :param maxIterations:
           Number of iterations.
