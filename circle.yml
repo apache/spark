@@ -12,7 +12,6 @@ test:
   override:
     - dev/lint-scala
     - dev/lint-java
-    - build/sbt assembly/assembly
     - build/sbt sql/test
   # Copy test reports to Circle test reports dir
   post:
