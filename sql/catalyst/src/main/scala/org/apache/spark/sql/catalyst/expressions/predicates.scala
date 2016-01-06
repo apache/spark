@@ -228,7 +228,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 }
 
-case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class And(left: Expression, right: Expression) extends BinaryOperator
+  with Predicate with PredicateHelper{
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -249,6 +250,27 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
           null
         }
       }
+    }
+  }
+
+  override def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    // Non-deterministic expressions cannot be semantic equal
+    if (!deterministic || !other.deterministic) return false
+
+    // We already know both expressions are And, so we can tolerate ordering different
+    // Recursively call semanticEquals on subexpressions to check the equivalency of two seqs.
+    var elements1 = splitConjunctivePredicates(this)
+    val elements2 = splitConjunctivePredicates(other)
+    // We can recursively call semanticEquals to check the equivalency for subexpressions, but
+    // there is no simple solution to compare the equivalency of sequence of expressions.
+    // Expression class doesn't have order, so we couldn't sort them. We can neither use
+    // set comparison as Set doesn't support custom compare function, which is semanticEquals.
+    // To check the equivalency of elements1 and elements2, we first compare their size. Then
+    // for each element in elements2, we remove its first semantically equivalent expression from
+    // elements1. If they are semantically equivalent, elements1 should be empty at the end.
+    elements1.size == elements2.size && {
+      for (e <- elements2) elements1 = removeFirstSemanticEquivalent(elements1, e)
+      elements1.isEmpty
     }
   }
 
@@ -277,7 +299,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 }
 
 
-case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class Or(left: Expression, right: Expression) extends BinaryOperator
+  with Predicate with PredicateHelper {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -298,6 +321,26 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
           null
         }
       }
+    }
+  }
+
+  override def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    // Non-deterministic expressions cannot be semantic equal
+    if (!deterministic || !other.deterministic) return false
+
+    // We know both expressions are Or, so we can tolerate ordering different
+    var elements1 = splitDisjunctivePredicates(this)
+    val elements2 = splitDisjunctivePredicates(other)
+    // We can recursively call semanticEquals to check the equivalency for subexpressions, but
+    // there is no simple solution to compare the equivalency of sequence of expressions.
+    // Expression class doesn't have order, so we couldn't sort them. We can neither use
+    // set comparison as Set doesn't support custom compare function, which is semanticEquals.
+    // To check the equivalency of elements1 and elements2, we first compare their size. Then
+    // for each element in elements2, we remove its first semantically equivalent expression from
+    // elements1. If they are semantically equivalent, elements1 should be empty at the end.
+    elements1.size == elements2.size && {
+      for (e <- elements2) elements1 = removeFirstSemanticEquivalent(elements1, e)
+      elements1.isEmpty
     }
   }
 

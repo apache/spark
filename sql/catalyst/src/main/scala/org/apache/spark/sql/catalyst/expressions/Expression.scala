@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  *                       the same output data type.
  *
  */
-abstract class Expression extends TreeNode[Expression] {
+abstract class Expression extends TreeNode[Expression]{
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -139,24 +139,37 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
+  def checkSemantic(elements1: Seq[Any], elements2: Seq[Any]): Boolean = {
+    elements1.length == elements2.length && elements1.zip(elements2).forall {
+      case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+      case (Some(e1: Expression), Some(e2: Expression)) => e1 semanticEquals e2
+      case (t1: Traversable[_], t2: Traversable[_]) => checkSemantic(t1.toSeq, t2.toSeq)
+      case (i1, i2) => i1 == i2
+    }
+  }
+
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
    * cosmetically (i.e. capitalization of names in attributes may be different).
    */
   def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
-    def checkSemantic(elements1: Seq[Any], elements2: Seq[Any]): Boolean = {
-      elements1.length == elements2.length && elements1.zip(elements2).forall {
-        case (e1: Expression, e2: Expression) => e1 semanticEquals e2
-        case (Some(e1: Expression), Some(e2: Expression)) => e1 semanticEquals e2
-        case (t1: Traversable[_], t2: Traversable[_]) => checkSemantic(t1.toSeq, t2.toSeq)
-        case (i1, i2) => i1 == i2
-      }
-    }
     // Non-deterministic expressions cannot be semantic equal
     if (!deterministic || !other.deterministic) return false
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
     checkSemantic(elements1, elements2)
+  }
+
+  /**
+   * Returns a sequence of expressions by removing from q the first expression that is semantically
+   * equivalent to e. If such an expression was not found, return seq.
+   */
+  def removeFirstSemanticEquivalent(seq: Seq[Expression], e: Expression): Seq[Expression] = {
+    seq match {
+      case Seq() => Seq()
+      case x +: rest if x semanticEquals e => rest
+      case x +: rest => x +: removeFirstSemanticEquivalent(rest, e)
+    }
   }
 
   /**
