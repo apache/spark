@@ -19,9 +19,6 @@ package org.apache.spark.util
 
 import java.util.Properties
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.shuffle.MetadataFetchFailedException
-
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
@@ -30,6 +27,8 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {

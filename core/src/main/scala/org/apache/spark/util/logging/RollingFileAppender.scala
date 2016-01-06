@@ -20,8 +20,8 @@ package org.apache.spark.util.logging
 import java.io.{File, FileFilter, InputStream}
 
 import com.google.common.io.Files
+
 import org.apache.spark.SparkConf
-import RollingFileAppender._
 
 /**
  * Continuously appends data from input stream into the given file, and rolls
@@ -39,8 +39,10 @@ private[spark] class RollingFileAppender(
     activeFile: File,
     val rollingPolicy: RollingPolicy,
     conf: SparkConf,
-    bufferSize: Int = DEFAULT_BUFFER_SIZE
+    bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE
   ) extends FileAppender(inputStream, activeFile, bufferSize) {
+
+  import RollingFileAppender._
 
   private val maxRetainedFiles = conf.getInt(RETAINED_FILES_PROPERTY, -1)
 

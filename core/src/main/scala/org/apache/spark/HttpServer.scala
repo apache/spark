@@ -19,17 +19,16 @@ package org.apache.spark
 
 import java.io.File
 
-import org.eclipse.jetty.server.ssl.SslSocketConnector
-import org.eclipse.jetty.util.security.{Constraint, Password}
-import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService}
+import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.bio.SocketConnector
+import org.eclipse.jetty.server.ssl.SslSocketConnector
 import org.eclipse.jetty.servlet.{DefaultServlet, ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.util.Utils
-
 
 /**
  * Exception type thrown by HttpServer when it is in the wrong state for an operation.

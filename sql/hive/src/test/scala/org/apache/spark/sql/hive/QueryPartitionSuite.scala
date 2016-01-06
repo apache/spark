@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
 
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext.implicits._

@@ -21,8 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, SparkConf, SecurityManager}
-
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,

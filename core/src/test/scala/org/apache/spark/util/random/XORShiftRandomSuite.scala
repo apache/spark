@@ -17,14 +17,13 @@
 
 package org.apache.spark.util.random
 
-import org.scalatest.Matchers
+import scala.language.reflectiveCalls
 
 import org.apache.commons.math3.stat.inference.ChiSquareTest
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils.times
-
-import scala.language.reflectiveCalls
 
 class XORShiftRandomSuite extends SparkFunSuite with Matchers {
 
