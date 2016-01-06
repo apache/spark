@@ -195,7 +195,7 @@ function
     RPAREN (KW_OVER ws=window_specification)?
            -> {$star != null}? ^(TOK_FUNCTIONSTAR functionName $ws?)
            -> {$dist == null}? ^(TOK_FUNCTION functionName (selectExpression+)? $ws?)
-                            -> ^(TOK_FUNCTIONDI functionName (selectExpression+)?)
+                            -> ^(TOK_FUNCTIONDI functionName (selectExpression+)? $ws?)
     ;
 
 functionName
