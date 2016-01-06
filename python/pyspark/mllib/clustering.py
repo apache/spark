@@ -212,8 +212,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     True
     >>> labels[4]==labels[5]
     True
-    >>> model.predict([-0.01,-0.1])
-    2
+    >>> model.predict([-0.1,-0.05])
+    0
+    >>> model.predictSoft([-0.1,-0.05])
+    array([ 0.985...,  0.005...,  0.009...])
 
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
