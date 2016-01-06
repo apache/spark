@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
 
@@ -59,6 +59,9 @@ private[deploy] class ExecutorRunner(
   private var process: Process = null
   private var stdoutAppender: FileAppender = null
   private var stderrAppender: FileAppender = null
+
+  // Timeout to wait for when trying to terminate an executor.
+  private val EXECUTOR_TERMINATE_TIMEOUT_MS = 10 * 1000
 
   // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It might
   // make sense to remove this in the future.
@@ -94,8 +97,11 @@ private[deploy] class ExecutorRunner(
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
-      process.destroy()
-      exitCode = Some(process.waitFor())
+      exitCode = Utils.terminateProcess(process, EXECUTOR_TERMINATE_TIMEOUT_MS)
+      if (exitCode.isEmpty) {
+        logWarning("Failed to terminate process: " + process +
+          ". This process will likely be orphaned.")
+      }
     }
     try {
       worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))

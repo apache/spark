@@ -20,11 +20,11 @@ package org.apache.spark.sql
 import java.lang.reflect.Modifier
 
 import scala.annotation.implicitNotFound
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
-import org.apache.spark.sql.catalyst.expressions.{DecodeUsingSerializer, BoundReference, EncodeUsingSerializer}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, DecodeUsingSerializer, EncodeUsingSerializer}
 import org.apache.spark.sql.types._
 
 /**
@@ -156,6 +156,12 @@ object Encoders {
     * @since 1.6.0
     */
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
+
+  /**
+    * An encoder for arrays of bytes.
+    * @since 1.6.1
+    */
+  def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
 
   /**
    * Creates an encoder for Java Bean of type T.

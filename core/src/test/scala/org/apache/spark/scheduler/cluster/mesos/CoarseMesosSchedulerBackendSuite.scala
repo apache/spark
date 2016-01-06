@@ -20,17 +20,17 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.util
 import java.util.Collections
 
-import org.apache.mesos.Protos.Value.Scalar
-import org.apache.mesos.Protos._
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
+import org.apache.mesos.Protos._
+import org.apache.mesos.Protos.Value.Scalar
+import org.mockito.Matchers
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.mockito.Matchers
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SecurityManager, SparkFunSuite}
 
 class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     with LocalSparkContext

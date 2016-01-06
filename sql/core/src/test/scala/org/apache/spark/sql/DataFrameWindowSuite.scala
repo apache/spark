@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 
 class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
@@ -291,5 +291,25 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         Row("b", 4, 7, 60),
         Row("b", 3, 8, 32),
         Row("b", 2, 4, 8)))
+  }
+
+  test("null inputs") {
+    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2))
+      .toDF("key", "value")
+    val window = Window.orderBy()
+    checkAnswer(
+      df.select(
+        $"key",
+        $"value",
+        avg(lit(null)).over(window),
+        sum(lit(null)).over(window)),
+      Seq(
+        Row("a", 1, null, null),
+        Row("a", 1, null, null),
+        Row("a", 2, null, null),
+        Row("a", 2, null, null),
+        Row("b", 4, null, null),
+        Row("b", 3, null, null),
+        Row("b", 2, null, null)))
   }
 }

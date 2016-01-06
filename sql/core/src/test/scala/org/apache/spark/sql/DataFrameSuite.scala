@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
@@ -339,15 +339,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
-  }
-
-  test("deprecated callUdf in SQLContext") {
-    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-    val sqlctx = df.sqlContext
-    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
-    checkAnswer(
-      df.select($"id", callUdf("simpleUdf", $"value")),
-      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
   test("callUDF in SQLContext") {
@@ -769,6 +760,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     val res11 = sqlContext.range(-1).select("id")
     assert(res11.count == 0)
+
+    // using the default slice number
+    val res12 = sqlContext.range(3, 15, 3).select("id")
+    assert(res12.count == 4)
+    assert(res12.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
   }
 
   test("SPARK-8621: support empty string column name") {
@@ -1215,5 +1211,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           " _2: struct<_1: bigint," +
           " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
 
+  }
+
+  test("SPARK-12512: support `.` in column name for withColumn()") {
+    val df = Seq("a" -> "b").toDF("col.a", "col.b")
+    checkAnswer(df.select(df("*")), Row("a", "b"))
+    checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
+    checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
   }
 }

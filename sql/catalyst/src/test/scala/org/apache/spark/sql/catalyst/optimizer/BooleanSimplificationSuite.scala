@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
 
 class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
@@ -86,23 +86,27 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
     checkCondition(
       ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5),
-      ('a === 'b || 'b > 3 && 'a > 3 && 'a < 5))
+      'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
   }
 
   test("a && (!a || b)") {
-    checkCondition(('a && (!('a) || 'b )), ('a && 'b))
+    checkCondition('a && (!'a || 'b ), 'a && 'b)
 
-    checkCondition(('a && ('b || !('a) )), ('a && 'b))
+    checkCondition('a && ('b || !'a ), 'a && 'b)
 
-    checkCondition(((!('a) || 'b ) && 'a), ('b && 'a))
+    checkCondition((!'a || 'b ) && 'a, 'b && 'a)
 
-    checkCondition((('b || !('a) ) && 'a), ('b && 'a))
+    checkCondition(('b || !'a ) && 'a, 'b && 'a)
   }
 
-  test("!(a && b) , !(a || b)") {
-    checkCondition((!('a && 'b)), (!('a) || !('b)))
+  test("DeMorgan's law") {
+    checkCondition(!('a && 'b), !'a || !'b)
 
-    checkCondition(!('a || 'b), (!('a) && !('b)))
+    checkCondition(!('a || 'b), !'a && !'b)
+
+    checkCondition(!(('a && 'b) || ('c && 'd)), (!'a || !'b) && (!'c || !'d))
+
+    checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
   }
 
   private val caseInsensitiveAnalyzer =

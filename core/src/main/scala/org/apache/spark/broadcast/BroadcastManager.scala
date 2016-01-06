@@ -21,8 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
 
-import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
@@ -39,15 +38,8 @@ private[spark] class BroadcastManager(
   private def initialize() {
     synchronized {
       if (!initialized) {
-        val broadcastFactoryClass =
-          conf.get("spark.broadcast.factory", "org.apache.spark.broadcast.TorrentBroadcastFactory")
-
-        broadcastFactory =
-          Utils.classForName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
-
-        // Initialize appropriate BroadcastFactory and BroadcastObject
+        broadcastFactory = new TorrentBroadcastFactory
         broadcastFactory.initialize(isDriver, conf, securityManager)
-
         initialized = true
       }
     }

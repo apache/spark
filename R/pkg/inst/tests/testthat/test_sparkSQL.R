@@ -62,6 +62,10 @@ mockLinesComplexType <-
 complexTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
+test_that("calling sparkRSQL.init returns existing SQL context", {
+  expect_equal(sparkRSQL.init(sc), sqlContext)
+})
+
 test_that("infer types and check types", {
   expect_equal(infer_type(1L), "integer")
   expect_equal(infer_type(1.0), "double")
@@ -419,12 +423,12 @@ test_that("read/write json files", {
 test_that("jsonRDD() on a RDD with json string", {
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
-  df <- jsonRDD(sqlContext, rdd)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
 
   rdd2 <- flatMap(rdd, function(x) c(x, x))
-  df <- jsonRDD(sqlContext, rdd2)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 6)
 })
@@ -494,9 +498,11 @@ test_that("table() returns a new DataFrame", {
   expect_equal(count(tabledf), 3)
   dropTempTable(sqlContext, "table1")
 
+  # nolint start
   # Test base::table is working
   #a <- letters[1:3]
   #expect_equal(class(table(a, sample(a))), "table")
+  # nolint end
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -762,8 +768,10 @@ test_that("sample on a DataFrame", {
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 
+  # nolint start
   # Test base::sample is working
   #expect_equal(length(sample(1:12)), 12)
+  # nolint end
 })
 
 test_that("select operators", {
@@ -1048,8 +1056,8 @@ test_that("string operators", {
   df2 <- createDataFrame(sqlContext, l2)
   expect_equal(collect(select(df2, locate("aa", df2$a)))[1, 1], 1)
   expect_equal(collect(select(df2, locate("aa", df2$a, 1)))[1, 1], 2)
-  expect_equal(collect(select(df2, lpad(df2$a, 8, "#")))[1, 1], "###aaads")
-  expect_equal(collect(select(df2, rpad(df2$a, 8, "#")))[1, 1], "aaads###")
+  expect_equal(collect(select(df2, lpad(df2$a, 8, "#")))[1, 1], "###aaads") # nolint
+  expect_equal(collect(select(df2, rpad(df2$a, 8, "#")))[1, 1], "aaads###") # nolint
 
   l3 <- list(list(a = "a.b.c.d"))
   df3 <- createDataFrame(sqlContext, l3)
@@ -1118,6 +1126,14 @@ test_that("when(), otherwise() and ifelse() on a DataFrame", {
   expect_equal(collect(select(df, when(df$a > 1 & df$b > 2, 1)))[, 1], c(NA, 1))
   expect_equal(collect(select(df, otherwise(when(df$a > 1, 1), 0)))[, 1], c(0, 1))
   expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, 0, 1)))[, 1], c(1, 0))
+})
+
+test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, when(df$a > 1 & df$b > 2, lit(1))))[, 1], c(NA, 1))
+  expect_equal(collect(select(df, otherwise(when(df$a > 1, lit(1)), lit(0))))[, 1], c(0, 1))
+  expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, lit(0), lit(1))))[, 1], c(1, 0))
 })
 
 test_that("group by, agg functions", {
@@ -1247,7 +1263,7 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered6), 2)
 
   # Test stats::filter is working
-  #expect_true(is.ts(filter(1:100, rep(1, 3))))
+  #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
 })
 
 test_that("join() and merge() on a DataFrame", {
@@ -1647,7 +1663,7 @@ test_that("cov() and corr() on a DataFrame", {
   expect_true(abs(result - 1.0) < 1e-12)
 
   # Test stats::cov is working
-  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3)
+  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3) # nolint
 })
 
 test_that("freqItems() on a DataFrame", {

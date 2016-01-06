@@ -17,12 +17,12 @@
 
 package org.apache.spark.api.java
 
+import java.{util => ju}
 import java.util.Map.Entry
 
-import com.google.common.base.Optional
-
-import java.{util => ju}
 import scala.collection.mutable
+
+import com.google.common.base.Optional
 
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
