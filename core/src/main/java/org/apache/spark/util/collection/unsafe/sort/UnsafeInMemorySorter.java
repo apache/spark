@@ -195,10 +195,6 @@ public final class UnsafeInMemorySorter {
       return position / 2 < numRecords;
     }
 
-    public int numRecordsLeft() {
-      return numRecords - position / 2;
-    }
-
     @Override
     public void loadNext() {
       // This pointer points to a 4-byte record length, followed by the record's bytes
