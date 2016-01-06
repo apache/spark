@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation, InsertableRelation}
-import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
 
 /**
  * Try to replaces [[UnresolvedRelation]]s with [[ResolvedDataSource]].
