@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.util
 
-import org.scalatest.{Suite, BeforeAndAfterAll}
+import org.scalatest.{BeforeAndAfterAll, Suite}
 
 import org.apache.spark.{SparkConf, SparkContext}
 

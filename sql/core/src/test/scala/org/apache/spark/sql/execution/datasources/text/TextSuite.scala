@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.util.Utils
-
 
 class TextSuite extends QueryTest with SharedSQLContext {
 

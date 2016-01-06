@@ -19,12 +19,12 @@ package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream}
 
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream}
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
 
 /**
  * This is a output stream just for the testsuites. All the output is collected into a

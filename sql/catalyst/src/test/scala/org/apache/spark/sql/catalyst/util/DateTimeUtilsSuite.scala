@@ -22,8 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
