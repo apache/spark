@@ -33,9 +33,10 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[AnalysisException](df.write.bucketBy(2, "k").saveAsTable("tt"))
   }
 
-  test("numBuckets not greater than 0") {
+  test("numBuckets not greater than 0 or less than 100000") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
     intercept[IllegalArgumentException](df.write.bucketBy(0, "i").saveAsTable("tt"))
+    intercept[IllegalArgumentException](df.write.bucketBy(100000, "i").saveAsTable("tt"))
   }
 
   test("specify sorting columns without bucketing columns") {
@@ -46,6 +47,11 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   test("sorting by non-orderable column") {
     val df = Seq("a" -> Map(1 -> 1), "b" -> Map(2 -> 2)).toDF("i", "j")
     intercept[AnalysisException](df.write.bucketBy(2, "i").sortBy("j").saveAsTable("tt"))
+  }
+
+  test("write bucketed data to unsupported data source") {
+    val df = Seq(Tuple1("a"), Tuple1("b")).toDF("i")
+    intercept[AnalysisException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
   }
 
   test("write bucketed data to non-hive-table or existing hive table") {

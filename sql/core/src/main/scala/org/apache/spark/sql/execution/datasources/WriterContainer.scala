@@ -410,7 +410,11 @@ private[sql] class DynamicPartitionWriterContainer(
     }
   }
 
-  /** Open and returns a new OutputWriter given a partition key and optional bucket id. */
+  /**
+   * Open and returns a new OutputWriter given a partition key and optional bucket id.
+   * If bucket id is specified, we will append it to the end of the file name, but before the
+   * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
+   */
   private def newOutputWriter(
       key: InternalRow,
       getPartitionString: UnsafeProjection): OutputWriter = {

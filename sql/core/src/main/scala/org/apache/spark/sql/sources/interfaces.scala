@@ -173,7 +173,7 @@ trait HadoopFsRelationProvider {
     if (bucketSpec.isDefined) {
       throw new AnalysisException("Currently we don't support bucketing for this data source.")
     }
-    createRelation(sqlContext, paths, dataSchema, partitionColumns, bucketSpec, parameters)
+    createRelation(sqlContext, paths, dataSchema, partitionColumns, parameters)
   }
 }
 
