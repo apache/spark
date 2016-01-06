@@ -49,6 +49,9 @@ class KMeansModel(Saveable, Loader):
 
     """A clustering model derived from the k-means method.
 
+    :param centers:
+      Initial cluster centers
+
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = KMeans.train(
     ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
@@ -170,7 +173,38 @@ class KMeans(object):
     @since('0.9.0')
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
               seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
-        """Train a k-means clustering model."""
+        """
+        Train a k-means clustering model.
+
+        :param rdd:
+          Train with a RDD of data points.
+        :param k:
+          Number of clusters to create.
+        :param maxIterations:
+          Number of iterations.
+          (default: 100)
+        :param runs:
+          Number of runs of the algorithm to execute in parallel (deprecated in 1.6.0).
+          (default: 1)
+        :param initializationMode:
+          The initialization algorithm. This can be either "random" or "k-means||".
+          (default: "k-means||")
+        :param seed:
+          Random seed for cluster initialization.
+          (default: None)
+        :param initializationSteps:
+          Set the number of steps for the k-means|| initialization mode. This is an advanced
+          setting -- the default of 5 is almost always enough.
+          (default: 5)
+        :param epsilon:
+          Set the distance threshold within which we've consider centers to have converged.
+          If all centers move less than this Euclidean distance, we stop iterating one run.
+          (default: 1e-4)
+        :param initialModel:
+          Initial cluster centers can be provided as a KMeansModel object rather than using the
+          random or k-means|| initializationModel.
+          (default: None)
+        """
         if runs != 1:
             warnings.warn(
                 "Support for runs is deprecated in 1.6.0. This param will have no effect in 1.7.0.")
@@ -280,8 +314,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         Find the cluster to which the points in 'x' has maximum membership
         in this model.
 
-        :param x:    RDD of data points.
-        :return:     cluster_labels. RDD of cluster labels.
+        :param x:
+          RDD of data points.
+        :return:
+          RDD of cluster labels.
         """
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
@@ -295,8 +331,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         Find the membership of each point in 'x' to all mixture components.
 
-        :param x:    RDD of data points.
-        :return:     membership_matrix. RDD of array of double values.
+        :param x:
+          RDD of data points.
+        :return:
+          Membership matrix as a RDD of double arrays.
         """
         if isinstance(x, RDD):
             means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
@@ -312,8 +350,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     def load(cls, sc, path):
         """Load the GaussianMixtureModel from disk.
 
-        :param sc: SparkContext
-        :param path: str, path to where the model is stored.
+        :param sc:
+          SparkContext.
+        :param path:
+          Path to where the model is stored.
         """
         model = cls._load_java(sc, path)
         wrapper = sc._jvm.GaussianMixtureModelWrapper(model)
@@ -326,19 +366,31 @@ class GaussianMixture(object):
 
     Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
-    :param data:            RDD of data points
-    :param k:               Number of components
-    :param convergenceTol:  Threshold value to check the convergence criteria. Defaults to 1e-3
-    :param maxIterations:   Number of iterations. Default to 100
-    :param seed:            Random Seed
-    :param initialModel:    GaussianMixtureModel for initializing learning
-
     .. versionadded:: 1.3.0
     """
     @classmethod
     @since('1.3.0')
     def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None, initialModel=None):
-        """Train a Gaussian Mixture clustering model."""
+        """
+        Train a Gaussian Mixture clustering model.
+
+        :param rdd:
+          Train with a RDD of data points.
+        :param k:
+          Number of independent Gaussians in the mixture model.
+        :param convergenceTol:
+          Threshold value to check the convergence criteria.
+          (default: 1e-3)
+        :param maxIterations:
+          Number of iterations.
+          (default: 100)
+        :param seed:
+          Random seed for initial Gaussian distribution.
+          (default: None)
+        :param initialModel:
+          Set the initial GMM starting point, bypassing the random initialization.
+          (default: None)
+        """
         initialModelWeights = None
         initialModelMu = None
         initialModelSigma = None
@@ -439,18 +491,21 @@ class PowerIterationClustering(object):
     @since('1.5.0')
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
         """
-        :param rdd: an RDD of (i, j, s,,ij,,) tuples representing the
-            affinity matrix, which is the matrix A in the PIC paper.
-            The similarity s,,ij,, must be nonnegative.
-            This is a symmetric matrix and hence s,,ij,, = s,,ji,,.
-            For any (i, j) with nonzero similarity, there should be
-            either (i, j, s,,ij,,) or (j, i, s,,ji,,) in the input.
-            Tuples with i = j are ignored, because we assume
-            s,,ij,, = 0.0.
-        :param k: Number of clusters.
-        :param maxIterations: Maximum number of iterations of the
-            PIC algorithm.
-        :param initMode: Initialization mode.
+        :param rdd:
+          Train with a RDD of (i, j, s,,ij,,) tuples representing the affinity matrix, which is
+          the matrix A in the PIC paper.  The similarity s,,ij,, must be nonnegative.  This is a
+          symmetric matrix and hence s,,ij,, = s,,ji,,.  For any (i, j) with nonzero similarity,
+          there should be either (i, j, s,,ij,,) or (j, i, s,,ji,,) in the input.  Tuples with
+          i = j are ignored, because we assume s,,ij,, = 0.0.
+        :param k:
+          Number of clusters.
+        :param maxIterations:
+          Maximum number of iterations of the PIC algorithm.
+          (default: 100)
+        :param initMode:
+          Set the initialization mode. This can be either "random" to use a random vector as
+          vertex properties, or "degree" to use normalized sum similarities.
+          (default: "random")
         """
         model = callMLlibFunc("trainPowerIterationClusteringModel",
                               rdd.map(_convert_to_vector), int(k), int(maxIterations), initMode)
@@ -490,8 +545,10 @@ class StreamingKMeansModel(KMeansModel):
     and new data. If it set to zero, the old centroids are completely
     forgotten.
 
-    :param clusterCenters: Initial cluster centers.
-    :param clusterWeights: List of weights assigned to each cluster.
+    :param clusterCenters:
+      Initial cluster centers.
+    :param clusterWeights:
+      List of weights assigned to each cluster.
 
     >>> initCenters = [[0.0, 0.0], [1.0, 1.0]]
     >>> initWeights = [1.0, 1.0]
@@ -538,11 +595,13 @@ class StreamingKMeansModel(KMeansModel):
     def update(self, data, decayFactor, timeUnit):
         """Update the centroids, according to data
 
-        :param data: Should be a RDD that represents the new data.
-        :param decayFactor: forgetfulness of the previous centroids.
-        :param timeUnit: Can be "batches" or "points". If points, then the
-                         decay factor is raised to the power of number of new
-                         points and if batches, it is used as it is.
+        :param data:
+          RDD with new data for the model update.
+        :param decayFactor:
+          Forgetfulness of the previous centroids.
+        :param timeUnit:
+          Can be "batches" or "points". If points, then the decay factor is raised to the power of
+          number of new points and if batches, then decay factor will be used as is.
         """
         if not isinstance(data, RDD):
             raise TypeError("Data should be of an RDD, got %s." % type(data))
@@ -569,10 +628,16 @@ class StreamingKMeans(object):
     More details on how the centroids are updated are provided under the
     docs of StreamingKMeansModel.
 
-    :param k: int, number of clusters
-    :param decayFactor: float, forgetfulness of the previous centroids.
-    :param timeUnit: can be "batches" or "points". If points, then the
-                     decayfactor is raised to the power of no. of new points.
+    :param k:
+      Number of clusters.
+      (default: 2)
+    :param decayFactor:
+      Forgetfulness of the previous centroids.
+      (default: 1.0)
+    :param timeUnit:
+      Can be "batches" or "points". If points, then the decay factor is raised to the power of
+      number of new points and if batches, then decay factor will be used as is.
+      (default: "batches")
 
     .. versionadded:: 1.5.0
     """
@@ -735,11 +800,13 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
 
         WARNING: If vocabSize and k are large, this can return a large object!
 
-        :param maxTermsPerTopic: Maximum number of terms to collect for each topic.
-            (default: vocabulary size)
-        :return: Array over topics. Each topic is represented as a pair of matching arrays:
-            (term indices, term weights in topic).
-            Each topic's terms are sorted in order of decreasing weight.
+        :param maxTermsPerTopic:
+          Maximum number of terms to collect for each topic.
+          (default: vocabulary size)
+        :return:
+          Array over topics. Each topic is represented as a pair of matching arrays:
+          (term indices, term weights in topic).  Each topic's terms are sorted in order of
+          decreasing weight.
         """
         if maxTermsPerTopic is None:
             topics = self.call("describeTopics")
@@ -752,8 +819,10 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
     def load(cls, sc, path):
         """Load the LDAModel from disk.
 
-        :param sc: SparkContext
-        :param path: str, path to where the model is stored.
+        :param sc:
+          SparkContext.
+        :param path:
+          Path to where the model is stored.
         """
         if not isinstance(sc, SparkContext):
             raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
@@ -774,17 +843,32 @@ class LDA(object):
               topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
         """Train a LDA model.
 
-        :param rdd:                 RDD of data points
-        :param k:                   Number of clusters you want
-        :param maxIterations:       Number of iterations. Default to 20
-        :param docConcentration:    Concentration parameter (commonly named "alpha")
-            for the prior placed on documents' distributions over topics ("theta").
-        :param topicConcentration:  Concentration parameter (commonly named "beta" or "eta")
-            for the prior placed on topics' distributions over terms.
-        :param seed:                Random Seed
-        :param checkpointInterval:  Period (in iterations) between checkpoints.
-        :param optimizer:           LDAOptimizer used to perform the actual calculation.
-            Currently "em", "online" are supported. Default to "em".
+        :param rdd:
+          Train with a RDD of data points.
+        :param k:
+          Number of clusters.
+          (default: 10)
+        :param maxIterations:
+          Number of iterations.
+          (default: 20)
+        :param docConcentration:
+          Concentration parameter (commonly named "alpha") for the prior placed on documents'
+          distributions over topics ("theta").
+          (default: -1.0)
+        :param topicConcentration:
+          Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
+          distributions over terms.
+          (default: -1.0)
+        :param seed:
+          Random seed for cluster initialization.
+          (default: None)
+        :param checkpointInterval:
+          Period (in iterations) between checkpoints.
+          (default: 10)
+        :param optimizer:
+          LDAOptimizer used to perform the actual calculation.  Currently "em", "online" are
+          supported.
+          (default: "em")
         """
         model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
                               docConcentration, topicConcentration, seed,
