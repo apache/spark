@@ -361,15 +361,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r @ logical.Range(start, end, step, numSlices, output) =>
         execution.Range(start, step, numSlices, r.numElements, output) :: Nil
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
-        val newPartitioning = HashPartitioning(expressions, nPartitions.getOrElse(numPartitions))
-        val childPlan = self.sqlContext.planner.planLater(child)
-        // This is necessary to get the outputPartitioning from EnsureRequirements batch
-        val executedChildPlan = sqlContext.prepareForExecution.execute(childPlan)
-        if (executedChildPlan.outputPartitioning.guarantees(newPartitioning)) {
-          childPlan :: Nil
-        } else {
-          execution.Exchange(newPartitioning, planLater(child)) :: Nil
-        }
+        execution.Exchange(HashPartitioning(
+          expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
       case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
