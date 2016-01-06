@@ -125,39 +125,22 @@ private[sql] case class InsertIntoHadoopFsRelation(
              |Actual: ${partitionColumns.mkString(", ")}
           """.stripMargin)
 
-        val bucketSpec = relation match {
-          case relation: BucketedHadoopFsRelation => relation.bucketSpec
-          case _ => None
-        }
-
-        val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
+        val writerContainer = if (partitionColumns.isEmpty && relation.bucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)
         } else {
           val output = df.queryExecution.executedPlan.output
           val (partitionOutput, dataOutput) =
             output.partition(a => partitionColumns.contains(a.name))
 
-          if (bucketSpec.isEmpty) {
-            new DynamicPartitionWriterContainer(
-              relation,
-              job,
-              partitionOutput,
-              dataOutput,
-              output,
-              PartitioningUtils.DEFAULT_PARTITION_NAME,
-              sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
-              isAppend)
-          } else {
-            new BucketedPartitionWriterContainer(
-              relation.asInstanceOf[BucketedHadoopFsRelation],
-              job,
-              partitionOutput,
-              bucketSpec.get,
-              dataOutput,
-              output,
-              PartitioningUtils.DEFAULT_PARTITION_NAME,
-              isAppend)
-          }
+          new DynamicPartitionWriterContainer(
+            relation,
+            job,
+            partitionOutput,
+            dataOutput,
+            output,
+            PartitioningUtils.DEFAULT_PARTITION_NAME,
+            sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
+            isAppend)
         }
 
         // This call shouldn't be put into the `try` block below because it only initializes and

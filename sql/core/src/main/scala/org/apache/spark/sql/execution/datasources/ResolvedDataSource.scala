@@ -240,21 +240,13 @@ object ResolvedDataSource extends Logging {
         val equality = columnNameEquality(caseSensitive)
         val dataSchema = StructType(
           data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
-        val r = dataSource match {
-          case provider: BucketedHadoopFsRelationProvider => provider.createRelation(
-            sqlContext,
-            Array(outputPath.toString),
-            Option(dataSchema.asNullable),
-            Option(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
-            bucketSpec,
-            caseInsensitiveOptions)
-          case provider: HadoopFsRelationProvider => provider.createRelation(
-            sqlContext,
-            Array(outputPath.toString),
-            Option(dataSchema.asNullable),
-            Option(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
-            caseInsensitiveOptions)
-        }
+        val r = dataSource.createRelation(
+          sqlContext,
+          Array(outputPath.toString),
+          Some(dataSchema.asNullable),
+          Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+          bucketSpec,
+          caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This

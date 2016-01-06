@@ -53,7 +53,7 @@ private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with D
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): BucketedHadoopFsRelation = {
+      parameters: Map[String, String]): HadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
@@ -156,10 +156,10 @@ private[sql] class OrcRelation(
     maybeDataSchema: Option[StructType],
     maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    val bucketSpec: Option[BucketSpec],
+    override val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(

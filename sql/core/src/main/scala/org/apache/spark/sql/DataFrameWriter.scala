@@ -129,8 +129,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Buckets the output by the given columns on the file system. If specified, the output is
-   * laid out on the file system similar to Hive's bucketing scheme.
+   * Buckets the output by the given columns. If specified, the output is laid out on the file
+   * system similar to Hive's bucketing scheme.
    *
    * This is applicable for Parquet, JSON and ORC.
    *
@@ -144,7 +144,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Sorts the bucketed output by the given columns.
+   * Sorts the output in each bucket by the given columns.
    *
    * This is applicable for Parquet, JSON and ORC.
    *
@@ -239,7 +239,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     for {
       n <- numBuckets
     } yield {
-      require(n > 0, "Bucket number must be greater than 0.")
+      require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
       BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
     }
   }

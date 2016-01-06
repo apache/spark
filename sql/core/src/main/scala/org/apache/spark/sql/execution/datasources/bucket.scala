@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.sources.{OutputWriter, OutputWriterFactory, HadoopFsRelationProvider, HadoopFsRelation}
 import org.apache.spark.sql.types.StructType
 
@@ -44,28 +43,7 @@ private[sql] trait BucketedHadoopFsRelationProvider extends HadoopFsRelationProv
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation =
-    createRelation(sqlContext, paths, dataSchema, partitionColumns, None, parameters)
-
-  def createRelation(
-      sqlContext: SQLContext,
-      paths: Array[String],
-      dataSchema: Option[StructType],
-      partitionColumns: Option[StructType],
-      bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): BucketedHadoopFsRelation
-}
-
-private[sql] abstract class BucketedHadoopFsRelation(
-    maybePartitionSpec: Option[PartitionSpec],
-    parameters: Map[String, String])
-  extends HadoopFsRelation(maybePartitionSpec, parameters) {
-  def this() = this(None, Map.empty[String, String])
-
-  def this(parameters: Map[String, String]) = this(None, parameters)
-
-  def bucketSpec: Option[BucketSpec]
-
-  def prepareJobForWrite(job: Job): BucketedOutputWriterFactory
+    createRelation(sqlContext, paths, dataSchema, partitionColumns, bucketSpec = None, parameters)
 }
 
 private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFactory {
@@ -73,11 +51,5 @@ private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFact
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter =
-    newInstance(path, None, dataSchema, context)
-
-  def newInstance(
-      path: String,
-      bucketId: Option[Int],
-      dataSchema: StructType,
-      context: TaskAttemptContext): OutputWriter
+    throw new UnsupportedOperationException("use bucket version")
 }

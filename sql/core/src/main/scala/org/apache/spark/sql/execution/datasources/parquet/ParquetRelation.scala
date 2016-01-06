@@ -61,7 +61,7 @@ private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with D
       schema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): BucketedHadoopFsRelation = {
+      parameters: Map[String, String]): HadoopFsRelation = {
     new ParquetRelation(paths, schema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
@@ -112,10 +112,10 @@ private[sql] class ParquetRelation(
     // This is for metastore conversion.
     private val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    val bucketSpec: Option[BucketSpec],
+    override val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
-  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(

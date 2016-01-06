@@ -50,7 +50,7 @@ class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegi
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): BucketedHadoopFsRelation = {
+      parameters: Map[String, String]): HadoopFsRelation = {
 
     new JSONRelation(
       inputRDD = None,
@@ -68,11 +68,11 @@ private[sql] class JSONRelation(
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    val bucketSpec: Option[BucketSpec],
+    override val bucketSpec: Option[BucketSpec],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
-  extends BucketedHadoopFsRelation(maybePartitionSpec, parameters) {
+  extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
   def this(
       inputRDD: Option[RDD[String]],
