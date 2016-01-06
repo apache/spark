@@ -239,6 +239,17 @@ class ALS(object):
         product of two lower-rank matrices of a given rank (number of features). To solve for these
         features, we run a given number of iterations of ALS. This is done using a level of
         parallelism given by `blocks`.
+		
+		:param iterations:
+		  Number of iterations run for each batch of data.
+          (default: 5)
+		:param lambda_:
+          The smoothing parameter.
+          (default: 0.01)
+		:param seed:
+		  Random seed for initial matrix factorization model.
+          (default: None)
+
         """
         model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
                               lambda_, blocks, nonnegative, seed)
@@ -254,6 +265,17 @@ class ALS(object):
         ratings matrix as the product of two lower-rank matrices of a given rank (number of
         features).  To solve for these features, we run a given number of iterations of ALS.
         This is done using a level of parallelism given by `blocks`.
+		
+		:param iterations:
+		  Number of iterations run for each batch of data.
+          (default: 5)
+		:param lambda_:
+          The smoothing parameter.
+          (default: 0.01)
+		:param seed:
+		  Random seed for initial matrix factorization model.
+          (default: None)
+		 
         """
         model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
                               iterations, lambda_, blocks, alpha, nonnegative, seed)
