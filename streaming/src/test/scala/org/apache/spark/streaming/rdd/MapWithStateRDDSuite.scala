@@ -26,8 +26,8 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
 import org.apache.spark.streaming.{State, Time}
+import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
 import org.apache.spark.util.Utils
 
 class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with BeforeAndAfterAll {

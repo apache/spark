@@ -17,14 +17,13 @@
 
 package org.apache.spark.streaming.twitter
 
-
 import org.scalatest.BeforeAndAfter
 import twitter4j.Status
-import twitter4j.auth.{NullAuthorization, Authorization}
+import twitter4j.auth.{Authorization, NullAuthorization}
 
 import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 class TwitterStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {
