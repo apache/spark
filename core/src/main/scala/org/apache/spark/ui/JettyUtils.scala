@@ -27,15 +27,14 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.{Connector, Request, Server}
 import org.eclipse.jetty.server.handler._
-import org.eclipse.jetty.servlet._
-import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.eclipse.jetty.server.nio.SelectChannelConnector
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
-
+import org.eclipse.jetty.servlet._
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{Logging, SSLOptions, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.util.Utils
 
 /**
