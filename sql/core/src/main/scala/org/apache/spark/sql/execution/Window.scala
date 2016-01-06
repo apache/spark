@@ -303,7 +303,7 @@ case class Window(
         fetchNextRow()
 
         // Manage the current partition.
-        val rows: ArrayBuffer[UnsafeRow] = ArrayBuffer.empty[UnsafeRow]
+        val rows = ArrayBuffer.empty[UnsafeRow]
         val inputFields = child.output.length
         var sorter: UnsafeExternalSorter = null
         var rowBuffer: RowBuffer = null
@@ -435,7 +435,6 @@ private[execution] final case class RangeBoundOrdering(
       outputIndex: Int): Int =
     ordering.compare(current(inputRow), bound(outputRow))
 }
-
 
 /**
   * The interface of row buffer for a partition
@@ -646,7 +645,7 @@ private[execution] final class SlidingWindowFunctionFrame(
   private[this] var nextRow: InternalRow = null
 
   /** The rows within current sliding window. */
-  private[this] val buffer: util.Queue[InternalRow] = new util.ArrayDeque[InternalRow]()
+  private[this] val buffer = new util.ArrayDeque[InternalRow]()
 
   /** Index of the first input row with a value greater than the upper bound of the current
     * output row. */
