@@ -519,8 +519,7 @@ class SparseVector(Vector):
             for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError(
-                        "Indices %s and %s are not strictly increasing",
-                        % (self.indices[i], self.indices[i + 1]))
+                        "Indices %s and %s are not strictly increasing", % (i, i + 1))
 
     def numNonzeros(self):
         return np.count_nonzero(self.values)
