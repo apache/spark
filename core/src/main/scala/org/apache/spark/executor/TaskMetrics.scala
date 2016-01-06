@@ -23,12 +23,16 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator, SparkException}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.Utils
 
 
+// TODO: make everything here private
+
 /**
+ * :: DeveloperApi ::
  * Metrics tracked during the execution of a task.
  *
  * This class is used to house metrics both for in-progress and completed tasks. In executors,
@@ -39,7 +43,7 @@ import org.apache.spark.util.Utils
  * So, when adding new fields, take into consideration that the whole object can be serialized for
  * shipping off at any time to consumers of the SparkListener interface.
  */
-@deprecated("TaskMetrics will be made private in a future version.", "2.0.0")
+@DeveloperApi
 class TaskMetrics private[spark] (
     initialAccums: Seq[Accumulator[Long]],
     val hostname: String = TaskMetrics.getCachedHostName)
@@ -293,15 +297,17 @@ class TaskMetrics private[spark] (
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
+  // TODO: make me an accumulator
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }
 
 
 /**
+ * :: DeveloperApi ::
  * Method by which input data was read.  Network means that the data was read over the network
  * from a remote block manager (which may have stored the data on-disk or in-memory).
  */
-@deprecated("DataReadMethod will be made private in a future version.", "2.0.0")
+@DeveloperApi
 object DataReadMethod extends Enumeration with Serializable {
   type DataReadMethod = Value
   val Memory, Disk, Hadoop, Network = Value
@@ -309,9 +315,10 @@ object DataReadMethod extends Enumeration with Serializable {
 
 
 /**
+ * :: DeveloperApi ::
  * Method by which output data was written.
  */
-@deprecated("DataWriteMethod will be made private in a future version.", "2.0.0")
+@DeveloperApi
 object DataWriteMethod extends Enumeration with Serializable {
   type DataWriteMethod = Value
   val Hadoop = Value
@@ -319,9 +326,10 @@ object DataWriteMethod extends Enumeration with Serializable {
 
 
 /**
+ * :: DeveloperApi ::
  * Metrics about reading input data.
  */
-@deprecated("InputMetrics will be made private in a future version.", "2.0.0")
+@DeveloperApi
 class InputMetrics private (
     val readMethod: DataReadMethod.Value,
     _bytesRead: Accumulator[Long],
@@ -368,9 +376,10 @@ class InputMetrics private (
 
 
 /**
+ * :: DeveloperApi ::
  * Metrics about writing output data.
  */
-@deprecated("OutputMetrics will be made private in a future version.", "2.0.0")
+@DeveloperApi
 class OutputMetrics private (
     val writeMethod: DataWriteMethod.Value,
     _bytesWritten: Accumulator[Long],
@@ -402,9 +411,10 @@ class OutputMetrics private (
 
 
 /**
+ * :: DeveloperApi ::
  * Metrics pertaining to shuffle data read in a given task.
  */
-@deprecated("ShuffleReadMetrics will be made private in a future version.", "2.0.0")
+@DeveloperApi
 class ShuffleReadMetrics private (
     _remoteBlocksFetched: Accumulator[Long],
     _localBlocksFetched: Accumulator[Long],
@@ -431,7 +441,7 @@ class ShuffleReadMetrics private (
    * many places only to merge their values together later. In the future, we should revisit
    * whether this is needed.
    *
-   * * A better alternative to use is [[TaskMetrics.registerTempShuffleReadMetrics]].
+   * A better alternative to use is [[TaskMetrics.registerTempShuffleReadMetrics]].
    */
   private[spark] def this() {
     this(InternalAccumulator.createShuffleReadAccums().map { a => (a.name.get, a) }.toMap)
@@ -496,9 +506,10 @@ class ShuffleReadMetrics private (
 
 
 /**
+ * :: DeveloperApi ::
  * Metrics pertaining to shuffle data written in a given task.
  */
-@deprecated("ShuffleWriteMetrics will be made private in a future version.", "2.0.0")
+@DeveloperApi
 class ShuffleWriteMetrics private (
     _bytesWritten: Accumulator[Long],
     _recordsWritten: Accumulator[Long],
@@ -539,8 +550,6 @@ class ShuffleWriteMetrics private (
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
   def shuffleWriteTime: Long = _shuffleWriteTime.value
-
-  // TODO: these are not thread-safe. Is that OK?
 
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)

@@ -134,8 +134,6 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         case _ => SqlNewHadoopRDDState.unsetInputFileName()
       }
 
-      // TODO: duplicate code alert!
-
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val getBytesReadCallback: Option[() => Long] = split.serializableHadoopSplit.value match {

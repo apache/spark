@@ -42,6 +42,8 @@ private[spark] abstract class SparkFunSuite extends FunSuite with Logging {
       test()
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+      // Avoid leaking map entries in tests that use accumulators without SparkContext
+      Accumulators.clear()
     }
   }
 

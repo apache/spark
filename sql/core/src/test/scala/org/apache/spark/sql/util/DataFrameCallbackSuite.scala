@@ -116,8 +116,6 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
   // A easy fix is to create a new SQLMetric(including new MetricValue, MetricParam, etc.), but we
   // can do it later because the impact is just too small (1048576 tasks for 1 MB).
   ignore("get size metrics by callback") {
-    import InternalAccumulator._
-
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
@@ -139,7 +137,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     def getPeakExecutionMemory(stageId: Int): Long = {
       val peakMemoryAccumulator = sparkListener.getCompletedStageInfos(stageId).accumulables
-        .filter(_._2.name == PEAK_EXECUTION_MEMORY)
+        .filter(_._2.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
 
       assert(peakMemoryAccumulator.size == 1)
       peakMemoryAccumulator.head._2.value.toLong

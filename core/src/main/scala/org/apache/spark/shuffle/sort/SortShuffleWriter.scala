@@ -45,6 +45,8 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var mapStatus: MapStatus = null
 
+  private val writeMetrics = context.taskMetrics().registerShuffleWriteMetrics()
+
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
@@ -90,8 +92,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (sorter != null) {
         val startTime = System.nanoTime()
         sorter.stop()
-        context.taskMetrics.shuffleWriteMetrics.foreach(
-          _.incWriteTime(System.nanoTime - startTime))
+        writeMetrics.incWriteTime(System.nanoTime - startTime)
         sorter = null
       }
     }

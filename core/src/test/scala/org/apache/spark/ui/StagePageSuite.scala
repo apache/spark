@@ -31,8 +31,6 @@ import org.apache.spark.ui.scope.RDDOperationGraphListener
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
-  import InternalAccumulator._
-
   test("peak execution memory only displayed if unsafe is enabled") {
     val unsafeConf = "spark.sql.unsafe.enabled"
     val conf = new SparkConf(false).set(unsafeConf, "true")
@@ -82,7 +80,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
       taskId =>
         val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY, false)
         val peakExecutionMemory = 10
-        taskInfo.accumulables += new AccumulableInfo(0, PEAK_EXECUTION_MEMORY,
+        taskInfo.accumulables += new AccumulableInfo(0, InternalAccumulator.PEAK_EXECUTION_MEMORY,
           Some(peakExecutionMemory.toString), (peakExecutionMemory * taskId).toString, true)
         jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))

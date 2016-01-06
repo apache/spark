@@ -373,8 +373,8 @@ object SparkHadoopUtil {
   /**
    * Number of records to update input metrics when reading from HadoopRDDs.
    *
-   * Each update is potentially expensive because we need to use reflection to access the Hadoop
-   * FileSystem API of interest (it is only available in 2.5), so we should do it sparingly.
+   * Each update is potentially expensive because we need to use reflection to access the
+   * Hadoop FileSystem API of interest (only available in 2.5), so we should do this sparingly.
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 

@@ -71,6 +71,9 @@ class SparkEnv (
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
+  // Note: always returns true in local mode
+  private[spark] def isDriver: Boolean = blockManager.blockManagerId.isDriver
+
   // TODO Remove actorSystem
   @deprecated("Actor system is no longer supported as of 1.4.0", "1.4.0")
   val actorSystem: ActorSystem = _actorSystem

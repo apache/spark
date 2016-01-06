@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
  *
- * TODO: document thread-safety.
+ * Operations are not thread-safe.
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
@@ -71,7 +71,10 @@ class Accumulable[R, T] private[spark] (
   @volatile private var value_ : R = initialValue
   val zero = param.zero(initialValue)
 
-  Accumulators.register(this)
+  // Avoid leaking accumulators on executors
+  if (isDriver) {
+    Accumulators.register(this)
+  }
 
   /**
    * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
@@ -109,9 +112,14 @@ class Accumulable[R, T] private[spark] (
   def merge(term: R): Unit = { value_ = param.addInPlace(value_, term) }
 
   /**
-   * Access the accumulator's current value; only allowed on master.
+   * Access the accumulator's current value; only allowed on driver.
    */
-  def value: R = value_
+  def value: R = {
+    if (!isDriver) {
+      throw new UnsupportedOperationException("Can't read accumulator value in task")
+    }
+    value_
+  }
 
   /**
    * Get the current value of this accumulator from within a task.
@@ -121,40 +129,41 @@ class Accumulable[R, T] private[spark] (
    *
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
-   *
-   * TODO: probably don't need this.
    */
   def localValue: R = value_
 
   /**
-   * Set the accumulator's value.
+   * Set the accumulator's value; only allowed on driver.
    */
   def value_= (newValue: R): Unit = {
+    if (!isDriver) {
+      throw new UnsupportedOperationException("Can't assign accumulator value in task")
+    }
     value_ = newValue
   }
 
   /**
    * Set the accumulator's value.
    */
-  def setValue(newValue: R): Unit = {
-    this.value = newValue
-  }
+  private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
 
   /**
    * Reset the accumulator's value to zero.
    */
-  private[spark] def resetValue(): Unit = {
-    setValue(zero)
+  private[spark] def resetValue(): Unit = { setValue(zero) }
+
+  /**
+   * Whether we are on the driver or the executors.
+   * Note: in local mode, this will inevitably return true even if we're on the executor.
+   */
+  private def isDriver: Boolean = {
+    Option(SparkEnv.get).map(_.isDriver).getOrElse(true)
   }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     // Automatically register the accumulator when it is deserialized with the task closure.
-    //
-    // Note internal accumulators sent with task are deserialized before the TaskContext is created
-    // and are registered in the TaskContext constructor. Other internal accumulators, such SQL
-    // metrics, still need to register here.
     val taskContext = TaskContext.get()
     if (taskContext != null) {
       taskContext.registerAccumulator(this)
@@ -319,6 +328,7 @@ private[spark] object Accumulators extends Logging {
    * This global map holds the original accumulator objects that are created on the driver.
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
+   * TODO: Don't use a global map; these should be tied to a SparkContext at the very least.
    */
   val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
@@ -354,6 +364,10 @@ private[spark] object Accumulators extends Logging {
         logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
       }
     }
+  }
+
+  def clear(): Unit = synchronized {
+    originals.clear()
   }
 
 }

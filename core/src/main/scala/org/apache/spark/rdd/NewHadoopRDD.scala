@@ -124,8 +124,6 @@ class NewHadoopRDD[K, V](
 
       val inputMetrics = context.taskMetrics.registerInputMetrics(DataReadMethod.Hadoop)
 
-      // TODO: duplicate code alert!
-
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val getBytesReadCallback: Option[() => Long] = split.serializableHadoopSplit.value match {

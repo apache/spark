@@ -45,7 +45,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       }
     }
 
-  test ("basic accumulation"){
+  test("basic accumulation") {
     sc = new SparkContext("local", "test")
     val acc : Accumulator[Int] = sc.accumulator(0)
 
@@ -59,16 +59,16 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     longAcc.value should be (210L + maxInt * 20)
   }
 
-  // TODO: fix me
-  ignore("value not assignable from tasks") {
-    sc = new SparkContext("local", "test")
+  test("value not assignable from tasks") {
+    // Note: this does not work in local mode because we can't tell whether we're on the driver
+    sc = new SparkContext("local-cluster[1,1,1024]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0)
 
     val d = sc.parallelize(1 to 20)
     an [Exception] should be thrownBy {d.foreach{x => acc.value = x}}
   }
 
-  test ("add value to collection accumulators") {
+  test("add value to collection accumulators") {
     val maxI = 1000
     for (nThreads <- List(1, 10)) { // test single & multi-threaded
       sc = new SparkContext("local[" + nThreads + "]", "test")
@@ -85,23 +85,20 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  // TODO: fix me
-  ignore("value not readable in tasks") {
+  test("value not readable in tasks") {
     val maxI = 1000
-    for (nThreads <- List(1, 10)) { // test single & multi-threaded
-      sc = new SparkContext("local[" + nThreads + "]", "test")
-      val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
-      val d = sc.parallelize(1 to maxI)
-      an [SparkException] should be thrownBy {
-        d.foreach {
-          x => acc.value += x
-        }
+    // Note: this does not work in local mode because we can't tell whether we're on the driver
+    sc = new SparkContext("local-cluster[1,1,1024]", "test")
+    val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+    val d = sc.parallelize(1 to maxI)
+    an [SparkException] should be thrownBy {
+      d.foreach {
+        x => acc.value += x
       }
-      resetSparkContext()
     }
   }
 
-  test ("collection accumulators") {
+  test("collection accumulators") {
     val maxI = 1000
     for (nThreads <- List(1, 10)) {
       // test single & multi-threaded
@@ -127,7 +124,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test ("localValue readable in tasks") {
+  test("localValue readable in tasks") {
     val maxI = 1000
     for (nThreads <- List(1, 10)) { // test single & multi-threaded
       sc = new SparkContext("local[" + nThreads + "]", "test")
@@ -142,7 +139,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test ("garbage collection") {
+  test("garbage collection") {
     // Create an accumulator and let it go out of scope to test that it's properly garbage collected
     sc = new SparkContext("local", "test")
     var acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
@@ -318,7 +315,6 @@ private[spark] object AccumulatorSuite {
   /**
    * Run one or more Spark jobs and verify that the peak execution memory accumulator
    * is updated afterwards.
-   * TODO: assert it's also set in task metrics?
    */
   def verifyPeakExecutionMemorySet(
       sc: SparkContext,
