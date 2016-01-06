@@ -247,7 +247,17 @@ trait StreamTest extends QueryTest with Timeouts {
                 currentStream.awaitOffset(source, offset)
               }
             }
-            QueryTest.sameRows(expectedAnswer, sink.allData).foreach {
+
+            val allData = try sink.allData catch {
+              case e: Exception =>
+                fail(
+                  s"""
+                    |Exception while getting data from sink $e
+                    |$testState
+                  """.stripMargin)
+            }
+
+            QueryTest.sameRows(expectedAnswer, allData).foreach {
               error => fail(
                 s"""
                    |$error

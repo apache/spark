@@ -17,17 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.DataFrame
+
 /**
- * A simple offset for sources that produce a single linear stream of data.
+ * Used to pass a batch of data through a streaming query execution.
  */
-case class LongOffset(offset: Long) extends Offset {
-
-  override def compareTo(other: Offset): Int = other match {
-    case l: LongOffset => offset.compareTo(l.offset)
-    case _ =>
-      throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")
-  }
-
-  def +(increment: Long): LongOffset = new LongOffset(offset + increment)
-  def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
-}
+class Batch(val end: Offset, val data: DataFrame)

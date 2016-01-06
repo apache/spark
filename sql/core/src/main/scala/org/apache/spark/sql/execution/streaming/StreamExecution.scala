@@ -19,9 +19,12 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
+
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occuring in a separate thread.
@@ -44,14 +47,22 @@ class StreamExecution(
   private val sources =
     logicalPlan.collect { case s: StreamingRelation => s.source }
 
-  // Start the execution at the current Offset for the sink. (i.e. avoid reprocessing data
+  // Start the execution at the current offsets stored in the sink. (i.e. avoid reprocessing data
   // that we have already processed).
   {
-    val storedProgress = sink.currentProgress
-    sources.foreach { s =>
-      storedProgress.get(s).foreach { offset =>
-        currentOffsets.update(s, offset)
-      }
+    sink.currentProgress match {
+      case Some(c: CompositeOffset) =>
+        val storedProgress = c.offsets
+        val sources = logicalPlan collect {
+          case StreamingRelation(source, _) => source
+        }
+
+        assert(sources.size == storedProgress.size)
+        sources.zip(storedProgress).foreach { case (source, offset) =>
+          offset.foreach(currentOffsets.update(source, _))
+        }
+      case None => // We are starting this stream for the first time.
+      case _ => throw new IllegalArgumentException("Expected composite offset from sink")
     }
   }
 
@@ -79,31 +90,38 @@ class StreamExecution(
    * a batch is executed and passed to the sink, updating the currentOffsets.
    */
   private def attemptBatch(): Unit = {
+    val startTime = System.nanoTime()
 
-    val newData = sources.flatMap { s =>
-      val prevOffset = currentOffsets.get(s)
-      val latestOffset = s.getCurrentOffset
-      if (prevOffset.isEmpty || latestOffset > prevOffset.get) {
-        Some(s -> latestOffset)
-      } else None
-    }.toMap
+    // A list of offsets that need to be updated if this batch is successful.
+    // Populated while walking the tree.
+    val newOffsets = new ArrayBuffer[(Source, Offset)]
+    // A list of attributes that will need to be updated.
+    var replacements = new ArrayBuffer[(Attribute, Attribute)]
+    // Replace sources in the logical plan with data that has arrived since the last batch.
+    val withNewSources = logicalPlan transform {
+      case StreamingRelation(source, output) =>
+        val prevOffset = currentOffsets.get(source)
+        val newBatch = source.getNextBatch(prevOffset)
 
-    if (newData.nonEmpty) {
-      val startTime = System.nanoTime()
-      logInfo(s"Running with new data up to: $newData")
+        newBatch.map { batch =>
+          newOffsets += ((source, batch.end))
+          val newPlan = batch.data.logicalPlan
 
-      // Replace sources in the logical plan with data that has arrived since the last batch.
-      val newPlan = logicalPlan transform {
-        case StreamingRelation(source, output) =>
-          if (newData.contains(source)) {
-            val batchInput =
-              source.getSlice(sqlContext, currentOffsets.get(source), newData(source))
-            LogicalRDD(output, batchInput)(sqlContext)
-          } else {
-            LocalRelation(output)
-          }
-      }
+          assert(output.size == newPlan.output.size)
+          replacements ++= newPlan.output.zip(output)
+          newPlan
+        }.getOrElse {
+          LocalRelation(output)
+        }
+    }
 
+    // Rewire the plan to use the new attributes that were returned by the source.
+    val replacementMap = AttributeMap(replacements)
+    val newPlan = withNewSources transformAllExpressions {
+      case a: Attribute if replacementMap.contains(a) => replacementMap(a)
+    }
+
+    if (newOffsets.nonEmpty) {
       val optimizerStart = System.nanoTime()
 
       lastExecution = new QueryExecution(sqlContext, newPlan)
@@ -111,16 +129,24 @@ class StreamExecution(
       val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
       logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-      val results = executedPlan.execute().map(_.copy())
-      newData.foreach(currentOffsets.update)
-      sink.addBatch(currentOffsets.copy(), results)
+      // Update the offsets and calculate a new composite offset
+      newOffsets.foreach(currentOffsets.update)
+      val newStreamProgress = logicalPlan.collect {
+        case StreamingRelation(source, _) => currentOffsets.get(source)
+      }
+      val batchOffset = CompositeOffset(newStreamProgress)
 
+      // Construct the batch and send it to the sink.
+      val nextBatch = new Batch(batchOffset, new DataFrame(sqlContext, newPlan))
+      sink.addBatch(nextBatch)
+
+      // Wake up any threads that are waiting for the stream to progress.
       StreamExecution.this.synchronized {
         StreamExecution.this.notifyAll()
       }
 
       val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
-      logInfo(s"Compete up to $newData in ${batchTime}ms")
+      logInfo(s"Compete up to $newOffsets in ${batchTime}ms")
     }
 
     logDebug(s"Waiting for data, current: $currentOffsets")

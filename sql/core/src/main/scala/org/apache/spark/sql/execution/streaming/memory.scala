@@ -81,22 +81,22 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  def getSlice(
-      sqlContext: SQLContext,
-      start: Option[Offset],
-      end: Offset): RDD[InternalRow] = synchronized {
+  override def getNextBatch(start: Option[Offset]): Option[Batch] = synchronized {
     val newBlocks =
-      batches.slice(
-        start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1,
-        end.asInstanceOf[LongOffset].offset.toInt + 1)
+      batches.drop(
+        start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1)
 
-    logDebug(s"Running [$start, $end] on blocks ${newBlocks.mkString(", ")}")
-    val rdd = newBlocks
-        .map(_.toDF())
-        .reduceOption(_ unionAll _)
-        .map(_.queryExecution.toRdd)
-        .getOrElse(sqlContext.sparkContext.emptyRDD)
-    rdd
+    if (newBlocks.nonEmpty) {
+      logDebug(s"Running [$start, $currentOffset] on blocks ${newBlocks.mkString(", ")}")
+      val df = newBlocks
+          .map(_.toDF())
+          .reduceOption(_ unionAll _)
+          .getOrElse(sqlContext.emptyDataFrame)
+
+      Some(new Batch(currentOffset, df))
+    } else {
+      None
+    }
   }
 
   override def toString: String = s"MemoryStream[${output.mkString(",")}]"
@@ -108,20 +108,24 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
  */
 class MemorySink(schema: StructType) extends Sink with Logging {
   /** An order list of batches that have been written to this [[Sink]]. */
-  private var batches = new ArrayBuffer[(StreamProgress, Seq[Row])]()
+  private var batches = new ArrayBuffer[Batch]()
 
   /** Used to convert an [[InternalRow]] to an external [[Row]] for comparison in testing. */
   private val externalRowConverter = RowEncoder(schema)
 
-  override def currentProgress: StreamProgress =
-    batches.lastOption.map(_._1).getOrElse(new StreamProgress)
+  override def currentProgress: Option[Offset] = batches.lastOption.map(_.end)
 
-  override def addBatch(currentState: StreamProgress, rdd: RDD[InternalRow]): Unit = {
-    batches.append((currentState, rdd.collect().map(externalRowConverter.fromRow)))
+  override def addBatch(nextBatch: Batch): Unit = {
+    batches.append(nextBatch)
   }
 
   /** Returns all rows that are stored in this [[Sink]]. */
-  def allData: Seq[Row] = batches.flatMap(_._2)
+  def allData: Seq[Row] =
+    batches
+      .map(_.data)
+      .reduceOption(_ unionAll _)
+      .map(_.collect().toSeq)
+      .getOrElse(Seq.empty)
 
   /**
    * Atomically drops the most recent `num` batches and resets the [[StreamProgress]] to the
@@ -132,6 +136,7 @@ class MemorySink(schema: StructType) extends Sink with Logging {
     batches.remove(batches.size - num, num)
   }
 
-  override def toString: String = batches.map(b => s"${b._1}: ${b._2.mkString(" ")}").mkString("\n")
+  override def toString: String =
+    batches.map(b => s"${b.end}: ${b.data.collect().mkString(" ")}").mkString("\n")
 }
 

@@ -17,21 +17,32 @@
 
 package org.apache.spark.sql.execution.streaming
 
-/**
- * A offset is a monotonically increasing metric used to track progress in the computation of a
- * stream. An [[Offset]] must be comparable.
- */
-trait Offset extends Serializable {
-
+case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
   /**
    * Returns a negative integer, zero, or a positive integer as this object is less than, equal to,
    * or greater than the specified object.
    */
-  def compareTo(other: Offset): Int
+  override def compareTo(other: Offset): Int = other match {
+    case otherComposite: CompositeOffset if otherComposite.offsets.size == offsets.size =>
+      val comparisons = offsets.zip(otherComposite.offsets).map {
+        case (Some(a), Some(b)) => a compareTo b
+        case (None, None) => 0
+        case (None, _) => 1
+        case (_, None) => -1
+       }
+      val signs = comparisons.map(sign).distinct
+      if (signs.size != 1) {
+        throw new IllegalArgumentException(
+          s"Invalid comparision between non-linear histories: $this <=> $other")
+      }
+      signs.head
+    case _ =>
+      throw new IllegalArgumentException(s"Cannot compare $this <=> $other")
+  }
 
-  def >(other: Offset): Boolean = compareTo(other) > 0
-  def <(other: Offset): Boolean = compareTo(other) < 0
-  def <=(other: Offset): Boolean = compareTo(other) <= 0
-  def >=(other: Offset): Boolean = compareTo(other) >= 0
-  def ==(other: Offset): Boolean = compareTo(other) == 0
+  private def sign(num: Int): Int = num match {
+    case i if i < 0 => -1
+    case i if i == 0 => 0
+    case i if i > 0 => 1
+  }
 }
