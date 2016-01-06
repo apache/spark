@@ -4,7 +4,7 @@ machine:
 
 dependencies:
   override:
-    - build/sbt "set updateOptions := updateOptions.value.withCachedResolution(true)" assembly/assembly
+    - build/sbt "set updateOptions := updateOptions.value.withCachedResolution(true)" test:compile assembly/assembly
   cache_directories:
     - "~/.sbt"
 
