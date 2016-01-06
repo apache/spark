@@ -18,19 +18,19 @@
 package org.apache.spark.streaming
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer, SynchronizedMap}
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.Logging
 import org.apache.spark.SparkException
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
-
-import org.scalatest.Matchers
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.time.SpanSugar._
-import org.apache.spark.Logging
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 

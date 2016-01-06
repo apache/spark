@@ -21,10 +21,9 @@ import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-
 
 class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
   import hiveContext.implicits._
