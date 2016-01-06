@@ -243,7 +243,7 @@ private[sql] class CSVOutputWriterFactory(params: CSVParameters) extends OutputW
   override def newInstance(
       path: String,
       dataSchema: StructType,
-      context: TaskAttemptContext): OutputWriter =  {
+      context: TaskAttemptContext): OutputWriter = {
     new CsvOutputWriter(path, dataSchema, context, params)
   }
 }
