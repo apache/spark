@@ -186,9 +186,4 @@ abstract class TaskContext extends Serializable {
    * accumulator id and the value of the Map is the latest accumulator local value.
    */
   private[spark] def collectAccumulators(): Map[Long, Any]
-
-  /**
-   * Accumulators for tracking internal metrics indexed by the name.
-   */
-  private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
 }

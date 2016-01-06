@@ -19,9 +19,10 @@ package org.apache.spark.executor
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
+import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator, SparkException}
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.Utils
@@ -39,15 +40,15 @@ import org.apache.spark.util.Utils
  * shipping off at any time to consumers of the SparkListener interface.
  */
 @deprecated("TaskMetrics will be made private in a future version.", "2.0.0")
-class TaskMetrics(
-    accumMap: Map[String, Accumulator[Long]],
+class TaskMetrics private[spark] (
+    initialAccums: Seq[Accumulator[Long]],
     val hostname: String = TaskMetrics.getCachedHostName)
   extends Serializable {
 
   import InternalAccumulator._
 
   def this(host: String) {
-    this(InternalAccumulator.create().map { a => (a.name.get, a) }.toMap, host)
+    this(InternalAccumulator.create())
   }
 
   // Needed for Java tests
@@ -55,23 +56,22 @@ class TaskMetrics(
     this(TaskMetrics.getCachedHostName)
   }
 
-  // Each metric is internally represented as an accumulator
-  private val _executorDeserializeTime: Accumulator[Long] = getAccum(EXECUTOR_DESERIALIZE_TIME)
-  private val _executorRunTime: Accumulator[Long] = getAccum(EXECUTOR_RUN_TIME)
-  private val _resultSize: Accumulator[Long] = getAccum(RESULT_SIZE)
-  private val _jvmGCTime: Accumulator[Long] = getAccum(JVM_GC_TIME)
-  private val _resultSerializationTime: Accumulator[Long] = getAccum(RESULT_SERIALIZATION_TIME)
-  private val _memoryBytesSpilled: Accumulator[Long] = getAccum(MEMORY_BYTES_SPILLED)
-  private val _diskBytesSpilled: Accumulator[Long] = getAccum(DISK_BYTES_SPILLED)
-  private val _peakExecutionMemory: Accumulator[Long] = getAccum(PEAK_EXECUTION_MEMORY)
-
   /**
-   * Return the internal accumulator associated with the specified metric, assuming it exists.
+   * Mapping from metric name to the corresponding internal accumulator.
    */
-  private def getAccum(name: String): Accumulator[Long] = {
-    assert(accumMap.contains(name), s"metric '$name' is missing")
-    accumMap(name)
-  }
+  private val accumMap = new mutable.HashMap[String, Accumulable[_, _]]
+
+  initialAccums.foreach(registerInternalAccum)
+
+  // Each metric is internally represented as an accumulator
+  private val _executorDeserializeTime = getLongAccum(EXECUTOR_DESERIALIZE_TIME)
+  private val _executorRunTime = getLongAccum(EXECUTOR_RUN_TIME)
+  private val _resultSize = getLongAccum(RESULT_SIZE)
+  private val _jvmGCTime = getLongAccum(JVM_GC_TIME)
+  private val _resultSerializationTime = getLongAccum(RESULT_SERIALIZATION_TIME)
+  private val _memoryBytesSpilled = getLongAccum(MEMORY_BYTES_SPILLED)
+  private val _diskBytesSpilled = getLongAccum(DISK_BYTES_SPILLED)
+  private val _peakExecutionMemory = getLongAccum(PEAK_EXECUTION_MEMORY)
 
   /**
    * Time taken on the executor to deserialize this task.
@@ -125,6 +125,24 @@ class TaskMetrics(
   private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
 
+  /**
+   * Register an internal accumulator as a new metric.
+   */
+  private[spark] def registerInternalAccum(a: Accumulable[_, _]): Unit = {
+    assert(a.name.isDefined, s"internal accumulator (${a.id}) is expected to have a name")
+    val name = a.name.get
+    assert(a.isInternal, s"internal accumulator $name (${a.id}) is not marked as 'internal'")
+    assert(!accumMap.contains(name), s"found duplicate internal accumulator name: $name")
+    accumMap(name) = a
+  }
+
+  /**
+   * Return a Long accumulator associated with the specified metric, assuming it exists.
+   */
+  private def getLongAccum(name: String): Accumulator[Long] = {
+    TaskMetrics.getLongAccum(accumMap, name)
+  }
+
 
   /* ============================ *
    |        OUTPUT METRICS        |
@@ -143,7 +161,7 @@ class TaskMetrics(
    */
   def registerOutputMetrics(writeMethod: DataWriteMethod.Value): OutputMetrics = synchronized {
     _outputMetrics.getOrElse {
-      val metrics = new OutputMetrics(writeMethod, accumMap)
+      val metrics = new OutputMetrics(writeMethod, accumMap.toMap)
       _outputMetrics = Some(metrics)
       metrics
     }
@@ -168,7 +186,7 @@ class TaskMetrics(
   private[spark] def registerInputMetrics(readMethod: DataReadMethod): InputMetrics = {
     synchronized {
       val metrics = _inputMetrics.getOrElse {
-        val metrics = new InputMetrics(readMethod, accumMap)
+        val metrics = new InputMetrics(readMethod, accumMap.toMap)
         _inputMetrics = Some(metrics)
         metrics
       }
@@ -202,7 +220,7 @@ class TaskMetrics(
    */
   def registerShuffleWriteMetrics(): ShuffleWriteMetrics = synchronized {
     _shuffleWriteMetrics.getOrElse {
-      val metrics = new ShuffleWriteMetrics(accumMap)
+      val metrics = new ShuffleWriteMetrics(accumMap.toMap)
       _shuffleWriteMetrics = Some(metrics)
       metrics
     }
@@ -248,7 +266,7 @@ class TaskMetrics(
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
     val agg = _shuffleReadMetrics.getOrElse {
-      val metrics = new ShuffleReadMetrics(accumMap)
+      val metrics = new ShuffleReadMetrics(accumMap.toMap)
       _shuffleReadMetrics = Some(metrics)
       metrics
     }
@@ -261,30 +279,19 @@ class TaskMetrics(
   }
 
 
-  /* ================================== *
-   |        OTHER THINGS... WIP         |
-   * ================================== */
+  /* =========================== *
+   |        OTHER THINGS         |
+   * =========================== */
+
+  /**
+   * Return a map from accumulator ID to the accumulator's latest value in this task.
+   */
+  def accumulatorUpdates(): Map[Long, Any] = accumMap.values.map { a => (a.id, a.value) }.toMap
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
-
-  private var _accumulatorUpdates: Map[Long, Any] = Map.empty
-  @transient private var _accumulatorsUpdater: () => Map[Long, Any] = null
-
-  private[spark] def updateAccumulators(): Unit = synchronized {
-    _accumulatorUpdates = _accumulatorsUpdater()
-  }
-
-  /**
-   * Return the latest updates of accumulators in this task.
-   */
-  def accumulatorUpdates(): Map[Long, Any] = _accumulatorUpdates
-
-  private[spark] def setAccumulatorsUpdater(accumulatorsUpdater: () => Map[Long, Any]): Unit = {
-    _accumulatorsUpdater = accumulatorsUpdater
-  }
 }
 
 
@@ -321,11 +328,11 @@ class InputMetrics private (
 
   private[executor] def this(
       readMethod: DataReadMethod.Value,
-      accumMap: Map[String, Accumulator[Long]]) {
+      accumMap: Map[String, Accumulable[_, _]]) {
     this(
       readMethod,
-      accumMap(InternalAccumulator.input.BYTES_READ),
-      accumMap(InternalAccumulator.input.RECORDS_READ))
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.input.BYTES_READ),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.input.RECORDS_READ))
   }
 
   /**
@@ -370,11 +377,11 @@ class OutputMetrics private (
 
   private[executor] def this(
       writeMethod: DataWriteMethod.Value,
-      accumMap: Map[String, Accumulator[Long]]) {
+      accumMap: Map[String, Accumulable[_, _]]) {
     this(
       writeMethod,
-      accumMap(InternalAccumulator.output.BYTES_WRITTEN),
-      accumMap(InternalAccumulator.output.RECORDS_WRITTEN))
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.output.BYTES_WRITTEN),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.output.RECORDS_WRITTEN))
   }
 
   /**
@@ -405,14 +412,14 @@ class ShuffleReadMetrics private (
     _recordsRead: Accumulator[Long])
   extends Serializable {
 
-  private[executor] def this(accumMap: Map[String, Accumulator[Long]]) {
+  private[executor] def this(accumMap: Map[String, Accumulable[_, _]]) {
     this(
-      accumMap(InternalAccumulator.shuffleRead.REMOTE_BLOCKS_FETCHED),
-      accumMap(InternalAccumulator.shuffleRead.LOCAL_BLOCKS_FETCHED),
-      accumMap(InternalAccumulator.shuffleRead.REMOTE_BYTES_READ),
-      accumMap(InternalAccumulator.shuffleRead.LOCAL_BYTES_READ),
-      accumMap(InternalAccumulator.shuffleRead.FETCH_WAIT_TIME),
-      accumMap(InternalAccumulator.shuffleRead.RECORDS_READ))
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleRead.REMOTE_BLOCKS_FETCHED),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleRead.LOCAL_BLOCKS_FETCHED),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleRead.REMOTE_BYTES_READ),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleRead.LOCAL_BYTES_READ),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleRead.FETCH_WAIT_TIME),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleRead.RECORDS_READ))
   }
 
   /**
@@ -496,11 +503,11 @@ class ShuffleWriteMetrics private (
     _shuffleWriteTime: Accumulator[Long])
   extends Serializable {
 
-  private[executor] def this(accumMap: Map[String, Accumulator[Long]]) {
+  private[executor] def this(accumMap: Map[String, Accumulable[_, _]]) {
     this(
-      accumMap(InternalAccumulator.shuffleWrite.BYTES_WRITTEN),
-      accumMap(InternalAccumulator.shuffleWrite.RECORDS_WRITTEN),
-      accumMap(InternalAccumulator.shuffleWrite.WRITE_TIME))
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleWrite.BYTES_WRITTEN),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleWrite.RECORDS_WRITTEN),
+      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.shuffleWrite.WRITE_TIME))
   }
 
   /**
@@ -559,4 +566,21 @@ private[spark] object TaskMetrics {
     val canonicalHost = hostNameCache.putIfAbsent(host, host)
     if (canonicalHost != null) canonicalHost else host
   }
+
+  /**
+   * Return a Long accumulator associated with the specified metric, assuming it exists.
+   */
+  def getLongAccum(
+      accumMap: scala.collection.Map[String, Accumulable[_, _]],
+      name: String): Accumulator[Long] = {
+    assert(accumMap.contains(name), s"metric '$name' is missing")
+    try {
+      // Note: we can't do pattern matching here because types are erased by compile time
+      accumMap(name).asInstanceOf[Accumulator[Long]]
+    } catch {
+      case _: ClassCastException =>
+        throw new SparkException(s"attempted to access invalid accumulator $name as a long metric")
+    }
+  }
+
 }

@@ -78,7 +78,6 @@ private[spark] abstract class Task[T](
       internalAccumulators,
       runningLocally = false)
     TaskContext.setTaskContext(context)
-    context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)

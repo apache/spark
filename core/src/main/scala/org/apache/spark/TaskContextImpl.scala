@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
@@ -36,6 +37,11 @@ private[spark] class TaskContextImpl(
     val runningLocally: Boolean = false)
   extends TaskContext
   with Logging {
+
+  /**
+   * Metrics associated with this task.
+   */
+  override val taskMetrics: TaskMetrics = new TaskMetrics(internalAccumulators)
 
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
   override def attemptId(): Long = taskAttemptId
@@ -101,9 +107,19 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  @transient private val accumulators = new HashMap[Long, Accumulable[_, _]]
+  /**
+   * All accumulators used in this task indexed by accumulator ID.
+   */
+  @transient private val accumulators = new mutable.HashMap[Long, Accumulable[_, _]]
+
+  // Register the initial set of internal accumulators.
+  // Future ones will be registered through `registerAccumulator`.
+  internalAccumulators.foreach { a => accumulators(a.id) = a }
 
   private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = synchronized {
+    if (a.isInternal) {
+      taskMetrics.registerInternalAccum(a)
+    }
     accumulators(a.id) = a
   }
 
@@ -113,34 +129,5 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def collectAccumulators(): Map[Long, Any] = synchronized {
     accumulators.mapValues(_.localValue).toMap
-  }
-
-  private[spark] override val internalMetricsToAccumulators: Map[String, Accumulator[Long]] = {
-    // Explicitly register internal accumulators here because these are not captured in the
-    // task closure and are already deserialized. Additionally, since the driver expects
-    // us to update these accumulators and report back partial values, we should reset
-    // each accumulator to zero. Otherwise, we may end up double counting in local mode.
-    internalAccumulators.map { a =>
-      registerAccumulator(a)
-      a.resetValue()
-      assert(a.name.isDefined, "internal accumulator is expected to be named")
-      assert(a.isInternal, "internal accumulator is not marked as 'internal'!")
-      (a.name.get, a)
-    }.toMap
-  }
-
-  /**
-   * Metrics associated with this task.
-   */
-  val taskMetrics: TaskMetrics = {
-    val testing = sys.props.contains("spark.testing")
-    if (testing && internalMetricsToAccumulators.isEmpty) {
-      // In tests, we may construct our own dummy TaskContexts where the list of internal
-      // accumulators is empty. Since TaskMetrics complains if it doesn't find the expected
-      // accumulators, we just pass in a list of dummy ones here.
-      new TaskMetrics(InternalAccumulator.create().map { a => (a.name.get, a) }.toMap)
-    } else {
-      new TaskMetrics(internalMetricsToAccumulators)
-    }
   }
 }
