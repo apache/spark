@@ -10,6 +10,7 @@ from builtins import str
 from builtins import object, bytes
 import copy
 from datetime import datetime, timedelta
+import dill
 import functools
 import getpass
 import imp
@@ -17,11 +18,12 @@ import jinja2
 import json
 import logging
 import os
-import dill
+import pickle
 import re
 import signal
 import socket
 import sys
+import traceback
 from urllib.parse import urlparse
 
 from sqlalchemy import (
@@ -2392,8 +2394,23 @@ class DAG(LoggingMixin):
                 return task
         raise AirflowException("Task {task_id} not found".format(**locals()))
 
-    def pickle(self, main_session=None):
-        session = main_session or settings.Session()
+    @provide_session
+    def pickle_info(self, session=None):
+        d = {}
+        d['is_picklable'] = True
+        try:
+            dttm = datetime.now()
+            pickled = pickle.dumps(self)
+            d['pickle_len'] = len(pickled)
+            d['pickling_duration'] = "{}".format(datetime.now() - dttm)
+        except Exception as e:
+            logging.exception(e)
+            d['is_picklable'] = False
+            d['stacktrace'] = traceback.format_exc()
+        return d
+
+    @provide_session
+    def pickle(self, session=None):
         dag = session.query(
             DagModel).filter(DagModel.dag_id == self.dag_id).first()
         dp = None
@@ -2407,8 +2424,6 @@ class DAG(LoggingMixin):
             session.commit()
             self.pickle_id = dp.id
 
-        if not main_session:
-            session.close()
         return dp
 
     def tree_view(self):

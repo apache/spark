@@ -23,7 +23,7 @@ from flask import redirect, url_for, request, Markup, Response, current_app, ren
 from flask.ext.admin import BaseView, expose, AdminIndexView
 from flask.ext.admin.contrib.sqla import ModelView
 from flask.ext.admin.actions import action
-from flask.ext.login import current_user, flash, logout_user, login_required
+from flask.ext.login import flash
 from flask._compat import PY2
 
 import jinja2
@@ -31,7 +31,6 @@ import markdown
 import json
 
 from wtforms import (
-    widgets,
     Form, SelectField, TextAreaField, PasswordField, StringField)
 
 from pygments import highlight, lexers
@@ -41,7 +40,6 @@ import airflow
 from airflow import models
 from airflow.settings import Session
 from airflow import configuration
-from airflow import login
 from airflow import utils
 from airflow.utils import AirflowException
 from airflow.www import utils as wwwutils
@@ -666,6 +664,15 @@ class Airflow(BaseView):
             d['is_authenticated'] = current_user.is_authenticated()
         if hasattr(current_user, 'username'):
             d['username'] = current_user.username
+        return wwwutils.json_response(d)
+
+    @expose('/pickle_info')
+    def pickle_info(self):
+        d = {}
+        dag_id = request.args.get('dag_id')
+        dags = [dagbag.dags.get(dag_id)] if dag_id else dagbag.dags.values()
+        for dag in dags:
+            d[dag.dag_id] = dag.pickle_info()
         return wwwutils.json_response(d)
 
     @expose('/login', methods=['GET', 'POST'])
