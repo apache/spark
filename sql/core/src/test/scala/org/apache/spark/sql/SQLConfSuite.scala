@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
+
 class SQLConfSuite extends QueryTest with SharedSQLContext {
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
@@ -72,6 +73,69 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(sqlContext.getConf(key, "0") === "")
 
     sqlContext.conf.clear()
+  }
+
+
+  test("Test AUTO_BROADCASTJOIN_THRESHOLD's method") {
+    sqlContext.conf.clear()
+
+    sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "100")
+    assert(sqlContext.conf.autoBroadcastJoinThreshold === 100)
+    sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1k")
+    assert(sqlContext.conf.autoBroadcastJoinThreshold === 1024)
+    sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1M")
+    assert(sqlContext.conf.autoBroadcastJoinThreshold === 1048576)
+    sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1g")
+    assert(sqlContext.conf.autoBroadcastJoinThreshold === 1073741824)
+    sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+    assert(sqlContext.conf.autoBroadcastJoinThreshold === -1)
+
+    // Test overflow exception
+    intercept[IllegalArgumentException] {
+      // This value exceeds Int.MaxValue
+      // Utils.byteStringAsBytes("30g")
+      sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "30g")
+     }
+
+    intercept[IllegalArgumentException] {
+      // This value less than Int.MinValue
+      // Utils.byteStringAsBytes("-30g")
+      sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-30g")
+     }
+
+    sqlContext.conf.clear()
+
+  }
+
+  test("Test SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE's method") {
+    sqlContext.conf.clear()
+
+    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "100")
+    assert(sqlContext.conf.targetPostShuffleInputSize === 100)
+    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1k")
+    assert(sqlContext.conf.targetPostShuffleInputSize === 1024)
+    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1M")
+    assert(sqlContext.conf.targetPostShuffleInputSize === 1048576)
+    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1g")
+    assert(sqlContext.conf.targetPostShuffleInputSize === 1073741824)
+    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-1")
+    assert(sqlContext.conf.targetPostShuffleInputSize === -1)
+
+    // Test overflow exception
+    intercept[IllegalArgumentException] {
+      // This value exceeds Long.MaxValue
+      // Utils.byteStringAsBytes("90000000000g")
+      sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "90000000000g")
+     }
+
+    intercept[IllegalArgumentException] {
+      // This value less than Int.MinValue
+      // Utils.byteStringAsBytes("-90000000000g")
+      sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
+     }
+
+    sqlContext.conf.clear()
+
   }
 
   test("deprecated property") {

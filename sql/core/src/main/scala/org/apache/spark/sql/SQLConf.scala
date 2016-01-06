@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -87,16 +88,38 @@ private[spark] object SQLConf {
       }
 
     def intConf(
-          key: String,
-          defaultValue: Option[Int] = None,
-          doc: String = "",
-          isPublic: Boolean = true): SQLConfEntry[Int] =
+        key: String,
+        defaultValue: Option[Int] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Int] =
       SQLConfEntry(key, defaultValue, { v =>
         try {
           v.toInt
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be int, but was $v")
+        }
+      }, _.toString, doc, isPublic)
+
+    def intMemConf(
+        key: String,
+        defaultValue: Option[Int] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Int] =
+      SQLConfEntry(key, defaultValue, { v =>
+        try {
+           v.toInt
+        } catch {
+          case _ : NumberFormatException =>
+           val sizeInBytes = try {
+             Utils.byteStringAsBytes(v)
+           } catch {
+             case _: NumberFormatException =>
+               throw new IllegalArgumentException(s"$key should be int, but was $v")
+           }
+           require(sizeInBytes >= Int.MinValue && sizeInBytes <= Int.MaxValue,
+             s"$v is out of bound")
+           sizeInBytes.toInt
         }
       }, _.toString, doc, isPublic)
 
@@ -111,6 +134,25 @@ private[spark] object SQLConf {
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be long, but was $v")
+        }
+      }, _.toString, doc, isPublic)
+
+    def longMemConf(
+        key: String,
+        defaultValue: Option[Long] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Long] =
+      SQLConfEntry(key, defaultValue, { v =>
+        try {
+          v.toLong
+        } catch {
+          case _: NumberFormatException =>
+            try {
+              Utils.byteStringAsBytes(v)
+            } catch {
+              case _: NumberFormatException =>
+                throw new IllegalArgumentException(s"$key should be long, but was $v")
+            }
         }
       }, _.toString, doc, isPublic)
 
@@ -214,7 +256,7 @@ private[spark] object SQLConf {
       doc = "When true, enable partition pruning for in-memory columnar tables.",
       isPublic = false)
 
-  val AUTO_BROADCASTJOIN_THRESHOLD = intConf("spark.sql.autoBroadcastJoinThreshold",
+  val AUTO_BROADCASTJOIN_THRESHOLD = intMemConf("spark.sql.autoBroadcastJoinThreshold",
     defaultValue = Some(10 * 1024 * 1024),
     doc = "Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
@@ -234,7 +276,7 @@ private[spark] object SQLConf {
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
-    longConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+    longMemConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
       defaultValue = Some(64 * 1024 * 1024),
       doc = "The target post-shuffle input size in bytes of a task.")
 
