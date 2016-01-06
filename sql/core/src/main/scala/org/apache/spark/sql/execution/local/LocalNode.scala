@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.local
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{SQLConf, Row}
+import org.apache.spark.sql.{Row, SQLConf}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._

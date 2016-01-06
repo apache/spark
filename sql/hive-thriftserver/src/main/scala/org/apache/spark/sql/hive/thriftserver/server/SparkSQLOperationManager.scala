@@ -18,14 +18,16 @@
 package org.apache.spark.sql.hive.thriftserver.server
 
 import java.util.{Map => JMap}
+
 import scala.collection.mutable.Map
 
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.hive.thriftserver.{SparkExecuteStatementOperation, ReflectionUtils}
+import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation}
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.

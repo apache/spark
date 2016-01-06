@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Nondeterministic}
 
 /**
  * A trait that can be used to provide a fallback mode for expression code generation.

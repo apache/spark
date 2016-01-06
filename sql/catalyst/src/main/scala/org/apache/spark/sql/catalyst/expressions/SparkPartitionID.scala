@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.types.{IntegerType, DataType}
-
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Expression that returns the current partition id of the Spark task.

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.ByteArrayOutputStream
+
 import scala.collection.mutable.ArrayBuffer
 
 import com.fasterxml.jackson.core._

@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{MapData, ArrayData, DateTimeUtils}
-
 import scala.collection.Map
 
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
 private[sql] object JacksonGenerator {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import org.apache.spark.sql.catalyst.expressions.{Unevaluable, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder, Unevaluable}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**

@@ -21,14 +21,14 @@ import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{DataFrame, SaveMode, AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils

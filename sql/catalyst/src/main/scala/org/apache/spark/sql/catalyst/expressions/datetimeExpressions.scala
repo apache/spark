@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import scala.util.Try
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback,
+  GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-
-import scala.util.Try
 
 /**
  * Returns the current date at the start of query evaluation.

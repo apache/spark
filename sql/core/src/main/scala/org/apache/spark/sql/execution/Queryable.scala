@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StructType
 

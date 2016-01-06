@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.{InternalAccumulator, Logging, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
-import org.apache.spark.{InternalAccumulator, Logging, TaskContext}
 
 /**
  * An iterator used to evaluate aggregate functions. It operates on [[UnsafeRow]]s.

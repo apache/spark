@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.net.URI
-import java.util.logging.{Logger => JLogger}
 import java.util.{List => JList}
+import java.util.logging.{Logger => JLogger}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -32,14 +32,15 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.task.JobContextImpl
+import org.apache.parquet.{Log => ApacheParquetLog}
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
-import org.apache.parquet.{Log => ApacheParquetLog}
 import org.slf4j.bridge.SLF4JBridgeHandler
 
+import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
@@ -49,8 +50,6 @@ import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
-import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
-
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 

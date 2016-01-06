@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
-import org.apache.hadoop.hive.ql.io.sarg.{SearchArgumentFactory, SearchArgument}
+import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.serde2.io.DateWritable
 

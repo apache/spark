@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
-
 
 abstract class UnsafeRowJoiner {
   def join(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow

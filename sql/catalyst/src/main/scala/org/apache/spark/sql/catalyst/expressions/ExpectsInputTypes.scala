@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.ImplicitTypeCasts
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types.AbstractDataType
-import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.ImplicitTypeCasts
 
 /**
  * An trait that gets mixin to define the expected input types of an expression.

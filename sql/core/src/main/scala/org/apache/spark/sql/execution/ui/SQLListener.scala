@@ -19,12 +19,11 @@ package org.apache.spark.sql.execution.ui
 
 import scala.collection.mutable
 
+import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetricValue, SQLMetricParam}
-import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
+import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetricParam, SQLMetricValue}
 import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
