@@ -521,7 +521,7 @@ setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("samp
 
 #' @rdname saveAsTable
 #' @export
-setGeneric("saveAsTable", function(df, tableName, ...) {
+setGeneric("saveAsTable", function(df, tableName, source = NULL, mode = "error", ...) {
   standardGeneric("saveAsTable")
 })
 
