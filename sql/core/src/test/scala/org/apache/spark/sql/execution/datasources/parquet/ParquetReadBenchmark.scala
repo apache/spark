@@ -22,11 +22,13 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.sql.{SQLConf, SQLContext}
-import org.apache.spark.util.Utils
-import org.apache.spark.{Benchmark, SparkConf, SparkContext}
+import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * Benchmark to measure parquet read performance.
+ * To run this:
+ *  spark-submit --class <this class> --jars <spark sql test jar>
  */
 object ParquetReadBenchmark {
   val conf = new SparkConf()
@@ -63,18 +65,18 @@ object ParquetReadBenchmark {
         sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
         val benchmark = new Benchmark("Single Int Column Scan", values)
 
-        benchmark.addCase("SQL", iter => {
+        benchmark.addCase("SQL Parquet Reader") { iter =>
           sqlContext.sql("select sum(id) from tempTable").collect()
-        })
+        }
 
-        benchmark.addCase("SQL Parquet MR", iter => {
+        benchmark.addCase("SQL Parquet MR") { iter =>
           withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
             sqlContext.sql("select sum(id) from tempTable").collect()
           }
-        })
+        }
 
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
-        benchmark.addCase("ParquetReader", num => {
+        benchmark.addCase("ParquetReader") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new UnsafeRowParquetRecordReader
@@ -85,13 +87,13 @@ object ParquetReadBenchmark {
               if (!record.isNullAt(0)) sum += record.getInt(0)
             }
             reader.close()
-        }})
+        }}
 
         /*
           Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
           Single Int Column Scan:      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
           -------------------------------------------------------------------------
-          SQL                                1910.0            13.72         1.00 X
+          SQL Parquet Reader                 1910.0            13.72         1.00 X
           SQL Parquet MR                     2330.0            11.25         0.82 X
           ParquetReader                      1252.6            20.93         1.52 X
         */
@@ -110,18 +112,18 @@ object ParquetReadBenchmark {
 
         val benchmark = new Benchmark("Int and String Scan", values)
 
-        benchmark.addCase("SQL", iter => {
+        benchmark.addCase("SQL Parquet Reader") { iter =>
           sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
-        })
+        }
 
-        benchmark.addCase("SQL Parquet MR", iter => {
+        benchmark.addCase("SQL Parquet MR") { iter =>
           withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
             sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
           }
-        })
+        }
 
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
-        benchmark.addCase("ParquetReader", num => {
+        benchmark.addCase("ParquetReader") { num =>
           var sum1 = 0L
           var sum2 = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
@@ -134,18 +136,17 @@ object ParquetReadBenchmark {
             }
             reader.close()
           }
-        })
+        }
 
         /*
           Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
           Int and String Scan:         Avg Time(ms)    Avg Rate(M/s)  Relative Rate
           -------------------------------------------------------------------------
-          SQL                                2245.6             7.00         1.00 X
+          SQL Parquet Reader                 2245.6             7.00         1.00 X
           SQL Parquet MR                     2914.2             5.40         0.77 X
           ParquetReader                      1544.6            10.18         1.45 X
         */
         benchmark.run()
-
       }
     }
   }

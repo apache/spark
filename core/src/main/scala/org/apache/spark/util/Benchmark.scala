@@ -15,27 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
 import scala.collection.mutable
 
 import org.apache.commons.lang3.SystemUtils
-import org.apache.spark.util.Utils
 
 /**
  * Utility class to benchmark components. An example of how to use this is:
  *  val benchmark = new Benchmark("My Benchmark", valuesPerIteration)
- *   benchmark.addCase("V1", <function>")
- *   benchmark.addCase("V2", <function>")
+ *   benchmark.addCase("V1")(<function>)
+ *   benchmark.addCase("V2")(<function>)
  *   benchmark.run
  * This will output the average time to run each function and the rate of each function.
  *
- * The benchmark function takes one argument that is the iteration that's being run
+ * The benchmark function takes one argument that is the iteration that's being run.
+ *
+ * If outputPerIteration is true, the timing for each run will be printed to stdout.
  */
-class Benchmark(name: String, valuesPerIteration: Long, iters: Int = 5) {
+private[spark] class Benchmark(
+    name: String, valuesPerIteration: Long,
+    iters: Int = 5,
+    outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
 
-  def addCase(name: String, f: Int => Unit): Unit = {
+  def addCase(name: String)(f: Int => Unit): Unit = {
     benchmarks += Benchmark.Case(name, f)
   }
 
@@ -46,17 +50,25 @@ class Benchmark(name: String, valuesPerIteration: Long, iters: Int = 5) {
    */
   def run(): Unit = {
     require(benchmarks.nonEmpty)
-    val results = benchmarks.map { c =>
-      Benchmark.measure(valuesPerIteration, c.fn, iters)
-    }
-    val firstRate = results.head.avgRate
     // scalastyle:off
+    println("Running benchmark: " + name)
+
+    val results = benchmarks.map { c =>
+      println("  Running case: " + c.name)
+      Benchmark.measure(valuesPerIteration, iters, outputPerIteration)(c.fn)
+    }
+    println
+
+    val firstRate = results.head.avgRate
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
     printf("%-24s %16s %16s %14s\n", name + ":", "Avg Time(ms)", "Avg Rate(M/s)", "Relative Rate")
     println("-------------------------------------------------------------------------")
     results.zip(benchmarks).foreach { r =>
-      printf("%-24s %16s %16s %14s\n", r._2.name, r._1.avgMs.toString, "%10.2f" format r._1.avgRate,
+      printf("%-24s %16s %16s %14s\n",
+        r._2.name,
+        "%10.2f" format r._1.avgMs,
+        "%10.2f" format r._1.avgRate,
         "%6.2f X" format (r._1.avgRate / firstRate))
     }
     println
@@ -64,7 +76,7 @@ class Benchmark(name: String, valuesPerIteration: Long, iters: Int = 5) {
   }
 }
 
-object Benchmark {
+private[spark] object Benchmark {
   case class Case(name: String, fn: Int => Unit)
   case class Result(avgMs: Double, avgRate: Double)
 
@@ -86,17 +98,23 @@ object Benchmark {
    * Runs a single function `f` for iters, returning the average time the function took and
    * the rate of the function.
    */
-  def measure(num: Long, f: Int => Unit, iters: Int): Result = {
+  def measure(num: Long, iters: Int, outputPerIteration: Boolean)(f: Int => Unit): Result = {
     var totalTime = 0L
     for (i <- 0 until iters + 1) {
-      val start = System.currentTimeMillis()
+      val start = System.nanoTime()
 
       f(i)
 
-      val end = System.currentTimeMillis()
+      val end = System.nanoTime()
       if (i != 0) totalTime += end - start
+
+      if (outputPerIteration) {
+        // scalastyle:off
+        println(s"Iteration $i took ${(end - start) / 1000} microseconds")
+        // scalastyle:on
+      }
     }
-    Result(totalTime.toDouble / iters, num * iters / totalTime.toDouble / 1000)
+    Result(totalTime.toDouble / 1000000 / iters, num * iters / (totalTime.toDouble / 1000))
   }
 }
 
