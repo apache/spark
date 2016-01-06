@@ -628,7 +628,7 @@ Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/
 The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.RegressionEvaluator)
 for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.BinaryClassificationEvaluator)
 for binary data, or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.MultiClassClassificationEvaluator)
-for multiclass problems. The default metric used to choose the best `ParamMap` can be overriden by the `setMetric`
+for multiclass problems. The default metric used to choose the best `ParamMap` can be overriden by the `setMetricName`
 method in each of these evaluators.
 
 The `ParamMap` which produces the best evaluation metric (averaged over the `$k$` folds) is selected as the best model.
