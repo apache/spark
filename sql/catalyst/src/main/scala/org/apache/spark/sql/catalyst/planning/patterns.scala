@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Queue
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational

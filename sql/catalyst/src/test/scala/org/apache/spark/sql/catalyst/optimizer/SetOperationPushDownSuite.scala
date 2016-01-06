@@ -30,15 +30,15 @@ class SetOperationPushDownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
       Batch("Union Pushdown", Once,
+        CombineUnions,
         SetOperationPushDown,
-        SimplifyFilters) ::
-      Batch("Unions", Once,
-        CombineUnions) :: Nil
+        SimplifyFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-  val testUnion = Union(testRelation, testRelation2)
+  val testRelation3 = LocalRelation('g.int, 'h.int, 'i.int)
+  val testUnion = Union(testRelation :: testRelation2 :: testRelation3 :: Nil)
   val testIntersect = Intersect(testRelation, testRelation2)
   val testExcept = Except(testRelation, testRelation2)
 
@@ -73,20 +73,24 @@ class SetOperationPushDownSuite extends PlanTest {
     comparePlans(exceptOptimized, exceptCorrectAnswer)
   }
 
-  ignore("union: filter to each side") {
+  test("union: filter to each side") {
     val unionQuery = testUnion.where('a === 1)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.where('a === 1), testRelation2.where('d === 1)).analyze
+      Union(testRelation.where('a === 1) ::
+        testRelation2.where('d === 1) ::
+        testRelation3.where('g === 1) :: Nil).analyze
 
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
-  ignore("union: project to each side") {
+  test("union: project to each side") {
     val unionQuery = testUnion.select('a)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.select('a), testRelation2.select('d)).analyze
+      Union(testRelation.select('a) ::
+        testRelation2.select('d) ::
+        testRelation3.select('g) :: Nil).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 

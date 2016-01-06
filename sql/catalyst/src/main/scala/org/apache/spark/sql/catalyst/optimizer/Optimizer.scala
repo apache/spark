@@ -118,11 +118,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
-  private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
-    assert(bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
-    assert(bn.left.output.size == bn.right.output.size)
-
-    AttributeMap(bn.left.output.zip(bn.right.output))
+  private def buildRewrites(left: LogicalPlan, right: LogicalPlan): AttributeMap[Attribute] = {
+    assert(left.output.size == right.output.size)
+    AttributeMap(left.output.zip(right.output))
   }
 
   /**
@@ -157,10 +155,44 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
-    // Push down filter through INTERSECT
-    case Filter(condition, i @ Intersect(left, right)) =>
+    // Push down deterministic projection through UNION ALL
+    case p @ Project(projectList, Union(children)) =>
+      assert(children.nonEmpty)
+      if (projectList.forall(_.deterministic)) {
+        val newFirstChild = Project(projectList, children.head)
+        val newOtherChildren = children.tail.map {
+          child => {
+            val rewrites = buildRewrites(children.head, child)
+            Project(projectList.map(pushToRight(_, rewrites)), child)
+          }
+        }
+        Union(
+          newFirstChild +: newOtherChildren)
+      } else {
+        p
+      }
+
+    // Push down filter into union
+    case Filter(condition, Union(children)) =>
+      assert(children.nonEmpty)
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(i)
+      val newFirstChild = Filter(deterministic, children.head)
+      val newOtherChildren = children.tail.map {
+        child => {
+          val rewrites = buildRewrites(children.head, child)
+          Filter(pushToRight(deterministic, rewrites), child)
+        }
+      }
+      Filter(nondeterministic,
+        Union(
+          newFirstChild +: newOtherChildren
+        )
+      )
+
+    // Push down filter through INTERSECT
+    case Filter(condition, Intersect(left, right)) =>
+      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Intersect(
           Filter(deterministic, left),
@@ -169,9 +201,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       )
 
     // Push down filter through EXCEPT
-    case Filter(condition, e @ Except(left, right)) =>
+    case Filter(condition, Except(left, right)) =>
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(e)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Except(
           Filter(deterministic, left),
@@ -581,7 +613,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  */
 object CombineUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case u @ Unions(children) => Union(children)
+    case Unions(children) => Union(children)
   }
 }
 
