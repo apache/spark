@@ -92,9 +92,9 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  @transient private val accumulators = new HashMap[Long, Accumulable[_, _]]
+  @transient private val accumulators = new HashMap[Long, GenericAccumulable[_, _, _]]
 
-  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = synchronized {
+  private[spark] override def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit = synchronized {
     accumulators(a.id) = a
   }
 

@@ -158,7 +158,7 @@ abstract class TaskContext extends Serializable {
    * Register an accumulator that belongs to this task. Accumulators must call this method when
    * deserializing in executors.
    */
-  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
+  private[spark] def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit
 
   /**
    * Return the local values of internal accumulators that belong to this task. The key of the Map
