@@ -323,6 +323,10 @@ class ConsistentAccumulator[T] private[spark] (
   def this(initialValue: T, param: AccumulatorParam[T]) = {
     this(initialValue, param, None)
   }
+
+  def consistentValue: T = {
+    this.value.value
+  }
 }
 
 
@@ -394,6 +398,7 @@ class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
       accumulatorParam.addAccumulator(_, t)
     ).getOrElse(t)
     r.pending(key) = v
+    r.value = v
     r
   }
 
