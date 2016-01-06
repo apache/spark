@@ -21,6 +21,7 @@ import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
+import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import java.util.UUID.randomUUID
 
@@ -272,7 +273,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = {
-    val map : ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
+    val map: ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
     map.asScala
   }
   private[spark] def jobProgressListener: JobProgressListener = _jobProgressListener
