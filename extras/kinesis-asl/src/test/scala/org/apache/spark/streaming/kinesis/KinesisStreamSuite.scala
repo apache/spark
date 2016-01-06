@@ -25,10 +25,11 @@ import scala.util.Random
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -38,7 +39,6 @@ import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext}
 
 abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
