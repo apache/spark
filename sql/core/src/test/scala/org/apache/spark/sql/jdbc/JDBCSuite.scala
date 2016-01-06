@@ -63,12 +63,21 @@ class JDBCSuite extends SparkFunSuite
 
     conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
+    // For basic tests
     conn.prepareStatement(
       "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('fred', 1)").executeUpdate()
     conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
     conn.prepareStatement(
       "insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
+    // For group-by tests
+    conn.prepareStatement(
+      "create table test.score (name TEXT(32), value1 INTEGER, value2 INTEGER)").executeUpdate()
+    conn.prepareStatement("insert into test.score values ('group1', 3, 1)").executeUpdate()
+    conn.prepareStatement("insert into test.score values ('group2', 5, 3)").executeUpdate()
+    conn.prepareStatement("insert into test.score values ('group1', 1, 5)").executeUpdate()
+    conn.prepareStatement("insert into test.score values ('group1', 4, 2)").executeUpdate()
+    conn.prepareStatement("insert into test.score values ('group2', 2, 4)").executeUpdate()
     conn.commit()
 
     sql(
@@ -76,6 +85,13 @@ class JDBCSuite extends SparkFunSuite
         |CREATE TEMPORARY TABLE foobar
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE barbar
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.SCORE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
@@ -214,6 +230,17 @@ class JDBCSuite extends SparkFunSuite
 
   test("SELECT * WHERE (quoted strings)") {
     assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
+  }
+
+  test("SELECT (aggregate funcs) GROUP BY (grouping columns)") {
+    assert(sql("SELECT MAX(VALUE1) FROM barbar").collect.toSet === Set(Row(5)))
+    assert(sql("SELECT MIN(VALUE2) FROM barbar").collect.toSet === Set(Row(1)))
+    assert(sql("SELECT NAME, MIN(VALUE1), MAX(VALUE2) FROM barbar GROUP BY NAME").collect.toSet
+      === Set(Row("group1", 1, 5), Row("group2", 2, 4)))
+    assert(sql("SELECT NAME, SUM(VALUE1) FROM barbar GROUP BY NAME").collect.toSet
+      === Set(Row("group1", 8), Row("group2", 7)))
+    assert(sql("SELECT k, MAX(v) FROM (SELECT NAME AS k, VALUE2 AS v FROM barbar) t GROUP BY k")
+      .collect.toSet === Set(Row("group1", 5), Row("group2", 4)))
   }
 
   test("SELECT first field") {
@@ -479,6 +506,14 @@ class JDBCSuite extends SparkFunSuite
     assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def")))
       === "((NOT (col0 != 'abc' OR col0 IS NULL OR 'abc' IS NULL) "
         + "OR (col0 IS NULL AND 'abc' IS NULL))) AND (col1 = 'def')")
+  }
+
+  test("compile aggregate") {
+    val compileAggregate = PrivateMethod[Map[String, String]]('compileAggregateFuncs)
+    def doCompileAggregate(agg: Seq[AggregateFunc]): Map[String, String] =
+      JDBCRDD invokePrivate compileAggregate(agg)
+    assert(doCompileAggregate(Seq(Min("col0"))).getOrElse("col0", "") == "MIN(col0)")
+    assert(doCompileAggregate(Seq(Max("col1"))).getOrElse("col1", "") == "MAX(col1)")
   }
 
   test("Dialect unregister") {

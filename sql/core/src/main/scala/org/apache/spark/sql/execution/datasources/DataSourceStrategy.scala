@@ -26,11 +26,13 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.aggregate.{Utils => AggUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -41,7 +43,76 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  */
 private[sql] object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
+    // If plan nodes like 'Aggregate -> Project -> (Filter) -> Scan' matched, try to push down
+    // partial aggregation processing into data sources that could aggregate their own  data
+    // efficiently. For example, Orc/Parquet could fetch the MIN/MAX value by using statistics data
+    // and some databases have efficient aggregation implementations.
+    case logical.Aggregate(groupingExpressions, resultExpressions, child) => child match {
+      case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _)) =>
+        val aggregateExpressions = resultExpressions.flatMap { expr =>
+          expr.collect {
+            case agg: AggregateExpression => agg
+          }
+        }.distinct
+
+        if (Aggregate.canSupportPreAggregate(aggregateExpressions)) {
+          // Make an alias map to resolve renamed columns
+          val aliasMap = projects.map {
+            _.collect {
+              case Alias(child, name) =>
+                // This case must be safe
+                assert(!child.getClass.isAssignableFrom(NamedExpression.getClass),
+                  s"unexpected plan node $child")
+                name -> child.asInstanceOf[NamedExpression].name
+            }.toMap
+          }.reduce(_ ++ _)
+
+          val dsPlan = planScanStrategy(
+            child, translateAggregate(aggregateExpressions, groupingExpressions, aliasMap))
+          assert(dsPlan.size == 1, s"unexpected plan node $child")
+          AggUtils.planAggregate(groupingExpressions, resultExpressions, dsPlan.head)
+        } else {
+          Nil
+        }
+
+      case _ => Nil
+    }
+
+    case p => planScanStrategy(p, None)
+  }
+
+  /**
+   * Tries to translate Catalyst [[AggregateExpression]]s and grouping column [[NamedExpression]]s
+   * into data source [[Aggregate]].
+   *
+   * @return a `Some[Aggregate]` if the input expressions are convertible, otherwise a `None`.
+   */
+  private[this] def translateAggregate(
+      aggregateExpressions: Seq[AggregateExpression],
+      namedGroupingExpressions: Seq[Expression],
+      aliasMap: Map[String, String]): Option[Aggregate] = {
+    def columnAsString(e: Expression): String = e match {
+      case AttributeReference(name, _, _, _) => aliasMap.getOrElse(name, name)
+    }
+    val aggFuncs = aggregateExpressions.map { aggExpr =>
+      aggExpr.aggregateFunction match {
+        case aggregate.Min(child) => Some(Min(columnAsString(child)))
+        case aggregate.Max(child) => Some(Max(columnAsString(child)))
+        case _ => None
+      }
+    }
+
+    if (!aggFuncs.contains(None)) {
+      Some(Aggregate(aggFuncs.flatMap(x => x), namedGroupingExpressions.map(columnAsString)))
+    } else {
+      None
+    }
+  }
+
+  private def planScanStrategy(
+      plan: LogicalPlan,
+      aggregate: Option[Aggregate]): Seq[SparkPlan] = plan match {
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _)) =>
       pruneFilterProjectRaw(
         l,
         projects,
@@ -54,7 +125,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l,
         projects,
         filters,
-        (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
+        (a, f) => toCatalystRDD(
+          l, a, t.buildScan(a.map(_.name), f, aggregate.getOrElse(Aggregate.empty)))) :: Nil
 
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _)) =>
       pruneFilterProject(
@@ -410,7 +482,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def translateFilter(predicate: Expression): Option[Filter] = {
+  private[this] def translateFilter(predicate: Expression): Option[Filter] = {
     predicate match {
       case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))

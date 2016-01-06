@@ -67,7 +67,8 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
     filters.filter(unhandled)
   }
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+  override def buildScan(
+      requiredColumns: Seq[String], filters: Seq[Filter], aggregate: Aggregate): RDD[Row] = {
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)

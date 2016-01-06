@@ -80,7 +80,7 @@ private[sql] object JDBCRelation {
 private[sql] case class JDBCRelation(
     url: String,
     table: String,
-    parts: Array[Partition],
+    parts: Seq[Partition],
     properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
   with PrunedFilteredScan
@@ -90,7 +90,10 @@ private[sql] case class JDBCRelation(
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+  override def buildScan(
+      requiredColumns: Seq[String],
+      filters: Seq[Filter],
+      aggregate: Aggregate): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
@@ -100,6 +103,7 @@ private[sql] case class JDBCRelation(
       table,
       requiredColumns,
       filters,
+      aggregate,
       parts).asInstanceOf[RDD[Row]]
   }
 

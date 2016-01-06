@@ -166,9 +166,9 @@ private[sql] object JDBCRDD extends Logging {
    *
    * @return A Catalyst schema corresponding to columns in the given order.
    */
-  private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
+  private def pruneSchema(schema: StructType, columns: Seq[String]): StructType = {
     val fieldMap = Map(schema.fields.map(x => x.metadata.getString("name") -> x): _*)
-    new StructType(columns.map(name => fieldMap(name)))
+    new StructType(columns.map(name => fieldMap(name)).toArray)
   }
 
   /**
@@ -227,7 +227,22 @@ private[sql] object JDBCRDD extends Logging {
     })
   }
 
-
+  /**
+   * Turns a set of [[AggregateFunc]] into a String representing a SQL expression.
+   * Returns an empty Map for unsupported aggregation functions.
+   */
+  private def compileAggregateFuncs(aggregateFuncs: Seq[AggregateFunc]): Map[String, String] = {
+    val compiledFuncs = aggregateFuncs.map {
+      case Min(column) => Some(column -> s"MIN($column)")
+      case Max(column) => Some(column -> s"MAX($column)")
+      case _ => None
+    }
+    if (!compiledFuncs.contains(None)) {
+      compiledFuncs.flatMap(x => x).toMap
+    } else {
+      Map.empty[String, String]
+    }
+  }
 
   /**
    * Build and return JDBCRDD from the given information.
@@ -249,18 +264,18 @@ private[sql] object JDBCRDD extends Logging {
       url: String,
       properties: Properties,
       fqTable: String,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      parts: Array[Partition]): RDD[InternalRow] = {
-    val dialect = JdbcDialects.get(url)
-    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+      requiredColumns: Seq[String],
+      filters: Seq[Filter],
+      aggregate: Aggregate,
+      parts: Seq[Partition]): RDD[InternalRow] = {
     new JDBCRDD(
       sc,
       JdbcUtils.createConnectionFactory(url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
-      quotedColumns,
+      requiredColumns,
       filters,
+      aggregate,
       parts,
       url,
       properties)
@@ -277,9 +292,10 @@ private[sql] class JDBCRDD(
     getConnection: () => Connection,
     schema: StructType,
     fqTable: String,
-    columns: Array[String],
-    filters: Array[Filter],
-    partitions: Array[Partition],
+    columns: Seq[String],
+    filters: Seq[Filter],
+    aggregate: Aggregate,
+    partitions: Seq[Partition],
     url: String,
     properties: Properties)
   extends RDD[InternalRow](sc, Nil) {
@@ -287,14 +303,21 @@ private[sql] class JDBCRDD(
   /**
    * Retrieve the list of partitions corresponding to this RDD.
    */
-  override def getPartitions: Array[Partition] = partitions
+  override def getPartitions: Array[Partition] = partitions.toArray
+
+  /**
+   * Return the SQL dialect from `url`.
+   */
+  private val dialect = JdbcDialects.get(url)
 
   /**
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
+    val compiledAggregateFuncs = JDBCRDD.compileAggregateFuncs(aggregate.aggregateFuncs)
     val sb = new StringBuilder()
-    columns.foreach(x => sb.append(",").append(x))
+    columns.map(c => compiledAggregateFuncs.getOrElse(c, dialect.quoteIdentifier(c)))
+      .foreach(x => sb.append(", ").append(x))
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
@@ -314,6 +337,18 @@ private[sql] class JDBCRDD(
       "WHERE " + part.whereClause
     } else if (filterWhereClause.length > 0) {
       "WHERE " + filterWhereClause
+    } else {
+      ""
+    }
+  }
+
+  /**
+   * A GROUP BY clause representing pushed-down grouping columns.
+   */
+  private def getGroupByClause: String = {
+    if (aggregate.groupingColumns.length > 0) {
+      val quotedColumns = aggregate.groupingColumns.map(dialect.quoteIdentifier)
+      s"GROUP BY ${quotedColumns.mkString(", ")}"
     } else {
       ""
     }
@@ -383,7 +418,8 @@ private[sql] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
+    val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause $getGroupByClause"
+
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     val fetchSize = properties.getProperty("fetchsize", "0").toInt
