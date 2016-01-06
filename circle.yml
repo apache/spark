@@ -1,0 +1,19 @@
+machine:
+  java:
+    version: openjdk7
+
+dependencies:
+  override:
+    - build/sbt assembly  # since some tests might need the assembly JAR
+
+test:
+  override:
+    - dev/lint-scala
+    - dev/lint-java
+    - build/sbt sql/test
+  # Copy test reports to Circle test reports dir
+  post:
+    - mkdir -p $CIRCLE_TEST_REPORTS/test-reports/
+    - mkdir -p $CIRCLE_TEST_REPORTS/logs/
+    - find . -type f -regex ".*/target/test-reports/.*xml" -exec cp {} $CIRCLE_TEST_REPORTS/test-reports/ \;
+    - find . -type f -regex ".*/target/unit-tests.*log" -exec cp {} $CIRCLE_TEST_REPORTS/logs/ \;
