@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataOutputStream, DataInputStream, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.util.Arrays
 
