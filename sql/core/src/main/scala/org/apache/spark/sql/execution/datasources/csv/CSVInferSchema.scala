@@ -28,6 +28,7 @@ import scala.util.control.Exception._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 
 private[sql] object CSVInferSchema {
 
@@ -36,7 +37,7 @@ private[sql] object CSVInferSchema {
     *     1. Infer type of each row
     *     2. Merge row types to find common type
     *     3. Replace any null types with string type
-    * TODO: Can we reuse JSON schema inference? [SPARK-12670]
+    * TODO(hossein): Can we reuse JSON schema inference? [SPARK-12670]
     */
   def apply(
       tokenRdd: RDD[Array[String]],
@@ -135,20 +136,7 @@ private[sql] object CSVInferSchema {
     StringType
   }
 
-  /**
-    * Copied from internal Spark api
-    * [[org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion]]
-    */
-  private val numericPrecedence: IndexedSeq[DataType] =
-    IndexedSeq[DataType](
-      ByteType,
-      ShortType,
-      IntegerType,
-      LongType,
-      FloatType,
-      DoubleType,
-      TimestampType,
-      DecimalType.Unlimited)
+  private val numericPrecedence: IndexedSeq[DataType] = HiveTypeCoercion.numericPrecedence
 
   /**
     * Copied from internal Spark api
