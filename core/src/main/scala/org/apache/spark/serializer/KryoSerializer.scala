@@ -21,6 +21,8 @@ import java.io.{DataInput, DataOutput, EOFException, InputStream, IOException, O
 import java.nio.ByteBuffer
 import javax.annotation.Nullable
 
+import org.apache.spark.serializer.avro.{GenericAvroSerializer, EmptySchemaRepo, SchemaRepo}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -108,8 +110,12 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
-    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
+    val schemaRepo = SchemaRepo(conf) match {
+      case Some(repo) => repo
+      case None => EmptySchemaRepo
+    }
+    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas, schemaRepo))
+    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas, schemaRepo))
 
     try {
       // scalastyle:off classforname
