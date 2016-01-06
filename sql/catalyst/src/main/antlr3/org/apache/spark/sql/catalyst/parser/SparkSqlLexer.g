@@ -35,7 +35,7 @@ package org.apache.spark.sql.catalyst.parser;
     if (parserConf == null) {
       return true;
     }
-    return !"none".equals(parserConf.supportQuotedId());
+    return parserConf.supportQuotedId();
   }
 
   @Override

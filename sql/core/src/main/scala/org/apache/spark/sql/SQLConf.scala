@@ -452,12 +452,12 @@ private[spark] object SQLConf {
     doc = "When true, we could use `datasource`.`path` as table in SQL query"
   )
 
-  val PARSER_SUPPORT_QUOTEDID = stringConf("spark.sql.parser.supportQuotedIdentifiers",
-    defaultValue = Some("column"),
+  val PARSER_SUPPORT_QUOTEDID = booleanConf("spark.sql.parser.supportQuotedIdentifiers",
+    defaultValue = Some(true),
     isPublic = false,
-    doc = "Whether to use quoted identifier. 'none' or 'column' can be used." +
-      "\n  none: default(past) behavior. Implies only alphaNumeric and underscore are valid " +
-      "characters in identifiers.\n  column: implies column names can contain any character.")
+    doc = "Whether to use quoted identifier.\n  false: default(past) behavior. Implies only" +
+      "alphaNumeric and underscore are valid characters in identifiers.\n" +
+      "  true: implies column names can contain any character.")
 
   val PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS = booleanConf(
     "spark.sql.parser.supportSQL11ReservedKeywords",
@@ -583,7 +583,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
-  def supportQuotedId: String = getConf(PARSER_SUPPORT_QUOTEDID)
+  def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
 
   def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
 

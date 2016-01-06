@@ -22,5 +22,5 @@ trait ParserConf {
 }
 
 case class SimpleParserConf(
-    supportQuotedId: String = "column",
+    supportQuotedId: Boolean = true,
     supportSQL11ReservedKeywords: Boolean = false) extends ParserConf
