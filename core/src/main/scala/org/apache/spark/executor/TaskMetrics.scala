@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulator, InternalAccumulator}
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.Utils
@@ -492,16 +491,16 @@ class ShuffleReadMetrics private (
  */
 @deprecated("ShuffleWriteMetrics will be made private in a future version.", "2.0.0")
 class ShuffleWriteMetrics private (
-    _shuffleBytesWritten: Accumulator[Long],
-    _shuffleRecordsWritten: Accumulator[Long],
+    _bytesWritten: Accumulator[Long],
+    _recordsWritten: Accumulator[Long],
     _shuffleWriteTime: Accumulator[Long])
   extends Serializable {
 
   private[executor] def this(accumMap: Map[String, Accumulator[Long]]) {
     this(
-      accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_BYTES_WRITTEN),
-      accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_RECORDS_WRITTEN),
-      accumMap(InternalAccumulator.shuffleWrite.SHUFFLE_WRITE_TIME))
+      accumMap(InternalAccumulator.shuffleWrite.BYTES_WRITTEN),
+      accumMap(InternalAccumulator.shuffleWrite.RECORDS_WRITTEN),
+      accumMap(InternalAccumulator.shuffleWrite.WRITE_TIME))
   }
 
   /**
@@ -520,12 +519,12 @@ class ShuffleWriteMetrics private (
   /**
    * Number of bytes written for the shuffle by this task.
    */
-  def shuffleBytesWritten: Long = _shuffleBytesWritten.value
+  def bytesWritten: Long = _bytesWritten.value
 
   /**
    * Total number of records written to the shuffle by this task.
    */
-  def shuffleRecordsWritten: Long = _shuffleRecordsWritten.value
+  def recordsWritten: Long = _recordsWritten.value
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
@@ -534,14 +533,14 @@ class ShuffleWriteMetrics private (
 
   // TODO: these are not thread-safe. Is that OK?
 
-  private[spark] def incShuffleBytesWritten(v: Long): Unit = _shuffleBytesWritten.add(v)
-  private[spark] def incShuffleRecordsWritten(v: Long): Unit = _shuffleRecordsWritten.add(v)
-  private[spark] def incShuffleWriteTime(v: Long): Unit = _shuffleWriteTime.add(v)
-  private[spark] def decShuffleBytesWritten(v: Long): Unit = {
-    _shuffleBytesWritten.setValue(shuffleBytesWritten - v)
+  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
+  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
+  private[spark] def incWriteTime(v: Long): Unit = _shuffleWriteTime.add(v)
+  private[spark] def decBytesWritten(v: Long): Unit = {
+    _bytesWritten.setValue(bytesWritten - v)
   }
-  private[spark] def decShuffleRecordsWritten(v: Long): Unit = {
-    _shuffleRecordsWritten.setValue(shuffleRecordsWritten - v)
+  private[spark] def decRecordsWritten(v: Long): Unit = {
+    _recordsWritten.setValue(recordsWritten - v)
   }
 }
 

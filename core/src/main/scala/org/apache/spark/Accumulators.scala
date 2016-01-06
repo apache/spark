@@ -376,9 +376,9 @@ private[spark] object InternalAccumulator {
 
   // Names of shuffle write metrics
   object shuffleWrite {
-    val SHUFFLE_BYTES_WRITTEN = "metrics.shuffle.write.shuffleBytesWritten"
-    val SHUFFLE_RECORDS_WRITTEN = "metrics.shuffle.write.shuffleRecordsWritten"
-    val SHUFFLE_WRITE_TIME = "metrics.shuffle.write.shuffleWriteTime"
+    val BYTES_WRITTEN = "metrics.shuffle.write.shuffleBytesWritten"
+    val RECORDS_WRITTEN = "metrics.shuffle.write.shuffleRecordsWritten"
+    val WRITE_TIME = "metrics.shuffle.write.shuffleWriteTime"
   }
 
   // Names of output metrics
@@ -442,9 +442,9 @@ private[spark] object InternalAccumulator {
    */
   def createShuffleWriteAccums(): Seq[Accumulator[Long]] = {
     Seq[String](
-      shuffleWrite.SHUFFLE_BYTES_WRITTEN,
-      shuffleWrite.SHUFFLE_RECORDS_WRITTEN,
-      shuffleWrite.SHUFFLE_WRITE_TIME).map(newMetric)
+      shuffleWrite.BYTES_WRITTEN,
+      shuffleWrite.RECORDS_WRITTEN,
+      shuffleWrite.WRITE_TIME).map(newMetric)
   }
 
   /**

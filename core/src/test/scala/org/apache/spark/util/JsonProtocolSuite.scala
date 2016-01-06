@@ -228,7 +228,7 @@ class JsonProtocolSuite extends SparkFunSuite {
                          .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
-    assert(newMetrics.shuffleWriteMetrics.get.shuffleRecordsWritten == 0)
+    assert(newMetrics.shuffleWriteMetrics.get.recordsWritten == 0)
   }
 
   test("OutputMetrics backward compatibility") {
@@ -568,7 +568,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def assertEquals(metrics1: ShuffleWriteMetrics, metrics2: ShuffleWriteMetrics) {
-    assert(metrics1.shuffleBytesWritten === metrics2.shuffleBytesWritten)
+    assert(metrics1.bytesWritten === metrics2.bytesWritten)
     assert(metrics1.shuffleWriteTime === metrics2.shuffleWriteTime)
   }
 
@@ -791,9 +791,9 @@ class JsonProtocolSuite extends SparkFunSuite {
       outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c)/100 else -1)
     } else {
       val sw = t.registerShuffleWriteMetrics()
-      sw.incShuffleBytesWritten(a + b + c)
-      sw.incShuffleWriteTime(b + c + d)
-      sw.incShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
+      sw.incBytesWritten(a + b + c)
+      sw.incWriteTime(b + c + d)
+      sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>

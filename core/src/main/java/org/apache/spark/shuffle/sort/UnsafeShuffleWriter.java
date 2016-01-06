@@ -25,7 +25,6 @@ import java.util.Iterator;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
-import scala.collection.immutable.Map;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
@@ -297,8 +296,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // final write as bytes spilled (instead, it's accounted as shuffle write). The merge needs
         // to be counted as shuffle write, but this will lead to double-counting of the final
         // SpillInfo's bytes.
-        writeMetrics.decShuffleBytesWritten(spills[spills.length - 1].file.length());
-        writeMetrics.incShuffleBytesWritten(outputFile.length());
+        writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
+        writeMetrics.incBytesWritten(outputFile.length());
         return partitionLengths;
       }
     } catch (IOException e) {
@@ -410,7 +409,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             spillInputChannelPositions[i] += actualBytesTransferred;
             bytesToTransfer -= actualBytesTransferred;
           }
-          writeMetrics.incShuffleWriteTime(System.nanoTime() - writeStartTime);
+          writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
           bytesWrittenToMergedFile += partitionLengthInSpill;
           partitionLengths[partition] += partitionLengthInSpill;
         }

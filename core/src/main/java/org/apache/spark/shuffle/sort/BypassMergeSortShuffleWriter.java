@@ -142,7 +142,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // Creating the file to write to and creating a disk writer both involve interacting with
     // the disk, and can take a long time in aggregate when we open many files, so should be
     // included in the shuffle write time.
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - openStartTime);
+    writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
     while (records.hasNext()) {
       final Product2<K, V> record = records.next();
@@ -199,7 +199,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       threwException = false;
     } finally {
       Closeables.close(out, threwException);
-      writeMetrics.incShuffleWriteTime(System.nanoTime() - writeStartTime);
+      writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
     }
     partitionWriters = null;
     return lengths;

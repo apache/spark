@@ -90,7 +90,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, so should be included in the shuffle write time.
-      writeMetrics.incShuffleWriteTime(System.nanoTime - openStartTime)
+      writeMetrics.incWriteTime(System.nanoTime - openStartTime)
 
       override def releaseWriters(success: Boolean) {
         shuffleState.completedMapTasks.add(mapId)
