@@ -83,7 +83,7 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
     try {
-      (runTask(context), context.collectAccumulators())
+      (runTask(context), context.collectAccumulatorValues())
     } finally {
       context.markTaskCompleted()
       try {

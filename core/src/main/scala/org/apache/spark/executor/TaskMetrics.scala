@@ -133,6 +133,8 @@ class TaskMetrics private[spark] (
     val name = a.name.get
     assert(a.isInternal, s"internal accumulator $name (${a.id}) is not marked as 'internal'")
     assert(!accumMap.contains(name), s"found duplicate internal accumulator name: $name")
+    // Note: reset the value here so we don't double count the values in local mode
+    a.resetValue()
     accumMap(name) = a
   }
 

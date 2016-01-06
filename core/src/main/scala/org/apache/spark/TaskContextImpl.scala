@@ -43,8 +43,17 @@ private[spark] class TaskContextImpl(
    */
   override val taskMetrics: TaskMetrics = new TaskMetrics(internalAccumulators)
 
+  /**
+   * All accumulators used in this task indexed by accumulator ID.
+   */
+  @transient private val _accumulators = new mutable.HashMap[Long, Accumulable[_, _]]
+
+  // Register the initial set of internal accumulators.
+  // Future ones will be registered through `registerAccumulator`.
+  internalAccumulators.foreach { a => _accumulators(a.id) = a }
+
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
-  override def attemptId(): Long = taskAttemptId
+  override val attemptId: Long = taskAttemptId
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -107,27 +116,23 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  /**
-   * All accumulators used in this task indexed by accumulator ID.
-   */
-  @transient private val accumulators = new mutable.HashMap[Long, Accumulable[_, _]]
-
-  // Register the initial set of internal accumulators.
-  // Future ones will be registered through `registerAccumulator`.
-  internalAccumulators.foreach { a => accumulators(a.id) = a }
+  private[spark] def accumulators: Seq[Accumulable[_, _]] = _accumulators.values.toSeq
 
   private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = synchronized {
     if (a.isInternal) {
       taskMetrics.registerInternalAccum(a)
     }
-    accumulators(a.id) = a
+    _accumulators(a.id) = a
   }
 
-  private[spark] override def collectInternalAccumulators(): Map[Long, Any] = synchronized {
-    accumulators.filter(_._2.isInternal).mapValues(_.localValue).toMap
+  private[spark] override def collectAccumulatorValues(): Map[Long, Any] = synchronized {
+    _accumulators.mapValues(_.localValue).toMap
   }
 
-  private[spark] override def collectAccumulators(): Map[Long, Any] = synchronized {
-    accumulators.mapValues(_.localValue).toMap
+  // For testing only.
+  private[spark] def findTestAccum(): Option[Accumulator[Long]] = {
+    accumulators
+      .find(_.name == Some(InternalAccumulator.TEST_ACCUM))
+      .map(_.asInstanceOf[Accumulator[Long]])
   }
 }
