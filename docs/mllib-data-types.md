@@ -320,7 +320,7 @@ import org.apache.spark.mllib.linalg.{Matrix, Matrices}
 dm2 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
 
 // Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
-sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
+sm = Matrices.sparse([Matrix Factorization](mllib-matrix-factorization.html)3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
 {% endhighlight %}
 </div>
 
@@ -660,7 +660,7 @@ blockMat = mat.toBlockMatrix()
 A `BlockMatrix` is a distributed matrix backed by an RDD of `MatrixBlock`s, where a `MatrixBlock` is
 a tuple of `((Int, Int), Matrix)`, where the `(Int, Int)` is the index of the block, and `Matrix` is
 the sub-matrix at the given index with size `rowsPerBlock` x `colsPerBlock`.
-`BlockMatrix` supports methods such as `add` and `multiply` with another `BlockMatrix`.
+`BlockMatrix` supports methods such as `add`, `subtract`, and `multiply` with another `BlockMatrix`.
 `BlockMatrix` also has a helper function `validate` which can be used to check whether the
 `BlockMatrix` is set up properly.
 
@@ -669,8 +669,10 @@ the sub-matrix at the given index with size `rowsPerBlock` x `colsPerBlock`.
 
 A [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) can be
 most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` by calling `toBlockMatrix`.
-`toBlockMatrix` creates blocks of size 1024 x 1024 by default.
+The `toBlockMatrix` method creates blocks of size 1024 x 1024 by default.
 Users may change the block size by supplying the values through `toBlockMatrix(rowsPerBlock, colsPerBlock)`.
+  Basic operations include `add`, `subtract`, and `multiply`.  See [Matrix Factorization](mllib-matrix-factorization.html)
+additional methods.
 
 Refer to the [`BlockMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) for details on the API.
 
@@ -689,7 +691,15 @@ matA.validate()
 
 // Calculate A^T A.
 val ata = matA.transpose.multiply(matA)
+
+// Calculate A + A
+val aPlusA = matA.add(matA)
+
+// Calulate (A + A) - A (should return A)
+val sameA = aPlusA.subtract(matA)
+
 {% endhighlight %}
+
 </div>
 
 <div data-lang="java" markdown="1">

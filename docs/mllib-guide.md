@@ -64,6 +64,15 @@ We list major functionality from both below, with links to detailed guides.
 * [Optimization (developer)](mllib-optimization.html)
   * [stochastic gradient descent](mllib-optimization.html#stochastic-gradient-descent-sgd)
   * [limited-memory BFGS (L-BFGS)](mllib-optimization.html#limited-memory-bfgs-l-bfgs)
+* [PMML model export](mllib-pmml-model-export.html)
+* [Matrix Factorization](mllib-matrix-factorization.html)
+  * [LU Factorization](mllib-matrix-factorization.html#lu-factorization)
+  * [Solving a Linear System of Equations](mllib-matrix-factorization.html#solving-a-linear-system-of-equations)
+
+MLlib is under active development.
+The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
+and the migration guide below will explain all changes between releases.
+=======
 
 # spark.ml: high-level APIs for ML pipelines
 
