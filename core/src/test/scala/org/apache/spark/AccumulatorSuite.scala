@@ -328,9 +328,16 @@ private[spark] object AccumulatorSuite {
       testName: String)(testBody: => Unit): Unit = {
     val listener = new SaveInfoListener
     sc.addSparkListener(listener)
+
+    // Find next job ID
+    var nextJobId = -1
+    listener.registerJobCompletionCallback { jobId => nextJobId = jobId + 1 }
+    sc.parallelize(1 to 10).count()
+    require(nextJobId > 0, "bad test: job ID was not updated even after a count()")
+
     // Register asserts in job completion callback to avoid flakiness
     listener.registerJobCompletionCallback { jobId =>
-      if (jobId == 0) {
+      if (jobId == nextJobId) {
         // The first job is a dummy one to verify that the accumulator does not already exist
         val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
         assert(!accums.exists(_.name == PEAK_EXECUTION_MEMORY))
@@ -340,9 +347,9 @@ private[spark] object AccumulatorSuite {
           .flatMap(_.accumulables.values)
           .find(_.name == PEAK_EXECUTION_MEMORY)
           .getOrElse {
-          throw new TestFailedException(
-            s"peak execution memory accumulator not set in '$testName'", 0)
-        }
+            throw new TestFailedException(
+              s"peak execution memory accumulator not set in '$testName'", 0)
+          }
         assert(accum.value.toLong > 0)
       }
     }
@@ -370,6 +377,7 @@ private class SaveInfoListener extends SparkListener {
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     if (jobCompletionCallback != null) {
+      // TODO: exceptions thrown here do not actually fail the test!
       jobCompletionCallback(jobEnd.jobId)
     }
   }

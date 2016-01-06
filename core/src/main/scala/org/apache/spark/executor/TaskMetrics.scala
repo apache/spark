@@ -50,7 +50,7 @@ class TaskMetrics(
     this(InternalAccumulator.create().map { a => (a.name.get, a) }.toMap, host)
   }
 
-  // Needed for Java
+  // Needed for Java tests
   def this() {
     this(TaskMetrics.getCachedHostName)
   }

@@ -443,7 +443,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public Option<MapStatus> stop(boolean success) {
     try {
-      // TODO: this will throw NPE
       taskContext.taskMetrics().incPeakExecutionMemory(getPeakMemoryUsedBytes());
 
       if (stopping) {
