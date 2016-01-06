@@ -67,7 +67,8 @@ class StreamExecution(
   microBatchThread.setDaemon(true)
   microBatchThread.start()
 
-  var lastExecution: QueryExecution = null
+  @volatile
+  private[sql] var lastExecution: QueryExecution = null
 
   /**
    * Checks to see if any new data is present in any of the sources.  When new data is available,
@@ -128,7 +129,7 @@ class StreamExecution(
    */
   def stop(): Unit = {
     shouldRun = false
-    while (microBatchThread.isAlive) { Thread.sleep(100) }
+    if (microBatchThread.isAlive) { microBatchThread.join() }
   }
 
   /**
