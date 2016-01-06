@@ -226,7 +226,26 @@ class BinaryClassificationMetrics @Since("1.3.0") (
 
   /**
    * Returns the calibration or reliability curve,
-   * which is an RDD of (average score in bin, fraction of positive examples in bin).
+   * which is represented as an RDD of `((s_min, s_max), (p, n))`
+   * where `s_min` is the least score, `s_max` is the greatest score,
+   * `p` is the fraction of positive examples, and `n` is the number of scores,
+   * for each bin.
+   *
+   * `RDD.count` returns the actual number of bins, which might or might not
+   * be the same as `numBins`.
+   *
+   * When `numBins` is zero, scores are not grouped;
+   * in effect, each score is put into its own distinct bin.
+   *
+   * When `numBins` is greater than (number of distinct scores)/2,
+   * `numBins` is ignored and scores are not grouped
+   * (same as `numBins` equal to zero).
+   *
+   * When `distinctScoresCount/numBins` (rounded up) is greater than or
+   * equal to `Int.MaxValue`, the actual number of bins is `distinctScoresCount/Int.MaxValue`
+   * (rounded up).
+   *
+   * Otherwise, the actual number of bins is equal to `numBins`.
    *
    * @see [[http://en.wikipedia.org/wiki/Calibration_%28statistics%29#In_classification Wikipedia article on calibration in classification]]
    *
@@ -257,7 +276,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   
     val binnedDistinctScoresAndLabelCounts =
       if (numBins == 0) {
-        distinctScoresAndLabelCounts.map { pair => ((pair._1, pair._1), pair._2) }
+        distinctScoresAndLabelCounts.map { case (score, count) => ((score, score), count) }
       } else {
         val distinctScoresCount = distinctScoresAndLabelCounts.count()
   
@@ -270,8 +289,9 @@ class BinaryClassificationMetrics @Since("1.3.0") (
           }
         
         if (groupCount < 2) {
-          logInfo(s"Too few distinct scores ($distinctScoresCount) for $numBins bins to be useful")
-          distinctScoresAndLabelCounts.map { pair => ((pair._1, pair._1), pair._2) }
+          logInfo(s"Too few distinct scores ($distinctScoresCount) for $numBins bins to be useful;"
+            + " proceed with number of bins == number of distinct scores.")
+          distinctScoresAndLabelCounts.map { case (score, count) => ((score, score), count) }
         } else {
           if (groupCount >= Int.MaxValue) {
             val n = distinctScoresCount
@@ -283,15 +303,15 @@ class BinaryClassificationMetrics @Since("1.3.0") (
             val firstScore = pairs.head._1
             val lastScore = pairs.last._1
             val agg = new BinaryLabelCounter()
-            pairs.foreach(pair => agg += pair._2)
+            pairs.foreach { case (score, count) => agg += count }
             ((firstScore, lastScore), agg)
           })
         }
       }
   
-    binnedDistinctScoresAndLabelCounts.map { pair =>
-      val n = pair._2.numPositives + pair._2.numNegatives
-      (pair._1, (pair._2.numPositives / n.toDouble, n))
+    binnedDistinctScoresAndLabelCounts.map { case (bounds, counts) =>
+      val n = counts.numPositives + counts.numNegatives
+      (bounds, (counts.numPositives / n.toDouble, n))
     }
   }
 }
