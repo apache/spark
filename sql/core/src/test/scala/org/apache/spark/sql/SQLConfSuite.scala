@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 
+
 class SQLConfSuite extends QueryTest with SharedSQLContext {
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
@@ -102,13 +103,6 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       // Utils.byteStringAsBytes("-30g")
       sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-30g")
      }
-
-    // Test invalid input
-    intercept[IllegalArgumentException] {
-      // This value exceeds Long.MaxValue
-      // Utils.byteStringAsBytes("-1g")
-      sqlContext.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1g")
-     }
     sqlContext.conf.clear()
 
   }
@@ -140,6 +134,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
      }
 
+<<<<<<< HEAD
     // Test invalid input
     intercept[IllegalArgumentException] {
       // This value exceeds Long.MaxValue
@@ -147,6 +142,8 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-1g")
      }
 
+=======
+>>>>>>> ffc1ae19db91f40e7e1884c2a3c02b90bf8d8981
     sqlContext.conf.clear()
 
   }
