@@ -134,3 +134,4 @@ class MemorySink(schema: StructType) extends Sink with Logging {
 
   override def toString: String = batches.map(b => s"${b._1}: ${b._2.mkString(" ")}").mkString("\n")
 }
+
