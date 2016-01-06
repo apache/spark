@@ -102,7 +102,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val unionDF = testData.unionAll(testData).unionAll(testData)
       .unionAll(testData).unionAll(testData)
 
-    assert(unionDF.queryExecution.optimizedPlan.collect {
+    // Before optimizer, Union should be combined.
+    assert(unionDF.queryExecution.analyzed.collect {
       case j @ Union(Seq(_, _, _, _, _)) => j }.size === 1)
 
     checkAnswer(

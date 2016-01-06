@@ -225,11 +225,12 @@ object HiveTypeCoercion {
       require(children.forall(_.output.length == children.head.output.length))
 
       val castedTypes: Seq[Option[DataType]] =
-        children.tail.foldLeft(children.head.output.map(a => Option(a.dataType))) {
+        children.foldLeft(children.head.output.map(a => Option(a.dataType))) {
           case (currentOutputDataTypes, child) => {
             currentOutputDataTypes.zip(child.output).map {
-              case (Some(dt), a2) if dt != a2.dataType =>
-                findWiderTypeForTwo(dt, a2.dataType)
+              case (Some(dt), ar) if dt != ar.dataType =>
+                findWiderTypeForTwo(dt, ar.dataType)
+              case (Some(dt), ar) if dt == ar.dataType => Option(dt)
               case other => None
             }
           }

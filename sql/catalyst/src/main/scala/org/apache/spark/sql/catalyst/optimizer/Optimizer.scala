@@ -22,7 +22,7 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{Unions, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -580,15 +580,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * Combines all adjacent [[Union]] operators into a single [[Union]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
-  private def buildUnionChildren(children: Seq[LogicalPlan]): Seq[LogicalPlan] =
-    children.foldLeft(Seq.empty[LogicalPlan]) { (newChildren, child) => child match {
-      case Union(grandchildren) => newChildren ++ grandchildren
-      case other => newChildren ++ Seq(other)
-    }
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case u @ Union(children) => Union(buildUnionChildren(children))
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case u @ Unions(children) => Union(children)
   }
 }
 

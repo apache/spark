@@ -22,6 +22,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
+import scala.annotation.tailrec
+import scala.collection.immutable.Queue
+
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
  * operator.  All filter operators are collected and their conditions are broken up and returned
@@ -167,5 +170,25 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
     case j @ Join(_, _, Inner, _) =>
       Some(flattenJoin(j))
     case _ => None
+  }
+}
+
+
+/**
+ * A pattern that collects all adjacent unions and returns their children as a Seq.
+ */
+object Unions {
+  def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
+    case u: Union => Some(collectUnionChildren(u :: Nil, Seq.empty[LogicalPlan]))
+    case _ => None
+  }
+
+  @tailrec
+  private def collectUnionChildren(
+      plan: List[LogicalPlan],
+      children: Seq[LogicalPlan]): Seq[LogicalPlan] = plan match {
+    case Nil => children
+    case Union(grandchildren) :: res => collectUnionChildren(grandchildren.toList ++ res, children)
+    case other :: res => collectUnionChildren(res, children :+ other)
   }
 }

@@ -370,24 +370,30 @@ class HiveTypeCoercionSuite extends PlanTest {
       }
     }
 
-    val left = LocalRelation(
+    val firstTable = LocalRelation(
       AttributeReference("i", IntegerType)(),
       AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("b", ByteType)(),
       AttributeReference("d", DoubleType)())
-    val right = LocalRelation(
+    val secondTable = LocalRelation(
       AttributeReference("s", StringType)(),
       AttributeReference("d", DecimalType(2, 1))(),
       AttributeReference("f", FloatType)(),
       AttributeReference("l", LongType)())
+    val thirdTable = LocalRelation(
+      AttributeReference("m", StringType)(),
+      AttributeReference("n", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("p", ByteType)(),
+      AttributeReference("q", DoubleType)())
 
     val wt = HiveTypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val r1 = wt(Union(left, right)).asInstanceOf[Union]
-    val r2 = wt(Except(left, right)).asInstanceOf[Except]
-    val r3 = wt(Intersect(left, right)).asInstanceOf[Intersect]
+    val r1 = wt(Union(firstTable :: secondTable :: thirdTable :: Nil)).asInstanceOf[Union]
+    val r2 = wt(Except(firstTable, secondTable)).asInstanceOf[Except]
+    val r3 = wt(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
     checkOutput(r1.children.head, expectedTypes)
+    checkOutput(r1.children(1), expectedTypes)
     checkOutput(r1.children.last, expectedTypes)
     checkOutput(r2.left, expectedTypes)
     checkOutput(r2.right, expectedTypes)

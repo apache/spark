@@ -33,6 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, SqlParser}
@@ -1005,7 +1006,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def unionAll(other: DataFrame): DataFrame = withPlan {
-    Union(logicalPlan, other.logicalPlan)
+    CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /**
