@@ -448,7 +448,8 @@ class Analyzer(
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
-      case g @ Generate(generator, join, outer, qualifier, output, child) if child.resolved =>
+      case g @ Generate(generator, join, outer, qualifier, output, child)
+        if child.resolved && !generator.resolved =>
         val newG = generator transformUp {
           case u @ UnresolvedAttribute(nameParts) =>
             withPosition(u) { child.resolve(nameParts, resolver).getOrElse(u) }
@@ -584,13 +585,6 @@ class Analyzer(
                 case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
                 case other => other
-              }
-            }
-          case u @ UnresolvedGenerator(name, children) =>
-            withPosition(u) {
-              registry.lookupFunction(name, children) match {
-                case g: Generator => g
-                case other => failAnalysis(s"$other is not a Generator.")
               }
             }
         }

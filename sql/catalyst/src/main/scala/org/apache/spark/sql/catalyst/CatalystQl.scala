@@ -945,16 +945,20 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       node: ASTNode,
       child: LogicalPlan): Option[ScriptTransformation] = None
 
+  val explode = "(?i)explode".r
+  val jsonTuple = "(?i)json_tuple".r
   protected def nodeToGenerate(node: ASTNode, outer: Boolean, child: LogicalPlan): Generate = {
     val Token("TOK_SELECT", Token("TOK_SELEXPR", clauses) :: Nil) = node
 
     val alias = getClause("TOK_TABALIAS", clauses).children.head.text
 
     val generator = clauses.head match {
-      case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
-        UnresolvedGenerator(functionName, children.map(nodeToExpr))
+      case Token("TOK_FUNCTION", Token(explode(), Nil) :: childNode :: Nil) =>
+        Explode(nodeToExpr(childNode))
+      case Token("TOK_FUNCTION", Token(jsonTuple(), Nil) :: children) =>
+        JsonTuple(children.map(nodeToExpr))
       case other =>
-        noParseRule("Generator", other)
+        nodeToGenerator(other)
     }
 
     val attributes = clauses.collect {
@@ -963,6 +967,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     Generate(generator, join = true, outer = outer, Some(alias.toLowerCase), attributes, child)
   }
+
+  protected def nodeToGenerator(node: ASTNode): Generator = noParseRule("Generator", node)
 
   protected def noParseRule(msg: String, node: ASTNode): Nothing = throw new NotImplementedError(
     s"[$msg]: No parse rules for ASTNode type: ${node.tokenType}, tree:\n${node.treeString}")

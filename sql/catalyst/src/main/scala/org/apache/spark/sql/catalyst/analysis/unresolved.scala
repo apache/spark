@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext, CodegenFallback}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier, errors}
+import org.apache.spark.sql.catalyst.{TableIdentifier, errors}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -129,39 +129,23 @@ object UnresolvedAttribute {
     nameParts.toSeq
   }
 }
-trait UnresolvedFunctionLike extends Expression {
-  def name: String
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-  override lazy val resolved = false
-
-  override def prettyString: String = s"$name(${children.map(_.prettyString).mkString(",")})"
-
-  override def toString: String = s"'$name(${children.mkString(",")})"
-}
 
 case class UnresolvedFunction(
     name: String,
     children: Seq[Expression],
     isDistinct: Boolean)
-  extends UnresolvedFunctionLike with Unevaluable
+  extends Expression with Unevaluable {
 
-case class UnresolvedGenerator(
-    name: String,
-    children: Seq[Expression]) extends Generator with UnresolvedFunctionLike {
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
 
-  override def elementTypes: Seq[(DataType, Boolean, String)] =
-    throw new UnresolvedException(this, "elementTypes")
+  override def prettyString: String = {
+    s"${name}(${children.map(_.prettyString).mkString(",")})"
+  }
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] =
-    throw new UnresolvedException(this, "eval")
-
-  override def terminate(): TraversableOnce[InternalRow] =
-    throw new UnresolvedException(this, "terminate")
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
-    throw new UnresolvedException(this, "genCode")
+  override def toString: String = s"'$name(${children.mkString(",")})"
 }
 
 /**

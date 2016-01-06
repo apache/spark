@@ -24,16 +24,19 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.ParseUtils._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, AnalyzeTable, DropTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
@@ -658,6 +661,16 @@ private[hive] object HiveQl extends SparkQl with Logging {
     case _ => None
   }
 
+  protected override def nodeToGenerator(node: ASTNode): Generator = node match {
+    case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
+      val functionInfo: FunctionInfo =
+        Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
+          sys.error(s"Couldn't find function $functionName"))
+      val functionClassName = functionInfo.getFunctionClass.getName
+      HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children.map(nodeToExpr))
+    case other => super.nodeToGenerator(node)
+  }
+
   protected def nodeToColumns(node: ASTNode, lowerCase: Boolean): Seq[HiveColumn] = {
     node.children.map(_.children).collect {
       case Token(rawColName, Nil) :: colTypeNode :: comment =>
@@ -670,6 +683,9 @@ private[hive] object HiveQl extends SparkQl with Logging {
     }
   }
 
+  /**
+   *
+   */
   protected def nodeToTypeString(node: ASTNode): String = node.tokenType match {
     case SparkSqlParser.TOK_LIST =>
       val listType :: Nil = node.children

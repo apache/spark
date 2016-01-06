@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.plans.logical.Generate
 import org.scalatest.BeforeAndAfterAll
@@ -187,7 +186,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       "nanosecond 1111111111 outside range")
   }
 
-  test("use Spark Generator instead of hive's UDTF in LATERAL VIEW") {
+  test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {
     val plan = HiveQl.parseSql(
       """
         |SELECT *
@@ -195,6 +194,6 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt AS a, b
       """.stripMargin)
 
-    assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[UnresolvedGenerator])
+    assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
   }
 }
