@@ -664,7 +664,7 @@ setMethod("saveAsParquetFile",
 #' write.text
 #'
 #' Saves the content of the DataFrame in a text file at the specified path.
-#' The DataFrame must have only one column that is of string type.
+#' The DataFrame must have only one column of string type with the name "value".
 #' Each row becomes a new line in the output file.
 #'
 #' @param x A SparkSQL DataFrame
