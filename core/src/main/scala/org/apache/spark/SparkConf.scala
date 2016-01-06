@@ -22,7 +22,7 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
-import org.apache.avro.{SchemaNormalization, Schema}
+import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.network.util.JavaUtils

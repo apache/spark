@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
-import java.util.{TimeZone, Calendar}
+import java.sql.{Date, Timestamp}
+import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row

@@ -18,13 +18,13 @@
 package org.apache.spark.sql.util
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
+
 import scala.collection.mutable.ListBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.sql.execution.QueryExecution
-
 
 /**
  * :: Experimental ::

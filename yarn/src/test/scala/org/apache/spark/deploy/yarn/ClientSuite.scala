@@ -42,7 +42,7 @@ import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.util.{Utils, ResetSystemProperties}
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   with ResetSystemProperties {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, StringWriter}
 import java.sql.{Date, Timestamp}
+
 import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.core.JsonFactory

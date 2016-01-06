@@ -26,9 +26,9 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * The top level component of the UI hierarchy that contains the server.
