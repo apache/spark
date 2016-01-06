@@ -18,8 +18,8 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.stat.test.{StreamingTest, StreamingTestResult, StudentTTest,
-  WelchTTest, BinarySample}
+import org.apache.spark.mllib.stat.test.{BinarySample, StreamingTest, StreamingTestResult,
+  StudentTTest, WelchTTest}
 import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.StatCounter

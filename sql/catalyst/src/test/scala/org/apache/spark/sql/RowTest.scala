@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.{FunSpec, Matchers}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
-import org.scalatest.{Matchers, FunSpec}
 
 class RowTest extends FunSpec with Matchers {
 

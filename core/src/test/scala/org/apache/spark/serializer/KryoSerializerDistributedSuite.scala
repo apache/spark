@@ -17,12 +17,11 @@
 
 package org.apache.spark.serializer
 
-import org.apache.spark.util.Utils
-
 import com.esotericsoftware.kryo.Kryo
 
 import org.apache.spark._
 import org.apache.spark.serializer.KryoDistributedTest._
+import org.apache.spark.util.Utils
 
 class KryoSerializerDistributedSuite extends SparkFunSuite {
 

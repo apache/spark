@@ -20,8 +20,8 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.util.UUID
 
-import scala.util.Try
 import scala.language.implicitConversions
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfterAll

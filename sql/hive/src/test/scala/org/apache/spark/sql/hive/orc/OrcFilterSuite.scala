@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.orc
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, PredicateLeaf}
+import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
 import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.dsl.expressions._

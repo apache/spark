@@ -27,15 +27,13 @@ import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.{Utils, ResetSystemProperties}
-
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
   with ResetSystemProperties {

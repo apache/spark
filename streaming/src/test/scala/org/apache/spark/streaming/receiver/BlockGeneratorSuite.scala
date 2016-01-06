@@ -22,13 +22,13 @@ import scala.language.reflectiveCalls
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers._
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.ManualClock
-import org.apache.spark.{SparkException, SparkConf, SparkFunSuite}
 
 class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 

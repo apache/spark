@@ -24,16 +24,16 @@ import javax.servlet.http.HttpServletResponse
 import scala.collection.mutable
 
 import com.google.common.base.Charsets
-import org.scalatest.BeforeAndAfterEach
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
+import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
+import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
-import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
-import org.apache.spark.deploy.master.DriverState._
 
 /**
  * Tests for the REST application submission protocol used in standalone cluster mode.

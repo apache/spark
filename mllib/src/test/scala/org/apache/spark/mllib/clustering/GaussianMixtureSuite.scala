@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, Vectors, Matrices}
+import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._

@@ -33,8 +33,9 @@ import com.google.common.io.Files
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.network.util.ByteUnit
+
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.network.util.ByteUnit
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 

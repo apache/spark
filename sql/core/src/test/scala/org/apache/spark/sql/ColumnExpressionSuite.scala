@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.scalatest.Matchers._
 
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext

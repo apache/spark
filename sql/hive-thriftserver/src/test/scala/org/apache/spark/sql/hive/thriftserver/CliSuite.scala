@@ -22,15 +22,15 @@ import java.sql.Timestamp
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
+import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
+import org.apache.spark.util.Utils
 
 /**
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary

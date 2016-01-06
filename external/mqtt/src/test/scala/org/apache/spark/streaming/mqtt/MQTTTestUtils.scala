@@ -27,8 +27,8 @@ import org.apache.commons.lang3.RandomUtils
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.Utils
 
 /**
  * Share codes for Scala and Python unit tests

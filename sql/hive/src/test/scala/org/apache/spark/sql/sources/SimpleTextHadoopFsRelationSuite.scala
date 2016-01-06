@@ -21,14 +21,13 @@ import java.io.File
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.{execution, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, PredicateHelper}
 import org.apache.spark.sql.execution.{LogicalRDD, PhysicalRDD}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame, Row, execution}
 import org.apache.spark.util.Utils
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with PredicateHelper {

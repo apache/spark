@@ -17,9 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{SparkException, SparkContext, LocalSparkContext, SparkFunSuite}
-
 import org.mockito.Mockito.spy
+
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**

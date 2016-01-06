@@ -17,13 +17,13 @@
 
 package org.apache.spark.rdd
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException
-
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}

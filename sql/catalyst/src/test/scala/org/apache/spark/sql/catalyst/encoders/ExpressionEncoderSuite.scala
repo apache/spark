@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.util.Arrays
 import java.util.concurrent.ConcurrentMap
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
@@ -27,10 +28,10 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.types.{StructType, ArrayType}
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 

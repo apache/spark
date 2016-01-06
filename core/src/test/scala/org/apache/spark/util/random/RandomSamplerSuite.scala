@@ -18,9 +18,10 @@
 package org.apache.spark.util.random
 
 import java.util.Random
-import scala.collection.mutable.ArrayBuffer
-import org.apache.commons.math3.distribution.PoissonDistribution
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.commons.math3.distribution.PoissonDistribution
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite

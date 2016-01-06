@@ -19,6 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort
 
 import com.google.common.primitives.UnsignedBytes
 import org.scalatest.prop.PropertyChecks
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.unsafe.types.UTF8String
 

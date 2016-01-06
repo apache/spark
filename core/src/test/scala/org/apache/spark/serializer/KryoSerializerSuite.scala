@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileOutputStream, FileInputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -25,14 +25,13 @@ import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
-import org.apache.spark.util.Utils
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")

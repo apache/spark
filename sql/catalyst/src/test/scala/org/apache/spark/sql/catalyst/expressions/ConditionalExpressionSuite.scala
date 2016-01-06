@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
-
 
 class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 

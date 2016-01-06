@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.net.{Inet4Address, NetworkInterface, InetAddress}
+import java.net.{Inet4Address, InetAddress, NetworkInterface}
 
 import scala.collection.JavaConverters._
 import scala.sys.process._

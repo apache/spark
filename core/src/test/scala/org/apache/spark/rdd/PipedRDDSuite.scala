@@ -19,14 +19,14 @@ package org.apache.spark.rdd
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
-
 import scala.collection.Map
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
+
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.util.Utils

@@ -25,7 +25,7 @@ import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
-import org.apache.spark.serializer.{Serializer, JavaSerializer}
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.Utils
 
 class PersistenceEngineSuite extends SparkFunSuite {

@@ -26,19 +26,19 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.mesos.Protos.Value.Scalar
 import org.apache.mesos.Protos._
+import org.apache.mesos.Protos.Value.Scalar
 import org.apache.mesos.SchedulerDriver
+import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.mockito.{ArgumentCaptor, Matchers}
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.executor.MesosExecutorBackend
-import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
   TaskDescription, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 

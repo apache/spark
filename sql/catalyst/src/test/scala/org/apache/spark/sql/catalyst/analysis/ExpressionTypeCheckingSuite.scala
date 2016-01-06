@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{LongType, TypeCollection, StringType}
+import org.apache.spark.sql.types.{LongType, StringType, TypeCollection}
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite {
 

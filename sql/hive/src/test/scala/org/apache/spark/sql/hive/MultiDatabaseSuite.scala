@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 
 class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   private lazy val df = sqlContext.range(10).coalesce(1)

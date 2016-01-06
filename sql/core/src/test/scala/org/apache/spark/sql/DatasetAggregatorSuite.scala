@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-
 import scala.language.postfixOps
 
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
 class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {

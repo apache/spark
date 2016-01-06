@@ -22,13 +22,12 @@ import java.io._
 import scala.collection.mutable.HashSet
 import scala.reflect._
 
-import org.scalatest.BeforeAndAfter
-
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
-import org.apache.spark.util.logging.{RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy, FileAppender}
+import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 

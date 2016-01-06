@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 
 class DataFrameWindowSuite extends QueryTest with SharedSQLContext {

@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.expressions.{Literal, GreaterThan, Not, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GreaterThan, Literal, Not}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, LogicalPlan, Command}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 private[sql] case class TestCommand(cmd: String) extends LogicalPlan with Command {

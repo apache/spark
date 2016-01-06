@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.rpc.{RpcEnv, RpcEndpoint, RpcAddress, TestRpcEndpoint}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv, TestRpcEndpoint}
 
 class InboxSuite extends SparkFunSuite {
 

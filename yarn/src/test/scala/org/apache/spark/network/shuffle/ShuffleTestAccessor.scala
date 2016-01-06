@@ -16,7 +16,7 @@
  */
 package org.apache.spark.network.shuffle
 
-import java.io.{IOException, File}
+import java.io.{File, IOException}
 import java.util.concurrent.ConcurrentMap
 
 import org.apache.hadoop.yarn.api.records.ApplicationId

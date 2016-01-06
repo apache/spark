@@ -23,10 +23,10 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 
 class WriteAheadLogBackedBlockRDDSuite
   extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach {

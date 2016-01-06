@@ -25,23 +25,22 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-import org.mockito.Mockito.{mock, when}
 import org.mockito.{Matchers => mc}
+import org.mockito.Mockito.{mock, when}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
-import org.apache.spark.network.netty.NettyBlockTransferService
-import org.apache.spark.rpc.RpcEnv
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.memory.StaticMemoryManager
+import org.apache.spark.network.netty.NettyBlockTransferService
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
-
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with ResetSystemProperties {

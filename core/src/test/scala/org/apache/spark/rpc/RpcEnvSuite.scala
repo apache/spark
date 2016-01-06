@@ -18,9 +18,9 @@
 package org.apache.spark.rpc
 
 import java.io.{File, NotSerializableException}
-import java.util.UUID
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.{TimeUnit, CountDownLatch, TimeoutException}
+import java.util.UUID
+import java.util.concurrent.{CountDownLatch, TimeoutException, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.Await
