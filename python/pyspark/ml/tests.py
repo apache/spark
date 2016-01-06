@@ -92,6 +92,7 @@ class MockEstimator(Estimator, HasFake):
 class MockModel(MockTransformer, Model, HasFake):
     pass
 
+
 class ParamTypeConversionTests(PySparkTestCase):
     """
     Test that param type conversion happens.
@@ -111,6 +112,7 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
         lr = LogisticRegression(elasticNetParam=0)
         self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
+
 
 class PipelineTests(PySparkTestCase):
 
