@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.net.{URLClassLoader, URL}
+import java.net.{URL, URLClassLoader}
 import java.util.Enumeration
 import java.util.concurrent.ConcurrentHashMap
 

@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.{ScalaReflection, SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -208,10 +208,10 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
-      case a: Cube =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
-      case a: Rollup =>
-        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
+      case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
+        GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
+      case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
+        GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 

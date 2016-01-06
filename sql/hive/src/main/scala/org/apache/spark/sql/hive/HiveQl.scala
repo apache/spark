@@ -25,21 +25,23 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse.SemanticException
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+
 import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.{logical, _}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.execution.datasources.DescribeCommand
@@ -48,7 +50,6 @@ import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
 import org.apache.spark.sql.parser._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, catalyst}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
@@ -1121,12 +1122,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             }),
             rollupGroupByClause.map(e => e match {
               case Token("TOK_ROLLUP_GROUPBY", children) =>
-                Rollup(children.map(nodeToExpr), withLateralView, selectExpressions)
+                Aggregate(Seq(Rollup(children.map(nodeToExpr))), selectExpressions, withLateralView)
               case _ => sys.error("Expect WITH ROLLUP")
             }),
             cubeGroupByClause.map(e => e match {
               case Token("TOK_CUBE_GROUPBY", children) =>
-                Cube(children.map(nodeToExpr), withLateralView, selectExpressions)
+                Aggregate(Seq(Cube(children.map(nodeToExpr))), selectExpressions, withLateralView)
               case _ => sys.error("Expect WITH CUBE")
             }),
             Some(Project(selectExpressions, withLateralView))).flatten.head

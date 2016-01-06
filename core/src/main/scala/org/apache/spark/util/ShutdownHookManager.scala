@@ -23,6 +23,7 @@ import java.util.PriorityQueue
 import scala.util.Try
 
 import org.apache.hadoop.fs.FileSystem
+
 import org.apache.spark.Logging
 
 /**
