@@ -23,8 +23,8 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -54,8 +54,6 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with De
   }
 
   test("Test vector slicer") {
-    val sqlContext = new SQLContext(sc)
-
     val data = Array(
       Vectors.sparse(5, Seq((0, -2.0), (1, 2.3))),
       Vectors.dense(-2.0, 2.3, 0.0, 0.0, 1.0),

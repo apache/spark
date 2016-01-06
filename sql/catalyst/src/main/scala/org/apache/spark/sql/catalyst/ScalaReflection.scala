@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, ArrayData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -63,13 +62,13 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< definitions.BooleanTpe => BooleanType
       case t if t <:< localTypeOf[Array[Byte]] => BinaryType
       case _ =>
-        val className: String = tpe.erasure.typeSymbol.asClass.fullName
+        val className = getClassNameFromType(tpe)
         className match {
           case "scala.Array" =>
             val TypeRef(_, _, Seq(elementType)) = tpe
             arrayClassFor(elementType)
           case other =>
-            val clazz = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
+            val clazz = getClassFromType(tpe)
             ObjectType(clazz)
         }
     }
@@ -117,70 +116,115 @@ object ScalaReflection extends ScalaReflection {
    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
    * calling resolve/bind with a new schema.
    */
-  def constructorFor[T : TypeTag]: Expression = constructorFor(localTypeOf[T], None)
+  def constructorFor[T : TypeTag]: Expression = {
+    val tpe = localTypeOf[T]
+    val clsName = getClassNameFromType(tpe)
+    val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
+    constructorFor(tpe, None, walkedTypePath)
+  }
 
   private def constructorFor(
       tpe: `Type`,
-      path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
+      path: Option[Expression],
+      walkedTypePath: Seq[String]): Expression = ScalaReflectionLock.synchronized {
 
     /** Returns the current path with a sub-field extracted. */
-    def addToPath(part: String): Expression = path
-      .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
-      .getOrElse(UnresolvedAttribute(part))
+    def addToPath(part: String, dataType: DataType, walkedTypePath: Seq[String]): Expression = {
+      val newPath = path
+        .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
+        .getOrElse(UnresolvedAttribute(part))
+      upCastToExpectedType(newPath, dataType, walkedTypePath)
+    }
 
     /** Returns the current path with a field at ordinal extracted. */
-    def addToPathOrdinal(ordinal: Int, dataType: DataType): Expression = path
-      .map(p => GetInternalRowField(p, ordinal, dataType))
-      .getOrElse(BoundReference(ordinal, dataType, false))
+    def addToPathOrdinal(
+        ordinal: Int,
+        dataType: DataType,
+        walkedTypePath: Seq[String]): Expression = {
+      val newPath = path
+        .map(p => GetStructField(p, ordinal))
+        .getOrElse(BoundReference(ordinal, dataType, false))
+      upCastToExpectedType(newPath, dataType, walkedTypePath)
+    }
 
     /** Returns the current path or `BoundReference`. */
-    def getPath: Expression = path.getOrElse(BoundReference(0, schemaFor(tpe).dataType, true))
+    def getPath: Expression = {
+      val dataType = schemaFor(tpe).dataType
+      if (path.isDefined) {
+        path.get
+      } else {
+        upCastToExpectedType(BoundReference(0, dataType, true), dataType, walkedTypePath)
+      }
+    }
 
+    /**
+     * When we build the `fromRowExpression` for an encoder, we set up a lot of "unresolved" stuff
+     * and lost the required data type, which may lead to runtime error if the real type doesn't
+     * match the encoder's schema.
+     * For example, we build an encoder for `case class Data(a: Int, b: String)` and the real type
+     * is [a: int, b: long], then we will hit runtime error and say that we can't construct class
+     * `Data` with int and long, because we lost the information that `b` should be a string.
+     *
+     * This method help us "remember" the required data type by adding a `UpCast`.  Note that we
+     * don't need to cast struct type because there must be `UnresolvedExtractValue` or
+     * `GetStructField` wrapping it, thus we only need to handle leaf type.
+     */
+    def upCastToExpectedType(
+        expr: Expression,
+        expected: DataType,
+        walkedTypePath: Seq[String]): Expression = expected match {
+      case _: StructType => expr
+      case _ => UpCast(expr, expected, walkedTypePath)
+    }
+
+    val className = getClassNameFromType(tpe)
     tpe match {
       case t if !dataTypeFor(t).isInstanceOf[ObjectType] => getPath
 
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
-        WrapOption(constructorFor(optType, path))
+        val className = getClassNameFromType(optType)
+        val newTypePath = s"""- option value class: "$className"""" +: walkedTypePath
+        WrapOption(constructorFor(optType, path, newTypePath), dataTypeFor(optType))
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
         val boxedType = classOf[java.lang.Integer]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, objectType)
 
       case t if t <:< localTypeOf[java.lang.Long] =>
         val boxedType = classOf[java.lang.Long]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, objectType)
 
       case t if t <:< localTypeOf[java.lang.Double] =>
         val boxedType = classOf[java.lang.Double]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, objectType)
 
       case t if t <:< localTypeOf[java.lang.Float] =>
         val boxedType = classOf[java.lang.Float]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, objectType)
 
       case t if t <:< localTypeOf[java.lang.Short] =>
         val boxedType = classOf[java.lang.Short]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, objectType)
 
       case t if t <:< localTypeOf[java.lang.Byte] =>
         val boxedType = classOf[java.lang.Byte]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, objectType)
 
       case t if t <:< localTypeOf[java.lang.Boolean] =>
         val boxedType = classOf[java.lang.Boolean]
         val objectType = ObjectType(boxedType)
-        NewInstance(boxedType, getPath :: Nil, propagateNull = true, objectType)
+        NewInstance(boxedType, getPath :: Nil, objectType)
 
       case t if t <:< localTypeOf[java.sql.Date] =>
         StaticInvoke(
-          DateTimeUtils,
+          DateTimeUtils.getClass,
           ObjectType(classOf[java.sql.Date]),
           "toJavaDate",
           getPath :: Nil,
@@ -188,7 +232,7 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         StaticInvoke(
-          DateTimeUtils,
+          DateTimeUtils.getClass,
           ObjectType(classOf[java.sql.Timestamp]),
           "toJavaTimestamp",
           getPath :: Nil,
@@ -219,9 +263,11 @@ object ScalaReflection extends ScalaReflection {
         primitiveMethod.map { method =>
           Invoke(getPath, method, arrayClassFor(elementType))
         }.getOrElse {
+          val className = getClassNameFromType(elementType)
+          val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
           Invoke(
             MapObjects(
-              p => constructorFor(elementType, Some(p)),
+              p => constructorFor(elementType, Some(p), newTypePath),
               getPath,
               schemaFor(elementType).dataType),
             "array",
@@ -230,28 +276,31 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
+        val className = getClassNameFromType(elementType)
+        val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
         val arrayData =
           Invoke(
             MapObjects(
-              p => constructorFor(elementType, Some(p)),
+              p => constructorFor(elementType, Some(p), newTypePath),
               getPath,
               schemaFor(elementType).dataType),
             "array",
             ObjectType(classOf[Array[Any]]))
 
         StaticInvoke(
-          scala.collection.mutable.WrappedArray,
+          scala.collection.mutable.WrappedArray.getClass,
           ObjectType(classOf[Seq[_]]),
           "make",
           arrayData :: Nil)
 
       case t if t <:< localTypeOf[Map[_, _]] =>
+        // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
         val keyData =
           Invoke(
             MapObjects(
-              p => constructorFor(keyType, Some(p)),
+              p => constructorFor(keyType, Some(p), walkedTypePath),
               Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
               schemaFor(keyType).dataType),
             "array",
@@ -260,53 +309,48 @@ object ScalaReflection extends ScalaReflection {
         val valueData =
           Invoke(
             MapObjects(
-              p => constructorFor(valueType, Some(p)),
+              p => constructorFor(valueType, Some(p), walkedTypePath),
               Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
               schemaFor(valueType).dataType),
             "array",
             ObjectType(classOf[Array[Any]]))
 
         StaticInvoke(
-          ArrayBasedMapData,
+          ArrayBasedMapData.getClass,
           ObjectType(classOf[Map[_, _]]),
           "toScalaMap",
           keyData :: valueData :: Nil)
 
       case t if t <:< localTypeOf[Product] =>
-        val formalTypeArgs = t.typeSymbol.asClass.typeParams
-        val TypeRef(_, _, actualTypeArgs) = t
-        val constructorSymbol = t.member(nme.CONSTRUCTOR)
-        val params = if (constructorSymbol.isMethod) {
-          constructorSymbol.asMethod.paramss
-        } else {
-          // Find the primary constructor, and use its parameter ordering.
-          val primaryConstructorSymbol: Option[Symbol] =
-            constructorSymbol.asTerm.alternatives.find(s =>
-              s.isMethod && s.asMethod.isPrimaryConstructor)
+        val params = getConstructorParameters(t)
 
-          if (primaryConstructorSymbol.isEmpty) {
-            sys.error("Internal SQL error: Product object did not have a primary constructor.")
-          } else {
-            primaryConstructorSymbol.get.asMethod.paramss
-          }
-        }
+        val cls = getClassFromType(tpe)
 
-        val cls = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
-
-        val arguments = params.head.zipWithIndex.map { case (p, i) =>
-          val fieldName = p.name.toString
-          val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
-          val dataType = schemaFor(fieldType).dataType
-
+        val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
+          val Schema(dataType, nullable) = schemaFor(fieldType)
+          val clsName = getClassNameFromType(fieldType)
+          val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
           if (cls.getName startsWith "scala.Tuple") {
-            constructorFor(fieldType, Some(addToPathOrdinal(i, dataType)))
+            constructorFor(
+              fieldType,
+              Some(addToPathOrdinal(i, dataType, newTypePath)),
+              newTypePath)
           } else {
-            constructorFor(fieldType, Some(addToPath(fieldName)))
+            val constructor = constructorFor(
+              fieldType,
+              Some(addToPath(fieldName, dataType, newTypePath)),
+              newTypePath)
+
+            if (!nullable) {
+              AssertNotNull(constructor, t.toString, fieldName, fieldType.toString)
+            } else {
+              constructor
+            }
           }
         }
 
-        val newInstance = NewInstance(cls, arguments, propagateNull = false, ObjectType(cls))
+        val newInstance = NewInstance(cls, arguments, ObjectType(cls), propagateNull = false)
 
         if (path.nonEmpty) {
           expressions.If(
@@ -317,13 +361,37 @@ object ScalaReflection extends ScalaReflection {
         } else {
           newInstance
         }
+
+      case t if Utils.classIsLoadable(className) &&
+        Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+        val udt = Utils.classForName(className)
+          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        val obj = NewInstance(
+          udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+          Nil,
+          dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
     }
   }
 
-  /** Returns expressions for extracting all the fields from the given type. */
+  /**
+   * Returns expressions for extracting all the fields from the given type.
+   *
+   * If the given type is not supported, i.e. there is no encoder can be built for this type,
+   * an [[UnsupportedOperationException]] will be thrown with detailed error message to explain
+   * the type path walked so far and which class we are not supporting.
+   * There are 4 kinds of type path:
+   *  * the root type: `root class: "abc.xyz.MyClass"`
+   *  * the value type of [[Option]]: `option value class: "abc.xyz.MyClass"`
+   *  * the element type of [[Array]] or [[Seq]]: `array element class: "abc.xyz.MyClass"`
+   *  * the field of [[Product]]: `field (class: "abc.xyz.MyClass", name: "myField")`
+   */
   def extractorsFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
-    extractorFor(inputObject, localTypeOf[T]) match {
-      case s: CreateNamedStruct => s
+    val tpe = localTypeOf[T]
+    val clsName = getClassNameFromType(tpe)
+    val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
+    extractorFor(inputObject, tpe, walkedTypePath) match {
+      case expressions.If(_, _, s: CreateNamedStruct) if tpe <:< localTypeOf[Product] => s
       case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
     }
   }
@@ -331,10 +399,28 @@ object ScalaReflection extends ScalaReflection {
   /** Helper for extracting internal fields from a case class. */
   private def extractorFor(
       inputObject: Expression,
-      tpe: `Type`): Expression = ScalaReflectionLock.synchronized {
+      tpe: `Type`,
+      walkedTypePath: Seq[String]): Expression = ScalaReflectionLock.synchronized {
+
+    def toCatalystArray(input: Expression, elementType: `Type`): Expression = {
+      val externalDataType = dataTypeFor(elementType)
+      val Schema(catalystType, nullable) = silentSchemaFor(elementType)
+      if (isNativeType(externalDataType)) {
+        NewInstance(
+          classOf[GenericArrayData],
+          input :: Nil,
+          dataType = ArrayType(catalystType, nullable))
+      } else {
+        val clsName = getClassNameFromType(elementType)
+        val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
+        MapObjects(extractorFor(_, elementType, newPath), input, externalDataType)
+      }
+    }
+
     if (!inputObject.dataType.isInstanceOf[ObjectType]) {
       inputObject
     } else {
+      val className = getClassNameFromType(tpe)
       tpe match {
         case t if t <:< localTypeOf[Option[_]] =>
           val TypeRef(_, _, Seq(optType)) = t
@@ -378,42 +464,28 @@ object ScalaReflection extends ScalaReflection {
 
             // For non-primitives, we can just extract the object from the Option and then recurse.
             case other =>
-              val className: String = optType.erasure.typeSymbol.asClass.fullName
+              val className = getClassNameFromType(optType)
               val classObj = Utils.classForName(className)
               val optionObjectType = ObjectType(classObj)
+              val newPath = s"""- option value class: "$className"""" +: walkedTypePath
 
               val unwrapped = UnwrapOption(optionObjectType, inputObject)
               expressions.If(
                 IsNull(unwrapped),
-                expressions.Literal.create(null, schemaFor(optType).dataType),
-                extractorFor(unwrapped, optType))
+                expressions.Literal.create(null, silentSchemaFor(optType).dataType),
+                extractorFor(unwrapped, optType, newPath))
           }
 
         case t if t <:< localTypeOf[Product] =>
-          val formalTypeArgs = t.typeSymbol.asClass.typeParams
-          val TypeRef(_, _, actualTypeArgs) = t
-          val constructorSymbol = t.member(nme.CONSTRUCTOR)
-          val params = if (constructorSymbol.isMethod) {
-            constructorSymbol.asMethod.paramss
-          } else {
-            // Find the primary constructor, and use its parameter ordering.
-            val primaryConstructorSymbol: Option[Symbol] =
-              constructorSymbol.asTerm.alternatives.find(s =>
-                s.isMethod && s.asMethod.isPrimaryConstructor)
-
-            if (primaryConstructorSymbol.isEmpty) {
-              sys.error("Internal SQL error: Product object did not have a primary constructor.")
-            } else {
-              primaryConstructorSymbol.get.asMethod.paramss
-            }
-          }
-
-          CreateNamedStruct(params.head.flatMap { p =>
-            val fieldName = p.name.toString
-            val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+          val params = getConstructorParameters(t)
+          val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
-            expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
+            val clsName = getClassNameFromType(fieldType)
+            val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
+            expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType, newPath) :: Nil
           })
+          val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
+          expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
         case t if t <:< localTypeOf[Array[_]] =>
           val TypeRef(_, _, Seq(elementType)) = t
@@ -458,28 +530,28 @@ object ScalaReflection extends ScalaReflection {
 
         case t if t <:< localTypeOf[java.sql.Timestamp] =>
           StaticInvoke(
-            DateTimeUtils,
+            DateTimeUtils.getClass,
             TimestampType,
             "fromJavaTimestamp",
             inputObject :: Nil)
 
         case t if t <:< localTypeOf[java.sql.Date] =>
           StaticInvoke(
-            DateTimeUtils,
+            DateTimeUtils.getClass,
             DateType,
             "fromJavaDate",
             inputObject :: Nil)
 
         case t if t <:< localTypeOf[BigDecimal] =>
           StaticInvoke(
-            Decimal,
+            Decimal.getClass,
             DecimalType.SYSTEM_DEFAULT,
             "apply",
             inputObject :: Nil)
 
         case t if t <:< localTypeOf[java.math.BigDecimal] =>
           StaticInvoke(
-            Decimal,
+            Decimal.getClass,
             DecimalType.SYSTEM_DEFAULT,
             "apply",
             inputObject :: Nil)
@@ -499,24 +571,37 @@ object ScalaReflection extends ScalaReflection {
         case t if t <:< localTypeOf[java.lang.Boolean] =>
           Invoke(inputObject, "booleanValue", BooleanType)
 
+        case t if Utils.classIsLoadable(className) &&
+          Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+          val udt = Utils.classForName(className)
+            .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+          val obj = NewInstance(
+            udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+            Nil,
+            dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+          Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+
         case other =>
-          throw new UnsupportedOperationException(s"Extractor for type $other is not supported")
+          throw new UnsupportedOperationException(
+            s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
       }
     }
   }
 
-  private def toCatalystArray(input: Expression, elementType: `Type`): Expression = {
-    val externalDataType = dataTypeFor(elementType)
-    val Schema(catalystType, nullable) = schemaFor(elementType)
-    if (isNativeType(catalystType)) {
-      NewInstance(
-        classOf[GenericArrayData],
-        input :: Nil,
-        dataType = ArrayType(catalystType, nullable))
-    } else {
-      MapObjects(extractorFor(_, elementType), input, externalDataType)
-    }
+  /**
+   * Returns the parameter names and types for the primary constructor of this class.
+   *
+   * Note that it only works for scala classes with primary constructor, and currently doesn't
+   * support inner class.
+   */
+  def getConstructorParameters(cls: Class[_]): Seq[(String, Type)] = {
+    val m = runtimeMirror(cls.getClassLoader)
+    val classSymbol = m.staticClass(cls.getName)
+    val t = classSymbol.selfType
+    getConstructorParameters(t)
   }
+
+  def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 }
 
 /**
@@ -561,7 +646,7 @@ trait ScalaReflection {
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
-    val className: String = tpe.erasure.typeSymbol.asClass.fullName
+    val className = getClassNameFromType(tpe)
     tpe match {
       case t if Utils.classIsLoadable(className) &&
         Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
@@ -590,26 +675,11 @@ trait ScalaReflection {
         Schema(MapType(schemaFor(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< localTypeOf[Product] =>
-        val formalTypeArgs = t.typeSymbol.asClass.typeParams
-        val TypeRef(_, _, actualTypeArgs) = t
-        val constructorSymbol = t.member(nme.CONSTRUCTOR)
-        val params = if (constructorSymbol.isMethod) {
-          constructorSymbol.asMethod.paramss
-        } else {
-          // Find the primary constructor, and use its parameter ordering.
-          val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
-            s => s.isMethod && s.asMethod.isPrimaryConstructor)
-          if (primaryConstructorSymbol.isEmpty) {
-            sys.error("Internal SQL error: Product object did not have a primary constructor.")
-          } else {
-            primaryConstructorSymbol.get.asMethod.paramss
-          }
-        }
+        val params = getConstructorParameters(t)
         Schema(StructType(
-          params.head.map { p =>
-            val Schema(dataType, nullable) =
-              schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
-            StructField(p.name.toString, dataType, nullable)
+          params.map { case (fieldName, fieldType) =>
+            val Schema(dataType, nullable) = schemaFor(fieldType)
+            StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
@@ -638,11 +708,56 @@ trait ScalaReflection {
   }
 
   /**
+   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
+   *
+   * Unlike `schemaFor`, this method won't throw exception for un-supported type, it will return
+   * `NullType` silently instead.
+   */
+  def silentSchemaFor(tpe: `Type`): Schema = try {
+    schemaFor(tpe)
+  } catch {
+    case _: UnsupportedOperationException => Schema(NullType, nullable = true)
+  }
+
+  /** Returns the full class name for a type. */
+  def getClassNameFromType(tpe: `Type`): String = {
+    tpe.erasure.typeSymbol.asClass.fullName
+  }
+
+  /**
    * Returns classes of input parameters of scala function object.
    */
   def getParameterTypes(func: AnyRef): Seq[Class[_]] = {
     val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
     assert(methods.length == 1)
     methods.head.getParameterTypes
+  }
+
+  /**
+   * Returns the parameter names and types for the primary constructor of this type.
+   *
+   * Note that it only works for scala classes with primary constructor, and currently doesn't
+   * support inner class.
+   */
+  def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
+    val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
+    val TypeRef(_, _, actualTypeArgs) = tpe
+    val constructorSymbol = tpe.member(nme.CONSTRUCTOR)
+    val params = if (constructorSymbol.isMethod) {
+      constructorSymbol.asMethod.paramss
+    } else {
+      // Find the primary constructor, and use its parameter ordering.
+      val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
+        s => s.isMethod && s.asMethod.isPrimaryConstructor)
+      if (primaryConstructorSymbol.isEmpty) {
+        sys.error("Internal SQL error: Product object did not have a primary constructor.")
+      } else {
+        primaryConstructorSymbol.get.asMethod.paramss
+      }
+    }
+
+    params.flatten.map { p =>
+      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+    }
   }
 }

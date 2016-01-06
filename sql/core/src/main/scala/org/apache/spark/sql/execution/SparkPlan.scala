@@ -23,20 +23,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
-
-object SparkPlan {
-  protected[sql] val currentContext = new ThreadLocal[SQLContext]()
-}
 
 /**
  * The base class for physical operators.
@@ -49,7 +43,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] final val sqlContext = SparkPlan.currentContext.get()
+  protected[spark] final val sqlContext = SQLContext.getActive().getOrElse(null)
 
   protected def sparkContext = sqlContext.sparkContext
 
@@ -69,9 +63,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /** Overridden make copy also propogates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
-    SparkPlan.currentContext.set(sqlContext)
+    SQLContext.setActive(sqlContext)
     super.makeCopy(newArgs)
   }
+
+  /**
+   * Return all metadata that describes more details of this SparkPlan.
+   */
+  private[sql] def metadata: Map[String, String] = Map.empty
 
   /**
    * Return all metrics containing metrics of this SparkPlan.
@@ -98,17 +97,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
-  /** Specifies whether this operator outputs UnsafeRows */
-  def outputsUnsafeRows: Boolean = false
-
-  /** Specifies whether this operator is capable of processing UnsafeRows */
-  def canProcessUnsafeRows: Boolean = false
-
-  /**
-   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
-   * that are not UnsafeRows).
-   */
-  def canProcessSafeRows: Boolean = true
 
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
@@ -116,18 +104,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override doExecute instead.
    */
   final def execute(): RDD[InternalRow] = {
-    if (children.nonEmpty) {
-      val hasUnsafeInputs = children.exists(_.outputsUnsafeRows)
-      val hasSafeInputs = children.exists(!_.outputsUnsafeRows)
-      assert(!(hasSafeInputs && hasUnsafeInputs),
-        "Child operators should output rows in the same format")
-      assert(canProcessSafeRows || canProcessUnsafeRows,
-        "Operator must be able to process at least one row format")
-      assert(!hasSafeInputs || canProcessSafeRows,
-        "Operator will receive safe rows as input but cannot process safe rows")
-      assert(!hasUnsafeInputs || canProcessUnsafeRows,
-        "Operator will receive unsafe rows as input but cannot process unsafe rows")
-    }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       doExecute()
@@ -280,6 +256,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
 private[sql] trait LeafNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 private[sql] trait UnaryNode extends SparkPlan {

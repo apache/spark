@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
@@ -46,15 +46,8 @@ case class BroadcastNestedLoopJoin(
     case BuildLeft => (right, left)
   }
 
-  override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
-  override def canProcessUnsafeRows: Boolean = true
-
   private[this] def genResultProjection: InternalRow => InternalRow = {
-    if (outputsUnsafeRows) {
       UnsafeProjection.create(schema)
-    } else {
-      identity[InternalRow]
-    }
   }
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning

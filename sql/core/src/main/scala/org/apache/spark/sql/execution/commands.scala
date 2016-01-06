@@ -21,13 +21,13 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -148,8 +148,6 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
-      (keyValueOutput, runFunc)
-
     case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
@@ -232,7 +230,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
-      Seq(AttributeReference("plan", StringType, nullable = false)()),
+      Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false)
   extends RunnableCommand {
 

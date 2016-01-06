@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.{lang => jl}
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.NumberConverter
@@ -74,6 +74,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
+
+  override def nullable: Boolean = true
 
   // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
   protected val yAsymptote: Double = 0.0
@@ -194,6 +196,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
   override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
     NumberConverter.convert(
@@ -620,6 +623,8 @@ case class Logarithm(left: Expression, right: Expression)
   def this(child: Expression) = {
     this(EulerNumber(), child)
   }
+
+  override def nullable: Boolean = true
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val dLeft = input1.asInstanceOf[Double]

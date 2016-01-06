@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
@@ -63,6 +62,33 @@ class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFun
 
   def evaluate(buffer: Row): Any = {
     Row.fromSeq(buffer.toSeq)
+  }
+}
+
+class ScalaAggregateFunctionWithoutInputSchema extends UserDefinedAggregateFunction {
+
+  def inputSchema: StructType = StructType(Nil)
+
+  def bufferSchema: StructType = StructType(StructField("value", LongType) :: Nil)
+
+  def dataType: DataType = LongType
+
+  def deterministic: Boolean = true
+
+  def initialize(buffer: MutableAggregationBuffer): Unit = {
+    buffer.update(0, 0L)
+  }
+
+  def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    buffer.update(0, input.getAs[Seq[Row]](0).map(_.getAs[Int]("v")).sum + buffer.getLong(0))
+  }
+
+  def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    buffer1.update(0, buffer1.getLong(0) + buffer2.getLong(0))
+  }
+
+  def evaluate(buffer: Row): Any = {
+    buffer.getLong(0)
   }
 }
 
@@ -525,80 +551,73 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("single distinct column set") {
-    Seq(true, false).foreach { specializeSingleDistinctAgg =>
-      val conf =
-        (SQLConf.SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING.key,
-          specializeSingleDistinctAgg.toString)
-      withSQLConf(conf) {
-        // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
-        checkAnswer(
-          sqlContext.sql(
-            """
-              |SELECT
-              |  min(distinct value1),
-              |  sum(distinct value1),
-              |  avg(value1),
-              |  avg(value2),
-              |  max(distinct value1)
-              |FROM agg2
-            """.stripMargin),
-          Row(-60, 70.0, 101.0/9.0, 5.6, 100))
+    // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  min(distinct value1),
+          |  sum(distinct value1),
+          |  avg(value1),
+          |  avg(value2),
+          |  max(distinct value1)
+          |FROM agg2
+        """.stripMargin),
+      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
 
-        checkAnswer(
-          sqlContext.sql(
-            """
-              |SELECT
-              |  mydoubleavg(distinct value1),
-              |  avg(value1),
-              |  avg(value2),
-              |  key,
-              |  mydoubleavg(value1 - 1),
-              |  mydoubleavg(distinct value1) * 0.1,
-              |  avg(value1 + value2)
-              |FROM agg2
-              |GROUP BY key
-            """.stripMargin),
-          Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
-            Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
-            Row(null, null, 3.0, 3, null, null, null) ::
-            Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  mydoubleavg(distinct value1),
+          |  avg(value1),
+          |  avg(value2),
+          |  key,
+          |  mydoubleavg(value1 - 1),
+          |  mydoubleavg(distinct value1) * 0.1,
+          |  avg(value1 + value2)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
+        Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
+        Row(null, null, 3.0, 3, null, null, null) ::
+        Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
-        checkAnswer(
-          sqlContext.sql(
-            """
-              |SELECT
-              |  key,
-              |  mydoubleavg(distinct value1),
-              |  mydoublesum(value2),
-              |  mydoublesum(distinct value1),
-              |  mydoubleavg(distinct value1),
-              |  mydoubleavg(value1)
-              |FROM agg2
-              |GROUP BY key
-            """.stripMargin),
-          Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
-            Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
-            Row(3, null, 3.0, null, null, null) ::
-            Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  mydoubleavg(distinct value1),
+          |  mydoublesum(value2),
+          |  mydoublesum(distinct value1),
+          |  mydoubleavg(distinct value1),
+          |  mydoubleavg(value1)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
+        Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
+        Row(3, null, 3.0, null, null, null) ::
+        Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
 
-        checkAnswer(
-          sqlContext.sql(
-            """
-              |SELECT
-              |  count(value1),
-              |  count(*),
-              |  count(1),
-              |  count(DISTINCT value1),
-              |  key
-              |FROM agg2
-              |GROUP BY key
-            """.stripMargin),
-          Row(3, 3, 3, 2, 1) ::
-            Row(3, 4, 4, 2, 2) ::
-            Row(0, 2, 2, 0, 3) ::
-            Row(3, 4, 4, 3, null) :: Nil)
-      }
-    }
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  count(value1),
+          |  count(*),
+          |  count(1),
+          |  count(DISTINCT value1),
+          |  key
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(3, 3, 3, 2, 1) ::
+        Row(3, 4, 4, 2, 2) ::
+        Row(0, 2, 2, 0, 3) ::
+        Row(3, 4, 4, 3, null) :: Nil)
   }
 
   test("single distinct multiple columns set") {
@@ -856,6 +875,43 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         // udaf returns a Row as the output value.
         Row(expectedAnswer)
       )
+    }
+  }
+
+  test("udaf without specifying inputSchema") {
+    withTempTable("noInputSchemaUDAF") {
+      sqlContext.udf.register("noInputSchema", new ScalaAggregateFunctionWithoutInputSchema)
+
+      val data =
+        Row(1, Seq(Row(1), Row(2), Row(3))) ::
+          Row(1, Seq(Row(4), Row(5), Row(6))) ::
+          Row(2, Seq(Row(-10))) :: Nil
+      val schema =
+        StructType(
+          StructField("key", IntegerType) ::
+            StructField("myArray",
+              ArrayType(StructType(StructField("v", IntegerType) :: Nil))) :: Nil)
+      sqlContext.createDataFrame(
+        sparkContext.parallelize(data, 2),
+        schema)
+        .registerTempTable("noInputSchemaUDAF")
+
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT key, noInputSchema(myArray)
+            |FROM noInputSchemaUDAF
+            |GROUP BY key
+          """.stripMargin),
+        Row(1, 21) :: Row(2, -10) :: Nil)
+
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT noInputSchema(myArray)
+            |FROM noInputSchemaUDAF
+          """.stripMargin),
+        Row(11) :: Nil)
     }
   }
 }

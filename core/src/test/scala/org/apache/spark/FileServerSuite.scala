@@ -27,9 +27,9 @@ import org.apache.commons.lang3.RandomUtils
 
 import org.apache.spark.util.Utils
 
-import SSLSampleConfigs._
-
 class FileServerSuite extends SparkFunSuite with LocalSparkContext {
+
+  import SSLSampleConfigs._
 
   @transient var tmpDir: File = _
   @transient var tmpFile: File = _
@@ -75,8 +75,11 @@ class FileServerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   override def afterAll() {
-    super.afterAll()
-    Utils.deleteRecursively(tmpDir)
+    try {
+      Utils.deleteRecursively(tmpDir)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("Distributing files locally") {

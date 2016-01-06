@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
+import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
-import java.util.{Arrays, UUID, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
@@ -33,11 +33,10 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
 import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, SQLConf, Row => SparkRow}
-
 
 private[hive] class SparkExecuteStatementOperation(
     parentSession: HiveSession,
@@ -134,12 +133,12 @@ private[hive] class SparkExecuteStatementOperation(
 
   def getResultSetSchema: TableSchema = resultSchema
 
-  override def run(): Unit = {
+  override def runInternal(): Unit = {
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
-      runInternal()
+      execute()
     } else {
       val sparkServiceUGI = Utils.getUGI()
 
@@ -151,7 +150,7 @@ private[hive] class SparkExecuteStatementOperation(
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
               try {
-                runInternal()
+                execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
@@ -188,7 +187,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  override def runInternal(): Unit = {
+  private def execute(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)

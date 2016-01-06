@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
-
 
 class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -230,19 +229,5 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
-  }
-
-  test("function dropAnyNull") {
-    val drop = DropAnyNull(CreateStruct(Seq('a.string.at(0), 'b.string.at(1))))
-    val a = create_row("a", "q")
-    val nullStr: String = null
-    checkEvaluation(drop, a, a)
-    checkEvaluation(drop, null, create_row("b", nullStr))
-    checkEvaluation(drop, null, create_row(nullStr, nullStr))
-
-    val row = 'r.struct(
-      StructField("a", StringType, false),
-      StructField("b", StringType, true)).at(0)
-    checkEvaluation(DropAnyNull(row), null, create_row(null))
   }
 }

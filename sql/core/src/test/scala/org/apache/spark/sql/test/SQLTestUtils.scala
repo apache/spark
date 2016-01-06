@@ -20,8 +20,8 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.util.UUID
 
-import scala.util.Try
 import scala.language.implicitConversions
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfterAll
@@ -177,6 +177,21 @@ private[sql] trait SQLTestUtils
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
     sqlContext.sql(s"USE $db")
     try f finally sqlContext.sql(s"USE default")
+  }
+
+  /**
+   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
+   */
+  protected def stripSparkFilter(df: DataFrame): DataFrame = {
+    val schema = df.schema
+    val childRDD = df
+      .queryExecution
+      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
+      .child
+      .execute()
+      .map(row => Row.fromSeq(row.toSeq(schema)))
+
+    sqlContext.createDataFrame(childRDD, schema)
   }
 
   /**

@@ -35,7 +35,7 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 Note that we can have more than 1 thread in local mode, and in cases like Spark Streaming, we may
-actually require one to prevent any sort of starvation issues.
+actually require more than 1 thread to prevent any sort of starvation issues.
 
 Properties that specify some time duration should be configured with a unit of time.
 The following format is accepted:
@@ -48,7 +48,7 @@ The following format is accepted:
     1y (years)
 
 
-Properties that specify a byte size should be configured with a unit of size.  
+Properties that specify a byte size should be configured with a unit of size.
 The following format is accepted:
 
     1b (bytes)
@@ -190,6 +190,15 @@ of the most common options to set are:
   <td>
     The cluster manager to connect to. See the list of
     <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.submit.deployMode</code></td>
+  <td>(none)</td>
+  <td>
+    The deploy mode of Spark driver program, either "client" or "cluster",
+    Which means to launch driver program locally ("client")
+    or remotely ("cluster") on one of the nodes inside the cluster.
   </td>
 </tr>
 </table>
@@ -586,7 +595,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>snappy</td>
+  <td>lz4</td>
   <td>
     The codec used to compress internal data such as RDD partitions, broadcast variables and
     shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
@@ -647,10 +656,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.kryo.registrator</code></td>
   <td>(none)</td>
   <td>
-    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
+    If you use Kryo serialization, give a comma-separated list of classes that register your custom classes with Kryo. This
     property is useful if you need to register your classes in a custom way, e.g. to specify a custom
     field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
-    set to a class that extends
+    set to classes that extend
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
@@ -678,9 +687,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for
-    <code>StorageLevel.MEMORY_ONLY_SER</code>). Can save substantial space at the cost of some
-    extra CPU time.
+    Whether to compress serialized RDD partitions (e.g. for 
+    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java 
+    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python). 
+    Can save substantial space at the cost of some extra CPU time. 
   </td>
 </tr>
 <tr>
@@ -719,8 +729,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.fraction</code></td>
   <td>0.75</td>
   <td>
-    Fraction of the heap space used for execution and storage. The lower this is, the more
-    frequently spills and cached data eviction occur. The purpose of this config is to set
+    Fraction of (heap space - 300MB) used for execution and storage. The lower this is, the
+    more frequently spills and cached data eviction occur. The purpose of this config is to set
     aside memory for internal metadata, user data structures, and imprecise size estimation
     in the case of sparse, unusually large records. Leaving this at the default value is
     recommended. For more detail, see <a href="tuning.html#memory-management-overview">
@@ -736,6 +746,22 @@ Apart from these, the following properties are also available, and may be useful
     working memory may be available to execution and tasks may spill to disk more often.
     Leaving this at the default value is recommended. For more detail, see
     <a href="tuning.html#memory-management-overview">this description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.offHeap.enabled</code></td>
+  <td>true</td>
+  <td>
+    If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.offHeap.size</code></td>
+  <td>0</td>
+  <td>
+    The absolute amount of memory which can be used for off-heap allocation.
+    This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
+    This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
   </td>
 </tr>
 <tr>
@@ -795,13 +821,6 @@ Apart from these, the following properties are also available, and may be useful
     Size of each piece of a block for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
     too small, <code>BlockManager</code> might take a performance hit.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
-  <td>
-    Which broadcast implementation to use.
   </td>
 </tr>
 <tr>
@@ -992,14 +1011,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.broadcast.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP broadcast server to listen on.
-    This is not relevant for torrent broadcast.
-  </td>
-</tr>
-<tr>
   <td><code>spark.driver.host</code></td>
   <td>(local hostname)</td>
   <td>
@@ -1020,6 +1031,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the executor to listen on. This is used for communicating with the driver.
+    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>
@@ -1027,6 +1039,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver's HTTP file server to listen on.
+    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>
@@ -1049,14 +1062,6 @@ Apart from these, the following properties are also available, and may be useful
     increment the port used in the previous attempt by 1 before retrying. This
     essentially allows it to try a range of ports from the start port specified
     to port + maxRetries.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.replClassServer.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP class server to listen on.
-    This is only relevant for the Spark shell.
   </td>
 </tr>
 <tr>
@@ -1085,7 +1090,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rpc.lookupTimeout</code></td>
   <td>120s</td>
   <td>
-    Duration for an RPC remote endpoint lookup operation to wait before timing out.  
+    Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
 </tr>
 </table>
@@ -1424,8 +1429,8 @@ Apart from these, the following properties are also available, and may be useful
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            either <code>akka</code> for Akka based connections or <code>fs</code> for broadcast and
-            file server.</p>
+            either <code>akka</code> for Akka based connections or <code>fs</code> for file
+            server.</p>
         </td>
     </tr>
     <tr>
@@ -1549,7 +1554,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.streaming.stopGracefullyOnShutdown</code></td>
   <td>false</td>
   <td>
-    If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM 
+    If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM
     shutdown rather than immediately.
   </td>
 </tr>

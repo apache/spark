@@ -202,25 +202,36 @@ private[ml] object DefaultParamsWriter {
    *  - timestamp
    *  - sparkVersion
    *  - uid
-   *  - paramMap: These must be encodable using [[org.apache.spark.ml.param.Param.jsonEncode()]].
+   *  - paramMap
+   *  - (optionally, extra metadata)
+   * @param extraMetadata  Extra metadata to be saved at same level as uid, paramMap, etc.
+   * @param paramMap  If given, this is saved in the "paramMap" field.
+   *                  Otherwise, all [[org.apache.spark.ml.param.Param]]s are encoded using
+   *                  [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
   def saveMetadata(
       instance: Params,
       path: String,
       sc: SparkContext,
-      extraMetadata: Option[JValue] = None): Unit = {
+      extraMetadata: Option[JObject] = None,
+      paramMap: Option[JValue] = None): Unit = {
     val uid = instance.uid
     val cls = instance.getClass.getName
     val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
-    val jsonParams = params.map { case ParamPair(p, v) =>
+    val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
-    }.toList
-    val metadata = ("class" -> cls) ~
+    }.toList))
+    val basicMetadata = ("class" -> cls) ~
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("paramMap" -> jsonParams) ~
-      ("extraMetadata" -> extraMetadata)
+      ("paramMap" -> jsonParams)
+    val metadata = extraMetadata match {
+      case Some(jObject) =>
+        basicMetadata ~ jObject
+      case None =>
+        basicMetadata
+    }
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = compact(render(metadata))
     sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
@@ -251,8 +262,8 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    * @param params  paramMap, as a [[JValue]]
-   * @param extraMetadata  Extra metadata saved by [[DefaultParamsWriter.saveMetadata()]]
-   * @param metadataStr  Full metadata file String (for debugging)
+   * @param metadata  All metadata, including the other fields
+   * @param metadataJson  Full metadata file String (for debugging)
    */
   case class Metadata(
       className: String,
@@ -260,8 +271,8 @@ private[ml] object DefaultParamsReader {
       timestamp: Long,
       sparkVersion: String,
       params: JValue,
-      extraMetadata: Option[JValue],
-      metadataStr: String)
+      metadata: JValue,
+      metadataJson: String)
 
   /**
    * Load metadata from file.
@@ -279,13 +290,12 @@ private[ml] object DefaultParamsReader {
     val timestamp = (metadata \ "timestamp").extract[Long]
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
     val params = metadata \ "paramMap"
-    val extraMetadata = (metadata \ "extraMetadata").extract[Option[JValue]]
     if (expectedClassName.nonEmpty) {
       require(className == expectedClassName, s"Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
 
-    Metadata(className, uid, timestamp, sparkVersion, params, extraMetadata, metadataStr)
+    Metadata(className, uid, timestamp, sparkVersion, params, metadata, metadataStr)
   }
 
   /**
@@ -303,7 +313,17 @@ private[ml] object DefaultParamsReader {
         }
       case _ =>
         throw new IllegalArgumentException(
-          s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
+          s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
     }
+  }
+
+  /**
+   * Load a [[Params]] instance from the given path, and return it.
+   * This assumes the instance implements [[MLReadable]].
+   */
+  def loadParamsInstance[T](path: String, sc: SparkContext): T = {
+    val metadata = DefaultParamsReader.loadMetadata(path, sc)
+    val cls = Utils.classForName(metadata.className)
+    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
   }
 }

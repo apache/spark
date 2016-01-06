@@ -91,7 +91,9 @@ trait CaseWhenLike extends Expression {
 
   // both then and else expressions should be considered.
   def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
-  def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
+  def valueTypesEqual: Boolean = valueTypes.size <= 1 || valueTypes.sliding(2, 1).forall {
+    case Seq(dt1, dt2) => dt1.sameType(dt2)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (valueTypesEqual) {
@@ -426,30 +428,3 @@ case class Greatest(children: Seq[Expression]) extends Expression {
   }
 }
 
-/** Operator that drops a row when it contains any nulls. */
-case class DropAnyNull(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def nullable: Boolean = true
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
-
-  protected override def nullSafeEval(input: Any): InternalRow = {
-    val row = input.asInstanceOf[InternalRow]
-    if (row.anyNull) {
-      null
-    } else {
-      row
-    }
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval.anyNull()) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = $eval;
-        }
-      """
-    })
-  }
-}

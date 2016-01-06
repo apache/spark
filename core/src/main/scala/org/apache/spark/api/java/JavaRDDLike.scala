@@ -19,7 +19,7 @@ package org.apache.spark.api.java
 
 import java.{lang => jl}
 import java.lang.{Iterable => JIterable, Long => JLong}
-import java.util.{Comparator, List => JList, Iterator => JIterator}
+import java.util.{Comparator, Iterator => JIterator, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -28,6 +28,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark._
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
@@ -56,11 +57,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  @deprecated("Use partitions() instead.", "1.1.0")
-  def splits: JList[Partition] = rdd.partitions.toSeq.asJava
-
   /** Set of partitions in this RDD. */
   def partitions: JList[Partition] = rdd.partitions.toSeq.asJava
+
+  /** Return the number of partitions in this RDD. */
+  @Since("1.6.0")
+  def getNumPartitions: Int = rdd.getNumPartitions
 
   /** The partitioner of this RDD. */
   def partitioner: Optional[Partitioner] = JavaUtils.optionToOptional(rdd.partitioner)
@@ -342,13 +344,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
      asJavaIteratorConverter(rdd.toLocalIterator).asJava
 
   /**
-   * Return an array that contains all of the elements in this RDD.
-   * @deprecated As of Spark 1.0.0, toArray() is deprecated, use {@link #collect()} instead
-   */
-  @deprecated("use collect()", "1.0.0")
-  def toArray(): JList[T] = collect()
-
-  /**
    * Return an array that contains all of the elements in a specific partition of this RDD.
    */
   def collectPartitions(partitionIds: Array[Int]): Array[JList[T]] = {
@@ -556,7 +551,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Returns the top k (largest) elements from this RDD as defined by
-   * the specified Comparator[T].
+   * the specified Comparator[T] and maintains the order.
    * @param num k, the number of top elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
@@ -567,7 +562,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Returns the top k (largest) elements from this RDD using the
-   * natural ordering for T.
+   * natural ordering for T and maintains the order.
    * @param num k, the number of top elements to return
    * @return an array of top elements
    */

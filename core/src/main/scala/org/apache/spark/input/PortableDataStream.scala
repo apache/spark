@@ -21,13 +21,11 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 
 import scala.collection.JavaConverters._
 
-import com.google.common.io.{Closeables, ByteStreams}
+import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
-
-import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
  * A general format for reading whole files in as streams, byte arrays,
@@ -44,7 +42,7 @@ private[spark] abstract class StreamFileInputFormat[T]
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
     val files = listStatus(context).asScala
-    val totalLen = files.map(file => if (file.isDir) 0L else file.getLen).sum
+    val totalLen = files.map(file => if (file.isDirectory) 0L else file.getLen).sum
     val maxSplitSize = Math.ceil(totalLen * 1.0 / files.size).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
@@ -135,8 +133,7 @@ class PortableDataStream(
 
   private val confBytes = {
     val baos = new ByteArrayOutputStream()
-    SparkHadoopUtil.get.getConfigurationFromJobContext(context).
-      write(new DataOutputStream(baos))
+    context.getConfiguration.write(new DataOutputStream(baos))
     baos.toByteArray
   }
 

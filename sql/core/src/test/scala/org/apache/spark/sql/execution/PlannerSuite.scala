@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.joins.{SortMergeJoin, BroadcastHashJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -44,10 +44,10 @@ class PlannerSuite extends SharedSQLContext {
         fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
-    // For the new aggregation code path, there will be three aggregate operator for
+    // For the new aggregation code path, there will be four aggregate operator for
     // distinct aggregations.
     assert(
-      aggregations.size == 2 || aggregations.size == 3,
+      aggregations.size == 2 || aggregations.size == 4,
       s"The plan of query $query does not have partial aggregations.")
   }
 
@@ -169,7 +169,7 @@ class PlannerSuite extends SharedSQLContext {
 
       withTempTable("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
-        assert(exp.toString.contains("PushedFilter: [EqualTo(key,15)]"))
+        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
       }
     }
   }

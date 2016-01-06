@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
@@ -67,6 +67,17 @@ class VectorAssemblerSuite
       case Row(v: Vector) =>
         assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
     }
+  }
+
+  test("transform should throw an exception in case of unsupported type") {
+    val df = sqlContext.createDataFrame(Seq(("a", "b", "c"))).toDF("a", "b", "c")
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("a", "b", "c"))
+      .setOutputCol("features")
+    val thrown = intercept[SparkException] {
+      assembler.transform(df)
+    }
+    assert(thrown.getMessage contains "VectorAssembler does not support the StringType type")
   }
 
   test("ML attributes") {

@@ -19,8 +19,8 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.Queue
 
-import org.apache.spark.util.Distribution
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Distribution
 
 /**
  * :: DeveloperApi ::

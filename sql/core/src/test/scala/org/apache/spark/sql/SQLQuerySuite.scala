@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
@@ -1996,5 +1996,75 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
     sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "true")
     verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
+  }
+
+  test("SPARK-10707: nullability should be correctly propagated through set operations (1)") {
+    // This test produced an incorrect result of 1 before the SPARK-10707 fix because of the
+    // NullPropagation rule: COUNT(v) got replaced with COUNT(1) because the output column of
+    // UNION was incorrectly considered non-nullable:
+    checkAnswer(
+      sql("""SELECT count(v) FROM (
+            |  SELECT v FROM (
+            |    SELECT 'foo' AS v UNION ALL
+            |    SELECT NULL AS v
+            |  ) my_union WHERE isnull(v)
+            |) my_subview""".stripMargin),
+      Seq(Row(0)))
+  }
+
+  test("SPARK-10707: nullability should be correctly propagated through set operations (2)") {
+    // This test uses RAND() to stop column pruning for Union and checks the resulting isnull
+    // value. This would produce an incorrect result before the fix in SPARK-10707 because the "v"
+    // column of the union was considered non-nullable.
+    checkAnswer(
+      sql(
+        """
+          |SELECT a FROM (
+          |  SELECT ISNULL(v) AS a, RAND() FROM (
+          |    SELECT 'foo' AS v UNION ALL SELECT null AS v
+          |  ) my_union
+          |) my_view
+        """.stripMargin),
+      Row(false) :: Row(true) :: Nil)
+  }
+
+  test("rollup") {
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by rollup(course, year)" +
+        " order by course, year"),
+      Row(null, null, 113000.0) ::
+        Row("Java", null, 50000.0) ::
+        Row("Java", 2012, 20000.0) ::
+        Row("Java", 2013, 30000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row("dotNET", 2012, 15000.0) ::
+        Row("dotNET", 2013, 48000.0) :: Nil
+    )
+  }
+
+  test("cube") {
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by cube(course, year)"),
+      Row("Java", 2012, 20000.0) ::
+        Row("Java", 2013, 30000.0) ::
+        Row("Java", null, 50000.0) ::
+        Row("dotNET", 2012, 15000.0) ::
+        Row("dotNET", 2013, 48000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row(null, 2012, 35000.0) ::
+        Row(null, 2013, 78000.0) ::
+        Row(null, null, 113000.0) :: Nil
+    )
+  }
+
+  test("hash function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempTable("tbl") {
+      df.registerTempTable("tbl")
+      checkAnswer(
+        df.select(hash($"i", $"j")),
+        sql("SELECT hash(i, j) from tbl")
+      )
+    }
   }
 }

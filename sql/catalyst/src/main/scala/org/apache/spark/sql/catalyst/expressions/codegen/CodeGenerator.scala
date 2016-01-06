@@ -27,11 +27,11 @@ import org.codehaus.janino.ClassBodyEvaluator
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-
+import org.apache.spark.util.Utils
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -104,16 +104,13 @@ class CodeGenContext {
   val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // State used for subexpression elimination.
-  case class SubExprEliminationState(
-      isLoaded: String,
-      code: GeneratedExpressionCode,
-      fnName: String)
+  case class SubExprEliminationState(isNull: String, value: String)
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
-  // The collection of isLoaded variables that need to be reset on each row.
-  val subExprIsLoadedVariables = mutable.ArrayBuffer.empty[String]
+  // The collection of sub-exression result resetting methods that need to be called on each row.
+  val subExprResetVariables = mutable.ArrayBuffer.empty[String]
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -408,7 +405,6 @@ class CodeGenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach(e => {
       val expr = e.head
-      val isLoaded = freshName("isLoaded")
       val isNull = freshName("isNull")
       val value = freshName("value")
       val fnName = freshName("evalExpr")
@@ -417,18 +413,12 @@ class CodeGenContext {
       val code = expr.gen(this)
       val fn =
         s"""
-           |private void $fnName(InternalRow ${INPUT_ROW}) {
-           |  if (!$isLoaded) {
-           |    ${code.code.trim}
-           |    $isLoaded = true;
-           |    $isNull = ${code.isNull};
-           |    $value = ${code.value};
-           |  }
+           |private void $fnName(InternalRow $INPUT_ROW) {
+           |  ${code.code.trim}
+           |  $isNull = ${code.isNull};
+           |  $value = ${code.value};
            |}
            """.stripMargin
-      code.code = fn
-      code.isNull = isNull
-      code.value = value
 
       addNewFunction(fnName, fn)
 
@@ -448,18 +438,12 @@ class CodeGenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-
-      // Maintain the loaded value and isNull as member variables. This is necessary if the codegen
-      // function is split across multiple functions.
-      // TODO: maintaining this as a local variable probably allows the compiler to do better
-      // optimizations.
-      addMutableState("boolean", isLoaded, s"$isLoaded = false;")
       addMutableState("boolean", isNull, s"$isNull = false;")
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
-      subExprIsLoadedVariables += isLoaded
 
-      val state = SubExprEliminationState(isLoaded, code, fnName)
+      subExprResetVariables += s"$fnName($INPUT_ROW);"
+      val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
     })
   }
@@ -536,7 +520,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(

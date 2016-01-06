@@ -19,19 +19,21 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
 
 /**
@@ -53,6 +55,8 @@ private[spark] object JsonProtocol {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
   private implicit val format = DefaultFormats
+
+  private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
@@ -96,6 +100,7 @@ private[spark] object JsonProtocol {
         executorMetricsUpdateToJson(metricsUpdate)
       case blockUpdated: SparkListenerBlockUpdated =>
         throw new MatchError(blockUpdated)  // TODO(ekl) implement this
+      case _ => parse(mapper.writeValueAsString(event))
     }
   }
 
@@ -398,7 +403,7 @@ private[spark] object JsonProtocol {
     ("RDD ID" -> rddInfo.id) ~
     ("Name" -> rddInfo.name) ~
     ("Scope" -> rddInfo.scope.map(_.toJson)) ~
-    ("Callsite" -> callsiteToJson(rddInfo.callSite)) ~
+    ("Callsite" -> rddInfo.callSite) ~
     ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
@@ -406,11 +411,6 @@ private[spark] object JsonProtocol {
     ("Memory Size" -> rddInfo.memSize) ~
     ("ExternalBlockStore Size" -> rddInfo.externalBlockStoreSize) ~
     ("Disk Size" -> rddInfo.diskSize)
-  }
-
-  def callsiteToJson(callsite: CallSite): JValue = {
-    ("Short Form" -> callsite.shortForm) ~
-    ("Long Form" -> callsite.longForm)
   }
 
   def storageLevelToJson(storageLevel: StorageLevel): JValue = {
@@ -511,6 +511,8 @@ private[spark] object JsonProtocol {
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
+      case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
+        .asInstanceOf[SparkListenerEvent]
     }
   }
 
@@ -857,9 +859,7 @@ private[spark] object JsonProtocol {
     val scope = Utils.jsonOption(json \ "Scope")
       .map(_.extract[String])
       .map(RDDOperationScope.fromJson)
-    val callsite = Utils.jsonOption(json \ "Callsite")
-      .map(callsiteFromJson)
-      .getOrElse(CallSite.empty)
+    val callsite = Utils.jsonOption(json \ "Callsite").map(_.extract[String]).getOrElse("")
     val parentIds = Utils.jsonOption(json \ "Parent IDs")
       .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
       .getOrElse(Seq.empty)
@@ -878,12 +878,6 @@ private[spark] object JsonProtocol {
     rddInfo.externalBlockStoreSize = externalBlockStoreSize
     rddInfo.diskSize = diskSize
     rddInfo
-  }
-
-  def callsiteFromJson(json: JValue): CallSite = {
-    val shortForm = (json \ "Short Form").extract[String]
-    val longForm = (json \ "Long Form").extract[String]
-    CallSite(shortForm, longForm)
   }
 
   def storageLevelFromJson(json: JValue): StorageLevel = {

@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.Serializable
 
-import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate._
+import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.OriginalType
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -256,8 +256,21 @@ private[sql] object ParquetFilters {
       case sources.GreaterThanOrEqual(name, value) =>
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
+      case sources.In(name, valueSet) =>
+        makeInSet.lift(dataTypeOf(name)).map(_(name, valueSet.toSet))
+
       case sources.And(lhs, rhs) =>
-        (createFilter(schema, lhs) ++ createFilter(schema, rhs)).reduceOption(FilterApi.and)
+        // At here, it is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        // Pushing one side of AND down is only safe to do at the top level.
+        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
+        for {
+          lhsFilter <- createFilter(schema, lhs)
+          rhsFilter <- createFilter(schema, rhs)
+        } yield FilterApi.and(lhsFilter, rhsFilter)
 
       case sources.Or(lhs, rhs) =>
         for {

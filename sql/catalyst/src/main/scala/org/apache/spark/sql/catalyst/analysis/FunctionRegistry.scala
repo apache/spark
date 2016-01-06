@@ -49,7 +49,7 @@ trait FunctionRegistry {
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private val functionBuilders =
+  private[sql] val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
   override def registerFunction(
@@ -278,12 +278,27 @@ object FunctionRegistry {
     // misc functions
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
+    expression[Murmur3Hash]("hash"),
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
-    expression[MonotonicallyIncreasingID]("monotonically_increasing_id")
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+
+    // grouping sets
+    expression[Cube]("cube"),
+    expression[Rollup]("rollup"),
+
+    // window functions
+    expression[Lead]("lead"),
+    expression[Lag]("lag"),
+    expression[RowNumber]("row_number"),
+    expression[CumeDist]("cume_dist"),
+    expression[NTile]("ntile"),
+    expression[Rank]("rank"),
+    expression[DenseRank]("dense_rank"),
+    expression[PercentRank]("percent_rank")
   )
 
   val builtin: SimpleFunctionRegistry = {

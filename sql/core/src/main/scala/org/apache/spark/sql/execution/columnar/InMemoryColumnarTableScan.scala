@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.columnar
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.{Accumulable, Accumulator, Accumulators}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -26,10 +28,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{ConvertToUnsafe, LeafNode, SparkPlan}
+import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{Accumulable, Accumulator, Accumulators}
 
 private[sql] object InMemoryRelation {
   def apply(
@@ -38,9 +39,7 @@ private[sql] object InMemoryRelation {
       storageLevel: StorageLevel,
       child: SparkPlan,
       tableName: Option[String]): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel,
-      if (child.outputsUnsafeRows) child else ConvertToUnsafe(child),
-      tableName)()
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
 }
 
 /**
@@ -60,10 +59,12 @@ private[sql] case class InMemoryRelation(
     storageLevel: StorageLevel,
     @transient child: SparkPlan,
     tableName: Option[String])(
-    @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    @transient private var _statistics: Statistics = null,
-    private var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
+    @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null,
+    @transient private[sql] var _statistics: Statistics = null,
+    private[sql] var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
   extends LogicalPlan with MultiInstanceRelation {
+
+  override def producedAttributes: AttributeSet = outputSet
 
   private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
     if (_batchStats == null) {
@@ -163,7 +164,9 @@ private[sql] case class InMemoryRelation(
                         .flatMap(_.values))
 
           batchStats += stats
-          CachedBatch(rowCount, columnBuilders.map(_.build().array()), stats)
+          CachedBatch(rowCount, columnBuilders.map { builder =>
+            JavaUtils.bufferToArray(builder.build())
+          }, stats)
         }
 
         def hasNext: Boolean = rowIterator.hasNext
@@ -220,8 +223,6 @@ private[sql] case class InMemoryColumnarTableScan(
 
   // The cached version does not change the outputOrdering of the original SparkPlan.
   override def outputOrdering: Seq[SortOrder] = relation.child.outputOrdering
-
-  override def outputsUnsafeRows: Boolean = true
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
 

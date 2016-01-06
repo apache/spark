@@ -71,15 +71,18 @@ class StandaloneDynamicAllocationSuite
   }
 
   override def afterAll(): Unit = {
-    masterRpcEnv.shutdown()
-    workerRpcEnvs.foreach(_.shutdown())
-    master.stop()
-    workers.foreach(_.stop())
-    masterRpcEnv = null
-    workerRpcEnvs = null
-    master = null
-    workers = null
-    super.afterAll()
+    try {
+      masterRpcEnv.shutdown()
+      workerRpcEnvs.foreach(_.shutdown())
+      master.stop()
+      workers.foreach(_.stop())
+      masterRpcEnv = null
+      workerRpcEnvs = null
+      master = null
+      workers = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("dynamic allocation default behavior") {
@@ -365,7 +368,7 @@ class StandaloneDynamicAllocationSuite
     val executors = getExecutorIds(sc)
     assert(executors.size === 2)
     assert(sc.killExecutor(executors.head))
-    assert(sc.killExecutor(executors.head))
+    assert(!sc.killExecutor(executors.head))
     val apps = getApplications()
     assert(apps.head.executors.size === 1)
     // The limit should not be lowered twice
@@ -386,23 +389,28 @@ class StandaloneDynamicAllocationSuite
     // the driver refuses to kill executors it does not know about
     syncExecutors(sc)
     val executors = getExecutorIds(sc)
+    val executorIdsBefore = executors.toSet
     assert(executors.size === 2)
-    // kill executor 1, and replace it
+    // kill and replace an executor
     assert(sc.killAndReplaceExecutor(executors.head))
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
       assert(apps.head.executors.size === 2)
+      val executorIdsAfter = getExecutorIds(sc).toSet
+      // make sure the executor was killed and replaced
+      assert(executorIdsBefore != executorIdsAfter)
     }
 
-    var apps = getApplications()
-    // kill executor 1
-    assert(sc.killExecutor(executors.head))
-    apps = getApplications()
-    assert(apps.head.executors.size === 2)
-    assert(apps.head.getExecutorLimit === 2)
-    // kill executor 2
-    assert(sc.killExecutor(executors(1)))
-    apps = getApplications()
+    // kill old executor (which is killedAndReplaced) should fail
+    assert(!sc.killExecutor(executors.head))
+
+    // refresh executors list
+    val newExecutors = getExecutorIds(sc)
+    syncExecutors(sc)
+
+    // kill newly created executor and do not replace it
+    assert(sc.killExecutor(newExecutors(1)))
+    val apps = getApplications()
     assert(apps.head.executors.size === 1)
     assert(apps.head.getExecutorLimit === 1)
   }
@@ -430,7 +438,7 @@ class StandaloneDynamicAllocationSuite
     val executorIdToTaskCount = taskScheduler invokePrivate getMap()
     executorIdToTaskCount(executors.head) = 1
     // kill the busy executor without force; this should fail
-    assert(killExecutor(sc, executors.head, force = false))
+    assert(!killExecutor(sc, executors.head, force = false))
     apps = getApplications()
     assert(apps.head.executors.size === 2)
 
@@ -466,7 +474,7 @@ class StandaloneDynamicAllocationSuite
     (0 until numWorkers).map { i =>
       val rpcEnv = workerRpcEnvs(i)
       val worker = new Worker(rpcEnv, 0, cores, memory, Array(masterRpcEnv.address),
-        Worker.SYSTEM_NAME + i, Worker.ENDPOINT_NAME, null, conf, securityManager)
+        Worker.ENDPOINT_NAME, null, conf, securityManager)
       rpcEnv.setupEndpoint(Worker.ENDPOINT_NAME, worker)
       worker
     }

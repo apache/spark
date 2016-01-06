@@ -20,21 +20,20 @@ package org.apache.spark.scheduler
 import java.io.File
 import java.util.concurrent.TimeoutException
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
+import org.apache.hadoop.mapred.{JobConf, OutputCommitter, TaskAttemptContext, TaskAttemptID}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
-import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
-
 import org.apache.spark._
-import org.apache.spark.rdd.{RDD, FakeOutputCommitter}
+import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
 import org.apache.spark.util.Utils
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.language.postfixOps
 
 /**
  * Unit tests for the output commit coordination functionality.

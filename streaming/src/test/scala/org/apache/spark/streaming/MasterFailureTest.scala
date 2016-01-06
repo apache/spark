@@ -17,23 +17,21 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.Logging
-import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.util.Utils
-
-import scala.util.Random
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
-
 import java.io.{File, IOException}
 import java.nio.charset.Charset
 import java.util.UUID
 
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+import scala.util.Random
+
 import com.google.common.io.Files
-
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
+import org.apache.spark.Logging
+import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.Utils
 
 private[streaming]
 object MasterFailureTest extends Logging {

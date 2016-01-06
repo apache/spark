@@ -220,18 +220,18 @@ class RDD(object):
 
     def cache(self):
         """
-        Persist this RDD with the default storage level (C{MEMORY_ONLY_SER}).
+        Persist this RDD with the default storage level (C{MEMORY_ONLY}).
         """
         self.is_cached = True
-        self.persist(StorageLevel.MEMORY_ONLY_SER)
+        self.persist(StorageLevel.MEMORY_ONLY)
         return self
 
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY):
         """
         Set this RDD's storage level to persist its values across operations
         after the first time it is computed. This can only be used to assign
         a new storage level if the RDD does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
+        If no storage level is specified defaults to (C{MEMORY_ONLY}).
 
         >>> rdd = sc.parallelize(["b", "a", "c"])
         >>> rdd.persist().is_cached
@@ -2015,7 +2015,7 @@ class RDD(object):
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
         [[1, 2, 3, 4, 5]]
         """
-        jrdd = self._jrdd.coalesce(numPartitions)
+        jrdd = self._jrdd.coalesce(numPartitions, shuffle)
         return RDD(jrdd, self.ctx, self._jrdd_deserializer)
 
     def zip(self, other):

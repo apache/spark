@@ -18,7 +18,7 @@
 package org.apache.spark.storage
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{RDDOperationScope, RDD}
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.util.{CallSite, Utils}
 
 @DeveloperApi
@@ -28,7 +28,7 @@ class RDDInfo(
     val numPartitions: Int,
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],
-    val callSite: CallSite = CallSite.empty,
+    val callSite: String = "",
     val scope: Option[RDDOperationScope] = None)
   extends Ordered[RDDInfo] {
 
@@ -58,6 +58,6 @@ private[spark] object RDDInfo {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
     val parentIds = rdd.dependencies.map(_.rdd.id)
     new RDDInfo(rdd.id, rddName, rdd.partitions.length,
-      rdd.getStorageLevel, parentIds, rdd.creationSite, rdd.scope)
+      rdd.getStorageLevel, parentIds, rdd.creationSite.shortForm, rdd.scope)
   }
 }

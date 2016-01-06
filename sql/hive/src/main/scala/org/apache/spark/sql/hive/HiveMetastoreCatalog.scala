@@ -31,21 +31,21 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.execution.{datasources, FileRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
-import org.apache.spark.sql.execution.{FileRelation, datasources}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
 
 private[hive] case class HiveSerDe(
     inputFormat: Option[String] = None,
@@ -411,7 +411,12 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     // evil case insensitivity issue, which is reconciled within `ParquetRelation`.
     val parquetOptions = Map(
       ParquetRelation.METASTORE_SCHEMA -> metastoreSchema.json,
-      ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString)
+      ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
+      ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
+        metastoreRelation.tableName,
+        Some(metastoreRelation.databaseName)
+      ).unquotedString
+    )
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
 
@@ -722,6 +727,8 @@ private[hive] case class MetastoreRelation
   override def hashCode(): Int = {
     Objects.hashCode(databaseName, tableName, alias, output)
   }
+
+  override protected def otherCopyArgs: Seq[AnyRef] = table :: sqlContext :: Nil
 
   @transient val hiveQlTable: Table = {
     // We start by constructing an API table as Hive performs several important transformations

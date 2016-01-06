@@ -21,14 +21,13 @@ import java.io.File
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.{execution, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, PredicateHelper}
 import org.apache.spark.sql.execution.{LogicalRDD, PhysicalRDD}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame, Row, execution}
 import org.apache.spark.util.Utils
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with PredicateHelper {
@@ -80,7 +79,11 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
 
   private var partitionedDF: DataFrame = _
 
-  private val partitionedDataSchema: StructType = StructType('a.int :: 'b.int :: 'c.string :: Nil)
+  private val partitionedDataSchema: StructType =
+    new StructType()
+      .add("a", IntegerType)
+      .add("b", IntegerType)
+      .add("c", StringType)
 
   protected override def beforeAll(): Unit = {
     this.tempPath = Utils.createTempDir()

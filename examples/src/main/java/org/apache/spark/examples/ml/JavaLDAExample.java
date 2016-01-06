@@ -16,7 +16,7 @@
  */
 
 package org.apache.spark.examples.ml;
-
+// $example on$
 import java.util.regex.Pattern;
 
 import org.apache.spark.SparkConf;
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+// $example off$
 
 /**
  * An example demonstrating LDA
@@ -45,6 +46,7 @@ import org.apache.spark.sql.types.StructType;
  */
 public class JavaLDAExample {
 
+  // $example on$
   private static class ParseVector implements Function<String, Row> {
     private static final Pattern separator = Pattern.compile(" ");
 
@@ -91,4 +93,5 @@ public class JavaLDAExample {
 
     jsc.stop();
   }
+  // $example off$
 }

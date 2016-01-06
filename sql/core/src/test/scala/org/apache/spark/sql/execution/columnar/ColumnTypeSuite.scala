@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
 
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeProjection}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
-import org.apache.spark.{Logging, SparkFunSuite}
-
 
 class ColumnTypeSuite extends SparkFunSuite with Logging {
   private val DEFAULT_BUFFER_SIZE = 512
@@ -35,7 +34,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   test("defaultSize") {
     val checks = Map(
-      NULL-> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
+      NULL -> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
       FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
       STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 16, MAP_TYPE -> 32)
 

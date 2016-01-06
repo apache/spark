@@ -17,14 +17,14 @@
 
 package org.apache.spark.rpc.netty
 
-import java.util.concurrent.{ThreadPoolExecutor, ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Promise
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
@@ -106,44 +106,30 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-      postMessage(
-        name,
-        _ => message,
-        () => { logWarning(s"Drop $message because $name has been stopped") })
+      postMessage(name, message, (e) => logWarning(s"Message $message dropped.", e))
     }
   }
 
   /** Posts a message sent by a remote endpoint. */
   def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
-    def createMessage(sender: NettyRpcEndpointRef): InboxMessage = {
-      val rpcCallContext =
-        new RemoteNettyRpcCallContext(
-          nettyEnv, sender, callback, message.senderAddress, message.needReply)
-      ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext)
-    }
-
-    def onEndpointStopped(): Unit = {
-      callback.onFailure(
-        new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
-    }
-
-    postMessage(message.receiver.name, createMessage, onEndpointStopped)
+    val rpcCallContext =
+      new RemoteNettyRpcCallContext(nettyEnv, callback, message.senderAddress)
+    val rpcMessage = RpcMessage(message.senderAddress, message.content, rpcCallContext)
+    postMessage(message.receiver.name, rpcMessage, (e) => callback.onFailure(e))
   }
 
   /** Posts a message sent by a local endpoint. */
   def postLocalMessage(message: RequestMessage, p: Promise[Any]): Unit = {
-    def createMessage(sender: NettyRpcEndpointRef): InboxMessage = {
-      val rpcCallContext =
-        new LocalNettyRpcCallContext(sender, message.senderAddress, message.needReply, p)
-      ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext)
-    }
+    val rpcCallContext =
+      new LocalNettyRpcCallContext(message.senderAddress, p)
+    val rpcMessage = RpcMessage(message.senderAddress, message.content, rpcCallContext)
+    postMessage(message.receiver.name, rpcMessage, (e) => p.tryFailure(e))
+  }
 
-    def onEndpointStopped(): Unit = {
-      p.tryFailure(
-        new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
-    }
-
-    postMessage(message.receiver.name, createMessage, onEndpointStopped)
+  /** Posts a one-way message. */
+  def postOneWayMessage(message: RequestMessage): Unit = {
+    postMessage(message.receiver.name, OneWayMessage(message.senderAddress, message.content),
+      (e) => throw e)
   }
 
   /**
@@ -155,21 +141,26 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
    */
   private def postMessage(
       endpointName: String,
-      createMessageFn: NettyRpcEndpointRef => InboxMessage,
-      callbackIfStopped: () => Unit): Unit = {
+      message: InboxMessage,
+      callbackIfStopped: (Exception) => Unit): Unit = {
     val shouldCallOnStop = synchronized {
       val data = endpoints.get(endpointName)
       if (stopped || data == null) {
         true
       } else {
-        data.inbox.post(createMessageFn(data.ref))
+        data.inbox.post(message)
         receivers.offer(data)
         false
       }
     }
     if (shouldCallOnStop) {
       // We don't need to call `onStop` in the `synchronized` block
-      callbackIfStopped()
+      val error = if (stopped) {
+          new IllegalStateException("RpcEnv already stopped.")
+        } else {
+          new SparkException(s"Could not find $endpointName or it has been stopped.")
+        }
+      callbackIfStopped(error)
     }
   }
 

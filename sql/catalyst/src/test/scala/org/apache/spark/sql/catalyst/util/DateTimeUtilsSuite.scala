@@ -22,8 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
@@ -343,6 +343,14 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("2015-03-18T12:03.17-0:70")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-1:0:0")).isEmpty)
+
+    // Truncating the fractional seconds
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-03-18T12:03:17.123456789+0:00")).get ===
+        c.getTimeInMillis * 1000 + 123456)
   }
 
   test("hours") {

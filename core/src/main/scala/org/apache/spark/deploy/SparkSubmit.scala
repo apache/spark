@@ -37,9 +37,9 @@ import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
-import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
+import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.{SparkException, SparkUserAppException, SPARK_VERSION}
+import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -545,6 +545,10 @@ object SparkSubmit {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
+    }
+
+    // assure a keytab is available from any place in a JVM
+    if (clusterManager == YARN || clusterManager == LOCAL) {
       if (args.principal != null) {
         require(args.keytab != null, "Keytab must be specified when principal is specified")
         if (!new File(args.keytab).exists()) {
@@ -961,7 +965,7 @@ private[spark] object SparkSubmitUtils {
     // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
     // other spark-streaming utility components. Underscore is there to differentiate between
     // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
-    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 
     components.foreach { comp =>

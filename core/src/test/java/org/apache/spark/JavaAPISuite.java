@@ -688,13 +688,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void toArray() {
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3));
-    List<Integer> list = rdd.toArray();
-    Assert.assertEquals(Arrays.asList(1, 2, 3), list);
-  }
-
-  @Test
   public void cartesian() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));
@@ -973,6 +966,19 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
   }
 
+  @Test
+  public void getNumPartitions(){
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaDoubleRDD rdd2 = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0), 2);
+    JavaPairRDD<String, Integer> rdd3 = sc.parallelizePairs(Arrays.asList(
+            new Tuple2<>("a", 1),
+            new Tuple2<>("aa", 2),
+            new Tuple2<>("aaa", 3)
+    ), 2);
+    Assert.assertEquals(3, rdd1.getNumPartitions());
+    Assert.assertEquals(2, rdd2.getNumPartitions());
+    Assert.assertEquals(2, rdd3.getNumPartitions());
+  }
 
   @Test
   public void repartition() {
@@ -1233,7 +1239,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<IntWritable, Text> output = sc.newAPIHadoopFile(outputDir,
         org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat.class,
-        IntWritable.class, Text.class, new Job().getConfiguration());
+        IntWritable.class, Text.class, Job.getInstance().getConfiguration());
     Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>, String>() {
       @Override
       public String call(Tuple2<IntWritable, Text> x) {
