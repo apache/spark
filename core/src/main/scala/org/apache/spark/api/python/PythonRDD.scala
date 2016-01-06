@@ -19,7 +19,7 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
+import java.util.{ArrayList => JArrayList, Collections, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable

@@ -29,7 +29,8 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.{SQLContext, SQLConf}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
@@ -39,7 +40,6 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.util.{ShutdownHookManager, Utils}
-import org.apache.spark.{SparkConf, SparkContext}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive

@@ -40,6 +40,7 @@ object MimaExcludes {
         excludePackage("org.apache.spark.rpc"),
         excludePackage("org.spark-project.jetty"),
         excludePackage("org.apache.spark.unused"),
+        excludePackage("org.apache.spark.util.collection.unsafe"),
         excludePackage("org.apache.spark.sql.catalyst"),
         excludePackage("org.apache.spark.sql.execution"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this"),
@@ -114,6 +115,13 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-12149 Added new fields to ExecutorSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
+      ) ++
+      // SPARK-12665 Remove deprecated and unused classes
+      Seq(
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.graphx.GraphKryoRegistrator"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$")
       )
     case v if v.startsWith("1.6") =>
       Seq(
