@@ -24,7 +24,7 @@ import java.io.UnsupportedEncodingException;
  * A couple of utility methods that help with parsing ASTs.
  *
  * Both methods in this class were take from the SemanticAnalyzer in Hive:
- * ql/src/java/org/apache/hadoop/hive/ql/parse/SemanticAnalyzer.java
+ * ql/src/java/org/apache/hadoop/hive/ql/parse/BaseSemanticAnalyzer.java
  */
 public final class ParseUtils {
   private ParseUtils() {
