@@ -724,7 +724,7 @@ private[spark] object JsonProtocol {
       readMetrics.setRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
       readMetrics.setLocalBytesRead((readJson \ "Local Bytes Read").extractOpt[Long].getOrElse(0L))
       readMetrics.setFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
-      readMetrics.setRecordsRead((readJson \ "Total Records Read").extract[Long])
+      readMetrics.setRecordsRead((readJson \ "Total Records Read").extractOpt[Long].getOrElse(0L))
       metrics.mergeShuffleReadMetrics()
     }
 
@@ -732,7 +732,8 @@ private[spark] object JsonProtocol {
     Utils.jsonOption(json \ "Shuffle Write Metrics").foreach { writeJson =>
       val writeMetrics = metrics.registerShuffleWriteMetrics()
       writeMetrics.incShuffleBytesWritten((writeJson \ "Shuffle Bytes Written").extract[Long])
-      writeMetrics.incShuffleRecordsWritten((writeJson \ "Shuffle Records Written").extract[Long])
+      writeMetrics.incShuffleRecordsWritten((writeJson \ "Shuffle Records Written")
+        .extractOpt[Long].getOrElse(0L))
       writeMetrics.incShuffleWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
     }
 
@@ -741,15 +742,15 @@ private[spark] object JsonProtocol {
       val writeMethod = DataWriteMethod.withName((outJson \ "Data Write Method").extract[String])
       val outputMetrics = metrics.registerOutputMetrics(writeMethod)
       outputMetrics.setBytesWritten((outJson \ "Bytes Written").extract[Long])
-      outputMetrics.setRecordsWritten((outJson \ "Records Written").extract[Long])
+      outputMetrics.setRecordsWritten((outJson \ "Records Written").extractOpt[Long].getOrElse(0L))
     }
 
     // Input metrics
     Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
-      val readMethod = DataReadMethod.withName((json \ "Data Read Method").extract[String])
+      val readMethod = DataReadMethod.withName((inJson \ "Data Read Method").extract[String])
       val inputMetrics = metrics.registerInputMetrics(readMethod)
-      inputMetrics.setBytesRead((json \ "Bytes Read").extract[Long])
-      inputMetrics.incRecordsRead((json \ "Records Read").extract[Long])
+      inputMetrics.setBytesRead((inJson \ "Bytes Read").extract[Long])
+      inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
     }
 
     metrics.updatedBlocks =
