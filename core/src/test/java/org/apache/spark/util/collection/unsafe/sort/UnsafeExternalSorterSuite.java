@@ -370,6 +370,37 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
+  public void forcedSpillingWithoutComparator() throws Exception {
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
+      blockManager,
+      taskContext,
+      null,
+      null,
+      /* initialSize */ 1024,
+      pageSizeBytes);
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    int batch = n / 4;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
+      if (i % batch == batch - 1) {
+        sorter.spill();
+      }
+    }
+    UnsafeSorterIterator iter = sorter.getIterator();
+    for (int i = 0; i < n; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      assert(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+    }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
   public void testPeakMemoryUsed() throws Exception {
     final long recordLengthBytes = 8;
     final long pageSizeBytes = 256;
