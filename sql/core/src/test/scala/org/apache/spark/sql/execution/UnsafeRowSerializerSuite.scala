@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.Utils
+import org.apache.spark.util.testing._
 
 /**
  * used to test close InputStream in UnsafeRowSerializer
