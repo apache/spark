@@ -195,4 +195,11 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
   }
+
+  test("parse union distinct/except/intersect") {
+    HiveQl.parseSql("select a, b from t1 union all t2 union all t3")
+    HiveQl.parseSql("select a, b from t1 union distinct t2 union distinct t3")
+    HiveQl.parseSql("select a, b from t1 except t2 except t3")
+    HiveQl.parseSql("select a, b from t1 intersect t2 intersect t3")
+  }
 }
