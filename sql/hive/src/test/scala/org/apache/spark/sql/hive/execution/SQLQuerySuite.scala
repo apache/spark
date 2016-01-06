@@ -936,6 +936,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(e.getMessage.contains("Distinct window functions are not supported"))
   }
 
+  test("window function: better support of parentheses") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, product,
+          |sum(product + 1) over (partition by ((1) + (1 - 1) -
+          |(2 * 1 / 2) + (1) + product - (product)) order by 2)
+          |from windowData
+        """.stripMargin),
+      Seq(
+        (1, "a", 5, 51),
+        (2, "a", 6, 51),
+        (3, "b", 7, 51),
+        (4, "b", 8, 51),
+        (5, "c", 9, 51),
+        (6, "c", 10, 51)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
   test("window function: expressions in arguments of a window functions") {
     val data = Seq(
       WindowData(1, "a", 5),

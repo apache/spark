@@ -24,7 +24,7 @@ ASTLabelType=CommonTree;
 backtrack=false;
 k=3;
 }
-import SelectClauseParser, FromClauseParser, IdentifiersParser;
+import SelectClauseParser, FromClauseParser, IdentifiersParser, ExpressionParser;
 
 tokens {
 TOK_INSERT;
