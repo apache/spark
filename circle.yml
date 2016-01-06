@@ -4,13 +4,15 @@ machine:
 
 dependencies:
   override:
-    - build/sbt assembly  # since some tests might need the assembly JAR
+    - build/sbt "set updateOptions := updateOptions.value.withCachedResolution(true) " assembly
+  cache_directories:
+    - "~/.sbt"
 
 test:
   override:
     - dev/lint-scala
     - dev/lint-java
-    - build/sbt sql/test
+    - build/sbt "set updateOptions := updateOptions.value.withCachedResolution(true)" sql/test
   # Copy test reports to Circle test reports dir
   post:
     - mkdir -p $CIRCLE_TEST_REPORTS/test-reports/
