@@ -352,11 +352,11 @@ setMethod("crc32",
 setMethod("hash",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(...), function (x) {
+            jcols <- lapply(list(x, ...), function (x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
-            jc <- callJStatic("org.apache.spark.sql.functions", "hash", x@jc, jcols)
+            jc <- callJStatic("org.apache.spark.sql.functions", "hash", jcols)
             column(jc)
           })
 
