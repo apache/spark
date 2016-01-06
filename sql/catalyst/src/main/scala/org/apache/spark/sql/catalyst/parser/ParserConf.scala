@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 trait ParserConf {
-  def supportQuotedId: String
+  def supportQuotedId: Boolean
   def supportSQL11ReservedKeywords: Boolean
 }
 
