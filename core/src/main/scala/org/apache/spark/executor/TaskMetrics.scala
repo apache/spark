@@ -48,7 +48,7 @@ class TaskMetrics(
   import InternalAccumulator._
 
   def this(host: String) {
-    this(InternalAccumulator.create().map { accum => (accum.name.get, accum) }.toMap, host)
+    this(InternalAccumulator.create().map { a => (a.name.get, a) }.toMap, host)
   }
 
   // Needed for Java
@@ -341,7 +341,7 @@ class InputMetrics private (
   private[spark] def this(readMethod: DataReadMethod.Value) {
     this(
       readMethod,
-      InternalAccumulator.createInputAccums().map { acc => (acc.name.get, acc) }.toMap)
+      InternalAccumulator.createInputAccums().map { a => (a.name.get, a) }.toMap)
   }
 
   /**
@@ -426,7 +426,7 @@ class ShuffleReadMetrics private (
    * * A better alternative to use is [[TaskMetrics.registerTempShuffleReadMetrics]].
    */
   private[spark] def this() {
-    this(InternalAccumulator.createShuffleReadAccums().map { acc => (acc.name.get, acc) }.toMap)
+    this(InternalAccumulator.createShuffleReadAccums().map { a => (a.name.get, a) }.toMap)
   }
 
   /**
@@ -514,7 +514,7 @@ class ShuffleWriteMetrics private (
    * A better alternative to use is [[TaskMetrics.registerShuffleWriteMetrics]].
    */
   private[spark] def this() {
-    this(InternalAccumulator.createShuffleWriteAccums().map { acc => (acc.name.get, acc) }.toMap)
+    this(InternalAccumulator.createShuffleWriteAccums().map { a => (a.name.get, a) }.toMap)
   }
 
   /**

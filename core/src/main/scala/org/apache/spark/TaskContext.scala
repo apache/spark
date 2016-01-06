@@ -153,8 +153,7 @@ abstract class TaskContext extends Serializable {
    */
   def taskAttemptId(): Long
 
-  /** ::DeveloperApi:: */
-  @DeveloperApi
+  @deprecated("TaskMetrics will be made private in a future version", "2.0.0")
   def taskMetrics(): TaskMetrics
 
   /**

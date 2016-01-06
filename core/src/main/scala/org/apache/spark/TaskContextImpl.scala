@@ -122,5 +122,18 @@ private[spark] class TaskContextImpl(
     internalAccumulators.map { a => (a.name.get, a) }.toMap
   }
 
-  val taskMetrics: TaskMetrics = new TaskMetrics(internalMetricsToAccumulators)
+  /**
+   * Metrics associated with this task.
+   */
+  val taskMetrics: TaskMetrics = {
+    val testing = sys.props.contains("spark.testing")
+    if (testing && internalMetricsToAccumulators.isEmpty) {
+      // In tests, we may construct our own dummy TaskContexts where the list of internal
+      // accumulators is empty. Since TaskMetrics complains if it doesn't find the expected
+      // accumulators, we just pass in a list of dummy ones here.
+      new TaskMetrics(InternalAccumulator.create().map { a => (a.name.get, a) }.toMap)
+    } else {
+      new TaskMetrics(internalMetricsToAccumulators)
+    }
+  }
 }
