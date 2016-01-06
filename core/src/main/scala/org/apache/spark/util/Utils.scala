@@ -1950,39 +1950,139 @@ private[spark] object Utils extends Logging {
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
 
-    require(startPort == 0 || (1024 <= startPort && startPort < 65536),
-      "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
-
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val maxRetries = portMaxRetries(conf)
-    for (offset <- 0 to maxRetries) {
-      // Do not increment port if startPort is 0, which is treated as a special port
-      val tryPort = if (startPort == 0) {
-        startPort
-      } else {
-        // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
-      }
+
+    def portRangeToList(ranges: String): List[(Long, Long)] = {
+      ranges.split(":").map { r => val ret = r.substring(1, r.length - 1).split(",")
+        (ret(0).toLong, ret(1).toLong)
+      }.toList
+    }
+
+    def startOnce(tryPort: Int): (Option[T], Int) = {
+      val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
       try {
         val (service, port) = startService(tryPort)
         logInfo(s"Successfully started service$serviceString on port $port.")
-        return (service, port)
+        (Some(service), port)
       } catch {
         case e: Exception if isBindCollision(e) =>
-          if (offset >= maxRetries) {
-            val exceptionMessage =
-              s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
-            val exception = new BindException(exceptionMessage)
-            // restore original stack trace
-            exception.setStackTrace(e.getStackTrace)
-            throw exception
-          }
-          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
-            s"Attempting port ${tryPort + 1}.")
+          logWarning(s"Service$serviceString could not bind on port $tryPort. ")
+          (None, -1)
       }
     }
-    // Should never happen
-    throw new SparkException(s"Failed to start service$serviceString on port $startPort")
+
+    def retryPort(next: Int => Int, maxRetries: Int): (T, Int) = {
+
+      for (offset <- 0 to maxRetries) {
+        val tryPort = next(offset)
+        try {
+          val (service, port) = startService(tryPort)
+          logInfo(s"Successfully started service$serviceString on port $port.")
+          return (service, port)
+        } catch {
+          case e: Exception if isBindCollision(e) =>
+            if (offset >= maxRetries) {
+              val exceptionMessage =
+                s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
+              val exception = new BindException(exceptionMessage)
+              // restore original stack trace
+              exception.setStackTrace(e.getStackTrace)
+              throw exception
+            }
+            logWarning(s"Service$serviceString could not bind on port $tryPort.")
+        }
+      }
+      // Should never happen
+      throw new SparkException(s"Failed to start service$serviceString on port $startPort")
+    }
+
+    def startFromAvailable(rand: Boolean = false): (T, Int) = {
+
+      val ports = portRangeToList(getPortRangeRestriction(conf).get) // checked above for empty
+
+      val filteredPorts = ports.map(r => (r._1 to r._2).toList).reduce(_ ++ _).
+        distinct.filterNot(_ == startPort)
+      val maxRetries = Math.min(portMaxRetries(conf), filteredPorts.size)
+
+      val availPorts = {
+        if (rand) {
+          scala.util.Random.shuffle(filteredPorts.take(maxRetries)).toArray
+        } else {
+          filteredPorts.sorted.toArray
+        }
+      }
+
+      val tryPort = (x: Int) => availPorts(x).toInt
+
+      retryPort(tryPort, maxRetries)
+    }
+
+    require(startPort == 0 || (1024 <= startPort && startPort < 65536),
+      "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
+
+    if (hasPortRangeRestriction(conf)) {
+
+      if (startPort != 0) {
+
+        val (service, port) = startOnce(startPort)
+
+        if (port != -1) {
+          (service.get, port)
+        } else {
+          // try other
+          startFromAvailable()
+        }
+      }
+      else {
+        // try random
+        startFromAvailable(true)
+      }
+
+    } else {
+
+      val maxRetries = portMaxRetries(conf)
+
+      // Do not increment port if startPort is 0, which is treated as a special port
+      val tryPort = (x: Int) => if (startPort == 0) {
+        startPort
+      } else {
+        // If the new port wraps around, do not try a privilege port
+        ((startPort + x - 1024) % (65536 - 1024)) + 1024
+      }
+
+      retryPort(tryPort, maxRetries)
+    }
+  }
+
+  /**
+   * Checks if there is any port restriction (currently used only with mesos)
+   * @param conf the SparkConfig to use
+   * @return true if port range restriction holds false otherwise
+   */
+  def hasPortRangeRestriction(conf: SparkConf): Boolean = {
+    // Caution: the property is for internal use only
+    conf.getOption("spark.mesos.executor.port.ranges").isDefined
+  }
+
+  /**
+   * Gets the allowed port ranges to use (currently  used only with mesos)
+   * @param conf the SparkConfig to use
+   * @return the string containing a list of port ranges in the format:
+   * (begin_port_number_1, end_port_number_1):...:(begin_port_number_n, end_port_number_n)
+   */
+  def getPortRangeRestriction(conf: SparkConf): Option[String] = {
+    // Caution:  the property is for internal use only
+    conf.getOption("spark.mesos.executor.port.ranges")
+  }
+
+  /**
+   * Sets the allowed port ranges to use (currently used only with mesos).
+   * @param conf the SparkConfig to use
+   * @param ports a list of port ranges with format: (begin_port_number, end_port_number)
+   */
+  def setPortRangeRestriction(conf: SparkConf, ports: List[(Long, Long)]): Unit = {
+    // Caution: the property is for internal use only
+    conf.set("spark.mesos.executor.port.ranges", ports.mkString(":"))
   }
 
   /**

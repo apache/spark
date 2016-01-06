@@ -140,6 +140,13 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     res.asScala.filter(_.getName == name).map(_.getScalar.getValue).sum
   }
 
+  protected def getRangeResource(res: JList[Resource], name: String): List[(Long, Long)] = {
+    // A resource can have multiple values in the offer since it can either be from
+    // a specific role or wildcard.
+    res.asScala.filter(_.getName == name).flatMap(_.getRanges.getRangeList.asScala
+      .map(r => (r.getBegin, r.getEnd)).toList).toList
+  }
+
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
@@ -340,4 +347,24 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForUnmetConstraints", "120s")
   }
 
+  protected def getExecutorRelatedPort(sc: SparkContext, configProperty: String): Int = {
+    // either: spark.blockManager.port or spark.executor.port
+    sc.conf.getInt(s"$configProperty", 0)
+  }
+
+  protected def checkPorts(sc: SparkContext, ports: List[(Long, Long)]): Boolean = {
+
+    def checkIfInRange(port: Int, ps: List[(Long, Long)]): Boolean = {
+      ps.exists(r => r._1 <= port & r._2 >= port)
+    }
+
+    val portsToCheck = List(getExecutorRelatedPort(sc, "spark.executor.port"),
+      getExecutorRelatedPort(sc, "spark.blockManager.port"))
+    val nonZeroPorts = portsToCheck.filter(_ != 0)
+    val withinRange = nonZeroPorts.forall(p => checkIfInRange(p, ports))
+
+    // make sure we have enough ports to allocate per offer
+    ports.map(r => r._2 - r._1 + 1).sum >= portsToCheck.size && withinRange
+  }
 }
+
