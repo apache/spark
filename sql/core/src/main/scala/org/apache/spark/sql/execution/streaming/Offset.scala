@@ -22,7 +22,16 @@ package org.apache.spark.sql.execution.streaming
  * stream. An [[Offset]] must be comparable.
  */
 trait Offset extends Serializable {
-  def >(other: Offset): Boolean
 
-  def <(other: Offset): Boolean
+  /**
+   * Returns a negative integer, zero, or a positive integer as this object is less than, equal to,
+   * or greater than the specified object.
+   */
+  def compare(other: Offset): Int
+
+  def >(other: Offset): Boolean = compare(other) > 0
+  def <(other: Offset): Boolean = compare(other) < 0
+  def <=(other: Offset): Boolean = compare(other) <= 0
+  def >=(other: Offset): Boolean = compare(other) >= 0
+  def ==(other: Offset): Boolean = compare(other) == 0
 }

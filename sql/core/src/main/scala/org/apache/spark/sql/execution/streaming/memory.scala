@@ -39,8 +39,8 @@ object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder]: MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement())
+  def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
 }
 
 /**
@@ -48,11 +48,12 @@ object MemoryStream {
  * is primarily intended for use in unit tests as it can only replay data when the object is still
  * available.
  */
-case class MemoryStream[A : Encoder](id: Int) extends Source with Logging {
+case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
+    extends Source with Logging {
   protected val encoder = encoderFor[A]
   protected val logicalPlan = StreamingRelation(this)
   protected val output = logicalPlan.output
-  protected var blocks = new ArrayBuffer[BlockId]
+  protected val batches = new ArrayBuffer[Dataset[A]]
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
   protected def blockManager = SparkEnv.get.blockManager
@@ -70,29 +71,33 @@ case class MemoryStream[A : Encoder](id: Int) extends Source with Logging {
   }
 
   def addData(data: TraversableOnce[A]): Offset = {
-    val blockId = StreamBlockId(0, MemoryStream.currentBlockId.incrementAndGet())
-    blockManager.putIterator(
-      blockId,
-      data.toIterator.map(encoder.toRow).map(_.copy()),
-      StorageLevels.MEMORY_ONLY_SER)
-
-    synchronized {
+    import sqlContext.implicits._
+    this.synchronized {
       currentOffset = currentOffset + 1
-      blocks.append(blockId)
+      val ds = data.toVector.toDS()
+      logDebug(s"Adding ds: $ds")
+      batches.append(ds)
       currentOffset
     }
   }
 
-  def getSlice(sqlContext: SQLContext, start: Option[Offset], end: Offset): RDD[InternalRow] = {
+  def getSlice(
+      sqlContext: SQLContext,
+      start: Option[Offset],
+      end: Offset): RDD[InternalRow] = synchronized {
     val newBlocks =
-      blocks.slice(
+      batches.slice(
         start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1,
-        end.asInstanceOf[LongOffset].offset.toInt + 1).toArray
-    logDebug(s"Running [$start, $end] on blocks ${newBlocks.mkString(", ")}")
-    new BlockRDD[InternalRow](sqlContext.sparkContext, newBlocks)
-  }
+        end.asInstanceOf[LongOffset].offset.toInt + 1)
 
-  def restart(): Source = this
+    logDebug(s"Running [$start, $end] on blocks ${newBlocks.mkString(", ")}")
+    val rdd = newBlocks
+        .map(_.toDF())
+        .reduceOption(_ unionAll _)
+        .map(_.queryExecution.toRdd)
+        .getOrElse(sqlContext.sparkContext.emptyRDD)
+    rdd
+  }
 
   override def toString: String = s"MemoryStream[${output.mkString(",")}]"
 }

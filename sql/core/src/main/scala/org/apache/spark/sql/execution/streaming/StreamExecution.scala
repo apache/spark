@@ -34,6 +34,9 @@ class StreamExecution(
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink) extends Logging {
 
+  /** Minimum amount of time in between the start of each batch. */
+  val minBatchTime = 10
+
   /** Tracks how much data we have processed from each input source. */
   private[sql] val currentOffsets = new StreamProgress
 
@@ -57,6 +60,7 @@ class StreamExecution(
   /** When false, signals to the microBatchThread that it should stop running. */
   @volatile private var shouldRun = true
 
+  // TODO: add exception handling to batch thread
   /** The thread that runs the micro-batches of this stream. */
   private[sql] val microBatchThread = new Thread("stream execution thread") {
     override def run(): Unit = {
@@ -120,7 +124,9 @@ class StreamExecution(
     }
 
     logDebug(s"Waiting for data, current: $currentOffsets")
-    Thread.sleep(10)
+
+    // TODO: this could be tighter...
+    Thread.sleep(minBatchTime)
   }
 
   /**

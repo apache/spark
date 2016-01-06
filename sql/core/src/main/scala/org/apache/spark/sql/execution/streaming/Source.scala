@@ -36,8 +36,8 @@ trait Source  {
   /**
    * Returns the maximum offset that can be retrieved from the source.  This function will be called
    * only before attempting to start a new batch, in order to determine if new data is available.
-   * Therfore is acceptable to perform potentially expensive work when this function is called that
-   * is required in-order to correctly replay sections of data when `getSlice` is called.  For
+   * Therefore it is acceptable to perform potentially expensive work when this function is called
+   * that are required in-order to correctly replay sections of data when `getSlice` is called.  For
    * example, a [[Source]] might append to a write-ahead log in order to record what data is present
    * at a given [[Offset]].
    */

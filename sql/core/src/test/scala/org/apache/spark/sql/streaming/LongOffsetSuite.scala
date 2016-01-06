@@ -15,19 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.streaming
 
-/**
- * A simple offset for sources that produce a single linear stream of data.
- */
-case class LongOffset(offset: Long) extends Offset {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.StreamTest
+import org.apache.spark.sql.execution.streaming.LongOffset
 
-  override def compare(other: Offset): Int = other match {
-    case l: LongOffset => offset.compareTo(l.offset)
-    case _ =>
-      throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")
+
+class LongOffsetSuite extends SparkFunSuite {
+  val one = new LongOffset(1)
+  val two = new LongOffset(2)
+
+  test("comparisions") {
+    assert(one < two)
+    assert(one <= two)
+    assert(one <= one)
+    assert(two > one)
+    assert(two >= one)
+    assert(one >= one)
+    assert(one == one)
   }
-
-  def +(increment: Long): LongOffset = new LongOffset(offset + increment)
-  def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
 }
