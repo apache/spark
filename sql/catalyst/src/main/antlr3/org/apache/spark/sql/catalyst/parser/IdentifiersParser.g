@@ -35,7 +35,7 @@ k=3;
   @Override
   public void displayRecognitionError(String[] tokenNames,
       RecognitionException e) {
-    gParent.errors.add(new ParseError(gParent, e, tokenNames));
+    gParent.displayRecognitionError(tokenNames, e);
   }
   protected boolean useSQL11ReservedKeywordsForIdentifier() {
     return gParent.useSQL11ReservedKeywordsForIdentifier();

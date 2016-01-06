@@ -380,7 +380,6 @@ import java.util.HashMap;
 
 
 @members {
-  ArrayList<ParseError> errors = new ArrayList<ParseError>();
   Stack msgs = new Stack<String>();
 
   private static HashMap<String, String> xlateMap;
@@ -563,9 +562,10 @@ import java.util.HashMap;
   }
 
   @Override
-  public void displayRecognitionError(String[] tokenNames,
-      RecognitionException e) {
-    errors.add(new ParseError(this, e, tokenNames));
+  public void displayRecognitionError(String[] tokenNames, RecognitionException e) {
+    if (reporter != null) {
+      reporter.report(this, e, tokenNames);
+    }
   }
 
   @Override
@@ -654,10 +654,15 @@ import java.util.HashMap;
   private CommonTree throwColumnNameException() throws RecognitionException {
     throw new FailedPredicateException(input, Arrays.toString(excludedCharForColumnName) + " can not be used in column name in create table statement.", "");
   }
+
   private ParserConf parserConf;
-  public void setParserConf(ParserConf parserConf) {
+  private ParseErrorReporter reporter;
+
+  public void configure(ParserConf parserConf, ParseErrorReporter reporter) {
     this.parserConf = parserConf;
+    this.reporter = reporter;
   }
+
   protected boolean useSQL11ReservedKeywordsForIdentifier() {
     if (parserConf == null) {
       return true;

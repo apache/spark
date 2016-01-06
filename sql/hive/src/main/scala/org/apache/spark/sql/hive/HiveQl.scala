@@ -447,7 +447,8 @@ private[hive] object HiveQl extends SparkQl with Logging {
             tableDesc = tableDesc.copy(
               serde = Option(unescapeSQLString(child.children.head.text)))
             if (child.numChildren == 2) {
-              // This is based on org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.readProps(..)
+              // This is based on the readProps(..) method in
+              // ql/src/java/org/apache/hadoop/hive/ql/parse/BaseSemanticAnalyzer.java:
               val serdeParams = child.children(1).children.head.children.map {
                 case Token(_, Token(prop, Nil) :: valueNode) =>
                   val value = valueNode.headOption
@@ -672,7 +673,8 @@ private[hive] object HiveQl extends SparkQl with Logging {
     case other => super.nodeToGenerator(node)
   }
 
-  // This is based on org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.getColumns(..)
+  // This is based the getColumns methods in
+  // ql/src/java/org/apache/hadoop/hive/ql/parse/BaseSemanticAnalyzer.java
   protected def nodeToColumns(node: ASTNode, lowerCase: Boolean): Seq[HiveColumn] = {
     node.children.map(_.children).collect {
       case Token(rawColName, Nil) :: colTypeNode :: comment =>
@@ -685,10 +687,11 @@ private[hive] object HiveQl extends SparkQl with Logging {
     }
   }
 
-  // This is based on the following methods in org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer:
-  // getTypeStringFromAST
-  // getStructTypeStringFromAST
-  // getUnionTypeStringFromAST
+  // This is based on the following methods in
+  // ql/src/java/org/apache/hadoop/hive/ql/parse/BaseSemanticAnalyzer.java:
+  //  getTypeStringFromAST
+  //  getStructTypeStringFromAST
+  //  getUnionTypeStringFromAST
   protected def nodeToTypeString(node: ASTNode): String = node.tokenType match {
     case SparkSqlParser.TOK_LIST =>
       val listType :: Nil = node.children

@@ -41,8 +41,6 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
     }
   }
 
-  // TODO improve the parse error - so we don't need this anymore.
-  val errorRegEx = "line (\\d+):(\\d+) (.*)".r
 
   /**
    * Returns the AST for the given SQL string.
@@ -54,14 +52,8 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
     try {
       createPlan(sql, ParseDriver.parse(sql, conf))
     } catch {
-      case pe: ParseException =>
-        pe.getMessage match {
-          case errorRegEx(line, start, message) =>
-            throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
-          case otherMessage =>
-            throw new AnalysisException(otherMessage)
-        }
       case e: MatchError => throw e
+      case e: AnalysisException => throw e
       case e: Exception =>
         throw new AnalysisException(e.getMessage)
       case e: NotImplementedError =>
@@ -78,13 +70,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   protected def createPlan(sql: String, tree: ASTNode): LogicalPlan = nodeToPlan(tree)
 
   def parseDdl(ddl: String): Seq[Attribute] = {
-    val tree =
-      try {
-        getAst(ddl)
-      } catch {
-        case pe: ParseException =>
-          throw new RuntimeException(s"Failed to parse ddl: '$ddl'", pe)
-      }
+    val tree = getAst(ddl)
     assert(tree.text == "TOK_CREATETABLE", "Only CREATE TABLE supported.")
     val tableOps = tree.children
     val colList = tableOps

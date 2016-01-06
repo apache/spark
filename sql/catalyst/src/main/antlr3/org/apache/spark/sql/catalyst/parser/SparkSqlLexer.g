@@ -24,11 +24,12 @@ package org.apache.spark.sql.catalyst.parser;
 }
 
 @lexer::members {
-  ArrayList<ParseError> errors = new ArrayList<ParseError>();
   private ParserConf parserConf;
+  private ParseErrorReporter reporter;
   
-  public void setParserConf(ParserConf parserConf) {
+  public void configure(ParserConf parserConf, ParseErrorReporter reporter) {
     this.parserConf = parserConf;
+    this.reporter = reporter;
   }
   
   protected boolean allowQuotedId() {
@@ -40,7 +41,9 @@ package org.apache.spark.sql.catalyst.parser;
 
   @Override
   public void displayRecognitionError(String[] tokenNames, RecognitionException e) {
-    errors.add(new ParseError(this, e, tokenNames));
+    if (reporter != null) {
+      reporter.report(this, e, tokenNames);
+    }
   }
 }
 

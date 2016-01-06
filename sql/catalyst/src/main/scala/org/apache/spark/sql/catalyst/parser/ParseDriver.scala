@@ -16,13 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-
-import java.util
-
 import org.antlr.runtime._
 import org.antlr.runtime.tree.CommonTree
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 
 /**
  * The ParseDriver takes a SQL command and turns this into an AST.
@@ -33,26 +31,23 @@ object ParseDriver extends Logging {
   def parse(command: String, conf: ParserConf): ASTNode = {
     logInfo(s"Parsing command: $command")
 
+    // Setup error collection.
+    val reporter = new ParseErrorReporter()
+
     // Create lexer.
     val lexer = new SparkSqlLexer(new ANTLRNoCaseStringStream(command))
     val tokens = new TokenRewriteStream(lexer)
-    lexer.setParserConf(conf)
+    lexer.configure(conf, reporter)
 
     // Create the parser.
     val parser = new SparkSqlParser(tokens)
-    parser.setParserConf(conf)
+    parser.configure(conf, reporter)
 
     try {
       val result = parser.statement()
 
-      // Check lexer errors.
-      val errors = new util.ArrayList[ParseError]
-      errors.addAll(lexer.errors)
-      errors.addAll(parser.errors)
-      if (errors.size > 0) {
-        logInfo(s"Parse failed.")
-        throw new ParseException(errors)
-      }
+      // Check errors.
+      reporter.checkForErrors()
 
       // Return the AST node from the result.
       logInfo(s"Parse completed.")
@@ -79,7 +74,7 @@ object ParseDriver extends Logging {
     catch {
       case e: RecognitionException =>
         logInfo(s"Parse failed.")
-        throw new ParseException(parser.errors)
+        reporter.throwError(e)
     }
   }
 }
@@ -109,5 +104,53 @@ private[parser] class ANTLRNoCaseStringStream(input: String) extends ANTLRString
     val la = super.LA(i)
     if (la == 0 || la == CharStream.EOF) la
     else Character.toUpperCase(la)
+  }
+}
+
+/**
+ * Utility used by the Parser and the Lexer for error collection and reporting.
+ */
+private[parser] class ParseErrorReporter {
+  val errors = scala.collection.mutable.Buffer.empty[ParseError]
+
+  def report(br: BaseRecognizer, re: RecognitionException, tokenNames: Array[String]): Unit = {
+    errors += ParseError(br, re, tokenNames)
+  }
+
+  def checkForErrors(): Unit = {
+    if (errors.nonEmpty) {
+      val first = errors.head
+      val e = first.re
+      throwError(e.line, e.charPositionInLine, first.buildMessage().toString, errors.tail)
+    }
+  }
+
+  def throwError(e: RecognitionException): Nothing = {
+    throwError(e.line, e.charPositionInLine, e.toString, errors)
+  }
+
+  private def throwError(
+      line: Int,
+      startPosition: Int,
+      msg: String,
+      errors: Seq[ParseError]): Nothing = {
+    val b = new StringBuilder
+    b.append(msg).append("\n")
+    errors.foreach(error => error.buildMessage(b).append("\n"))
+    throw new AnalysisException(b.toString, Option(line), Option(startPosition))
+  }
+}
+
+/**
+ * Error collected during the parsing process.
+ *
+ * This is based on Hive's org.apache.hadoop.hive.ql.parse.ParseError
+ */
+private[parser] case class ParseError(
+    br: BaseRecognizer,
+    re: RecognitionException,
+    tokenNames: Array[String]) {
+  def buildMessage(s: StringBuilder = new StringBuilder): StringBuilder = {
+    s.append(br.getErrorHeader(re)).append(" ").append(br.getErrorMessage(re, tokenNames))
   }
 }
