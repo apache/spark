@@ -24,10 +24,10 @@ import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
-import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 
 private[kinesis] class KinesisInputDStream[T: ClassTag](
     _ssc: StreamingContext,
