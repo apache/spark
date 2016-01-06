@@ -36,13 +36,13 @@ class KMeansModel(JavaModel):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self._call_java("clusterCenters")]
 
-    @since("1.6.0")
+    @since("2.0.0")
     def computeCost(self, dataset):
         """
         Return the K-means cost (sum of squared distances of points to their nearest center)
         for this model on the given data.
         """
-        return self._java_obj.computeCost(dataset._jdf)
+        return self._call_java("computeCost", dataset)
 
 
 @inherit_doc
