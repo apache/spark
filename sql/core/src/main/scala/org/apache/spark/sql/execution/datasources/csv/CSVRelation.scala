@@ -26,7 +26,6 @@ import org.apache.hadoop.io.{Text, NullWritable, LongWritable}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.RecordWriter
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
-
 import com.google.common.base.Objects
 
 import org.apache.spark.Logging
@@ -171,7 +170,6 @@ object CSVRelation extends Logging {
     }, true)
   }
 
-
   def parseCsv(
       tokenizedRDD: RDD[Array[String]],
       schema: StructType,
@@ -189,7 +187,6 @@ object CSVRelation extends Logging {
     } else {
       requiredFields
     }
-    //println("safeRequiredFields: " + safeRequiredFields.mkString("\n\t"))
     if (requiredColumns.isEmpty) {
       sqlContext.sparkContext.emptyRDD[Row]
     } else {
@@ -299,5 +296,4 @@ private[sql] class CsvOutputWriter(
   override def close(): Unit = {
     recordWriter.close(context)
   }
-
 }
