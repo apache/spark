@@ -42,7 +42,6 @@ import org.apache.spark.sql.hive.execution.{HiveNativeCommand, AnalyzeTable, Dro
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.AnalysisException
 
-
 /**
  * Used when we need to start parsing the AST before deciding that we are going to pass the command
  * back for Hive to execute natively.  Will be replaced with a native command that contains the

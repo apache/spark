@@ -18,12 +18,12 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
+import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -1820,8 +1820,8 @@ object functions extends LegacyFunctions {
    * @since 2.0
    */
   @scala.annotation.varargs
-  def hash(col: Column, cols: Column*): Column = withExpr {
-    new Murmur3Hash((col +: cols).map(_.expr))
+  def hash(cols: Column*): Column = withExpr {
+    new Murmur3Hash(cols.map(_.expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

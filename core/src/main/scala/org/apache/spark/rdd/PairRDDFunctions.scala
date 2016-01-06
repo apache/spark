@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
-import scala.collection.{Map, mutable}
+import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, TaskType, TaskAttemptID}
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, TaskAttemptID, TaskType}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
@@ -357,12 +357,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     } : JHashMap[K, V]
 
     self.mapPartitions(reducePartition).reduce(mergeMaps).asScala
-  }
-
-  /** Alias for reduceByKeyLocally */
-  @deprecated("Use reduceByKeyLocally", "1.0.0")
-  def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = self.withScope {
-    reduceByKeyLocally(func)
   }
 
   /**
