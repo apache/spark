@@ -224,7 +224,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-      val jobDescription = UIUtils.makeDescription(lastStageDescription, parent.basePath)
+      val basePathUri = UIUtils.prependBaseUri(parent.basePath)
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, basePathUri)
 
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
