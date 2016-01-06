@@ -20,9 +20,9 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{diag => brzDiag, DenseMatrix => BDM, DenseVector => BDV}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 
 class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 

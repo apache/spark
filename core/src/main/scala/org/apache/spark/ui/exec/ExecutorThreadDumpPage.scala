@@ -21,7 +21,7 @@ import java.net.URLDecoder
 import javax.servlet.http.HttpServletRequest
 
 import scala.util.Try
-import scala.xml.{Text, Node}
+import scala.xml.{Node, Text}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 

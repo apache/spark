@@ -30,8 +30,8 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.DockerUtils
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.DockerUtils
 
 abstract class DatabaseOnDocker {
   /**

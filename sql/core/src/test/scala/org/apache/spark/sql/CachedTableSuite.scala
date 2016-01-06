@@ -17,20 +17,18 @@
 
 package org.apache.spark.sql
 
-
-import org.apache.spark.sql.execution.Exchange
-import org.apache.spark.sql.execution.PhysicalRDD
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Accumulators
+import org.apache.spark.sql.execution.Exchange
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
-import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 private case class BigData(s: String)
 
