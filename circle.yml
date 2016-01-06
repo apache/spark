@@ -4,15 +4,16 @@ machine:
 
 dependencies:
   override:
-    - build/sbt test:compile
+    - build/sbt sql/test:compile
   cache_directories:
     - "~/.sbt"
+    - "**/target/"
 
 test:
   override:
     - dev/lint-scala
     - dev/lint-java
-    - build/sbt sql/test
+    - build/sbt sql/test *streaming*
   # Copy test reports to Circle test reports dir
   post:
     - mkdir -p $CIRCLE_TEST_REPORTS/test-reports/
