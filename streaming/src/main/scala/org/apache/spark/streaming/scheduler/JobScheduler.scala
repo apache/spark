@@ -26,6 +26,7 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 
@@ -197,7 +198,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       try {
         val formattedTime = UIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
-        val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
+        val batchUrl = s"${SparkUIUtils.uiRoot}/streaming/batch/?id=${job.time.milliseconds}"
         val batchLinkText = s"[output operation ${job.outputOpId}, batch time ${formattedTime}]"
 
         ssc.sc.setJobDescription(
