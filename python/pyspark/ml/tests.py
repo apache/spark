@@ -37,6 +37,7 @@ else:
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
+from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
@@ -91,6 +92,25 @@ class MockEstimator(Estimator, HasFake):
 class MockModel(MockTransformer, Model, HasFake):
     pass
 
+class ParamTypeConversionTests(PySparkTestCase):
+    """
+    Test that param type conversion happens.
+    """
+
+    def test_int_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.sc.parallelize([
+            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0))]).toDF()
+        lr = LogisticRegression(elasticNetParam=0)
+        lr.fit(df)
+        lr.setElasticNetParam(0)
+        lr.fit(df)
+
+    def test_invalid_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
+        lr = LogisticRegression(elasticNetParam=0)
+        self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
 
 class PipelineTests(PySparkTestCase):
 
