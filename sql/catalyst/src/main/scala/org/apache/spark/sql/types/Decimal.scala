@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{RoundingMode, MathContext}
+import java.math.{MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 

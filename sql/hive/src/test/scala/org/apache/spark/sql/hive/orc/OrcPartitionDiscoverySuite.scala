@@ -22,8 +22,8 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.scalatest.BeforeAndAfterAll
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton

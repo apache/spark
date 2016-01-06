@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution
 import scala.util.Random
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{RandomDataGenerator, Row}
-
 
 /**
  * Test sorting. Many of the test cases generate random data and compares the sorted result with one

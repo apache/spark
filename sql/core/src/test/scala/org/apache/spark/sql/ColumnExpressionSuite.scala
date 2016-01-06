@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.scalatest.Matchers._
 
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -298,7 +298,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
-      testData.select(isNaN($"a"), isNaN($"b")),
+      testData.select(isnan($"a"), isnan($"b")),
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
@@ -586,7 +586,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
-      df.select(sparkPartitionId()),
+      df.select(spark_partition_id()),
       Row(0) :: Row(0) :: Row(1) :: Row(1) :: Nil
     )
   }
@@ -595,11 +595,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
-      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(inputFileName())
+      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(input_file_name())
         .head.getString(0)
       assert(answer.contains(dir.getCanonicalPath))
 
-      checkAnswer(data.select(inputFileName()).limit(1), Row(""))
+      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
     }
   }
 

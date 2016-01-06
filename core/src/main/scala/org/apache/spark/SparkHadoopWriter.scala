@@ -22,9 +22,9 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.apache.hadoop.mapred._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
