@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.functions._
 
-class HiveQLSQLBuilderSuite extends SQLBuilderTest with SQLTestUtils {
+class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {

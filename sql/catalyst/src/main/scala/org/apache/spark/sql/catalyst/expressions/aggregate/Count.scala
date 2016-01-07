@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {

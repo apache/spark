@@ -50,7 +50,8 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 
   override def dataType: DataType = DoubleType
 
-  override def sql: Option[String] = Some(s"${prettyName.toUpperCase}($seed)")
+  // NOTE: Even if the user doesn't provide a seed, Spark SQL adds a default seed.
+  override def sql: Option[String] = Some(s"$prettyName($seed)")
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */

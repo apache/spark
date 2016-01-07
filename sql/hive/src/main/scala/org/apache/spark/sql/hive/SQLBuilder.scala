@@ -128,6 +128,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     // ParquetRelation converted from Hive metastore table
     case Subquery(alias, LogicalRelation(r: ParquetRelation, _)) =>
+      // There seems to be a bug related to `ParquetConversions` analysis rule.  The problem is
+      // that, the metastore database name and table name are not always propagated to converted
+      // `ParquetRelation` instances via data source options.  Here we use subquery alias as a
+      // workaround.
       Some(s"`$alias`")
 
     case Subquery(alias, child) =>
@@ -175,7 +179,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
-      Batch("Normalizer", FixedPoint(100),
+      Batch("Canonicalizer", FixedPoint(100),
         // The `WidenSetOperationTypes` analysis rule may introduce extra `Project`s over
         // `Aggregate`s to perform type casting.  This rule merges these `Project`s into
         // `Aggregate`s.

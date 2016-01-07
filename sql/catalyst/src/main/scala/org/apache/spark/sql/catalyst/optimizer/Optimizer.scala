@@ -63,7 +63,9 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      // Nondeterministic
+      ComputeCurrentTime) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -1007,5 +1009,22 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) =>
       val newGrouping = grouping.filter(!_.foldable)
       a.copy(groupingExpressions = newGrouping)
+  }
+}
+
+/**
+ * Computes the current date and time to make sure we return the same result in a single query.
+ */
+object ComputeCurrentTime extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val dateExpr = CurrentDate()
+    val timeExpr = CurrentTimestamp()
+    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
+    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
+
+    plan transformAllExpressions {
+      case CurrentDate() => currentDate
+      case CurrentTimestamp() => currentTime
+    }
   }
 }

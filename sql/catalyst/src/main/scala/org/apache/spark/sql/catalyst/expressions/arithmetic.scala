@@ -96,7 +96,7 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 
-  override def sql: Option[String] = child.sql.map(sql => s"(ABS($sql))")
+  override def sql: Option[String] = child.sql.map(sql => s"$prettyName($sql)")
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
@@ -523,5 +523,5 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
   override def sql: Option[String] = for {
     leftSQL <- left.sql
     rightSQL <- right.sql
-  } yield s"Pmod($leftSQL, $rightSQL)"
+  } yield s"$prettyName($leftSQL, $rightSQL)"
 }

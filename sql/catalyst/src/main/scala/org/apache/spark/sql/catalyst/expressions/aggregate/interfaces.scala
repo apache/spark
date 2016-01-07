@@ -96,13 +96,15 @@ private[sql] case class AggregateExpression(
 
   override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
 
-  override def sql: Option[String] = if (isDistinct) {
-    aggregateFunction.argumentsSQL.map { argsSQL =>
-      val name = aggregateFunction.prettyName.toUpperCase
-      s"$name(DISTINCT $argsSQL)"
+  override def sql: Option[String] = {
+    val name = aggregateFunction.prettyName
+    val argsSQL = sequenceOption(aggregateFunction.children.map(_.sql))
+
+    if (isDistinct) {
+      argsSQL.map(args => s"$name(DISTINCT ${args.mkString(", ")})")
+    } else {
+      argsSQL.map(args => s"$name(${args.mkString(", ")})")
     }
-  } else {
-    aggregateFunction.sql
   }
 }
 
@@ -173,12 +175,6 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
     AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
   }
-
-  override def sql: Option[String] = argumentsSQL.map(sql => s"${prettyName.toUpperCase}($sql)")
-
-  def argumentsSQL: Option[String] = for {
-    childrenSQL <- sequenceOption(children.map(_.sql))
-  } yield childrenSQL.mkString(", ")
 }
 
 /**
