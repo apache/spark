@@ -914,7 +914,7 @@ test_that("test HiveContext", {
   expect_is(df4, "DataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
-  
+
   parquetDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
   invisible(saveAsTable(df, "parquetest", "parquet", mode="overwrite", path=parquetDataPath))
   df5 <- sql(hiveCtx, "select * from parquetest")
