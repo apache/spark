@@ -190,7 +190,7 @@ class KMeans(object):
           The initialization algorithm. This can be either "random" or "k-means||".
           (default: "k-means||")
         :param seed:
-          Random seed for cluster initialization.
+          Random seed for cluster initialization. Set as None to generate seed based on system time.
           (default: None)
         :param initializationSteps:
           Set the number of steps for the k-means|| initialization mode. This is an advanced
@@ -385,7 +385,8 @@ class GaussianMixture(object):
           Number of iterations.
           (default: 100)
         :param seed:
-          Random seed for initial Gaussian distribution.
+          Random seed for initial Gaussian distribution. Set as None to generate seed based on
+          system time.
           (default: None)
         :param initialModel:
           Set the initial GMM starting point, bypassing the random initialization.
@@ -860,7 +861,7 @@ class LDA(object):
           distributions over terms.
           (default: -1.0)
         :param seed:
-          Random seed for cluster initialization.
+          Random seed for cluster initialization. Set as None to generate seed based on system time.
           (default: None)
         :param checkpointInterval:
           Period (in iterations) between checkpoints.
