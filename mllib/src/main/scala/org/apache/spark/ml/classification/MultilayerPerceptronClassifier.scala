@@ -22,11 +22,11 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
-import org.apache.spark.ml.param.{IntArrayParam, IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasTol}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.param.{IntArrayParam, IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.util._
+import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
@@ -174,11 +174,11 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   }
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object MultilayerPerceptronClassifier
   extends DefaultParamsReadable[MultilayerPerceptronClassifier] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): MultilayerPerceptronClassifier = super.load(path)
 }
 
@@ -225,20 +225,20 @@ class MultilayerPerceptronClassificationModel private[ml] (
     copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
   }
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter =
     new MultilayerPerceptronClassificationModel.MultilayerPerceptronClassificationModelWriter(this)
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[MultilayerPerceptronClassificationModel] =
     new MultilayerPerceptronClassificationModelReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): MultilayerPerceptronClassificationModel = super.load(path)
 
   /** [[MLWriter]] instance for [[MultilayerPerceptronClassificationModel]] */
