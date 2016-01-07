@@ -1986,7 +1986,7 @@ To run a Spark Streaming applications, you need to have the following.
   received data within Spark be disabled when the write ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
   input stream to `StorageLevel.MEMORY_AND_DISK_SER`. While using S3 (or any file system that
-  does not support flushing) for Write Ahead Logs, please remember to enable
+  does not support flushing) for _write ahead logs_, please remember to enable
   `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
   `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
   [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
