@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Iterable => JIterable, Long => JLong}
+import java.{lang => jl}
+import java.lang.{Iterable => JIterable}
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
@@ -847,7 +848,7 @@ object JavaPairDStream {
   }
 
   def scalaToJavaLong[K: ClassTag](dstream: JavaPairDStream[K, Long])
-  : JavaPairDStream[K, JLong] = {
-    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
+  : JavaPairDStream[K, jl.Long] = {
+    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(jl.Long.valueOf)
   }
 }

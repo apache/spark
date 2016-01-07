@@ -1580,11 +1580,11 @@ public class JavaAPISuite implements Serializable {
     }
     double relativeSD = 0.001;
     JavaPairRDD<Integer, Integer> pairRdd = sc.parallelizePairs(arrayData);
-    List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(relativeSD, 8).collect();
-    for (Tuple2<Integer, Object> resItem : res) {
-      double count = (double)resItem._1();
-      Long resCount = (Long)resItem._2();
-      Double error = Math.abs((resCount - count) / count);
+    List<Tuple2<Integer, Long>> res =  pairRdd.countApproxDistinctByKey(relativeSD, 8).collect();
+    for (Tuple2<Integer, Long> resItem : res) {
+      double count = resItem._1();
+      long resCount = resItem._2();
+      double error = Math.abs((resCount - count) / count);
       Assert.assertTrue(error < 0.1);
     }
 
@@ -1633,12 +1633,12 @@ public class JavaAPISuite implements Serializable {
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
-    Map<Integer, Long> wrCounts = (Map<Integer, Long>) (Object) wr.countByKey();
+    Map<Integer, Long> wrCounts = wr.countByKey();
     Assert.assertEquals(2, wrCounts.size());
     Assert.assertTrue(wrCounts.get(0) > 0);
     Assert.assertTrue(wrCounts.get(1) > 0);
     JavaPairRDD<Integer, Integer> wor = rdd2.sampleByKey(false, fractions, 1L);
-    Map<Integer, Long> worCounts = (Map<Integer, Long>) (Object) wor.countByKey();
+    Map<Integer, Long> worCounts = wor.countByKey();
     Assert.assertEquals(2, worCounts.size());
     Assert.assertTrue(worCounts.get(0) > 0);
     Assert.assertTrue(worCounts.get(1) > 0);
@@ -1659,12 +1659,12 @@ public class JavaAPISuite implements Serializable {
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
-    Map<Integer, Long> wrExactCounts = (Map<Integer, Long>) (Object) wrExact.countByKey();
+    Map<Integer, Long> wrExactCounts = wrExact.countByKey();
     Assert.assertEquals(2, wrExactCounts.size());
     Assert.assertTrue(wrExactCounts.get(0) == 2);
     Assert.assertTrue(wrExactCounts.get(1) == 4);
     JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKeyExact(false, fractions, 1L);
-    Map<Integer, Long> worExactCounts = (Map<Integer, Long>) (Object) worExact.countByKey();
+    Map<Integer, Long> worExactCounts = worExact.countByKey();
     Assert.assertEquals(2, worExactCounts.size());
     Assert.assertTrue(worExactCounts.get(0) == 2);
     Assert.assertTrue(worExactCounts.get(1) == 4);
