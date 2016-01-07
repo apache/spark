@@ -23,7 +23,6 @@ from random import Random
 from pyspark import SparkContext
 
 numEdges = 200
-numVertices = 100
 rand = Random(42)
 
 
