@@ -53,8 +53,11 @@ trait HashJoin {
   protected def streamSideKeyGenerator: Projection =
     UnsafeProjection.create(streamedKeys, streamedPlan.output)
 
-  @transient private[this] lazy val boundCondition =
+  @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+  } else {
+    (r: InternalRow) => true
+  }
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
@@ -74,28 +77,28 @@ trait HashJoin {
 
       private[this] val joinKeys = streamSideKeyGenerator
 
-      hasNext  // find the initial match
-
       override final def hasNext: Boolean = {
-        while (currentMatchPosition >= 0) {
-
+        while (true) {
           // check if it's end of current matches
-          if (currentMatchPosition == currentHashMatches.length) {
+          if (currentHashMatches != null && currentMatchPosition == currentHashMatches.length) {
             currentHashMatches = null
             currentMatchPosition = -1
+          }
 
-            while (currentHashMatches == null && streamIter.hasNext) {
-              currentStreamedRow = streamIter.next()
-              numStreamRows += 1
-              val key = joinKeys(currentStreamedRow)
-              if (!key.anyNull) {
-                currentHashMatches = hashedRelation.get(key)
+          // find the next match
+          while (currentHashMatches == null && streamIter.hasNext) {
+            currentStreamedRow = streamIter.next()
+            numStreamRows += 1
+            val key = joinKeys(currentStreamedRow)
+            if (!key.anyNull) {
+              currentHashMatches = hashedRelation.get(key)
+              if (currentHashMatches != null) {
+                currentMatchPosition = 0
               }
             }
-            if (currentHashMatches == null) {
-              return false
-            }
-            currentMatchPosition = 0
+          }
+          if (currentHashMatches == null) {
+            return false
           }
 
           // found some matches
@@ -105,9 +108,11 @@ trait HashJoin {
           }
           if (boundCondition(joinRow)) {
             return true
+          } else {
+            currentMatchPosition += 1
           }
         }
-        false
+        false  // unreachable
       }
 
       override final def next(): InternalRow = {
