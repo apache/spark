@@ -257,7 +257,7 @@ The following table summarizes the characteristics of both types of receivers
 
 ## Implementing and Using a Custom Actor-based Receiver
 
-Custom [Akka Actors](http://doc.akka.io/docs/akka/current/scala/actors.html) can also be used to
+Custom [Akka Actors](http://doc.akka.io/docs/akka/2.3.11/scala/actors.html) can also be used to
 receive data. The [`ActorHelper`](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
 trait can be mixed in to any Akka actor, which allows received data to be stored in Spark using
  `store(...)` methods. The supervisor strategy of this actor can be configured to handle failures, etc.
