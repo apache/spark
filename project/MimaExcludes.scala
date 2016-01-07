@@ -119,6 +119,10 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$")
+      ) ++
+      Seq(
+        // SPARK-12688 Fix spill size metric in unsafe external sorter
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.unsafe.map.BytesToBytesMap.reset")
       )
     case v if v.startsWith("1.6") =>
       Seq(
