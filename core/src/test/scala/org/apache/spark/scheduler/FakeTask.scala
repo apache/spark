@@ -17,12 +17,12 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{InternalAccumulator, TaskContext}
 
 class FakeTask(
     stageId: Int,
     prefLocs: Seq[TaskLocation] = Nil)
-  extends Task[Int](stageId, 0, 0, Seq.empty) {
+  extends Task[Int](stageId, 0, 0, InternalAccumulator.create()) {
   override def runTask(context: TaskContext): Int = 0
   override def preferredLocations: Seq[TaskLocation] = prefLocs
 }

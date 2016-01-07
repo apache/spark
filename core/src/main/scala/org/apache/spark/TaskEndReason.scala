@@ -115,8 +115,10 @@ case class ExceptionFailure(
     description: String,
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
-    metrics: Option[TaskMetrics],
-    private val exceptionWrapper: Option[ThrowableSerializationWrapper])
+    exceptionWrapper: Option[ThrowableSerializationWrapper],
+    accumulatorUpdates: Map[Long, Any] = Map[Long, Any](),
+    // always None, kept here for backward compatibility
+    metrics: Option[TaskMetrics] = None)
   extends TaskFailedReason {
 
   /**
@@ -124,13 +126,16 @@ case class ExceptionFailure(
    * driver. This may be set to `false` in the event that the exception is not in fact
    * serializable.
    */
-  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics], preserveCause: Boolean) {
-    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics,
-      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None)
+  private[spark] def this(
+      e: Throwable,
+      accumulatorUpdates: Map[Long, Any],
+      preserveCause: Boolean) {
+    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
+      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumulatorUpdates)
   }
 
-  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
-    this(e, metrics, preserveCause = true)
+  private[spark] def this(e: Throwable, accumulatorUpdates: Map[Long, Any]) {
+    this(e, accumulatorUpdates, preserveCause = true)
   }
 
   def exception: Option[Throwable] = exceptionWrapper.flatMap {

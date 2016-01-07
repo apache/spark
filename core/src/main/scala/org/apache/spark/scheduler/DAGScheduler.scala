@@ -209,10 +209,8 @@ class DAGScheduler(
       reason: TaskEndReason,
       result: Any,
       accumUpdates: Map[Long, Any],
-      taskInfo: TaskInfo,
-      taskMetrics: TaskMetrics): Unit = {
-    eventProcessLoop.post(
-      CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
+      taskInfo: TaskInfo): Unit = {
+    eventProcessLoop.post(CompletionEvent(task, reason, result, accumUpdates, taskInfo))
   }
 
   /**
@@ -1111,6 +1109,29 @@ class DAGScheduler(
   }
 
   /**
+   * Reconstruct [[TaskMetrics]] from accumulator updates.
+   *
+   * This is needed for posting task end events to listeners. If the task has failed,
+   * `accumUpdates` may be null, in which case we just return null.
+   */
+  private def reconstructTaskMetrics(task: Task[_], accumUpdates: Map[Long, Any]): TaskMetrics = {
+    if (accumUpdates != null) {
+      task.internalAccumulators.foreach { a =>
+        assert(a.name.isDefined, s"internal accumulator ${a.id} is expected to have a name.")
+        assert(accumUpdates.contains(a.id),
+          s"missing entry in task accumulator updates: ${a.name.get} (${a.id})")
+        val stringValue = accumUpdates(a.id).toString
+        assert(stringValue.forall(_.isDigit),
+          s"existing value for accumulator ${a.name.get} (${a.id}) was not a number: $stringValue ")
+        a.setValue(stringValue.toLong)
+      }
+      new TaskMetrics(task.internalAccumulators)
+    } else {
+      null
+    }
+  }
+
+  /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
@@ -1118,6 +1139,10 @@ class DAGScheduler(
     val task = event.task
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
+
+    // Executors only send accumulator updates back to the driver, not TaskMetrics. However,
+    // we still need TaskMetrics to post task end events to listeners, so reconstruct them here.
+    val taskMetrics = reconstructTaskMetrics(task, event.accumUpdates)
 
     outputCommitCoordinator.taskCompleted(
       stageId,
@@ -1130,7 +1155,7 @@ class DAGScheduler(
     if (event.reason != Success) {
       val attemptId = task.stageAttemptId
       listenerBus.post(SparkListenerTaskEnd(stageId, attemptId, taskType, event.reason,
-        event.taskInfo, event.taskMetrics))
+        event.taskInfo, taskMetrics))
     }
 
     if (!stageIdToStage.contains(task.stageId)) {
@@ -1142,7 +1167,7 @@ class DAGScheduler(
     event.reason match {
       case Success =>
         listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
-          event.reason, event.taskInfo, event.taskMetrics))
+          event.reason, event.taskInfo, taskMetrics))
         stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>
@@ -1637,7 +1662,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case GettingResultEvent(taskInfo) =>
       dagScheduler.handleGetTaskResult(taskInfo)
 
-    case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
+    case completion: CompletionEvent =>
       dagScheduler.handleTaskCompletion(completion)
 
     case TaskSetFailed(taskSet, reason, exception) =>

@@ -251,7 +251,7 @@ private[spark] class Executor(
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
 
-        val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
+        val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
 
@@ -296,20 +296,25 @@ private[spark] class Executor(
           // the default uncaught exception handler, which will terminate the Executor.
           logError(s"Exception in $taskName (TID $taskId)", t)
 
-          val metrics: Option[TaskMetrics] = Option(task).flatMap { task =>
-            task.metrics.map { m =>
-              m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-              m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-              m
+          // Collect latest accumulator values to report back to the driver
+          val accumulatorUpdates: Map[Long, Any] =
+            if (task != null) {
+              task.metrics.foreach { m =>
+                m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+                m.setJvmGCTime(computeTotalGcTime() - startGCTime)
+              }
+              task.collectAccumulatorUpdates()
+            } else {
+              Map[Long, Any]()
             }
-          }
+
           val serializedTaskEndReason = {
             try {
-              ser.serialize(new ExceptionFailure(t, metrics))
+              ser.serialize(new ExceptionFailure(t, accumulatorUpdates))
             } catch {
               case _: NotSerializableException =>
                 // t is not serializable so just send the stacktrace
-                ser.serialize(new ExceptionFailure(t, metrics, false))
+                ser.serialize(new ExceptionFailure(t, accumulatorUpdates, false))
             }
           }
           execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)

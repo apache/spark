@@ -24,7 +24,6 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils
 
@@ -36,19 +35,18 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
   extends TaskResult[T] with Serializable
 
 /** A TaskResult that contains the task's return value and accumulator updates. */
-private[spark]
-class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long, Any],
-    var metrics: TaskMetrics)
+private[spark] class DirectTaskResult[T](
+    var valueBytes: ByteBuffer,
+    var accumUpdates: Map[Long, Any])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
   private var valueObject: T = _
 
-  def this() = this(null.asInstanceOf[ByteBuffer], null, null)
+  def this() = this(null.asInstanceOf[ByteBuffer], null)
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-
-    out.writeInt(valueBytes.remaining);
+    out.writeInt(valueBytes.remaining)
     Utils.writeByteBuffer(valueBytes, out)
 
     out.writeInt(accumUpdates.size)
@@ -56,11 +54,9 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
       out.writeLong(key)
       out.writeObject(value)
     }
-    out.writeObject(metrics)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-
     val blen = in.readInt()
     val byteVal = new Array[Byte](blen)
     in.readFully(byteVal)
@@ -76,7 +72,6 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
       }
       accumUpdates = _accumUpdates
     }
-    metrics = in.readObject().asInstanceOf[TaskMetrics]
     valueObjectDeserialized = false
   }
 

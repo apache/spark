@@ -52,7 +52,7 @@ class TaskMetrics private[spark] (
   import InternalAccumulator._
 
   def this(host: String) {
-    this(InternalAccumulator.create())
+    this(InternalAccumulator.create(), host)
   }
 
   // Needed for Java tests

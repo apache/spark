@@ -82,8 +82,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               (deserializedResult, size)
           }
 
-          result.metrics.setResultSize(size)
-          scheduler.handleSuccessfulTask(taskSetManager, tid, result)
+          scheduler.handleSuccessfulTask(taskSetManager, tid, result, size.toLong)
         } catch {
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
