@@ -34,13 +34,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 
-class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "json"
 
@@ -49,6 +49,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
 
     new JSONRelation(
@@ -56,6 +57,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       maybeDataSchema = dataSchema,
       maybePartitionSpec = None,
       userDefinedPartitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
       paths = paths,
       parameters = parameters)(sqlContext)
   }
@@ -66,10 +68,28 @@ private[sql] class JSONRelation(
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    override val bucketSpec: Option[BucketSpec],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
+
+  def this(
+      inputRDD: Option[RDD[String]],
+      maybeDataSchema: Option[StructType],
+      maybePartitionSpec: Option[PartitionSpec],
+      userDefinedPartitionColumns: Option[StructType],
+      paths: Array[String] = Array.empty[String],
+      parameters: Map[String, String] = Map.empty[String, String])(sqlContext: SQLContext) = {
+    this(
+      inputRDD,
+      maybeDataSchema,
+      maybePartitionSpec,
+      userDefinedPartitionColumns,
+      None,
+      paths,
+      parameters)(sqlContext)
+  }
 
   val options: JSONOptions = JSONOptions.createFromConfigMap(parameters)
 
@@ -158,13 +178,14 @@ private[sql] class JSONRelation(
       partitionColumns)
   }
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    new OutputWriterFactory {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
+    new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
+          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, dataSchema, context)
+        new JsonOutputWriter(path, bucketId, dataSchema, context)
       }
     }
   }
@@ -172,6 +193,7 @@ private[sql] class JSONRelation(
 
 private[json] class JsonOutputWriter(
     path: String,
+    bucketId: Option[Int],
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
@@ -188,7 +210,8 @@ private[json] class JsonOutputWriter(
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
       }
     }.getRecordWriter(context)
   }

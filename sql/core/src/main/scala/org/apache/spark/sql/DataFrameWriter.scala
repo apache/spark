@@ -23,9 +23,9 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.sources.HadoopFsRelation
 
@@ -129,6 +129,34 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Buckets the output by the given columns. If specified, the output is laid out on the file
+   * system similar to Hive's bucketing scheme.
+   *
+   * This is applicable for Parquet, JSON and ORC.
+   *
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter = {
+    this.numBuckets = Option(numBuckets)
+    this.bucketColumnNames = Option(colName +: colNames)
+    this
+  }
+
+  /**
+   * Sorts the output in each bucket by the given columns.
+   *
+   * This is applicable for Parquet, JSON and ORC.
+   *
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def sortBy(colName: String, colNames: String*): DataFrameWriter = {
+    this.sortColumnNames = Option(colName +: colNames)
+    this
+  }
+
+  /**
    * Saves the content of the [[DataFrame]] at the specified path.
    *
    * @since 1.4.0
@@ -144,10 +172,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def save(): Unit = {
+    assertNotBucketed()
     ResolvedDataSource(
       df.sqlContext,
       source,
       partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+      getBucketSpec,
       mode,
       extraOptions.toMap,
       df)
@@ -166,6 +196,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
+    assertNotBucketed()
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
@@ -188,13 +219,47 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         ifNotExists = false)).toRdd
   }
 
-  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { parCols =>
-    parCols.map { col =>
-      df.logicalPlan.output
-        .map(_.name)
-        .find(df.sqlContext.analyzer.resolver(_, col))
-        .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
-          s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
+    cols.map(normalize(_, "Partition"))
+  }
+
+  private def normalizedBucketColNames: Option[Seq[String]] = bucketColumnNames.map { cols =>
+    cols.map(normalize(_, "Bucketing"))
+  }
+
+  private def normalizedSortColNames: Option[Seq[String]] = sortColumnNames.map { cols =>
+    cols.map(normalize(_, "Sorting"))
+  }
+
+  private def getBucketSpec: Option[BucketSpec] = {
+    if (sortColumnNames.isDefined) {
+      require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
+    }
+
+    for {
+      n <- numBuckets
+    } yield {
+      require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
+      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
+    }
+  }
+
+  /**
+   * The given column name may not be equal to any of the existing column names if we were in
+   * case-insensitive context.  Normalize the given column name to the real one so that we don't
+   * need to care about case sensitivity afterwards.
+   */
+  private def normalize(columnName: String, columnType: String): String = {
+    val validColumnNames = df.logicalPlan.output.map(_.name)
+    validColumnNames.find(df.sqlContext.analyzer.resolver(_, columnName))
+      .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
+        s"existing columns (${validColumnNames.mkString(", ")})"))
+  }
+
+  private def assertNotBucketed(): Unit = {
+    if (numBuckets.isDefined || sortColumnNames.isDefined) {
+      throw new IllegalArgumentException(
+        "Currently we don't support writing bucketed data to this data source.")
     }
   }
 
@@ -244,6 +309,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             source,
             temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            getBucketSpec,
             mode,
             extraOptions.toMap,
             df.logicalPlan)
@@ -372,4 +438,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var partitioningColumns: Option[Seq[String]] = None
 
+  private var bucketColumnNames: Option[Seq[String]] = None
+
+  private var numBuckets: Option[Int] = None
+
+  private var sortColumnNames: Option[Seq[String]] = None
 }
