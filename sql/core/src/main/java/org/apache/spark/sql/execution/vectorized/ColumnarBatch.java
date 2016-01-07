@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.util.Iterator;
+import java.util.*;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -103,7 +103,7 @@ public final class ColumnarBatch {
 
     @Override
     public final boolean anyNull() {
-      return false;
+      throw new NotImplementedException();
     }
 
     @Override
@@ -206,6 +206,7 @@ public final class ColumnarBatch {
 
       @Override
       public Row next() {
+        assert(hasNext());
         while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
           ++rowId;
         }
@@ -223,9 +224,7 @@ public final class ColumnarBatch {
       columns[i].reset();
     }
     if (this.numRowsFiltered > 0) {
-      for (int i = 0; i < numRows; ++i) {
-        filteredRows[i] = false;
-      }
+      Arrays.fill(filteredRows, false);
     }
     this.numRows = 0;
     this.numRowsFiltered = 0;

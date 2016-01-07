@@ -154,17 +154,13 @@ public abstract class ColumnVector {
   protected final int capacity;
 
   /**
-   * Byte width fo this column.
-   */
-  protected final int width;
-
-  /**
-   * Number of nulls in this column.
+   * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
    */
   protected int numNulls;
 
   /**
-   * True if there is at least one NULL byte set.
+   * True if there is at least one NULL byte set. This is an optimization for the writer, to skip
+   * having to clear NULL bits.
    */
   protected boolean anyNullsSet;
 
@@ -176,6 +172,5 @@ public abstract class ColumnVector {
   protected ColumnVector(int capacity, DataType type) {
     this.capacity = capacity;
     this.type = type;
-    this.width = type.defaultSize();
   }
 }

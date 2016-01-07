@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.spark.sql.execution.vectorized;
 
 import org.apache.spark.sql.types.DataType;
@@ -7,6 +23,7 @@ import org.apache.spark.unsafe.Platform;
 
 import java.nio.ByteBuffer;
 import java.nio.DoubleBuffer;
+import java.util.Arrays;
 
 /**
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
@@ -113,14 +130,11 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
     for (int i = 0; i < count; ++i) {
-      // TODO: is this the fastest way?
-      int v = (int)src[srcIndex];
-      v += ((int)src[srcIndex + 1]) << 8;
-      v += ((int)src[srcIndex + 2]) << 16;
-      v += ((int)src[srcIndex + 3]) << 24;
-      intData[i + rowId] = v;
+      intData[i + rowId] = Platform.getInt(src, srcOffset);;
       srcIndex += 4;
+      srcOffset += 4;
     }
   }
 
@@ -140,9 +154,7 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putDoubles(int rowId, int count, double value) {
-    for (int i = 0; i < count; ++i) {
-      doubleData[i + rowId] = value;
-    }
+    Arrays.fill(doubleData, rowId, rowId + count, value);
   }
 
   @Override
