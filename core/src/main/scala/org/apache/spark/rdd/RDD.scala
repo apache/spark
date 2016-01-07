@@ -264,6 +264,7 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
+    println("Hiiiii!!!!! id is "+id+" split is "+split.index)
     context.setComputeRDDSplit(id, split.index)
     if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)

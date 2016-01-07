@@ -342,7 +342,7 @@ class ConsistentAccumulator[T] private[spark] (
     param: ConsistentAccumulatorParam[T],
     name: Option[String],
     internal: Boolean)
-  extends GenericAccumulable[T, UpdateTracking[T], T](initialValue, param, name, internal, _.value) {
+  extends GenericAccumulable[T, UpdateTracking[T], T](initialValue, param, name, internal, {x => println(x); x.value}) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(new UpdateTracking(initialValue),
@@ -351,6 +351,10 @@ class ConsistentAccumulator[T] private[spark] (
 
   def this(initialValue: T, param: AccumulatorParam[T]) = {
     this(initialValue, param, None)
+  }
+
+  def sketch() = {
+    param
   }
 }
 
@@ -419,6 +423,7 @@ class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
   def addAccumulator(r: UpdateTracking[T], t: T): UpdateTracking[T] = {
     val tc = TaskContext.get()
     val key = tc.getComputeRDDSplit()
+    println("key is "+key)
     val v = r.pending.get(key).map(
       accumulatorParam.addAccumulator(_, t)
     ).getOrElse(t)
