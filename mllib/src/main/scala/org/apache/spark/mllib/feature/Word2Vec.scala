@@ -151,7 +151,7 @@ class Word2Vec extends Serializable with Logging {
   /** context words from [-window, window] */
   private var window = 5
 
-  private var trainWordsCount = 0
+  private var trainWordsCount = 0L
   private var vocabSize = 0
   @transient private var vocab: Array[VocabWord] = null
   @transient private var vocabHash = mutable.HashMap.empty[String, Int]
@@ -159,13 +159,13 @@ class Word2Vec extends Serializable with Logging {
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
+      .filter(_._2 >= minCount)
       .map(x => VocabWord(
         x._1,
         x._2,
         new Array[Int](MAX_CODE_LENGTH),
         new Array[Int](MAX_CODE_LENGTH),
         0))
-      .filter(_.cn >= minCount)
       .collect()
       .sortWith((a, b) => a.cn > b.cn)
 
@@ -179,7 +179,7 @@ class Word2Vec extends Serializable with Logging {
       trainWordsCount += vocab(a).cn
       a += 1
     }
-    logInfo("trainWordsCount = " + trainWordsCount)
+    logInfo(s"vocabSize = $vocabSize, trainWordsCount = $trainWordsCount")
   }
 
   private def createExpTable(): Array[Float] = {
