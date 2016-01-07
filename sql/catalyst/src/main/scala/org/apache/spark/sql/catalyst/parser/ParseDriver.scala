@@ -28,15 +28,25 @@ import org.apache.spark.sql.AnalysisException
  * This is based on Hive's org.apache.hadoop.hive.ql.parse.ParseDriver
  */
 object ParseDriver extends Logging {
+  /** Create an LogicalPlan ASTNode from a SQL command. */
   def parsePlan(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
     parser.statement().getTree
   }
 
+  /** Create an Expression ASTNode from a SQL command. */
   def parseExpression(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
-    parser.expression().getTree
+    parser.namedExpression().getTree
   }
 
-  def parse(command: String, conf: ParserConf)(toTree: SparkSqlParser => CommonTree): ASTNode = {
+  /** Create an TableIdentifier ASTNode from a SQL command. */
+  def parseTableName(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
+    parser.tableName().getTree
+  }
+
+  private def parse(
+      command: String,
+      conf: ParserConf)(
+      toTree: SparkSqlParser => CommonTree): ASTNode = {
     logInfo(s"Parsing command: $command")
 
     // Setup error collection.

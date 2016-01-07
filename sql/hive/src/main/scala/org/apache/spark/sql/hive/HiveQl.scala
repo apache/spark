@@ -230,8 +230,8 @@ private[hive] object HiveQl extends SparkQl with Logging {
   }
 
   /** Creates LogicalPlan for a given SQL string. */
-  override def createPlan(sql: String): LogicalPlan = {
-    safeParse(sql, ParseDriver.parsePlan(sql, conf), ast => {
+  override def parsePlan(sql: String): LogicalPlan = {
+    safeParse(sql, ParseDriver.parsePlan(sql, conf)) { ast =>
       if (nativeCommands.contains(ast.text)) {
         HiveNativeCommand(sql)
       } else {
@@ -240,7 +240,7 @@ private[hive] object HiveQl extends SparkQl with Logging {
           case plan => plan
         }
       }
-    })
+    }
   }
 
   protected override def isNoExplainCommand(command: String): Boolean =

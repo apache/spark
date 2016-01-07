@@ -30,6 +30,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
+private[sql] object CatalystQl {
+  val parser = new CatalystQl
+  def parseExpression(sql: String): Expression = parser.parseExpression(sql)
+  def parseTableIdentifier(sql: String): TableIdentifier = parser.parseTableIdentifier(sql)
+}
+
 /**
  * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
  */
@@ -41,7 +47,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
     }
   }
 
-  protected  def safeParse[T](sql: String, ast: ASTNode, toResult: ASTNode => T): T = {
+  protected  def safeParse[T](sql: String, ast: ASTNode)(toResult: ASTNode => T): T = {
     try {
       toResult(ast)
     } catch {
@@ -65,21 +71,25 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   }
 
   /** Creates LogicalPlan for a given SQL string. */
-  def createPlan(sql: String): LogicalPlan =
-    safeParse(sql, ParseDriver.parsePlan(sql, conf), nodeToPlan)
+  def parsePlan(sql: String): LogicalPlan =
+    safeParse(sql, ParseDriver.parsePlan(sql, conf))(nodeToPlan)
 
-    /** Creates Expression for a given SQL string. */
-  def createExpression(sql: String): Expression =
-    safeParse(sql, ParseDriver.parseExpression(sql, conf), nodeToExpr)
+  /** Creates Expression for a given SQL string. */
+  def parseExpression(sql: String): Expression =
+    safeParse(sql, ParseDriver.parseExpression(sql, conf))(selExprNodeToExpr(_).get)
+
+  /** Creates Expression for a given SQL string. */
+  def parseTableIdentifier(sql: String): TableIdentifier =
+    safeParse(sql, ParseDriver.parseTableName(sql, conf))(extractTableIdent)
 
   def createDdl(sql: String): Seq[Attribute] = {
-    safeParse(sql, ParseDriver.parseExpression(sql, conf), ast => {
+    safeParse(sql, ParseDriver.parseExpression(sql, conf)) { ast =>
       val Token("TOK_CREATETABLE", children) = ast
       children
         .find(_.text == "TOK_TABCOLLIST")
         .getOrElse(sys.error("No columnList!"))
         .flatMap(_.children.map(nodeToAttribute))
-    })
+    }
   }
 
   protected def getClauses(
