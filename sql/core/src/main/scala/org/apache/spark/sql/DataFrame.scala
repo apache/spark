@@ -1066,13 +1066,11 @@ class DataFrame private[sql](
     // constituent partitions each time a split is materialized which could result in
     // overlapping splits. To prevent this, we explicitly sort each input partition to make the
     // ordering deterministic.
-    val logicalPlanWithLocalSort =
-      Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
+    val sorted = Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new DataFrame(sqlContext, Sample(x(0), x(1), withReplacement = false, seed,
-        logicalPlanWithLocalSort))
+      new DataFrame(sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted))
     }.toArray
   }
 
