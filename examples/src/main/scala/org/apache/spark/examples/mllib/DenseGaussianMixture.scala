@@ -63,6 +63,7 @@ object DenseGaussianMixture {
     membership.take(100).foreach { x =>
       print(" " + x.mkString(","))
     }
+    println()
     println("Cluster labels (first <= 100):")
     val clusterLabels = clusters.predict(data)
     clusterLabels.take(100).foreach { x =>
