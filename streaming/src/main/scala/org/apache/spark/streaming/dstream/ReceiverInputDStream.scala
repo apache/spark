@@ -32,7 +32,7 @@ import org.apache.spark.streaming.util.WriteAheadLogUtils
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
  * that has to start a receiver on worker nodes to receive external data.
  * Specific implementations of ReceiverInputDStream must
- * define `the getReceiver()` function that gets the receiver object of type
+ * define [[getReceiver]] function that gets the receiver object of type
  * [[org.apache.spark.streaming.receiver.Receiver]] that will be sent
  * to the workers to receive data.
  * @param ssc_ Streaming context that will execute this input stream
@@ -121,7 +121,7 @@ abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
         }
         if (validBlockIds.size != blockIds.size) {
           logWarning("Some blocks could not be recovered as they were not found in memory. " +
-            "To prevent such data loss, enabled Write Ahead Log (see programming guide " +
+            "To prevent such data loss, enable Write Ahead Log (see programming guide " +
             "for more details.")
         }
         new BlockRDD[T](ssc.sc, validBlockIds)

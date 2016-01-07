@@ -57,7 +57,7 @@ public abstract class RpcHandler {
 
   /**
    * Receives an RPC message that does not expect a reply. The default implementation will
-   * call "{@link receive(TransportClient, byte[], RpcResponseCallback)}" and log a warning if
+   * call "{@link #receive(TransportClient, ByteBuffer, RpcResponseCallback)}" and log a warning if
    * any of the callback methods are called.
    *
    * @param client A channel client which enables the handler to make requests back to the sender

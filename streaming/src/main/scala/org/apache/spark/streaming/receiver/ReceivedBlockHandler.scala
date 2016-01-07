@@ -69,7 +69,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
 
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
 
-    var numRecords = None: Option[Long]
+    var numRecords: Option[Long] = None
 
     val putResult: Seq[(BlockId, BlockStatus)] = block match {
       case ArrayBufferBlock(arrayBuffer) =>

@@ -103,7 +103,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
 
   /**
    * This method is called by the system when the receiver is stopped. All resources
-   * (threads, buffers, etc.) setup in `onStart()` must be cleaned up in this method.
+   * (threads, buffers, etc.) set up in `onStart()` must be cleaned up in this method.
    */
   def onStop()
 
@@ -273,7 +273,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   /** Get the attached supervisor. */
   private[streaming] def supervisor: ReceiverSupervisor = {
     assert(_supervisor != null,
-      "A ReceiverSupervisor have not been attached to the receiver yet. Maybe you are starting " +
+      "A ReceiverSupervisor has not been attached to the receiver yet. Maybe you are starting " +
         "some computation in the receiver before the Receiver.onStart() has been called.")
     _supervisor
   }
