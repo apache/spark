@@ -787,6 +787,24 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select key from src having key > 490").collect().size < 100)
   }
 
+  test("union/except/intersect") {
+    assertResult(Array(Row(1), Row(1))) {
+      sql("select 1 as a union all select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a union distinct select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a union select 1 as a").collect()
+    }
+    assertResult(Array()) {
+      sql("select 1 as a except select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a intersect select 1 as a").collect()
+    }
+  }
+
   test("SPARK-5383 alias for udfs with multi output columns") {
     assert(
       sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
