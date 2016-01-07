@@ -33,7 +33,8 @@ import org.apache.spark.util.random.RandomSampler
 /**
  * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
  */
-private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
+/* private[sql] */
+class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   object Token {
     def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
       CurrentOrigin.setPosition(node.line, node.positionInLine)
@@ -41,16 +42,9 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
     }
   }
 
-
-  /**
-   * Returns the AST for the given SQL string.
-   */
-  protected def getAst(sql: String): ASTNode = ParseDriver.parse(sql, conf)
-
-  /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String): LogicalPlan = {
+  protected  def safeParse[T](sql: String, ast: ASTNode, toResult: ASTNode => T): T = {
     try {
-      createPlan(sql, ParseDriver.parse(sql, conf))
+      toResult(ast)
     } catch {
       case e: MatchError => throw e
       case e: AnalysisException => throw e
@@ -58,26 +52,35 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
         throw new AnalysisException(e.getMessage)
       case e: NotImplementedError =>
         throw new AnalysisException(
-          s"""
-             |Unsupported language features in query: $sql
-             |${getAst(sql).treeString}
+          s"""== Unsupported language features in query ==
+             |== SQL ==
+             |$sql
+             |== AST ==
+             |${ast.treeString}
+             |== Error ==
              |$e
+             |== Stacktrace ==
              |${e.getStackTrace.head}
           """.stripMargin)
     }
   }
 
-  protected def createPlan(sql: String, tree: ASTNode): LogicalPlan = nodeToPlan(tree)
+  /** Creates LogicalPlan for a given SQL string. */
+  def createPlan(sql: String): LogicalPlan =
+    safeParse(sql, ParseDriver.parsePlan(sql, conf), nodeToPlan)
 
-  def parseDdl(ddl: String): Seq[Attribute] = {
-    val tree = getAst(ddl)
-    assert(tree.text == "TOK_CREATETABLE", "Only CREATE TABLE supported.")
-    val tableOps = tree.children
-    val colList = tableOps
-      .find(_.text == "TOK_TABCOLLIST")
-      .getOrElse(sys.error("No columnList!"))
+    /** Creates Expression for a given SQL string. */
+  def createExpression(sql: String): Expression =
+    safeParse(sql, ParseDriver.parseExpression(sql, conf), nodeToExpr)
 
-    colList.children.map(nodeToAttribute)
+  def createDdl(sql: String): Seq[Attribute] = {
+    safeParse(sql, ParseDriver.parseExpression(sql, conf), ast => {
+      val Token("TOK_CREATETABLE", children) = ast
+      children
+        .find(_.text == "TOK_TABCOLLIST")
+        .getOrElse(sys.error("No columnList!"))
+        .flatMap(_.children.map(nodeToAttribute))
+    })
   }
 
   protected def getClauses(
