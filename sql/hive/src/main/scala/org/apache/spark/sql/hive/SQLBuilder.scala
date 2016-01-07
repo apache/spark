@@ -29,6 +29,12 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
+/**
+ * A builder class used to convert a resolved logical plan into a SQL query string.  Note that this
+ * all resolved logical plan are convertible.  They either don't have corresponding SQL
+ * representations (e.g. logical plans that operate on local Scala collections), or are simply not
+ * supported by this builder (yet).
+ */
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 

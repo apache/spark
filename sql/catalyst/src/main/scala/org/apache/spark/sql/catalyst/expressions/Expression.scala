@@ -225,6 +225,10 @@ abstract class Expression extends TreeNode[Expression] {
     .replace("*/", "\\*\\/")
     .replace("\\u", "\\\\u")
 
+  /**
+   * Returns SQL representation of this expression if there is one (some expressions, e.g.
+   * `ScalaUDF`, don't have SQL representations).
+   */
   def sql: Option[String] = None
 }
 
