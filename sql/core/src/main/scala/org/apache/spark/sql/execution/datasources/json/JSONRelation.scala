@@ -68,28 +68,11 @@ private[sql] class JSONRelation(
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    override val bucketSpec: Option[BucketSpec],
+    override val bucketSpec: Option[BucketSpec] = None,
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
-
-  def this(
-      inputRDD: Option[RDD[String]],
-      maybeDataSchema: Option[StructType],
-      maybePartitionSpec: Option[PartitionSpec],
-      userDefinedPartitionColumns: Option[StructType],
-      paths: Array[String] = Array.empty[String],
-      parameters: Map[String, String] = Map.empty[String, String])(sqlContext: SQLContext) = {
-    this(
-      inputRDD,
-      maybeDataSchema,
-      maybePartitionSpec,
-      userDefinedPartitionColumns,
-      None,
-      paths,
-      parameters)(sqlContext)
-  }
 
   val options: JSONOptions = JSONOptions.createFromConfigMap(parameters)
 
