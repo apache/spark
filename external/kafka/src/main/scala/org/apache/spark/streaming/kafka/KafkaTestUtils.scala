@@ -20,8 +20,8 @@ package org.apache.spark.streaming.kafka
 import java.io.File
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
+import java.util.concurrent.{TimeUnit, TimeoutException}
 import java.util.{Map => JMap, Properties}
-import java.util.concurrent.TimeoutException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -30,16 +30,16 @@ import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
 import kafka.api.Request
-import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
-import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
+import org.apache.kafka.clients.producer._
+import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -170,11 +170,19 @@ private[kafka] class KafkaTestUtils extends Logging {
   }
 
   /** Send the array of messages to the Kafka broker */
-  def sendMessages(topic: String, messages: Array[String]): Unit = {
-    producer = new Producer[String, String](new ProducerConfig(producerConfiguration))
-    producer.send(messages.map { new KeyedMessage[String, String](topic, _ ) }: _*)
-    producer.close()
-    producer = null
+  def sendMessages(topic: String, messages: Array[String]): Seq[RecordMetadata] = {
+    producer = new KafkaProducer[String, String](producerConfiguration)
+    val offsets = try {
+      messages.map { m =>
+        producer.send(new ProducerRecord[String, String](topic, m)).get(10, TimeUnit.SECONDS)
+      }
+    } finally {
+      if (producer != null) {
+        producer.close()
+        producer = null
+      }
+    }
+    offsets
   }
 
   private def brokerConfiguration: Properties = {
@@ -191,10 +199,11 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   private def producerConfiguration: Properties = {
     val props = new Properties()
-    props.put("metadata.broker.list", brokerAddress)
-    props.put("serializer.class", classOf[StringEncoder].getName)
+    props.put("bootstrap.servers", brokerAddress)
+    props.put("value.serializer", classOf[StringSerializer].getName)
+    props.put("key.serializer", classOf[StringSerializer].getName)
     // wait for all in-sync replicas to ack sends
-    props.put("request.required.acks", "-1")
+    props.put("acks", "-1")
     props
   }
 

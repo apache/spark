@@ -27,19 +27,19 @@ import scala.reflect.ClassTag
 import com.google.common.base.Charsets.UTF_8
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import kafka.serializer.{Decoder, DefaultDecoder, StringDecoder}
-import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
+import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
+import net.razorvine.pickle.{Opcodes, Pickler, IObjectPickler}
 
-import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.streaming.util.WriteAheadLogUtils
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java._
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
-import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 object KafkaUtils {
   /**
@@ -173,7 +173,7 @@ object KafkaUtils {
   }
 
   /** get leaders for the given offset ranges, or throw an exception */
-  private def leadersForRanges(
+  private[spark] def leadersForRanges(
       kc: KafkaCluster,
       offsetRanges: Array[OffsetRange]): Map[TopicAndPartition, (String, Int)] = {
     val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet

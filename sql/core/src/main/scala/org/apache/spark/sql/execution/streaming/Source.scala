@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
 /**
