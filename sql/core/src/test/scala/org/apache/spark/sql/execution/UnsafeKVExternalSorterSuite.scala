@@ -118,7 +118,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       attemptNumber = 0,
       taskMemoryManager = taskMemMgr,
       metricsSystem = null,
-      internalAccumulators = Seq.empty))
+      internalAccumulators = InternalAccumulator.create()))
 
     val sorter = new UnsafeKVExternalSorter(
       keySchema, valueSchema, SparkEnv.get.blockManager, pageSize)

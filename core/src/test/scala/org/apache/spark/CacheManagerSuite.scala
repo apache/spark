@@ -21,7 +21,7 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.executor.{DataReadMethod, TaskMetrics}
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 
@@ -86,7 +86,8 @@ class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with Before
     // Local computation should not persist the resulting value, so don't expect a put().
     when(blockManager.get(RDDBlockId(0, 0))).thenReturn(None)
 
-    val context = new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty, runningLocally = true)
+    val context = new TaskContextImpl(
+      0, 0, 0, 0, null, null, InternalAccumulator.create(sc), runningLocally = true)
     val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
     assert(value.toList === List(1, 2, 3, 4))
   }
