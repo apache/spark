@@ -90,9 +90,13 @@ private[sql] case class JDBCRelation(
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    buildScan(requiredColumns, filters, Aggregate.empty)
+  }
+
   override def buildScan(
-      requiredColumns: Seq[String],
-      filters: Seq[Filter],
+      requiredColumns: Array[String],
+      filters: Array[Filter],
       aggregate: Aggregate): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(

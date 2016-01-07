@@ -67,8 +67,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
     filters.filter(unhandled)
   }
 
-  override def buildScan(
-      requiredColumns: Seq[String], filters: Seq[Filter], aggregate: Aggregate): RDD[Row] = {
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
@@ -117,6 +116,11 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
 
     sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
+  }
+
+  override def buildScan(
+      requiredColumns: Array[String], filters: Array[Filter], aggregate: Aggregate): RDD[Row] = {
+    buildScan(requiredColumns, filters)
   }
 }
 

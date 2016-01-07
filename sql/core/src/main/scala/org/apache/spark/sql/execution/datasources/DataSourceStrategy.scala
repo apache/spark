@@ -126,7 +126,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         projects,
         filters,
         (a, f) => toCatalystRDD(
-          l, a, t.buildScan(a.map(_.name), f, aggregate.getOrElse(Aggregate.empty)))) :: Nil
+          l, a, t.buildScan(a.map(_.name).toArray, f, aggregate.getOrElse(Aggregate.empty)))) :: Nil
 
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _)) =>
       pruneFilterProject(
