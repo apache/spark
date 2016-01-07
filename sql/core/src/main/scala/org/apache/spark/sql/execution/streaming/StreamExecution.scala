@@ -108,7 +108,7 @@ class StreamExecution(
           val newPlan = batch.data.logicalPlan
 
           assert(output.size == newPlan.output.size)
-          replacements ++= newPlan.output.zip(output)
+          replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {
           LocalRelation(output)
