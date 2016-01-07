@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import org.apache.spark.SparkFunSuite
 
-
 /**
   * test cases for StringIteratorReader
   */
@@ -78,7 +77,6 @@ class CSVParserSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] { reader.mark(1) }
     intercept[IllegalArgumentException] { reader.reset() }
   }
-
 
   test("Regular case") {
     val input = List("This is a string", "This is another string", "Small", "", "\"quoted\"")

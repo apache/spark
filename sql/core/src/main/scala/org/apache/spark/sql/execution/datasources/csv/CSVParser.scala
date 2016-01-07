@@ -52,7 +52,6 @@ private[sql] abstract class CsvReader(params: CSVParameters, headers: Seq[String
   }
 }
 
-
 /**
   * Converts a sequence of string to CSV string
   *
@@ -242,4 +241,3 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
 
   override def close(): Unit = { }
 }
-

@@ -68,5 +68,4 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(DoubleType, "\\N", "\\N") == DoubleType)
     assert(CSVInferSchema.inferField(TimestampType, "\\N", "\\N") == TimestampType)
   }
-
 }

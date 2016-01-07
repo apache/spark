@@ -44,7 +44,6 @@ private[csv] class CSVRelation(
     private val parameters: Map[String, String])
     (@transient val sqlContext: SQLContext) extends HadoopFsRelation with Serializable {
 
-
   override lazy val dataSchema: StructType = maybeDataSchema match {
     case Some(structType) => structType
     case None => inferSchema(paths)
