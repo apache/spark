@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A task that sends back the output to the driver application.
@@ -64,7 +65,8 @@ private[spark] class ResultTask[T, U](
     metrics = Some(context.taskMetrics)
     val itr = rdd.iterator(partition, context)
     val result = func(context, itr)
-    (result, itr.isEmpty)
+    val computedFullPartition = itr.isEmpty || rdd.getStorageLevel != StorageLevel.NONE
+    (result, computedFullPartition)
   }
 
   // This is only callable on the driver side.
