@@ -18,7 +18,7 @@
 package org.apache.spark.api.java
 
 import java.{lang => jl}
-import java.lang.{Iterable => JIterable, Long => JLong}
+import java.lang.{Iterable => JIterable}
 import java.util.{Comparator, Iterator => JIterator, List => JList}
 
 import scala.collection.JavaConverters._
@@ -305,8 +305,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    */
-  def zipWithUniqueId(): JavaPairRDD[T, JLong] = {
-    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, JLong]]
+  def zipWithUniqueId(): JavaPairRDD[T, jl.Long] = {
+    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, jl.Long]]
   }
 
   /**
@@ -316,8 +316,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
    */
-  def zipWithIndex(): JavaPairRDD[T, JLong] = {
-    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, JLong]]
+  def zipWithIndex(): JavaPairRDD[T, jl.Long] = {
+    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, jl.Long]]
   }
 
   // Actions (launch a job to return a value to the user program)
@@ -448,7 +448,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
   def countByValue(): java.util.Map[T, jl.Long] =
-    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new jl.Long(x._2)))))
+    mapAsSerializableJavaMap(rdd.countByValue().mapValues(jl.Long.valueOf))
 
   /**
    * (Experimental) Approximate version of countByValue().
@@ -631,8 +631,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * The asynchronous version of `count`, which returns a
    * future for counting the number of elements in this RDD.
    */
-  def countAsync(): JavaFutureAction[JLong] = {
-    new JavaFutureActionWrapper[Long, JLong](rdd.countAsync(), JLong.valueOf)
+  def countAsync(): JavaFutureAction[jl.Long] = {
+    new JavaFutureActionWrapper[Long, jl.Long](rdd.countAsync(), jl.Long.valueOf)
   }
 
   /**
