@@ -98,7 +98,7 @@ private[mllib] class CRF extends Serializable{
     i = 0
 
     while (itr <= maxiter) {
-      while (i < threadNum) {
+      while(i < threadNum) {
         threadPool(i) = new CRFThread()
         threadPool(i).start_i = i
         threadPool(i).size = tagger.size

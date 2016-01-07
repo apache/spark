@@ -17,23 +17,59 @@
 
 package org.apache.spark.ml.nlp
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.nlp.{CRF, CRFModel}
 import org.apache.spark.sql.{Row, DataFrame}
 
+import scala.collection.mutable.ArrayBuffer
+
 class ConditionalRandomField {
   def train(template: DataFrame,
-            sentences: DataFrame): CRFModel = {
-    val t = template.select().
-      map { case Row(template: Array[String]) => template }
-    val src = sentences.select().map { case Row(s: Array[String]) => s }
-    val model = CRF.runCRF(t, src)
+            sentences: DataFrame,
+            sc: SparkContext): CRFModel = {
+
+    val tArr: ArrayBuffer[Array[String]] = new ArrayBuffer[Array[String]]()
+    val sArr: ArrayBuffer[Array[String]] = new ArrayBuffer[Array[String]]()
+
+    template.foreach{row =>
+      val t: ArrayBuffer[String] = new ArrayBuffer[String]()
+      t.append(row.toString())
+      println(row.toString())
+      tArr.append(t.toArray)
+    }
+    val tRdd = sc.parallelize(tArr)
+
+    sentences.foreach{row =>
+      val s: ArrayBuffer[String] = new ArrayBuffer[String]()
+      s.append(row.toString())
+      sArr.append(s.toArray)
+    }
+
+    val sRdd = sc.parallelize(tArr)
+    val model = CRF.runCRF(tRdd, sRdd)
     model
   }
 
   def verify(sentences: DataFrame,
-             modelExp: DataFrame): CRFModel = {
-    val md = modelExp.select().map { case Row(exp: Array[String]) => exp }
+             modelExp: DataFrame,
+             sc: SparkContext): CRFModel = {
+    val md = modelExp.select("*").map { case Row(exp: Array[String]) => exp }
     val src = sentences.select().map { case Row(s: Array[String]) => s }
+    val result = CRF.verifyCRF(src, md)
+    result
+  }
+
+  def trainRdd(template: RDD[Array[String]],
+               sentences: RDD[Array[String]],
+               sc: SparkContext ): CRFModel = {
+    val model = CRF.runCRF(template, sentences)
+    model
+  }
+
+  def verifyRdd(src: RDD[Array[String]],
+                md: RDD[Array[String]],
+                sc: SparkContext ): CRFModel = {
     val result = CRF.verifyCRF(src, md)
     result
   }

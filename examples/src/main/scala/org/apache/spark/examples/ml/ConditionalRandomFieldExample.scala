@@ -19,7 +19,9 @@ package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.nlp.ConditionalRandomField
 import org.apache.spark.mllib.linalg.{VectorUDT}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.types.{StructType, ArrayType, StructField}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.{SparkContext, SparkConf}
 
@@ -44,20 +46,34 @@ object ConditionalRandomFieldExample {
 
     // Creates a Spark context and a SQL context
     val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
+    .set(s"spark.yarn.jar",s"/home/hujiayin/git/spark/yarn/target/spark.yarn.jar")
+
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
     // Loads data
-    var rowRDD = sc.textFile(template).filter(_.nonEmpty).map(Row(_))
-    var schema = StructType(Array(StructField("", new VectorUDT, false)))
+    /*
+    val rowRDD = sc.textFile(template).filter(_.nonEmpty).map(x => Row(Array(x.split("\t"))))
+    val itemType = ScalaReflection.schemaFor[Array[String]].dataType
+    val fields = Array(StructField("Values", ArrayType(itemType)))
+    val schema = StructType(fields)
     val templateDF = sqlContext.createDataFrame(rowRDD, schema)
 
-    rowRDD = sc.textFile(feature).filter(_.nonEmpty).map(Row(_))
-    schema = StructType(Array(StructField("", new VectorUDT, false)))
-    val featureDF = sqlContext.createDataFrame(rowRDD, schema)
+    val rowRddF = sc.textFile(feature).filter(_.nonEmpty).map(x => Row(Array(x.split("\t"))))
+    val itemTypeF = ScalaReflection.schemaFor[Array[String]].dataType
+    val fieldsF = Array(StructField("Values", ArrayType(itemTypeF)))
+    val schemaF = StructType(fieldsF)
+    val featureDF = sqlContext.createDataFrame(rowRddF, schemaF)
 
     val crf = new ConditionalRandomField()
-    val model = crf.train(templateDF, featureDF)
+    val model = crf.train(templateDF, featureDF, sc)
+    */
+    val rowRDD = sc.textFile(template).filter(_.nonEmpty).map(_.split("\t"))
+    val rowRddF = sc.textFile(feature).filter(_.nonEmpty).map(_.split("\t"))
+
+    val crf = new ConditionalRandomField()
+    val model = crf.trainRdd(rowRDD, rowRddF, sc)
+
 
     // Shows the result
     // scalastyle:off println
