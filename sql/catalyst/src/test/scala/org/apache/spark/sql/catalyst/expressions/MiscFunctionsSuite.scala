@@ -139,11 +139,6 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Base64(AesEncrypt(Literal("".getBytes),
       Literal("1234567890123456".getBytes))), "BQGHoM3lqYcsurCRq3PlUw==")
 
-    // Before testing this, installing Java Cryptography Extension (JCE)
-    // Unlimited Strength Jurisdiction Policy Files first
-//    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
-//      Literal("12345678901234561234567890123456".getBytes))), "nYfCuJeRd5eD60yXDw7WEA==")
-
     // input is null
     checkEvaluation(AesEncrypt(Literal.create(null, BinaryType),
       Literal("1234567890123456".getBytes)), null)
@@ -176,5 +171,14 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // both are null
     checkEvaluation(AesDecrypt(UnBase64(Literal.create(null, StringType)),
       Literal.create(null, BinaryType)), null)
+  }
+
+  ignore("aesEncryptWith256bitsKey") {
+    // Before testing this, installing Java Cryptography Extension (JCE)
+    // Unlimited Strength Jurisdiction Policy Files first. Otherwise it
+    // will return `null`. Because Oracle JDK does not support 192 and 256
+    // bits key out of box.
+    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
+      Literal("12345678901234561234567890123456".getBytes))), "nYfCuJeRd5eD60yXDw7WEA==")
   }
 }
