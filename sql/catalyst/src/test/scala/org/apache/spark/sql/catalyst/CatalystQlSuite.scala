@@ -17,16 +17,37 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.expressions.{Subtract, Add, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 class CatalystQlSuite extends PlanTest {
+  val parser = new CatalystQl()
+
+  test("parse expressions") {
+    compareExpressions(
+      parser.createExpression("prinln('hello', 'world')"),
+      UnresolvedFunction(
+        "prinln", Literal("hello") :: Literal("world") :: Nil, false))
+
+    compareExpressions(
+      parser.createExpression("1 + r.r"),
+      Add(Literal(1), UnresolvedAttribute("r.r")))
+
+    compareExpressions(
+      parser.createExpression("1 - f('o', o(bar))"),
+      Subtract(Literal(1),
+        UnresolvedFunction("f",
+          Literal("o") ::
+          UnresolvedFunction("o", UnresolvedAttribute("bar") :: Nil, false) ::
+          Nil, false)))
+  }
 
   test("parse union/except/intersect") {
-    val paresr = new CatalystQl()
-    paresr.createPlan("select * from t1 union all select * from t2")
-    paresr.createPlan("select * from t1 union distinct select * from t2")
-    paresr.createPlan("select * from t1 union select * from t2")
-    paresr.createPlan("select * from t1 except select * from t2")
-    paresr.createPlan("select * from t1 intersect select * from t2")
+    parser.createPlan("select * from t1 union all select * from t2")
+    parser.createPlan("select * from t1 union distinct select * from t2")
+    parser.createPlan("select * from t1 union select * from t2")
+    parser.createPlan("select * from t1 except select * from t2")
+    parser.createPlan("select * from t1 intersect select * from t2")
   }
 }
