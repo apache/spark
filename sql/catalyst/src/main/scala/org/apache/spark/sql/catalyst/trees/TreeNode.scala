@@ -26,17 +26,14 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.{EmptyRDD, RDD}
-import org.apache.spark.sql.catalyst.{ScalaReflectionLock, TableIdentifier}
-import org.apache.spark.sql.catalyst.ScalaReflection._
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.ScalaReflection._
+import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
@@ -398,6 +395,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if containsChild(tn) => Nil
     case tn: TreeNode[_] => s"${tn.simpleString}" :: Nil
+    case seq: Seq[BaseType] if seq.isEmpty => "[]" :: Nil
     case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
