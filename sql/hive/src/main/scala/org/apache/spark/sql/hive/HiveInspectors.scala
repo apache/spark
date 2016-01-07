@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ArrayBasedMapData => _, _}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
