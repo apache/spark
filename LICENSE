@@ -291,3 +291,7 @@ The text of each license is also included at licenses/LICENSE-[project].txt.
      (MIT License) dagre-d3 (https://github.com/cpettitt/dagre-d3)
      (MIT License) sorttable (https://github.com/stuartlangridge/sorttable)
      (MIT License) boto (https://github.com/boto/boto/blob/develop/LICENSE)
+     (MIT/GPL License) datatables (http://datatables.net/license)
+     (MIT/GPL License) blockUI (http://jquery.malsup.com/block/)
+     (MIT License) RowsGroup (http://datatables.net/license/mit)
+     (MIT License) jsonFormatter (http://www.jqueryscript.net/other/jQuery-Plugin-For-Pretty-JSON-Formatting-jsonFormatter.html)
