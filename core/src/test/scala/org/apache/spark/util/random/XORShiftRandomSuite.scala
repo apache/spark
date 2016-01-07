@@ -17,14 +17,13 @@
 
 package org.apache.spark.util.random
 
-import org.scalatest.Matchers
+import scala.language.reflectiveCalls
 
 import org.apache.commons.math3.stat.inference.ChiSquareTest
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils.times
-
-import scala.language.reflectiveCalls
 
 class XORShiftRandomSuite extends SparkFunSuite with Matchers {
 
@@ -64,5 +63,20 @@ class XORShiftRandomSuite extends SparkFunSuite with Matchers {
   test ("XORShift with zero seed") {
     val random = new XORShiftRandom(0L)
     assert(random.nextInt() != 0)
+  }
+
+  test ("hashSeed has random bits throughout") {
+    val totalBitCount = (0 until 10).map { seed =>
+      val hashed = XORShiftRandom.hashSeed(seed)
+      val bitCount = java.lang.Long.bitCount(hashed)
+      // make sure we have roughly equal numbers of 0s and 1s.  Mostly just check that we
+      // don't have all 0s or 1s in the high bits
+      bitCount should be > 20
+      bitCount should be < 44
+      bitCount
+    }.sum
+    // and over all the seeds, very close to equal numbers of 0s & 1s
+    totalBitCount should be > (32 * 10 - 30)
+    totalBitCount should be < (32 * 10 + 30)
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 
 /**
  * Transforms the input by forking and running the specified script.

@@ -103,10 +103,10 @@ public class TaskMemoryManager {
    * without doing any masking or lookups. Since this branching should be well-predicted by the JIT,
    * this extra layer of indirection / abstraction hopefully shouldn't be too expensive.
    */
-  private final boolean inHeap;
+  final MemoryMode tungstenMemoryMode;
 
   /**
-   * The size of memory granted to each consumer.
+   * Tracks spillable memory consumers.
    */
   @GuardedBy("this")
   private final HashSet<MemoryConsumer> consumers;
@@ -115,7 +115,7 @@ public class TaskMemoryManager {
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
-    this.inHeap = memoryManager.tungstenMemoryIsAllocatedInHeap();
+    this.tungstenMemoryMode = memoryManager.tungstenMemoryMode();
     this.memoryManager = memoryManager;
     this.taskAttemptId = taskAttemptId;
     this.consumers = new HashSet<>();
@@ -127,12 +127,19 @@ public class TaskMemoryManager {
    *
    * @return number of bytes successfully granted (<= N).
    */
-  public long acquireExecutionMemory(long required, MemoryConsumer consumer) {
+  public long acquireExecutionMemory(
+      long required,
+      MemoryMode mode,
+      MemoryConsumer consumer) {
     assert(required >= 0);
+    // If we are allocating Tungsten pages off-heap and receive a request to allocate on-heap
+    // memory here, then it may not make sense to spill since that would only end up freeing
+    // off-heap memory. This is subject to change, though, so it may be risky to make this
+    // optimization now in case we forget to undo it late when making changes.
     synchronized (this) {
-      long got = memoryManager.acquireExecutionMemory(required, taskAttemptId);
+      long got = memoryManager.acquireExecutionMemory(required, taskAttemptId, mode);
 
-      // try to release memory from other consumers first, then we can reduce the frequency of
+      // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
       if (got < required) {
         // Call spill() on other consumers to release memory
@@ -140,10 +147,10 @@ public class TaskMemoryManager {
           if (c != consumer && c.getUsed() > 0) {
             try {
               long released = c.spill(required - got, consumer);
-              if (released > 0) {
-                logger.info("Task {} released {} from {} for {}", taskAttemptId,
+              if (released > 0 && mode == tungstenMemoryMode) {
+                logger.debug("Task {} released {} from {} for {}", taskAttemptId,
                   Utils.bytesToString(released), c, consumer);
-                got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
+                got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
                 if (got >= required) {
                   break;
                 }
@@ -161,10 +168,10 @@ public class TaskMemoryManager {
       if (got < required && consumer != null) {
         try {
           long released = consumer.spill(required - got, consumer);
-          if (released > 0) {
-            logger.info("Task {} released {} from itself ({})", taskAttemptId,
+          if (released > 0 && mode == tungstenMemoryMode) {
+            logger.debug("Task {} released {} from itself ({})", taskAttemptId,
               Utils.bytesToString(released), consumer);
-            got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
+            got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
           }
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
@@ -184,9 +191,9 @@ public class TaskMemoryManager {
   /**
    * Release N bytes of execution memory for a MemoryConsumer.
    */
-  public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
+  public void releaseExecutionMemory(long size, MemoryMode mode, MemoryConsumer consumer) {
     logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
-    memoryManager.releaseExecutionMemory(size, taskAttemptId);
+    memoryManager.releaseExecutionMemory(size, taskAttemptId, mode);
   }
 
   /**
@@ -195,11 +202,22 @@ public class TaskMemoryManager {
   public void showMemoryUsage() {
     logger.info("Memory used in task " + taskAttemptId);
     synchronized (this) {
+      long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
-        if (c.getUsed() > 0) {
-          logger.info("Acquired by " + c + ": " + Utils.bytesToString(c.getUsed()));
+        long totalMemUsage = c.getUsed();
+        memoryAccountedForByConsumers += totalMemUsage;
+        if (totalMemUsage > 0) {
+          logger.info("Acquired by " + c + ": " + Utils.bytesToString(totalMemUsage));
         }
       }
+      long memoryNotAccountedFor =
+        memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
+      logger.info(
+        "{} bytes of memory were used by task {} but are not associated with specific consumers",
+        memoryNotAccountedFor, taskAttemptId);
+      logger.info(
+        "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
+        memoryManager.executionMemoryUsed(), memoryManager.storageMemoryUsed());
     }
   }
 
@@ -214,7 +232,8 @@ public class TaskMemoryManager {
    * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
    * intended for allocating large blocks of Tungsten memory that will be shared between operators.
    *
-   * Returns `null` if there was not enough memory to allocate the page.
+   * Returns `null` if there was not enough memory to allocate the page. May return a page that
+   * contains fewer bytes than requested, so callers should verify the size of returned pages.
    */
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
@@ -222,7 +241,7 @@ public class TaskMemoryManager {
         "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
     }
 
-    long acquired = acquireExecutionMemory(size, consumer);
+    long acquired = acquireExecutionMemory(size, tungstenMemoryMode, consumer);
     if (acquired <= 0) {
       return null;
     }
@@ -231,7 +250,7 @@ public class TaskMemoryManager {
     synchronized (this) {
       pageNumber = allocatedPages.nextClearBit(0);
       if (pageNumber >= PAGE_TABLE_SIZE) {
-        releaseExecutionMemory(acquired, consumer);
+        releaseExecutionMemory(acquired, tungstenMemoryMode, consumer);
         throw new IllegalStateException(
           "Have already allocated a maximum of " + PAGE_TABLE_SIZE + " pages");
       }
@@ -262,7 +281,7 @@ public class TaskMemoryManager {
     }
     long pageSize = page.size();
     memoryManager.tungstenMemoryAllocator().free(page);
-    releaseExecutionMemory(pageSize, consumer);
+    releaseExecutionMemory(pageSize, tungstenMemoryMode, consumer);
   }
 
   /**
@@ -276,7 +295,7 @@ public class TaskMemoryManager {
    * @return an encoded page address.
    */
   public long encodePageNumberAndOffset(MemoryBlock page, long offsetInPage) {
-    if (!inHeap) {
+    if (tungstenMemoryMode == MemoryMode.OFF_HEAP) {
       // In off-heap mode, an offset is an absolute address that may require a full 64 bits to
       // encode. Due to our page size limitation, though, we can convert this into an offset that's
       // relative to the page's base offset; this relative offset will fit in 51 bits.
@@ -305,7 +324,7 @@ public class TaskMemoryManager {
    * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
    */
   public Object getPage(long pagePlusOffsetAddress) {
-    if (inHeap) {
+    if (tungstenMemoryMode == MemoryMode.ON_HEAP) {
       final int pageNumber = decodePageNumber(pagePlusOffsetAddress);
       assert (pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE);
       final MemoryBlock page = pageTable[pageNumber];
@@ -323,7 +342,7 @@ public class TaskMemoryManager {
    */
   public long getOffsetInPage(long pagePlusOffsetAddress) {
     final long offsetInPage = decodeOffset(pagePlusOffsetAddress);
-    if (inHeap) {
+    if (tungstenMemoryMode == MemoryMode.ON_HEAP) {
       return offsetInPage;
     } else {
       // In off-heap mode, an offset is an absolute address. In encodePageNumberAndOffset, we
@@ -351,11 +370,19 @@ public class TaskMemoryManager {
       }
       consumers.clear();
     }
+
+    for (MemoryBlock page : pageTable) {
+      if (page != null) {
+        memoryManager.tungstenMemoryAllocator().free(page);
+      }
+    }
+    Arrays.fill(pageTable, null);
+
     return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
   }
 
   /**
-   * Returns the memory consumption, in bytes, for the current task
+   * Returns the memory consumption, in bytes, for the current task.
    */
   public long getMemoryConsumptionForThisTask() {
     return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);

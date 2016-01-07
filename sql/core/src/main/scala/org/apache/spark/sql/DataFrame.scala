@@ -23,22 +23,20 @@ import java.util.Properties
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -111,11 +109,11 @@ private[sql] object DataFrame {
  * @groupname action Actions
  * @since 1.3.0
  */
-// TODO: Improve documentation.
 @Experimental
 class DataFrame private[sql](
-    @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: QueryExecution) extends Serializable {
+    @transient override val sqlContext: SQLContext,
+    @DeveloperApi @transient override val queryExecution: QueryExecution)
+  extends Queryable with Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
@@ -165,13 +163,11 @@ class DataFrame private[sql](
    * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
    */
-  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+  override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
-    val sb = new StringBuilder
     val takeResult = take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
-    val numCols = schema.fieldNames.length
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
@@ -179,6 +175,7 @@ class DataFrame private[sql](
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
+          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case array: Array[_] => array.mkString("[", ", ", "]")
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
           case _ => cell.toString
@@ -187,59 +184,7 @@ class DataFrame private[sql](
       }: Seq[String]
     }
 
-    // Initialise the width of each column to a minimum value of '3'
-    val colWidths = Array.fill(numCols)(3)
-
-    // Compute the width of each column
-    for (row <- rows) {
-      for ((cell, i) <- row.zipWithIndex) {
-        colWidths(i) = math.max(colWidths(i), cell.length)
-      }
-    }
-
-    // Create SeparateLine
-    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
-
-    // column names
-    rows.head.zipWithIndex.map { case (cell, i) =>
-      if (truncate) {
-        StringUtils.leftPad(cell, colWidths(i))
-      } else {
-        StringUtils.rightPad(cell, colWidths(i))
-      }
-    }.addString(sb, "|", "|", "|\n")
-
-    sb.append(sep)
-
-    // data
-    rows.tail.map {
-      _.zipWithIndex.map { case (cell, i) =>
-        if (truncate) {
-          StringUtils.leftPad(cell.toString, colWidths(i))
-        } else {
-          StringUtils.rightPad(cell.toString, colWidths(i))
-        }
-      }.addString(sb, "|", "|", "|\n")
-    }
-
-    sb.append(sep)
-
-    // For Data that has more than "numRows" records
-    if (hasMoreData) {
-      val rowsString = if (numRows == 1) "row" else "rows"
-      sb.append(s"only showing top $numRows $rowsString\n")
-    }
-
-    sb.toString()
-  }
-
-  override def toString: String = {
-    try {
-      schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
-    } catch {
-      case NonFatal(e) =>
-        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
-    }
+    formatString ( rows, numRows, hasMoreData, truncate )
   }
 
   /**
@@ -293,6 +238,35 @@ class DataFrame private[sql](
   def schema: StructType = queryExecution.analyzed.schema
 
   /**
+   * Prints the schema to the console in a nice tree format.
+   * @group basic
+   * @since 1.3.0
+   */
+  // scalastyle:off println
+  override def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * @group basic
+   * @since 1.3.0
+   */
+  override def explain(extended: Boolean): Unit = {
+    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
+      // scalastyle:off println
+      r => println(r.getString(0))
+      // scalastyle:on println
+    }
+  }
+
+  /**
+   * Prints the physical plan to the console for debugging purposes.
+   * @since 1.3.0
+   */
+  override def explain(): Unit = explain(extended = false)
+
+  /**
    * Returns all column names and their data types as an array.
    * @group basic
    * @since 1.3.0
@@ -307,36 +281,6 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def columns: Array[String] = schema.fields.map(_.name)
-
-  /**
-   * Prints the schema to the console in a nice tree format.
-   * @group basic
-   * @since 1.3.0
-   */
-  // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
-  // scalastyle:on println
-
-  /**
-   * Prints the plans (logical and physical) to the console for debugging purposes.
-   * @group basic
-   * @since 1.3.0
-   */
-  def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    withPlan(explain).queryExecution.executedPlan.executeCollect().foreach {
-      // scalastyle:off println
-      r => println(r.getString(0))
-      // scalastyle:on println
-    }
-  }
-
-  /**
-   * Only prints the physical plan to the console for debugging purposes.
-   * @group basic
-   * @since 1.3.0
-   */
-  def explain(): Unit = explain(extended = false)
 
   /**
    * Returns true if the `collect` and `take` methods can be run locally
@@ -509,10 +453,9 @@ class DataFrame private[sql](
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
+      .analyzed.asInstanceOf[Join]
 
-    // Project only one of the join columns.
-    val joinedCols = usingColumns.map(col => withPlan(joined.right).resolve(col))
     val condition = usingColumns.map { col =>
       catalyst.expressions.EqualTo(
         withPlan(joined.left).resolve(col),
@@ -521,9 +464,26 @@ class DataFrame private[sql](
       catalyst.expressions.And(cond, eqTo)
     }
 
+    // Project only one of the join columns.
+    val joinedCols = JoinType(joinType) match {
+      case Inner | LeftOuter | LeftSemi =>
+        usingColumns.map(col => withPlan(joined.left).resolve(col))
+      case RightOuter =>
+        usingColumns.map(col => withPlan(joined.right).resolve(col))
+      case FullOuter =>
+        usingColumns.map { col =>
+          val leftCol = withPlan(joined.left).resolve(col).toAttribute.withNullability(true)
+          val rightCol = withPlan(joined.right).resolve(col).toAttribute.withNullability(true)
+          Alias(Coalesce(Seq(leftCol, rightCol)), col)()
+        }
+    }
+    // The nullability of output of joined could be different than original column,
+    // so we can only compare them by exprId
+    val joinRefs = AttributeSet(condition.toSeq.flatMap(_.references))
+    val resultCols = joinedCols ++ joined.output.filterNot(joinRefs.contains(_))
     withPlan {
       Project(
-        joined.output.filterNot(joinedCols.contains(_)),
+        resultCols,
         Join(
           joined.left,
           joined.right,
@@ -619,7 +579,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sortWithinPartitions(sortCol: String, sortCols: String*): DataFrame = {
-    sortWithinPartitions(sortCol, sortCols : _*)
+    sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
   /**
@@ -744,18 +704,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
-    val namedExpressions = cols.map {
-      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-      // make it a NamedExpression.
-      case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
-      case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
-      // correct defaults after the nested expression's type has been resolved.
-      case Column(explode: Explode) => MultiAlias(explode, Nil)
-      case Column(expr: Expression) => Alias(expr, expr.prettyString)()
-    }
-    Project(namedExpressions.toSeq, logicalPlan)
+    Project(cols.map(_.named), logicalPlan)
   }
 
   /**
@@ -1222,13 +1171,17 @@ class DataFrame private[sql](
    */
   def withColumn(colName: String, col: Column): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val replaced = schema.exists(f => resolver(f.name, colName))
-    if (replaced) {
-      val colNames = schema.map { field =>
-        val name = field.name
-        if (resolver(name, colName)) col.as(colName) else Column(name)
+    val output = queryExecution.analyzed.output
+    val shouldReplace = output.exists(f => resolver(f.name, colName))
+    if (shouldReplace) {
+      val columns = output.map { field =>
+        if (resolver(field.name, colName)) {
+          col.as(colName)
+        } else {
+          Column(field)
+        }
       }
-      select(colNames : _*)
+      select(columns : _*)
     } else {
       select(Column("*"), col.as(colName))
     }
@@ -1239,13 +1192,17 @@ class DataFrame private[sql](
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val replaced = schema.exists(f => resolver(f.name, colName))
-    if (replaced) {
-      val colNames = schema.map { field =>
-        val name = field.name
-        if (resolver(name, colName)) col.as(colName, metadata) else Column(name)
+    val output = queryExecution.analyzed.output
+    val shouldReplace = output.exists(f => resolver(f.name, colName))
+    if (shouldReplace) {
+      val columns = output.map { field =>
+        if (resolver(field.name, colName)) {
+          col.as(colName, metadata)
+        } else {
+          Column(field)
+        }
       }
-      select(colNames : _*)
+      select(columns : _*)
     } else {
       select(Column("*"), col.as(colName, metadata))
     }
@@ -1282,16 +1239,24 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(colName: String): DataFrame = {
+    drop(Seq(colName) : _*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with columns dropped.
+   * This is a no-op if schema doesn't contain column name(s).
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def drop(colNames: String*): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldDrop = schema.exists(f => resolver(f.name, colName))
-    if (shouldDrop) {
-      val colsAfterDrop = schema.filter { field =>
-        val name = field.name
-        !resolver(name, colName)
-      }.map(f => Column(f.name))
-      select(colsAfterDrop : _*)
-    } else {
+    val remainingCols =
+      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
+    if (remainingCols.size == this.schema.size) {
       this
+    } else {
+      this.select(remainingCols: _*)
     }
   }
 
@@ -1338,7 +1303,7 @@ class DataFrame private[sql](
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        Alias(First(attr), attr.name)()
+        Alias(new First(attr).toAggregateExpression(), attr.name)()
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)
@@ -1381,11 +1346,11 @@ class DataFrame private[sql](
 
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
-      "count" -> Count,
-      "mean" -> Average,
-      "stddev" -> StddevSamp,
-      "min" -> Min,
-      "max" -> Max)
+      "count" -> ((child: Expression) => Count(child).toAggregateExpression()),
+      "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
+      "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
+      "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
+      "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
@@ -1435,6 +1400,19 @@ class DataFrame private[sql](
   def first(): Row = head()
 
   /**
+   * Concise syntax for chaining custom transformations.
+   * {{{
+   *   def featurize(ds: DataFrame) = ...
+   *
+   *   df
+   *     .transform(featurize)
+   *     .transform(...)
+   * }}}
+   * @since 1.6.0
+   */
+  def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
+
+  /**
    * Returns a new RDD by applying a function to all rows of this DataFrame.
    * @group rdd
    * @since 1.3.0
@@ -1478,17 +1456,53 @@ class DataFrame private[sql](
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
    * @group action
    * @since 1.3.0
    */
   def take(n: Int): Array[Row] = head(n)
 
   /**
+   * Returns the first `n` rows in the [[DataFrame]] as a list.
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 1.6.0
+   */
+  def takeAsList(n: Int): java.util.List[Row] = java.util.Arrays.asList(take(n) : _*)
+
+  /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * For Java API, use [[collectAsList]].
+   *
    * @group action
    * @since 1.3.0
    */
   def collect(): Array[Row] = collect(needCallback = true)
+
+  /**
+   * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 1.3.0
+   */
+  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
+    withNewExecutionId {
+      java.util.Arrays.asList(rdd.collect() : _*)
+    }
+  }
 
   private def collect(needCallback: Boolean): Array[Row] = {
     def execute(): Array[Row] = withNewExecutionId {
@@ -1499,17 +1513,6 @@ class DataFrame private[sql](
       withCallback("collect", this)(_ => execute())
     } else {
       execute()
-    }
-  }
-
-  /**
-   * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
-   * @group action
-   * @since 1.3.0
-   */
-  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
-    withNewExecutionId {
-      java.util.Arrays.asList(rdd.collect() : _*)
     }
   }
 
@@ -1580,6 +1583,7 @@ class DataFrame private[sql](
   def distinct(): DataFrame = dropDuplicates()
 
   /**
+   * Persist this [[DataFrame]] with the default storage level (`MEMORY_AND_DISK`).
    * @group basic
    * @since 1.3.0
    */
@@ -1589,12 +1593,17 @@ class DataFrame private[sql](
   }
 
   /**
+   * Persist this [[DataFrame]] with the default storage level (`MEMORY_AND_DISK`).
    * @group basic
    * @since 1.3.0
    */
   def cache(): this.type = persist()
 
   /**
+   * Persist this [[DataFrame]] with the given storage level.
+   * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+   *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+   *                 `MEMORY_AND_DISK_2`, etc.
    * @group basic
    * @since 1.3.0
    */
@@ -1604,6 +1613,8 @@ class DataFrame private[sql](
   }
 
   /**
+   * Mark the [[DataFrame]] as non-persistent, and remove all blocks for it from memory and disk.
+   * @param blocking Whether to block until all blocks are deleted.
    * @group basic
    * @since 1.3.0
    */
@@ -1613,6 +1624,7 @@ class DataFrame private[sql](
   }
 
   /**
+   * Mark the [[DataFrame]] as non-persistent, and remove all blocks for it from memory and disk.
    * @group basic
    * @since 1.3.0
    */
@@ -1732,323 +1744,11 @@ class DataFrame private[sql](
     EvaluatePython.javaToPython(rdd)
   }
 
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-  // Deprecated methods
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * @deprecated As of 1.3.0, replaced by `toDF()`.
-   */
-  @deprecated("use toDF", "1.3.0")
-  def toSchemaRDD: DataFrame = this
-
-  /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
-   * This will run a `CREATE TABLE` and a bunch of `INSERT INTO` statements.
-   * If you pass `true` for `allowExisting`, it will drop any table with the
-   * given name; if you pass `false`, it will throw if the table already
-   * exists.
-   * @group output
-   * @deprecated As of 1.340, replaced by `write().jdbc()`.
-   */
-  @deprecated("Use write.jdbc()", "1.4.0")
-  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
-    val w = if (allowExisting) write.mode(SaveMode.Overwrite) else write
-    w.jdbc(url, table, new Properties)
+  protected[sql] def collectToPython(): Int = {
+    withNewExecutionId {
+      PythonRDD.collectAndServe(javaToPython.rdd)
+    }
   }
-
-  /**
-   * Save this [[DataFrame]] to a JDBC database at `url` under the table name `table`.
-   * Assumes the table already exists and has a compatible schema.  If you
-   * pass `true` for `overwrite`, it will `TRUNCATE` the table before
-   * performing the `INSERT`s.
-   *
-   * The table must already exist on the database.  It must have a schema
-   * that is compatible with the schema of this RDD; inserting the rows of
-   * the RDD in order via the simple statement
-   * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().jdbc()`.
-   */
-  @deprecated("Use write.jdbc()", "1.4.0")
-  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
-    val w = if (overwrite) write.mode(SaveMode.Overwrite) else write.mode(SaveMode.Append)
-    w.jdbc(url, table, new Properties)
-  }
-
-  /**
-   * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema.
-   * Files that are written out using this method can be read back in as a [[DataFrame]]
-   * using the `parquetFile` function in [[SQLContext]].
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().parquet()`.
-   */
-  @deprecated("Use write.parquet(path)", "1.4.0")
-  def saveAsParquetFile(path: String): Unit = {
-    write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
-  }
-
-  /**
-   * Creates a table from the the contents of this DataFrame.
-   * It will use the default data source configured by spark.sql.sources.default.
-   * This will fail if the table already exists.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
-   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
-   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
-   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
-   * specific format.
-   *
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String): Unit = {
-    write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
-  }
-
-  /**
-   * Creates a table from the the contents of this DataFrame, using the default data source
-   * configured by spark.sql.sources.default and [[SaveMode.ErrorIfExists]] as the save mode.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
-   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
-   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
-   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
-   * specific format.
-   *
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String, mode: SaveMode): Unit = {
-    write.mode(mode).saveAsTable(tableName)
-  }
-
-  /**
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source and a set of options,
-   * using [[SaveMode.ErrorIfExists]] as the save mode.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
-   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
-   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
-   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
-   * specific format.
-   *
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String, source: String): Unit = {
-    write.format(source).saveAsTable(tableName)
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
-   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
-   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
-   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
-   * specific format.
-   *
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
-  def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
-    write.format(source).mode(mode).saveAsTable(tableName)
-  }
-
-  /**
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
-   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
-   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
-   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
-   * specific format.
-   *
-   * @group output
-   * @deprecated As of 1.4.0, replaced by
-   *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
-    "1.4.0")
-  def saveAsTable(
-      tableName: String,
-      source: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).saveAsTable(tableName)
-  }
-
-  /**
-   * (Scala-specific)
-   * Creates a table from the the contents of this DataFrame based on a given data source,
-   * [[SaveMode]] specified by mode, and a set of options.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   *
-   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
-   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
-   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
-   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
-   * specific format.
-   *
-   * @group output
-   * @deprecated As of 1.4.0, replaced by
-   *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
-    "1.4.0")
-  def saveAsTable(
-      tableName: String,
-      source: String,
-      mode: SaveMode,
-      options: Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).saveAsTable(tableName)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path,
-   * using the default data source configured by spark.sql.sources.default and
-   * [[SaveMode.ErrorIfExists]] as the save mode.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().save(path)`.
-   */
-  @deprecated("Use write.save(path)", "1.4.0")
-  def save(path: String): Unit = {
-    write.save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
-   * using the default data source configured by spark.sql.sources.default.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().mode(mode).save(path)`.
-   */
-  @deprecated("Use write.mode(mode).save(path)", "1.4.0")
-  def save(path: String, mode: SaveMode): Unit = {
-    write.mode(mode).save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path based on the given data source,
-   * using [[SaveMode.ErrorIfExists]] as the save mode.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().format(source).save(path)`.
-   */
-  @deprecated("Use write.format(source).save(path)", "1.4.0")
-  def save(path: String, source: String): Unit = {
-    write.format(source).save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame to the given path based on the given data source and
-   * [[SaveMode]] specified by mode.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by `write().format(source).mode(mode).save(path)`.
-   */
-  @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
-  def save(path: String, source: String, mode: SaveMode): Unit = {
-    write.format(source).mode(mode).save(path)
-  }
-
-  /**
-   * Saves the contents of this DataFrame based on the given data source,
-   * [[SaveMode]] specified by mode, and a set of options.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by
-   *            `write().format(source).mode(mode).options(options).save(path)`.
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
-  def save(
-      source: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).save()
-  }
-
-  /**
-   * (Scala-specific)
-   * Saves the contents of this DataFrame based on the given data source,
-   * [[SaveMode]] specified by mode, and a set of options
-   * @group output
-   * @deprecated As of 1.4.0, replaced by
-   *            `write().format(source).mode(mode).options(options).save(path)`.
-   */
-  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
-  def save(
-      source: String,
-      mode: SaveMode,
-      options: Map[String, String]): Unit = {
-    write.format(source).mode(mode).options(options).save()
-  }
-
-
-  /**
-   * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by
-   *            `write().mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)", "1.4.0")
-  def insertInto(tableName: String, overwrite: Boolean): Unit = {
-    write.mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append).insertInto(tableName)
-  }
-
-  /**
-   * Adds the rows from this RDD to the specified table.
-   * Throws an exception if the table already exists.
-   * @group output
-   * @deprecated As of 1.4.0, replaced by
-   *            `write().mode(SaveMode.Append).saveAsTable(tableName)`.
-   */
-  @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
-  def insertInto(tableName: String): Unit = {
-    write.mode(SaveMode.Append).insertInto(tableName)
-  }
-
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-  // End of deprecated methods
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
 
   /**
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with

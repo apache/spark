@@ -31,21 +31,21 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
+import org.apache.spark.sql.execution.{datasources, FileRelation}
+import org.apache.spark.sql.execution.datasources.{Partition => ParquetPartition, _}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
-import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
 
 private[hive] case class HiveSerDe(
     inputFormat: Option[String] = None,
@@ -211,6 +211,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       tableIdent: TableIdentifier,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
@@ -237,6 +238,25 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       tableProperties.put("spark.sql.sources.schema.numPartCols", partitionColumns.length.toString)
       partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
         tableProperties.put(s"spark.sql.sources.schema.partCol.$index", partCol)
+      }
+    }
+
+    if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
+      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
+
+      tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
+      tableProperties.put("spark.sql.sources.schema.numBucketCols",
+        bucketColumnNames.length.toString)
+      bucketColumnNames.zipWithIndex.foreach { case (bucketCol, index) =>
+        tableProperties.put(s"spark.sql.sources.schema.bucketCol.$index", bucketCol)
+      }
+
+      if (sortColumnNames.nonEmpty) {
+        tableProperties.put("spark.sql.sources.schema.numSortCols",
+          sortColumnNames.length.toString)
+        sortColumnNames.zipWithIndex.foreach { case (sortCol, index) =>
+          tableProperties.put(s"spark.sql.sources.schema.sortCol.$index", sortCol)
+        }
       }
     }
 
@@ -411,7 +431,12 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     // evil case insensitivity issue, which is reconciled within `ParquetRelation`.
     val parquetOptions = Map(
       ParquetRelation.METASTORE_SCHEMA -> metastoreSchema.json,
-      ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString)
+      ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
+      ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
+        metastoreRelation.tableName,
+        Some(metastoreRelation.databaseName)
+      ).unquotedString
+    )
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
 
@@ -591,6 +616,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
+            bucketSpec = None,
             mode,
             options = Map.empty[String, String],
             child
@@ -723,6 +749,8 @@ private[hive] case class MetastoreRelation
     Objects.hashCode(databaseName, tableName, alias, output)
   }
 
+  override protected def otherCopyArgs: Seq[AnyRef] = table :: sqlContext :: Nil
+
   @transient val hiveQlTable: Table = {
     // We start by constructing an API table as Hive performs several important transformations
     // internally when converting an API table to a QL table.
@@ -804,12 +832,13 @@ private[hive] case class MetastoreRelation
 
       val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
       sd.setSerdeInfo(serdeInfo)
+      // maps and lists should be set only after all elements are ready (see HIVE-7975)
       serdeInfo.setSerializationLib(p.storage.serde)
 
       val serdeParameters = new java.util.HashMap[String, String]()
-      serdeInfo.setParameters(serdeParameters)
       table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
       p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+      serdeInfo.setParameters(serdeParameters)
 
       new Partition(hiveQlTable, tPartition)
     }

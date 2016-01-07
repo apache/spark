@@ -18,23 +18,21 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.sql.Timestamp
 import java.util.{Locale, TimeZone}
-
-import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
 
 import scala.util.Try
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-
-import org.apache.spark.{SparkFiles, SparkException}
+import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.hive.test.TestHive._
 
 case class TestData(a: Int, b: String)
@@ -251,11 +249,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |IF(TRUE, CAST(NULL AS BINARY), CAST("1" AS BINARY)) AS COL18,
       |IF(FALSE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL19,
       |IF(TRUE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL20,
-      |IF(FALSE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL21,
-      |IF(TRUE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL22,
-      |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23,
-      |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL24
+      |IF(TRUE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL21,
+      |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL22,
+      |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23
       |FROM src LIMIT 1""".stripMargin)
+
+  test("constant null testing timestamp") {
+    val r1 = sql("SELECT IF(FALSE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL20")
+      .collect().head
+    assert(new Timestamp(1000) == r1.getTimestamp(0))
+  }
 
   createQueryTest("constant array",
   """
@@ -383,9 +386,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("partitioned table scan",
     "SELECT ds, hr, key, value FROM srcpart")
-
-  createQueryTest("hash",
-    "SELECT hash('test') FROM src LIMIT 1")
 
   createQueryTest("create table as",
     """
@@ -606,26 +606,32 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   // Jdk version leads to different query output for double, so not use createQueryTest here
   test("timestamp cast #1") {
     val res = sql("SELECT CAST(CAST(1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
-    assert(0.001 == res.getDouble(0))
+    assert(1 == res.getDouble(0))
   }
 
   createQueryTest("timestamp cast #2",
     "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
 
-  createQueryTest("timestamp cast #3",
-    "SELECT CAST(CAST(1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1")
+  test("timestamp cast #3") {
+    val res = sql("SELECT CAST(CAST(1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1").collect().head
+    assert(1200 == res.getInt(0))
+  }
 
   createQueryTest("timestamp cast #4",
     "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
 
-  createQueryTest("timestamp cast #5",
-    "SELECT CAST(CAST(-1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+  test("timestamp cast #5") {
+    val res = sql("SELECT CAST(CAST(-1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
+    assert(-1 == res.get(0))
+  }
 
   createQueryTest("timestamp cast #6",
     "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
 
-  createQueryTest("timestamp cast #7",
-    "SELECT CAST(CAST(-1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1")
+  test("timestamp cast #7") {
+    val res = sql("SELECT CAST(CAST(-1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1").collect().head
+    assert(-1200 == res.getInt(0))
+  }
 
   createQueryTest("timestamp cast #8",
     "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
@@ -927,7 +933,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-2263: Insert Map<K, V> values") {
     sql("CREATE TABLE m(value MAP<INT, STRING>)")
     sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
-    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).map {
+    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).foreach {
       case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
         assert(map.size === 1)
         assert(map.head === (key, value))
@@ -961,10 +967,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("CREATE TEMPORARY FUNCTION") {
     val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
-    sql(s"ADD JAR $funcJar")
+    val jarURL = s"file://$funcJar"
+    sql(s"ADD JAR $jarURL")
     sql(
       """CREATE TEMPORARY FUNCTION udtf_count2 AS
-        | 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'""".stripMargin)
+        |'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
     assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
@@ -1233,6 +1241,26 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       s2.sql("DROP TABLE IF EXISTS test_b")
     }
 
+  }
+
+  test("lookup hive UDF in another thread") {
+    val e = intercept[AnalysisException] {
+      range(1).selectExpr("not_a_udf()")
+    }
+    assert(e.getMessage.contains("undefined function not_a_udf"))
+    var success = false
+    val t = new Thread("test") {
+      override def run(): Unit = {
+        val e = intercept[AnalysisException] {
+          range(1).selectExpr("not_a_udf()")
+        }
+        assert(e.getMessage.contains("undefined function not_a_udf"))
+        success = true
+      }
+    }
+    t.start()
+    t.join()
+    assert(success)
   }
 
   createQueryTest("select from thrift based table",

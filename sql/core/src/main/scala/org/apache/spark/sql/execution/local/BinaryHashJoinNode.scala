@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.local
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.joins.{HashedRelation, BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide, HashedRelation}
 
 /**
  * A [[HashJoinNode]] that builds the [[HashedRelation]] according to the value of
@@ -50,11 +50,7 @@ case class BinaryHashJoinNode(
   private def buildSideKeyGenerator: Projection = {
     // We are expecting the data types of buildKeys and streamedKeys are the same.
     assert(buildKeys.map(_.dataType) == streamedKeys.map(_.dataType))
-    if (isUnsafeMode) {
-      UnsafeProjection.create(buildKeys, buildNode.output)
-    } else {
-      newMutableProjection(buildKeys, buildNode.output)()
-    }
+    UnsafeProjection.create(buildKeys, buildNode.output)
   }
 
   protected override def doOpen(): Unit = {

@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -40,7 +40,7 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
+import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
   SamplingUtils}
 
 /**
@@ -241,6 +241,12 @@ abstract class RDD[T: ClassTag](
       partitions_
     }
   }
+
+  /**
+    * Returns the number of partitions of this RDD.
+    */
+  @Since("1.6.0")
+  final def getNumPartitions: Int = partitions.length
 
   /**
    * Get the preferred locations of a partition, taking into account whether the
@@ -706,6 +712,24 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * [performance] Spark's internal mapPartitions method which skips closure cleaning. It is a
+   * performance API to be used carefully only if we are sure that the RDD elements are
+   * serializable and don't require closure cleaning.
+   *
+   * @param preservesPartitioning indicates whether the input function preserves the partitioner,
+   * which should be `false` unless this is a pair RDD and the input function doesn't modify
+   * the keys.
+   */
+  private[spark] def mapPartitionsInternal[U: ClassTag](
+      f: Iterator[T] => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter),
+      preservesPartitioning)
+  }
+
+  /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    *
@@ -720,99 +744,6 @@ abstract class RDD[T: ClassTag](
       this,
       (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
       preservesPartitioning)
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
-   * mapPartitions that also passes the TaskContext into the closure.
-   *
-   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
-   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
-   */
-  @DeveloperApi
-  @deprecated("use TaskContext.get", "1.2.0")
-  def mapPartitionsWithContext[U: ClassTag](
-      f: (TaskContext, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    val cleanF = sc.clean(f)
-    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => cleanF(context, iter)
-    new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
-  }
-
-  /**
-   * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
-   * of the original partition.
-   */
-  @deprecated("use mapPartitionsWithIndex", "0.7.0")
-  def mapPartitionsWithSplit[U: ClassTag](
-      f: (Int, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    mapPartitionsWithIndex(f, preservesPartitioning)
-  }
-
-  /**
-   * Maps f over this RDD, where f takes an additional parameter of type A.  This
-   * additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex", "1.0.0")
-  def mapWith[A, U: ClassTag]
-      (constructA: Int => A, preservesPartitioning: Boolean = false)
-      (f: (T, A) => U): RDD[U] = withScope {
-    val cleanF = sc.clean(f)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
-      iter.map(t => cleanF(t, a))
-    }, preservesPartitioning)
-  }
-
-  /**
-   * FlatMaps f over this RDD, where f takes an additional parameter of type A.  This
-   * additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex and flatMap", "1.0.0")
-  def flatMapWith[A, U: ClassTag]
-      (constructA: Int => A, preservesPartitioning: Boolean = false)
-      (f: (T, A) => Seq[U]): RDD[U] = withScope {
-    val cleanF = sc.clean(f)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
-      iter.flatMap(t => cleanF(t, a))
-    }, preservesPartitioning)
-  }
-
-  /**
-   * Applies f to each element of this RDD, where f takes an additional parameter of type A.
-   * This additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
-  def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit): Unit = withScope {
-    val cleanF = sc.clean(f)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex { (index, iter) =>
-      val a = cleanA(index)
-      iter.map(t => {cleanF(t, a); t})
-    }
-  }
-
-  /**
-   * Filters this RDD with p, where p takes an additional parameter of type A.  This
-   * additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
-  def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = withScope {
-    val cleanP = sc.clean(p)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
-      iter.filter(t => cleanP(t, a))
-    }, preservesPartitioning = true)
   }
 
   /**
@@ -918,14 +849,6 @@ abstract class RDD[T: ClassTag](
       sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
     }
     (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
-  }
-
-  /**
-   * Return an array that contains all of the elements in this RDD.
-   */
-  @deprecated("use collect", "1.0.0")
-  def toArray(): Array[T] = withScope {
-    collect()
   }
 
   /**
@@ -1267,11 +1190,11 @@ abstract class RDD[T: ClassTag](
     } else {
       val buf = new ArrayBuffer[T]
       val totalParts = this.partitions.length
-      var partsScanned = 0
+      var partsScanned = 0L
       while (buf.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1
+        var numPartsToTry = 1L
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
@@ -1286,11 +1209,11 @@ abstract class RDD[T: ClassTag](
         }
 
         val left = num - buf.size
-        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+        val p = partsScanned.toInt until math.min(partsScanned + numPartsToTry, totalParts).toInt
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))
-        partsScanned += numPartsToTry
+        partsScanned += p.size
       }
 
       buf.toArray
@@ -1309,7 +1232,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the top k (largest) elements from this RDD as defined by the specified
-   * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
+   * implicit Ordering[T] and maintains the ordering. This does the opposite of
+   * [[takeOrdered]]. For example:
    * {{{
    *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
    *   // returns Array(12)

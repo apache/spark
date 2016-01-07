@@ -22,35 +22,40 @@ import java.sql.Timestamp
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
+import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
+import org.apache.spark.util.Utils
 
 /**
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
  * Hive metastore and warehouse.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     warehousePath.delete()
     metastorePath.delete()
     scratchDirPath.delete()
   }
 
-  after {
-    warehousePath.delete()
-    metastorePath.delete()
-    scratchDirPath.delete()
+  override def afterAll(): Unit = {
+    try {
+      warehousePath.delete()
+      metastorePath.delete()
+      scratchDirPath.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**
@@ -79,6 +84,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
       s"""$cliScript
          |  --master local
+         |  --driver-java-options -Dderby.system.durability=test
+         |  --conf spark.ui.enabled=false
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath

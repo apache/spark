@@ -18,16 +18,38 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
+import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+/**
+ * Ensures that java functions signatures for methods that now return a [[TypedColumn]] still have
+ * legacy equivalents in bytecode.  This compatibility is done by forcing the compiler to generate
+ * "bridge" methods due to the use of covariant return types.
+ *
+ * {{{
+ *   // In LegacyFunctions:
+ *   public abstract org.apache.spark.sql.Column avg(java.lang.String);
+ *
+ *   // In functions:
+ *   public static org.apache.spark.sql.TypedColumn<java.lang.Object, java.lang.Object> avg(...);
+ * }}}
+ *
+ * This allows us to use the same functions both in typed [[Dataset]] operations and untyped
+ * [[DataFrame]] operations when the return type for a given function is statically known.
+ */
+private[sql] abstract class LegacyFunctions {
+  def count(columnName: String): Column
+}
 
 /**
  * :: Experimental ::
@@ -48,10 +70,16 @@ import org.apache.spark.util.Utils
  */
 @Experimental
 // scalastyle:off
-object functions {
+object functions extends LegacyFunctions {
 // scalastyle:on
 
   private def withExpr(expr: Expression): Column = Column(expr)
+
+  private def withAggregateFunction(
+    func: AggregateFunction,
+    isDistinct: Boolean = false): Column = {
+    Column(func.toAggregateExpression(isDistinct))
+  }
 
   /**
    * Returns a [[Column]] based on the given column name.
@@ -128,7 +156,9 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def approxCountDistinct(e: Column): Column = withExpr { ApproxCountDistinct(e.expr) }
+  def approxCountDistinct(e: Column): Column = withAggregateFunction {
+    HyperLogLogPlusPlus(e.expr)
+  }
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -144,8 +174,8 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def approxCountDistinct(e: Column, rsd: Double): Column = withExpr {
-    ApproxCountDistinct(e.expr, rsd)
+  def approxCountDistinct(e: Column, rsd: Double): Column = withAggregateFunction {
+    HyperLogLogPlusPlus(e.expr, rsd, 0, 0)
   }
 
   /**
@@ -164,7 +194,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def avg(e: Column): Column = withExpr { Average(e.expr) }
+  def avg(e: Column): Column = withAggregateFunction { Average(e.expr) }
 
   /**
    * Aggregate function: returns the average of the values in a group.
@@ -175,12 +205,52 @@ object functions {
   def avg(columnName: String): Column = avg(Column(columnName))
 
   /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * For now this is an alias for the collect_list Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_list(e: Column): Column = callUDF("collect_list", e)
+
+  /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * For now this is an alias for the collect_list Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_list(columnName: String): Column = collect_list(Column(columnName))
+
+  /**
+   * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * For now this is an alias for the collect_set Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_set(e: Column): Column = callUDF("collect_set", e)
+
+  /**
+   * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * For now this is an alias for the collect_set Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_set(columnName: String): Column = collect_set(Column(columnName))
+
+  /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def corr(column1: Column, column2: Column): Column = withExpr {
+  def corr(column1: Column, column2: Column): Column = withAggregateFunction {
     Corr(column1.expr, column2.expr)
   }
 
@@ -200,7 +270,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(e: Column): Column = withExpr {
+  def count(e: Column): Column = withAggregateFunction {
     e.expr match {
       // Turn count(*) into count(1)
       case s: Star => Count(Literal(1))
@@ -214,7 +284,8 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(columnName: String): Column = count(Column(columnName))
+  def count(columnName: String): TypedColumn[Any, Long] =
+    count(Column(columnName)).as(ExpressionEncoder[Long])
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -223,8 +294,8 @@ object functions {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column = withExpr {
-    CountDistinct((expr +: exprs).map(_.expr))
+  def countDistinct(expr: Column, exprs: Column*): Column = {
+    withAggregateFunction(Count.apply((expr +: exprs).map(_.expr)), isDistinct = true)
   }
 
   /**
@@ -243,7 +314,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def first(e: Column): Column = withExpr { First(e.expr) }
+  def first(e: Column): Column = withAggregateFunction { new First(e.expr) }
 
   /**
    * Aggregate function: returns the first value of a column in a group.
@@ -259,7 +330,15 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def kurtosis(e: Column): Column = withExpr { Kurtosis(e.expr) }
+  def kurtosis(e: Column): Column = withAggregateFunction { Kurtosis(e.expr) }
+
+  /**
+   * Aggregate function: returns the kurtosis of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
   /**
    * Aggregate function: returns the last value in a group.
@@ -267,7 +346,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def last(e: Column): Column = withExpr { Last(e.expr) }
+  def last(e: Column): Column = withAggregateFunction { new Last(e.expr) }
 
   /**
    * Aggregate function: returns the last value of the column in a group.
@@ -283,7 +362,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def max(e: Column): Column = withExpr { Max(e.expr) }
+  def max(e: Column): Column = withAggregateFunction { Max(e.expr) }
 
   /**
    * Aggregate function: returns the maximum value of the column in a group.
@@ -317,7 +396,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def min(e: Column): Column = withExpr { Min(e.expr) }
+  def min(e: Column): Column = withAggregateFunction { Min(e.expr) }
 
   /**
    * Aggregate function: returns the minimum value of the column in a group.
@@ -333,7 +412,15 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def skewness(e: Column): Column = withExpr { Skewness(e.expr) }
+  def skewness(e: Column): Column = withAggregateFunction { Skewness(e.expr) }
+
+  /**
+   * Aggregate function: returns the skewness of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def skewness(columnName: String): Column = skewness(Column(columnName))
 
   /**
    * Aggregate function: alias for [[stddev_samp]].
@@ -341,16 +428,33 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev(e: Column): Column = withExpr { StddevSamp(e.expr) }
+  def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
-   * Aggregate function: returns the unbiased sample standard deviation of
+   * Aggregate function: alias for [[stddev_samp]].
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
+  /**
+   * Aggregate function: returns the sample standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev_samp(e: Column): Column = withExpr { StddevSamp(e.expr) }
+  def stddev_samp(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
+
+  /**
+   * Aggregate function: returns the sample standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_samp(columnName: String): Column = stddev_samp(Column(columnName))
 
   /**
    * Aggregate function: returns the population standard deviation of
@@ -359,7 +463,16 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev_pop(e: Column): Column = withExpr { StddevPop(e.expr) }
+  def stddev_pop(e: Column): Column = withAggregateFunction { StddevPop(e.expr) }
+
+  /**
+   * Aggregate function: returns the population standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_pop(columnName: String): Column = stddev_pop(Column(columnName))
 
   /**
    * Aggregate function: returns the sum of all values in the expression.
@@ -367,7 +480,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def sum(e: Column): Column = withExpr { Sum(e.expr) }
+  def sum(e: Column): Column = withAggregateFunction { Sum(e.expr) }
 
   /**
    * Aggregate function: returns the sum of all values in the given column.
@@ -383,7 +496,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def sumDistinct(e: Column): Column = withExpr { SumDistinct(e.expr) }
+  def sumDistinct(e: Column): Column = withAggregateFunction(Sum(e.expr), isDistinct = true)
 
   /**
    * Aggregate function: returns the sum of distinct values in the expression.
@@ -399,7 +512,15 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def variance(e: Column): Column = withExpr { VarianceSamp(e.expr) }
+  def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
+
+  /**
+   * Aggregate function: alias for [[var_samp]].
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def variance(columnName: String): Column = variance(Column(columnName))
 
   /**
    * Aggregate function: returns the unbiased variance of the values in a group.
@@ -407,7 +528,15 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def var_samp(e: Column): Column = withExpr { VarianceSamp(e.expr) }
+  def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
+
+  /**
+   * Aggregate function: returns the unbiased variance of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def var_samp(columnName: String): Column = var_samp(Column(columnName))
 
   /**
    * Aggregate function: returns the population variance of the values in a group.
@@ -415,7 +544,15 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def var_pop(e: Column): Column = withExpr { VariancePop(e.expr) }
+  def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
+
+  /**
+   * Aggregate function: returns the population variance of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -430,13 +567,10 @@ object functions {
    *   cumeDist(x) = number of values before (and including) x / N
    * }}}
    *
-   *
-   * This is equivalent to the CUME_DIST function in SQL.
-   *
    * @group window_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def cumeDist(): Column = withExpr { UnresolvedWindowFunction("cume_dist", Nil) }
+  def cume_dist(): Column = withExpr { new CumeDist }
 
   /**
    * Window function: returns the rank of rows within a window partition, without any gaps.
@@ -446,12 +580,10 @@ object functions {
    * and had three people tie for second place, you would say that all three were in second
    * place and that the next person came in third.
    *
-   * This is equivalent to the DENSE_RANK function in SQL.
-   *
    * @group window_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def denseRank(): Column = withExpr { UnresolvedWindowFunction("dense_rank", Nil) }
+  def dense_rank(): Column = withExpr { new DenseRank }
 
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
@@ -502,7 +634,7 @@ object functions {
    * @since 1.4.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    UnresolvedWindowFunction("lag", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    Lag(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**
@@ -554,7 +686,7 @@ object functions {
    * @since 1.4.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    UnresolvedWindowFunction("lead", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    Lead(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**
@@ -567,7 +699,7 @@ object functions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def ntile(n: Int): Column = withExpr { UnresolvedWindowFunction("ntile", lit(n).expr :: Nil) }
+  def ntile(n: Int): Column = withExpr { new NTile(Literal(n)) }
 
   /**
    * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
@@ -580,9 +712,9 @@ object functions {
    * This is equivalent to the PERCENT_RANK function in SQL.
    *
    * @group window_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def percentRank(): Column = withExpr { UnresolvedWindowFunction("percent_rank", Nil) }
+  def percent_rank(): Column = withExpr { new PercentRank }
 
   /**
    * Window function: returns the rank of rows within a window partition.
@@ -597,17 +729,15 @@ object functions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def rank(): Column = withExpr { UnresolvedWindowFunction("rank", Nil) }
+  def rank(): Column = withExpr { new Rank }
 
   /**
    * Window function: returns a sequential number starting at 1 within a window partition.
    *
-   * This is equivalent to the ROW_NUMBER function in SQL.
-   *
    * @group window_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def rowNumber(): Column = withExpr { UnresolvedWindowFunction("row_number", Nil) }
+  def row_number(): Column = withExpr { RowNumber() }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
@@ -636,6 +766,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
+  @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
     array((colName +: colNames).map(col) : _*)
   }
@@ -672,16 +803,25 @@ object functions {
    * Creates a string column for the file name of the current Spark task.
    *
    * @group normal_funcs
+   * @since 1.6.0
    */
-  def inputFileName(): Column = withExpr { InputFileName() }
+  def input_file_name(): Column = withExpr { InputFileName() }
 
   /**
    * Return true iff the column is NaN.
    *
    * @group normal_funcs
-   * @since 1.5.0
+   * @since 1.6.0
    */
-  def isNaN(e: Column): Column = withExpr { IsNaN(e.expr) }
+  def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
+
+  /**
+   * Return true iff the column is null.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
 
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
@@ -698,7 +838,24 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def monotonicallyIncreasingId(): Column = withExpr { MonotonicallyIncreasingID() }
+  def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
 
   /**
    * Returns col1 if it is not NaN, or col2 if col1 is NaN.
@@ -779,9 +936,9 @@ object functions {
    * Note that this is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def sparkPartitionId(): Column = withExpr { SparkPartitionID() }
+  def spark_partition_id(): Column = withExpr { SparkPartitionID() }
 
   /**
    * Computes the square root of the specified float value.
@@ -818,6 +975,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
+  @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
     struct((colName +: colNames).map(col) : _*)
   }
@@ -1655,6 +1813,17 @@ object functions {
    */
   def crc32(e: Column): Column = withExpr { Crc32(e.expr) }
 
+  /**
+   * Calculates the hash code of given columns, and returns the result as a int column.
+   *
+   * @group misc_funcs
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def hash(cols: Column*): Column = withExpr {
+    new Murmur3Hash(cols.map(_.expr))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2253,6 +2422,29 @@ object functions {
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
 
   /**
+   * Extracts json object from a json string based on json path specified, and returns json string
+   * of the extracted json object. It will return null if the input json string is invalid.
+   *
+   * @group collection_funcs
+   * @since 1.6.0
+   */
+  def get_json_object(e: Column, path: String): Column = withExpr {
+    GetJsonObject(e.expr, lit(path).expr)
+  }
+
+  /**
+   * Creates a new row for a json column according to the given field names.
+   *
+   * @group collection_funcs
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def json_tuple(json: Column, fields: String*): Column = withExpr {
+    require(fields.nonEmpty, "at least 1 field name should be given.")
+    JsonTuple(json.expr +: fields.map(Literal.apply))
+  }
+
+  /**
    * Returns length of array or map.
    *
    * @group collection_funcs
@@ -2281,7 +2473,8 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
-  // scalastyle:off
+  // scalastyle:off line.size.limit
+  // scalastyle:off parameter.number
 
   /* Use the following code to generate:
   (0 to 10).map { x =>
@@ -2297,29 +2490,11 @@ object functions {
      * @since 1.3.0
      */
     def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
-      val inputTypes = Try($inputTypes).getOrElse(Nil)
+      val inputTypes = Try($inputTypes).toOption
       UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
     }""")
   }
 
-  (0 to 10).map { x =>
-    val args = (1 to x).map(i => s"arg$i: Column").mkString(", ")
-    val fTypes = Seq.fill(x + 1)("_").mkString(", ")
-    val argsInUDF = (1 to x).map(i => s"arg$i.expr").mkString(", ")
-    println(s"""
-    /**
-     * Call a Scala function of ${x} arguments as user-defined function (UDF). This requires
-     * you to specify the return data type.
-     *
-     * @group udf_funcs
-     * @since 1.3.0
-     * @deprecated As of 1.5.0, since it's redundant with udf()
-     */
-    @deprecated("Use udf", "1.5.0")
-    def callUDF(f: Function$x[$fTypes], returnType: DataType${if (args.length > 0) ", " + args else ""}): Column = withExpr {
-      ScalaUDF(f, returnType, Seq($argsInUDF))
-    }""")
-  }
   */
   /**
    * Defines a user-defined function of 0 arguments as user-defined function (UDF).
@@ -2329,7 +2504,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
-    val inputTypes = Try(Nil).getOrElse(Nil)
+    val inputTypes = Try(Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2341,7 +2516,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2353,7 +2528,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2365,7 +2540,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2377,7 +2552,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2389,7 +2564,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2401,7 +2576,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2413,7 +2588,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2425,7 +2600,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2437,7 +2612,7 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2449,155 +2624,26 @@ object functions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: ScalaReflection.schemaFor(typeTag[A10]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: ScalaReflection.schemaFor(typeTag[A10]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  /**
-    * Call a Scala function of 0 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function0[_], returnType: DataType): Column = withExpr {
-    ScalaUDF(f, returnType, Seq())
-  }
+  // scalastyle:on parameter.number
+  // scalastyle:on line.size.limit
 
   /**
-    * Call a Scala function of 1 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function1[_, _], returnType: DataType, arg1: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr))
+   * Defines a user-defined function (UDF) using a Scala closure. For this variant, the caller must
+   * specifcy the output data type, and there is no automatic input type coercion.
+   *
+   * @param f  A closure in Scala
+   * @param dataType  The output data type of the UDF
+   *
+   * @group udf_funcs
+   * @since 2.0.0
+   */
+  def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    UserDefinedFunction(f, dataType, None)
   }
-
-  /**
-    * Call a Scala function of 2 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function2[_, _, _], returnType: DataType, arg1: Column, arg2: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr))
-  }
-
-  /**
-    * Call a Scala function of 3 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function3[_, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
-  }
-
-  /**
-    * Call a Scala function of 4 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function4[_, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
-  }
-
-  /**
-    * Call a Scala function of 5 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function5[_, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
-  }
-
-  /**
-    * Call a Scala function of 6 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function6[_, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
-  }
-
-  /**
-    * Call a Scala function of 7 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function7[_, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
-  }
-
-  /**
-    * Call a Scala function of 8 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function8[_, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
-  }
-
-  /**
-    * Call a Scala function of 9 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
-  }
-
-  /**
-    * Call a Scala function of 10 arguments as user-defined function (UDF). This requires
-    * you to specify the return data type.
-    *
-    * @group udf_funcs
-    * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
-    */
-  @deprecated("Use udf", "1.5.0")
-  def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = withExpr {
-    ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
-  }
-
-  // scalastyle:on
 
   /**
    * Call an user-defined function.
@@ -2619,32 +2665,4 @@ object functions {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
 
-  /**
-   * Call an user-defined function.
-   * Example:
-   * {{{
-   *  import org.apache.spark.sql._
-   *
-   *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-   *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
-   *  df.select($"id", callUdf("simpleUDF", $"value"))
-   * }}}
-   *
-   * @group udf_funcs
-   * @since 1.4.0
-   * @deprecated As of 1.5.0, since it was not coherent to have two functions callUdf and callUDF
-   */
-  @deprecated("Use callUDF", "1.5.0")
-  def callUdf(udfName: String, cols: Column*): Column = withExpr {
-    // Note: we avoid using closures here because on file systems that are case-insensitive, the
-    // compiled class file for the closure here will conflict with the one in callUDF (upper case).
-    val exprs = new Array[Expression](cols.size)
-    var i = 0
-    while (i < cols.size) {
-      exprs(i) = cols(i).expr
-      i += 1
-    }
-    UnresolvedFunction(udfName, exprs, isDistinct = false)
-  }
 }

@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.{Map => JMap, HashMap => JHashMap}
+import java.util.{HashMap => JHashMap, Map => JMap}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Logging, SimpleFutureAction, ShuffleDependency, MapOutputStatistics}
+import org.apache.spark.{Logging, MapOutputStatistics, ShuffleDependency, SimpleFutureAction}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 
@@ -97,6 +98,7 @@ private[sql] class ExchangeCoordinator(
    * Registers an [[Exchange]] operator to this coordinator. This method is only allowed to be
    * called in the `doPrepare` method of an [[Exchange]] operator.
    */
+  @GuardedBy("this")
   def registerExchange(exchange: Exchange): Unit = synchronized {
     exchanges += exchange
   }
@@ -109,7 +111,7 @@ private[sql] class ExchangeCoordinator(
    */
   private[sql] def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
-    // If we have mapOutputStatistics.length <= numExchange, it is because we do not submit
+    // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
     // a stage when the number of partitions of this dependency is 0.
     assert(mapOutputStatistics.length <= numExchanges)
 
@@ -121,6 +123,8 @@ private[sql] class ExchangeCoordinator(
         val totalPostShuffleInputSize = mapOutputStatistics.map(_.bytesByPartitionId.sum).sum
         // The max at here is to make sure that when we have an empty table, we
         // only have a single post-shuffle partition.
+        // There is no particular reason that we pick 16. We just need a number to
+        // prevent maxPostShuffleInputSize from being set to 0.
         val maxPostShuffleInputSize =
           math.max(math.ceil(totalPostShuffleInputSize / numPartitions.toDouble).toLong, 16)
         math.min(maxPostShuffleInputSize, advisoryTargetPostShuffleInputSize)
@@ -135,6 +139,12 @@ private[sql] class ExchangeCoordinator(
     // Make sure we do get the same number of pre-shuffle partitions for those stages.
     val distinctNumPreShufflePartitions =
       mapOutputStatistics.map(stats => stats.bytesByPartitionId.length).distinct
+    // The reason that we are expecting a single value of the number of pre-shuffle partitions
+    // is that when we add Exchanges, we set the number of pre-shuffle partitions
+    // (i.e. map output partitions) using a static setting, which is the value of
+    // spark.sql.shuffle.partitions. Even if two input RDDs are having different
+    // number of partitions, they will have the same number of pre-shuffle partitions
+    // (i.e. map output partitions).
     assert(
       distinctNumPreShufflePartitions.length == 1,
       "There should be only one distinct value of the number pre-shuffle partitions " +
@@ -177,6 +187,7 @@ private[sql] class ExchangeCoordinator(
     partitionStartIndices.toArray
   }
 
+  @GuardedBy("this")
   private def doEstimationIfNecessary(): Unit = synchronized {
     // It is unlikely that this method will be called from multiple threads
     // (when multiple threads trigger the execution of THIS physical)
@@ -209,11 +220,11 @@ private[sql] class ExchangeCoordinator(
 
       // Wait for the finishes of those submitted map stages.
       val mapOutputStatistics = new Array[MapOutputStatistics](submittedStageFutures.length)
-      i = 0
-      while (i < submittedStageFutures.length) {
+      var j = 0
+      while (j < submittedStageFutures.length) {
         // This call is a blocking call. If the stage has not finished, we will wait at here.
-        mapOutputStatistics(i) = submittedStageFutures(i).get()
-        i += 1
+        mapOutputStatistics(j) = submittedStageFutures(j).get()
+        j += 1
       }
 
       // Now, we estimate partitionStartIndices. partitionStartIndices.length will be the
@@ -225,14 +236,14 @@ private[sql] class ExchangeCoordinator(
           Some(estimatePartitionStartIndices(mapOutputStatistics))
         }
 
-      i = 0
-      while (i < numExchanges) {
-        val exchange = exchanges(i)
+      var k = 0
+      while (k < numExchanges) {
+        val exchange = exchanges(k)
         val rdd =
-          exchange.preparePostShuffleRDD(shuffleDependencies(i), partitionStartIndices)
+          exchange.preparePostShuffleRDD(shuffleDependencies(k), partitionStartIndices)
         newPostShuffleRDDs.put(exchange, rdd)
 
-        i += 1
+        k += 1
       }
 
       // Finally, we set postShuffleRDDs and estimated.

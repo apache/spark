@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.parquet.schema._
 import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
-import org.apache.parquet.schema._
 
-import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, maxPrecisionForBytes}
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLConf}
+import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.{maxPrecisionForBytes, MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64}
+import org.apache.spark.sql.types._
 
 /**
  * This converter class is used to convert Parquet [[MessageType]] to Spark SQL [[StructType]] and
@@ -108,6 +108,9 @@ private[parquet] class CatalystSchemaConverter(
     def typeString =
       if (originalType == null) s"$typeName" else s"$typeName ($originalType)"
 
+    def typeNotSupported() =
+      throw new AnalysisException(s"Parquet type not supported: $typeString")
+
     def typeNotImplemented() =
       throw new AnalysisException(s"Parquet type not yet supported: $typeString")
 
@@ -142,6 +145,9 @@ private[parquet] class CatalystSchemaConverter(
           case INT_32 | null => IntegerType
           case DATE => DateType
           case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT32)
+          case UINT_8 => typeNotSupported()
+          case UINT_16 => typeNotSupported()
+          case UINT_32 => typeNotSupported()
           case TIME_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -150,6 +156,7 @@ private[parquet] class CatalystSchemaConverter(
         originalType match {
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT64)
+          case UINT_64 => typeNotSupported()
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -163,9 +170,10 @@ private[parquet] class CatalystSchemaConverter(
 
       case BINARY =>
         originalType match {
-          case UTF8 | ENUM => StringType
+          case UTF8 | ENUM | JSON => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
+          case BSON => BinaryType
           case DECIMAL => makeDecimalType()
           case _ => illegalType()
         }

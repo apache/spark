@@ -24,6 +24,8 @@ case class Kurtosis(child: Expression,
     inputAggBufferOffset: Int = 0)
   extends CentralMomentAgg(child) {
 
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -35,12 +37,15 @@ case class Kurtosis(child: Expression,
   override protected val momentOrder = 4
 
   // NOTE: this is the formula for excess kurtosis, which is default for R and SciPy
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
     val m2 = moments(2)
     val m4 = moments(4)
-    if (n == 0.0 || m2 == 0.0) {
+
+    if (n == 0.0) {
+      null
+    } else if (m2 == 0.0) {
       Double.NaN
     } else {
       n * m4 / (m2 * m2) - 3.0

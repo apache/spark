@@ -17,27 +17,28 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.Collections
-
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.parquet.example.data.simple.SimpleGroup
+import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.example.data.{Group, GroupWriter}
+import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
-import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -88,6 +89,33 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       assertResult(data.map(_._1.mkString(",")).sorted) {
         df.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
       }
+    }
+  }
+
+  test("SPARK-11694 Parquet logical types are not being tested properly") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 a(INT_8);
+        |  required int32 b(INT_16);
+        |  required int32 c(DATE);
+        |  required int32 d(DECIMAL(1,0));
+        |  required int64 e(DECIMAL(10,0));
+        |  required binary f(UTF8);
+        |  required binary g(ENUM);
+        |  required binary h(DECIMAL(32,0));
+        |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
+        |}
+      """.stripMargin)
+
+    val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
+      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0))
+
+    withTempPath { location =>
+      val path = new Path(location.getCanonicalPath)
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf)
+      val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
+      assert(sparkTypes === expectedSparkTypes)
     }
   }
 
@@ -203,6 +231,43 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val rows = df.collect()
       assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(3)(null): _*))
+    }
+  }
+
+  test("SPARK-10113 Support for unsigned Parquet logical types") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 c(UINT_32);
+        |}
+      """.stripMargin)
+
+    withTempPath { location =>
+      val path = new Path(location.getCanonicalPath)
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf)
+      val errorMessage = intercept[Throwable] {
+        sqlContext.read.parquet(path.toString).printSchema()
+      }.toString
+      assert(errorMessage.contains("Parquet type not supported"))
+    }
+  }
+
+  test("SPARK-11692 Support for Parquet logical types, JSON and BSON (embedded types)") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required binary a(JSON);
+        |  required binary b(BSON);
+        |}
+      """.stripMargin)
+
+    val expectedSparkTypes = Seq(StringType, BinaryType)
+
+    withTempPath { location =>
+      val path = new Path(location.getCanonicalPath)
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf)
+      val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
+      assert(sparkTypes === expectedSparkTypes)
     }
   }
 
@@ -350,16 +415,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Collections.singletonMap(
-        CatalystReadSupport.SPARK_METADATA_KEY, sparkSchema.toString)
-      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
+      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val path = new Path(location.getCanonicalPath)
-
-      ParquetFileWriter.writeMetadataFile(
-        sparkContext.hadoopConfiguration,
-        path,
-        Collections.singletonList(
-          new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))))
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf, extraMetadata)
 
       assertResult(sqlContext.read.parquet(path.toString).schema) {
         StructType(
@@ -489,6 +548,57 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-11044 Parquet writer version fixed as version1 ") {
+    // For dictionary encoding, Parquet changes the encoding types according to its writer
+    // version. So, this test checks one of the encoding types in order to ensure that
+    // the file is written with writer version2.
+    withTempPath { dir =>
+      val clonedConf = new Configuration(hadoopConfiguration)
+      try {
+        // Write a Parquet file with writer version2.
+        hadoopConfiguration.set(ParquetOutputFormat.WRITER_VERSION,
+          ParquetProperties.WriterVersion.PARQUET_2_0.toString)
+
+        // By default, dictionary encoding is enabled from Parquet 1.2.0 but
+        // it is enabled just in case.
+        hadoopConfiguration.setBoolean(ParquetOutputFormat.ENABLE_DICTIONARY, true)
+        val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
+        sqlContext.range(1 << 16).selectExpr("(id % 4) AS i")
+          .coalesce(1).write.mode("overwrite").parquet(path)
+
+        val blockMetadata = readFooter(new Path(path), hadoopConfiguration).getBlocks.asScala.head
+        val columnChunkMetadata = blockMetadata.getColumns.asScala.head
+
+        // If the file is written with version2, this should include
+        // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
+        assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
+      } finally {
+        // Manually clear the hadoop configuration for other tests.
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      }
+    }
+  }
+
+  test("null and non-null strings") {
+    // Create a dataset where the first values are NULL and then some non-null values. The
+    // number of non-nulls needs to be bigger than the ParquetReader batch size.
+    val data = sqlContext.range(200).map { i =>
+      if (i.getLong(0) < 150) Row(None)
+      else Row("a")
+    }
+    val df = sqlContext.createDataFrame(data, StructType(StructField("col", StringType) :: Nil))
+    assert(df.agg("col" -> "count").collect().head.getLong(0) == 50)
+
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/data"
+      df.write.parquet(path)
+
+      val df2 = sqlContext.read.parquet(path)
+      assert(df2.agg("col" -> "count").collect().head.getLong(0) == 50)
+    }
+  }
+
   test("read dictionary encoded decimals written as INT32") {
     checkAnswer(
       // Decimal column in this file is encoded using plain dictionary
@@ -503,10 +613,106 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
   }
 
-  // TODO Adds test case for reading dictionary encoded decimals written as `FIXED_LEN_BYTE_ARRAY`
-  // The Parquet writer version Spark 1.6 and prior versions use is `PARQUET_1_0`, which doesn't
-  // provide dictionary encoding support for `FIXED_LEN_BYTE_ARRAY`.  Should add a test here once
-  // we upgrade to `PARQUET_2_0`.
+  test("read dictionary encoded decimals written as FIXED_LEN_BYTE_ARRAY") {
+    checkAnswer(
+      // Decimal column in this file is encoded using plain dictionary
+      readResourceParquetFile("dec-in-fixed-len.parquet"),
+      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
+  }
+
+  test("SPARK-12589 copy() on rows returned from reader works for strings") {
+    withTempPath { dir =>
+      val data = (1, "abc") ::(2, "helloabcde") :: Nil
+      data.toDF().write.parquet(dir.getCanonicalPath)
+      var hash1: Int = 0
+      var hash2: Int = 0
+      (false :: true :: Nil).foreach { v =>
+        withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> v.toString) {
+          val df = sqlContext.read.parquet(dir.getCanonicalPath)
+          val rows = df.queryExecution.toRdd.map(_.copy()).collect()
+          val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
+          if (!v) {
+            hash1 = unsafeRows(0).hashCode()
+            hash2 = unsafeRows(1).hashCode()
+          } else {
+            assert(hash1 == unsafeRows(0).hashCode())
+            assert(hash2 == unsafeRows(1).hashCode())
+          }
+        }
+      }
+    }
+  }
+
+  test("UnsafeRowParquetRecordReader - direct path read") {
+    val data = (0 to 10).map(i => (i, ((i + 'a').toChar.toString)))
+    withTempPath { dir =>
+      sqlContext.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
+      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, null)
+          val result = mutable.ArrayBuffer.empty[(Int, String)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue
+            val v = (row.getInt(0), row.getString(1))
+            result += v
+          }
+          assert(data == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Project just one column
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, ("_2" :: Nil).asJava)
+          val result = mutable.ArrayBuffer.empty[(String)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue
+            result += row.getString(0)
+          }
+          assert(data.map(_._2) == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Project columns in opposite order
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
+          val result = mutable.ArrayBuffer.empty[(String, Int)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue
+            val v = (row.getString(0), row.getInt(1))
+            result += v
+          }
+          assert(data.map { x => (x._2, x._1) } == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Empty projection
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, List[String]().asJava)
+          var result = 0
+          while (reader.nextKeyValue()) {
+            result += 1
+          }
+          assert(result == data.length)
+        } finally {
+          reader.close()
+        }
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

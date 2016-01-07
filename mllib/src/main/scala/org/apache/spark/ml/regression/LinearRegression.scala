@@ -22,15 +22,16 @@ import scala.collection.mutable
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import breeze.stats.distributions.StudentsT
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
-import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
@@ -65,7 +66,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 @Experimental
 class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
-  with LinearRegressionParams with Logging {
+  with LinearRegressionParams with DefaultParamsWritable with Logging {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
@@ -144,6 +145,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the solver algorithm used for optimization.
    * In case of linear regression, this can be "l-bfgs", "normal" and "auto".
+   * "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
+   * optimization method. "normal" denotes using Normal Equation as an analytical
+   * solution to the linear regression problem.
    * The default value is "auto" which means that the solver algorithm is
    * selected automatically.
    * @group setParam
@@ -343,6 +347,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
+@Since("1.6.0")
+object LinearRegression extends DefaultParamsReadable[LinearRegression] {
+
+  @Since("1.6.0")
+  override def load(path: String): LinearRegression = super.load(path)
+}
+
 /**
  * :: Experimental ::
  * Model produced by [[LinearRegression]].
@@ -354,7 +365,7 @@ class LinearRegressionModel private[ml] (
     val coefficients: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
-  with LinearRegressionParams {
+  with LinearRegressionParams with MLWritable {
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
@@ -422,6 +433,63 @@ class LinearRegressionModel private[ml] (
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }
+
+  /**
+   * Returns a [[MLWriter]] instance for this ML instance.
+   *
+   * For [[LinearRegressionModel]], this does NOT currently save the training [[summary]].
+   * An option to save [[summary]] may be added in the future.
+   *
+   * This also does not save the [[parent]] currently.
+   */
+  @Since("1.6.0")
+  override def write: MLWriter = new LinearRegressionModel.LinearRegressionModelWriter(this)
+}
+
+@Since("1.6.0")
+object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[LinearRegressionModel] = new LinearRegressionModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): LinearRegressionModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[LinearRegressionModel]] */
+  private[LinearRegressionModel] class LinearRegressionModelWriter(instance: LinearRegressionModel)
+    extends MLWriter with Logging {
+
+    private case class Data(intercept: Double, coefficients: Vector)
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: intercept, coefficients
+      val data = Data(instance.intercept, instance.coefficients)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class LinearRegressionModelReader extends MLReader[LinearRegressionModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[LinearRegressionModel].getName
+
+    override def load(path: String): LinearRegressionModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.format("parquet").load(dataPath)
+        .select("intercept", "coefficients").head()
+      val intercept = data.getDouble(0)
+      val coefficients = data.getAs[Vector](1)
+      val model = new LinearRegressionModel(metadata.uid, coefficients, intercept)
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
 }
 
 /**
@@ -461,17 +529,21 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val model: LinearRegressionModel,
-    val diagInvAtWA: Array[Double]) extends Serializable {
+    private val diagInvAtWA: Array[Double]) extends Serializable {
 
   @transient private val metrics = new RegressionMetrics(
     predictions
       .select(predictionCol, labelCol)
-      .map { case Row(pred: Double, label: Double) => (pred, label) } )
+      .map { case Row(pred: Double, label: Double) => (pred, label) },
+    !model.getFitIntercept)
 
   /**
    * Returns the explained variance regression score.
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
@@ -479,6 +551,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
@@ -486,6 +561,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
@@ -493,6 +571,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
@@ -500,6 +581,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns R^2^, the coefficient of determination.
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val r2: Double = metrics.r2

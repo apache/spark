@@ -24,9 +24,9 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.Matchers
 
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ResetSystemProperties
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
 class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers
   with ResetSystemProperties {
@@ -35,6 +35,21 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   val WAIT_TIMEOUT_MILLIS = 10000
 
   val jobCompletionTime = 1421191296660L
+
+  test("don't call sc.stop in listener") {
+    sc = new SparkContext("local", "SparkListenerSuite")
+    val listener = new SparkContextStoppingListener(sc)
+    val bus = new LiveListenerBus
+    bus.addListener(listener)
+
+    // Starting listener bus should flush all buffered events
+    bus.start(sc)
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+    bus.stop()
+    assert(listener.sparkExSeen)
+  }
 
   test("basic creation and shutdown of LiveListenerBus") {
     val counter = new BasicJobCounter
@@ -269,14 +284,15 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
-    sc = new SparkContext("local", "SparkListenerSuite")
+    val conf = new SparkConf().set("spark.akka.frameSize", "1")
+    sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
     // Make a task whose result is larger than the akka frame size
-    System.setProperty("spark.akka.frameSize", "1")
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
+    assert(akkaFrameSize === 1024 * 1024)
     val result = sc.parallelize(Seq(1), 1)
       .map { x => 1.to(akkaFrameSize).toArray }
       .reduce { case (x, y) => x }
@@ -440,6 +456,21 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 private class BasicJobCounter extends SparkListener {
   var count = 0
   override def onJobEnd(job: SparkListenerJobEnd): Unit = count += 1
+}
+
+/**
+ * A simple listener that tries to stop SparkContext.
+ */
+private class SparkContextStoppingListener(val sc: SparkContext) extends SparkListener {
+  @volatile var sparkExSeen = false
+  override def onJobEnd(job: SparkListenerJobEnd): Unit = {
+    try {
+      sc.stop()
+    } catch {
+      case se: SparkException =>
+        sparkExSeen = true
+    }
+  }
 }
 
 private class ListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkListener {

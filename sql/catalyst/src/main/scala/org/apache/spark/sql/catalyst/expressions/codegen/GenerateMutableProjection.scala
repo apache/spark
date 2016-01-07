@@ -44,45 +44,62 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       case (NoOp, _) => ""
       case (e, i) =>
         val evaluationCode = e.gen(ctx)
-        val isNull = s"isNull_$i"
-        val value = s"value_$i"
-        ctx.addMutableState("boolean", isNull, s"this.$isNull = true;")
-        ctx.addMutableState(ctx.javaType(e.dataType), value,
-          s"this.$value = ${ctx.defaultValue(e.dataType)};")
-        s"""
-          ${evaluationCode.code}
-          this.$isNull = ${evaluationCode.isNull};
-          this.$value = ${evaluationCode.value};
-         """
+        if (e.nullable) {
+          val isNull = s"isNull_$i"
+          val value = s"value_$i"
+          ctx.addMutableState("boolean", isNull, s"this.$isNull = true;")
+          ctx.addMutableState(ctx.javaType(e.dataType), value,
+            s"this.$value = ${ctx.defaultValue(e.dataType)};")
+          s"""
+            ${evaluationCode.code}
+            this.$isNull = ${evaluationCode.isNull};
+            this.$value = ${evaluationCode.value};
+           """
+        } else {
+          val value = s"value_$i"
+          ctx.addMutableState(ctx.javaType(e.dataType), value,
+            s"this.$value = ${ctx.defaultValue(e.dataType)};")
+          s"""
+            ${evaluationCode.code}
+            this.$value = ${evaluationCode.value};
+           """
+        }
     }
     val updates = expressions.zipWithIndex.map {
       case (NoOp, _) => ""
       case (e, i) =>
-        if (e.dataType.isInstanceOf[DecimalType]) {
-          // Can't call setNullAt on DecimalType, because we need to keep the offset
-          s"""
-            if (this.isNull_$i) {
-              ${ctx.setColumn("mutableRow", e.dataType, i, null)};
-            } else {
-              ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-            }
-          """
+        if (e.nullable) {
+          if (e.dataType.isInstanceOf[DecimalType]) {
+            // Can't call setNullAt on DecimalType, because we need to keep the offset
+            s"""
+              if (this.isNull_$i) {
+                ${ctx.setColumn("mutableRow", e.dataType, i, null)};
+              } else {
+                ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
+              }
+            """
+          } else {
+            s"""
+              if (this.isNull_$i) {
+                mutableRow.setNullAt($i);
+              } else {
+                ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
+              }
+            """
+          }
         } else {
           s"""
-            if (this.isNull_$i) {
-              mutableRow.setNullAt($i);
-            } else {
-              ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-            }
+            ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
           """
         }
+
     }
 
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val code = s"""
-      public Object generate($exprType[] expr) {
+      public java.lang.Object generate($exprType[] expr) {
         return new SpecificMutableProjection(expr);
       }
 
@@ -109,7 +126,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           return (InternalRow) mutableRow;
         }
 
-        public Object apply(Object _i) {
+        public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allProjections
           // copy all the results into MutableRow

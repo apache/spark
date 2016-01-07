@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, udf}
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Experimental
 class OneHotEncoder(override val uid: String) extends Transformer
-  with HasInputCol with HasOutputCol {
+  with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("oneHot"))
 
@@ -66,6 +66,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
 
@@ -165,4 +166,11 @@ class OneHotEncoder(override val uid: String) extends Transformer
   }
 
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object OneHotEncoder extends DefaultParamsReadable[OneHotEncoder] {
+
+  @Since("1.6.0")
+  override def load(path: String): OneHotEncoder = super.load(path)
 }

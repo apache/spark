@@ -33,13 +33,13 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 
 # Building a Runnable Distribution
 
-To create a Spark distribution like those distributed by the 
-[Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as 
-to be runnable, use `make-distribution.sh` in the project root directory. It can be configured 
+To create a Spark distribution like those distributed by the
+[Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as
+to be runnable, use `make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
     ./make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
-    
+
 For more information on usage, run `./make-distribution.sh --help`
 
 # Setting up Maven's Memory Usage
@@ -74,7 +74,6 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
     <tr><th>Hadoop version</th><th>Profile required</th></tr>
   </thead>
   <tbody>
-    <tr><td>1.x to 2.1.x</td><td>hadoop-1</td></tr>
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
     <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
@@ -82,15 +81,6 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
   </tbody>
 </table>
 
-For Apache Hadoop versions 1.x, Cloudera CDH "mr1" distributions, and other Hadoop versions without YARN, use:
-
-{% highlight bash %}
-# Apache Hadoop 1.2.1
-mvn -Dhadoop.version=1.2.1 -Phadoop-1 -DskipTests clean package
-
-# Cloudera CDH 4.2.0 with MapReduce v1
-mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -Phadoop-1 -DskipTests clean package
-{% endhighlight %}
 
 You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different from `hadoop.version`. Spark only supports YARN versions 2.2.0 and later.
 
@@ -189,6 +179,10 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 Running only Java 8 tests and nothing else.
 
     mvn install -DskipTests -Pjava8-tests
+
+or
+
+    sbt -Pjava8-tests java8-tests/test
 
 Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
 For these tests to run your system must have a JDK 8 installation.

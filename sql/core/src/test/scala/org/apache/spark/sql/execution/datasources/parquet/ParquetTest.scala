@@ -26,12 +26,13 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter
-import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
+import org.apache.parquet.schema.MessageType
 
+import org.apache.spark.sql.{DataFrame, SaveMode, SQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLConf, SaveMode}
 
 /**
  * A helper trait that provides convenient facilities for Parquet testing.
@@ -112,6 +113,21 @@ private[sql] trait ParquetTest extends SQLTestUtils {
     val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
     val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
     val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
+    val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
+    val footer = new Footer(path, parquetMetadata)
+    ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)
+  }
+
+  /**
+   * This is an overloaded version of `writeMetadata` above to allow writing customized
+   * Parquet schema.
+   */
+  protected def writeMetadata(
+      parquetSchema: MessageType, path: Path, configuration: Configuration,
+      extraMetadata: Map[String, String] = Map.empty[String, String]): Unit = {
+    val extraMetadataAsJava = extraMetadata.asJava
+    val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
+    val fileMetadata = new FileMetaData(parquetSchema, extraMetadataAsJava, createdBy)
     val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
     val footer = new Footer(path, parquetMetadata)
     ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)

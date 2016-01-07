@@ -22,11 +22,11 @@ import scala.reflect.ClassTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext}
+import org.apache.spark.sql.{QueryTest, SQLConf, SQLContext}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{SQLConf, SQLContext, QueryTest}
 
 /**
- * Test various broadcast join operators with unsafe enabled.
+ * Test various broadcast join operators.
  *
  * Tests in this suite we need to run Spark in local-cluster mode. In particular, the use of
  * unsafe map in [[org.apache.spark.sql.execution.joins.UnsafeHashedRelation]] is not triggered
@@ -45,8 +45,6 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
       .setAppName("testing")
     val sc = new SparkContext(conf)
     sqlContext = new SQLContext(sc)
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED, true)
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
   }
 
   override def afterAll(): Unit = {

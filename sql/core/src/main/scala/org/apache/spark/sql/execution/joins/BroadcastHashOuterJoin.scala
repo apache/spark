@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
-import org.apache.spark.sql.execution.{BinaryNode, SQLExecution, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.{BinaryNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.{InternalAccumulator, TaskContext}
 
 /**
  * Performs a outer hash join for two child relations.  When the output RDD of this operator is

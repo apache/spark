@@ -21,7 +21,6 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -85,80 +84,6 @@ object PhysicalOperation extends PredicateHelper {
 }
 
 /**
- * Matches a logical aggregation that can be performed on distributed data in two steps.  The first
- * operates on the data in each partition performing partial aggregation for each group.  The second
- * occurs after the shuffle and completes the aggregation.
- *
- * This pattern will only match if all aggregate expressions can be computed partially and will
- * return the rewritten aggregation expressions for both phases.
- *
- * The returned values for this match are as follows:
- *  - Grouping attributes for the final aggregation.
- *  - Aggregates for the final aggregation.
- *  - Grouping expressions for the partial aggregation.
- *  - Partial aggregate expressions.
- *  - Input to the aggregation.
- */
-object PartialAggregation {
-  type ReturnType =
-    (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
-      // Collect all aggregate expressions.
-      val allAggregates =
-        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression1 => a})
-      // Collect all aggregate expressions that can be computed partially.
-      val partialAggregates =
-        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate1 => p})
-
-      // Only do partial aggregation if supported by all aggregate expressions.
-      if (allAggregates.size == partialAggregates.size) {
-        // Create a map of expressions to their partial evaluations for all aggregate expressions.
-        val partialEvaluations: Map[TreeNodeRef, SplitEvaluation] =
-          partialAggregates.map(a => (new TreeNodeRef(a), a.asPartial)).toMap
-
-        // We need to pass all grouping expressions though so the grouping can happen a second
-        // time. However some of them might be unnamed so we alias them allowing them to be
-        // referenced in the second aggregation.
-        val namedGroupingExpressions: Seq[(Expression, NamedExpression)] =
-          groupingExpressions.map {
-            case n: NamedExpression => (n, n)
-            case other => (other, Alias(other, "PartialGroup")())
-          }
-
-        // Replace aggregations with a new expression that computes the result from the already
-        // computed partial evaluations and grouping values.
-        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformDown {
-          case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
-            partialEvaluations(new TreeNodeRef(e)).finalEvaluation
-
-          case e: Expression =>
-            namedGroupingExpressions.collectFirst {
-              case (expr, ne) if expr semanticEquals e => ne.toAttribute
-            }.getOrElse(e)
-        }).asInstanceOf[Seq[NamedExpression]]
-
-        val partialComputation = namedGroupingExpressions.map(_._2) ++
-          partialEvaluations.values.flatMap(_.partialEvaluations)
-
-        val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
-
-        Some(
-          (namedGroupingAttributes,
-           rewrittenAggregateExpressions,
-           groupingExpressions,
-           partialComputation,
-           child))
-      } else {
-        None
-      }
-    case _ => None
-  }
-}
-
-
-/**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
  *
  * Null-safe equality will be transformed into equality as joining key (replace null with default
@@ -202,6 +127,45 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       } else {
         None
       }
+    case _ => None
+  }
+}
+
+/**
+  * A pattern that collects the filter and inner joins.
+  *
+  *          Filter
+  *            |
+  *        inner Join
+  *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
+  *      Filter   plan2
+  *        |
+  *  inner join
+  *      /    \
+  *   plan0    plan1
+  *
+  * Note: This pattern currently only works for left-deep trees.
+  */
+object ExtractFiltersAndInnerJoins extends PredicateHelper {
+
+  // flatten all inner joins, which are next to each other
+  def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
+    case Join(left, right, Inner, cond) =>
+      val (plans, conditions) = flattenJoin(left)
+      (plans ++ Seq(right), conditions ++ cond.toSeq)
+
+    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
+      val (plans, conditions) = flattenJoin(j)
+      (plans, conditions ++ splitConjunctivePredicates(filterCondition))
+
+    case _ => (Seq(plan), Seq())
+  }
+
+  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
+    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
+      Some(flattenJoin(f))
+    case j @ Join(_, _, Inner, _) =>
+      Some(flattenJoin(j))
     case _ => None
   }
 }

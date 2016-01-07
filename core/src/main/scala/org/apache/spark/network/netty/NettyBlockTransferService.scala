@@ -17,17 +17,20 @@
 
 package org.apache.spark.network.netty
 
+import java.nio.ByteBuffer
+
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCallback, TransportClientFactory}
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.shuffle.{RetryingBlockFetcher, BlockFetchingListener, OneForOneBlockFetcher}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.UploadBlock
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
@@ -41,7 +44,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
-  private val transportConf = SparkTransportConf.fromSparkConf(conf, numCores)
+  private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
@@ -121,21 +124,14 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
 
     // StorageLevel is serialized as bytes using our JavaSerializer. Everything else is encoded
     // using our binary protocol.
-    val levelBytes = serializer.newInstance().serialize(level).array()
+    val levelBytes = JavaUtils.bufferToArray(serializer.newInstance().serialize(level))
 
     // Convert or copy nio buffer into array in order to serialize it.
-    val nioBuffer = blockData.nioByteBuffer()
-    val array = if (nioBuffer.hasArray) {
-      nioBuffer.array()
-    } else {
-      val data = new Array[Byte](nioBuffer.remaining())
-      nioBuffer.get(data)
-      data
-    }
+    val array = JavaUtils.bufferToArray(blockData.nioByteBuffer())
 
-    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, levelBytes, array).toByteArray,
+    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, levelBytes, array).toByteBuffer,
       new RpcResponseCallback {
-        override def onSuccess(response: Array[Byte]): Unit = {
+        override def onSuccess(response: ByteBuffer): Unit = {
           logTrace(s"Successfully uploaded block $blockId")
           result.success((): Unit)
         }

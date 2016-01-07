@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 

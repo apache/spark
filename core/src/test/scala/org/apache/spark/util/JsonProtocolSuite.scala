@@ -19,9 +19,6 @@ package org.apache.spark.util
 
 import java.util.Properties
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.shuffle.MetadataFetchFailedException
-
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
@@ -30,6 +27,8 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
@@ -162,6 +161,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
   }
+
+  /* ============================== *
+   |  Backward compatibility tests  |
+   * ============================== */
 
   test("ExceptionFailure backward compatibility") {
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null,
@@ -334,14 +337,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
   }
 
-  test("RDDInfo backward compatibility (scope, parent IDs)") {
-    // Prior to Spark 1.4.0, RDDInfo did not have the "Scope" and "Parent IDs" properties
-    val rddInfo = new RDDInfo(
-      1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8), Some(new RDDOperationScope("fable")))
+  test("RDDInfo backward compatibility (scope, parent IDs, callsite)") {
+    // "Scope" and "Parent IDs" were introduced in Spark 1.4.0
+    // "Callsite" was introduced in Spark 1.6.0
+    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8),
+      "callsite", Some(new RDDOperationScope("fable")))
     val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
       .removeField({ _._1 == "Parent IDs"})
       .removeField({ _._1 == "Scope"})
-    val expectedRddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq.empty, scope = None)
+      .removeField({ _._1 == "Callsite"})
+    val expectedRddInfo = new RDDInfo(
+      1, "one", 100, StorageLevel.NONE, Seq.empty, "", scope = None)
     assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
   }
 
@@ -713,7 +719,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7))
+    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7), a.toString)
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
@@ -856,6 +862,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      {
       |        "RDD ID": 101,
       |        "Name": "mayor",
+      |        "Callsite": "101",
       |        "Parent IDs": [1, 4, 7],
       |        "Storage Level": {
       |          "Use Disk": true,
@@ -1258,6 +1265,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 1,
       |          "Name": "mayor",
+      |          "Callsite": "1",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1301,6 +1309,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 2,
       |          "Name": "mayor",
+      |          "Callsite": "2",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1318,6 +1327,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Callsite": "3",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1361,6 +1371,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Callsite": "3",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1378,6 +1389,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Callsite": "4",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1395,6 +1407,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Callsite": "5",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1438,6 +1451,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Callsite": "4",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1455,6 +1469,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Callsite": "5",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1472,6 +1487,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 6,
       |          "Name": "mayor",
+      |          "Callsite": "6",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1489,6 +1505,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 7,
       |          "Name": "mayor",
+      |          "Callsite": "7",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,

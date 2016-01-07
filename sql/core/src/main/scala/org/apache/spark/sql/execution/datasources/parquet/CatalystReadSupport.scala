@@ -22,11 +22,11 @@ import java.util.{Map => JMap}
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
+import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
-import org.apache.parquet.schema.Type.Repetition
 import org.apache.parquet.schema._
+import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -58,9 +58,7 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
    */
   override def init(context: InitContext): ReadContext = {
     catalystRequestedSchema = {
-      // scalastyle:off jobcontext
       val conf = context.getConfiguration
-      // scalastyle:on jobcontext
       val schemaString = conf.get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
       assert(schemaString != null, "Parquet requested schema not set.")
       StructType.fromString(schemaString)

@@ -22,10 +22,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -89,32 +89,11 @@ case class SortMergeOuterJoin(
     keys.map(SortOrder(_, Ascending))
   }
 
-  private def isUnsafeMode: Boolean = {
-    (codegenEnabled && unsafeEnabled
-      && UnsafeProjection.canSupport(leftKeys)
-      && UnsafeProjection.canSupport(rightKeys)
-      && UnsafeProjection.canSupport(schema))
-  }
+  private def createLeftKeyGenerator(): Projection =
+    UnsafeProjection.create(leftKeys, left.output)
 
-  override def outputsUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessSafeRows: Boolean = !isUnsafeMode
-
-  private def createLeftKeyGenerator(): Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(leftKeys, left.output)
-    } else {
-      newProjection(leftKeys, left.output)
-    }
-  }
-
-  private def createRightKeyGenerator(): Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(rightKeys, right.output)
-    } else {
-      newProjection(rightKeys, right.output)
-    }
-  }
+  private def createRightKeyGenerator(): Projection =
+    UnsafeProjection.create(rightKeys, right.output)
 
   override def doExecute(): RDD[InternalRow] = {
     val numLeftRows = longMetric("numLeftRows")
@@ -131,13 +110,7 @@ case class SortMergeOuterJoin(
           (r: InternalRow) => true
         }
       }
-      val resultProj: InternalRow => InternalRow = {
-        if (isUnsafeMode) {
-          UnsafeProjection.create(schema)
-        } else {
-          identity[InternalRow]
-        }
-      }
+      val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
         case LeftOuter =>

@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -803,6 +804,90 @@ class ExecutorAllocationManagerSuite
     val taskEndReason = ExceptionFailure(null, null, null, null, null, None)
     sc.listenerBus.postToAll(SparkListenerTaskEnd(0, 0, null, taskEndReason, taskInfo, null))
     assert(maxNumExecutorsNeeded(manager) === 1)
+  }
+
+  test("reset the state of allocation manager") {
+    sc = createSparkContext()
+    val manager = sc.executorAllocationManager.get
+    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsToAdd(manager) === 1)
+
+    // Allocation manager is reset when adding executor requests are sent without reporting back
+    // executor added.
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 10)))
+
+    assert(addExecutors(manager) === 1)
+    assert(numExecutorsTarget(manager) === 2)
+    assert(addExecutors(manager) === 2)
+    assert(numExecutorsTarget(manager) === 4)
+    assert(addExecutors(manager) === 1)
+    assert(numExecutorsTarget(manager) === 5)
+
+    manager.reset()
+    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(executorIds(manager) === Set.empty)
+
+    // Allocation manager is reset when executors are added.
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 10)))
+
+    addExecutors(manager)
+    addExecutors(manager)
+    addExecutors(manager)
+    assert(numExecutorsTarget(manager) === 5)
+
+    onExecutorAdded(manager, "first")
+    onExecutorAdded(manager, "second")
+    onExecutorAdded(manager, "third")
+    onExecutorAdded(manager, "fourth")
+    onExecutorAdded(manager, "fifth")
+    assert(executorIds(manager) === Set("first", "second", "third", "fourth", "fifth"))
+
+    // Cluster manager lost will make all the live executors lost, so here simulate this behavior
+    onExecutorRemoved(manager, "first")
+    onExecutorRemoved(manager, "second")
+    onExecutorRemoved(manager, "third")
+    onExecutorRemoved(manager, "fourth")
+    onExecutorRemoved(manager, "fifth")
+
+    manager.reset()
+    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(executorIds(manager) === Set.empty)
+    assert(removeTimes(manager) === Map.empty)
+
+    // Allocation manager is reset when executors are pending to remove
+    addExecutors(manager)
+    addExecutors(manager)
+    addExecutors(manager)
+    assert(numExecutorsTarget(manager) === 5)
+
+    onExecutorAdded(manager, "first")
+    onExecutorAdded(manager, "second")
+    onExecutorAdded(manager, "third")
+    onExecutorAdded(manager, "fourth")
+    onExecutorAdded(manager, "fifth")
+    assert(executorIds(manager) === Set("first", "second", "third", "fourth", "fifth"))
+
+    removeExecutor(manager, "first")
+    removeExecutor(manager, "second")
+    assert(executorsPendingToRemove(manager) === Set("first", "second"))
+    assert(executorIds(manager) === Set("first", "second", "third", "fourth", "fifth"))
+
+
+    // Cluster manager lost will make all the live executors lost, so here simulate this behavior
+    onExecutorRemoved(manager, "first")
+    onExecutorRemoved(manager, "second")
+    onExecutorRemoved(manager, "third")
+    onExecutorRemoved(manager, "fourth")
+    onExecutorRemoved(manager, "fifth")
+
+    manager.reset()
+
+    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(executorsPendingToRemove(manager) === Set.empty)
+    assert(removeTimes(manager) === Map.empty)
   }
 
   private def createSparkContext(

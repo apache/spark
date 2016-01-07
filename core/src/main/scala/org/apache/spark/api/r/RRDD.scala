@@ -19,8 +19,7 @@ package org.apache.spark.api.r
 
 import java.io._
 import java.net.{InetAddress, ServerSocket}
-import java.util.Arrays
-import java.util.{Map => JMap}
+import java.util.{Arrays, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.io.Source
@@ -400,14 +399,14 @@ private[r] object RRDD {
 
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
-    val rExecScript = rLibDir + "/SparkR/worker/" + script
+    val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
     val pb = new ProcessBuilder(Arrays.asList(rCommand, rOptions, rExecScript))
     // Unset the R_TESTS environment variable for workers.
     // This is set by R CMD check as startup.Rs
     // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)
     // and confuses worker script which tries to load a non-existent file
     pb.environment().put("R_TESTS", "")
-    pb.environment().put("SPARKR_RLIBDIR", rLibDir)
+    pb.environment().put("SPARKR_RLIBDIR", rLibDir.mkString(","))
     pb.environment().put("SPARKR_WORKER_PORT", port.toString)
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()

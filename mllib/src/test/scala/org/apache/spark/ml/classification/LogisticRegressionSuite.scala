@@ -23,7 +23,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -31,7 +31,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class LogisticRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var dataset: DataFrame = _
   @transient var binaryDataset: DataFrame = _
@@ -96,6 +97,17 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getProbabilityCol === "probability")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
+  }
+
+  test("empty probabilityCol") {
+    val lr = new LogisticRegression().setProbabilityCol("")
+    val model = lr.fit(dataset)
+    assert(model.hasSummary)
+    // Validate that we re-insert a probability column for evaluation
+    val fieldNames = model.summary.predictions.schema.fieldNames
+    assert((dataset.schema.fieldNames.toSet).subsetOf(
+      fieldNames.toSet))
+    assert(fieldNames.exists(s => s.startsWith("probability_")))
   }
 
   test("setThreshold, getThreshold") {
@@ -869,6 +881,37 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
     assert(model1a0.coefficients ~== model1b.coefficients absTol 1E-3)
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
-
   }
+
+  test("read/write") {
+    def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients.toArray === model2.coefficients.toArray)
+      assert(model.numClasses === model2.numClasses)
+      assert(model.numFeatures === model2.numFeatures)
+    }
+    val lr = new LogisticRegression()
+    testEstimatorAndModelReadWrite(lr, dataset, LogisticRegressionSuite.allParamSettings,
+      checkModelData)
+  }
+}
+
+object LogisticRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = ProbabilisticClassifierSuite.allParamSettings ++ Map(
+    "probabilityCol" -> "myProbability",
+    "thresholds" -> Array(0.4, 0.6),
+    "regParam" -> 0.01,
+    "elasticNetParam" -> 0.1,
+    "maxIter" -> 2,  // intentionally small
+    "fitIntercept" -> true,
+    "tol" -> 0.8,
+    "standardization" -> false,
+    "threshold" -> 0.6
+  )
 }

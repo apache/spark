@@ -20,7 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 /**
@@ -68,6 +68,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private lazy val lt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
@@ -90,6 +91,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private lazy val gt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 

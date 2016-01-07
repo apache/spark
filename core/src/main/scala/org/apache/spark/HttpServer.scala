@@ -19,18 +19,16 @@ package org.apache.spark
 
 import java.io.File
 
-import org.eclipse.jetty.server.ssl.SslSocketConnector
-import org.eclipse.jetty.util.security.{Constraint, Password}
-import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService}
-
+import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.bio.SocketConnector
-import org.eclipse.jetty.server.handler.{DefaultHandler, HandlerList, ResourceHandler}
+import org.eclipse.jetty.server.ssl.SslSocketConnector
+import org.eclipse.jetty.servlet.{DefaultServlet, ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.util.Utils
-
 
 /**
  * Exception type thrown by HttpServer when it is in the wrong state for an operation.
@@ -52,6 +50,11 @@ private[spark] class HttpServer(
 
   private var server: Server = null
   private var port: Int = requestedPort
+  private val servlets = {
+    val handler = new ServletContextHandler()
+    handler.setContextPath("/")
+    handler
+  }
 
   def start() {
     if (server != null) {
@@ -63,6 +66,14 @@ private[spark] class HttpServer(
       server = actualServer
       port = actualPort
     }
+  }
+
+  def addDirectory(contextPath: String, resourceBase: String): Unit = {
+    val holder = new ServletHolder()
+    holder.setInitParameter("resourceBase", resourceBase)
+    holder.setInitParameter("pathInfoOnly", "true")
+    holder.setServlet(new DefaultServlet())
+    servlets.addServlet(holder, contextPath.stripSuffix("/") + "/*")
   }
 
   /**
@@ -85,21 +96,17 @@ private[spark] class HttpServer(
     val threadPool = new QueuedThreadPool
     threadPool.setDaemon(true)
     server.setThreadPool(threadPool)
-    val resHandler = new ResourceHandler
-    resHandler.setResourceBase(resourceBase.getAbsolutePath)
-
-    val handlerList = new HandlerList
-    handlerList.setHandlers(Array(resHandler, new DefaultHandler))
+    addDirectory("/", resourceBase.getAbsolutePath)
 
     if (securityManager.isAuthenticationEnabled()) {
       logDebug("HttpServer is using security")
       val sh = setupSecurityHandler(securityManager)
       // make sure we go through security handler to get resources
-      sh.setHandler(handlerList)
+      sh.setHandler(servlets)
       server.setHandler(sh)
     } else {
       logDebug("HttpServer is not using security")
-      server.setHandler(handlerList)
+      server.setHandler(servlets)
     }
 
     server.start()

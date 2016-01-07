@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayData}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -51,7 +51,7 @@ object ExtractValue {
       case (StructType(fields), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, fields(ordinal).copy(name = fieldName), ordinal)
+        GetStructField(child, ordinal, Some(fieldName))
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
@@ -97,26 +97,37 @@ object ExtractValue {
  * Returns the value of fields in the Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
+ *
+ * Note that we can pass in the field name directly to keep case preserving in `toString`.
+ * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
-case class GetStructField(child: Expression, field: StructField, ordinal: Int)
+case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
   extends UnaryExpression {
 
-  override def dataType: DataType = field.dataType
-  override def nullable: Boolean = child.nullable || field.nullable
-  override def toString: String = s"$child.${field.name}"
+  private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+
+  override def dataType: DataType = childSchema(ordinal).dataType
+  override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
+  override def toString: String = s"$child.${name.getOrElse(childSchema(ordinal).name)}"
 
   protected override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[InternalRow].get(ordinal, field.dataType)
+    input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval.isNullAt($ordinal)) {
-          ${ev.isNull} = true;
-        } else {
+      if (nullable) {
+        s"""
+          if ($eval.isNullAt($ordinal)) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+          }
+        """
+      } else {
+        s"""
           ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
-        }
-      """
+        """
+      }
     })
   }
 }
@@ -134,7 +145,6 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def nullable: Boolean = child.nullable || containsNull || field.nullable
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {
@@ -217,7 +227,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int index = (int) $eval2;
-        if (index >= $eval1.numElements() || index < 0) {
+        if (index >= $eval1.numElements() || index < 0 || $eval1.isNullAt(index)) {
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${ctx.getValue(eval1, dataType, "index")};

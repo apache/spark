@@ -28,24 +28,22 @@ import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspect
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "orc"
 
@@ -54,20 +52,22 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
 
-    new OrcRelation(paths, dataSchema, None, partitionColumns, parameters)(sqlContext)
+    new OrcRelation(paths, dataSchema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
 
 private[orc] class OrcOutputWriter(
     path: String,
+    bucketId: Option[Int],
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
+  extends OutputWriter with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -77,7 +77,7 @@ private[orc] class OrcOutputWriter(
     }.mkString(":"))
 
     val serde = new OrcSerde
-    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val configuration = context.getConfiguration
     serde.initialize(configuration, table)
     serde
   }
@@ -99,11 +99,12 @@ private[orc] class OrcOutputWriter(
   private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
 
-    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val conf = context.getConfiguration
     val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
-    val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+    val taskAttemptId = context.getTaskAttemptID
     val partition = taskAttemptId.getTaskID.getId
-    val filename = f"part-r-$partition%05d-$uniqueWriteJobId.orc"
+    val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
@@ -155,9 +156,10 @@ private[sql] class OrcRelation(
     maybeDataSchema: Option[StructType],
     maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    override val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(
@@ -171,6 +173,7 @@ private[sql] class OrcRelation(
       maybeDataSchema,
       maybePartitionSpec,
       maybePartitionSpec.map(_.partitionColumns),
+      None,
       parameters)(sqlContext)
   }
 
@@ -207,8 +210,8 @@ private[sql] class OrcRelation(
     OrcTableScan(output, this, filters, inputPaths).execute()
   }
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    SparkHadoopUtil.get.getConfigurationFromJobContext(job) match {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
+    job.getConfiguration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
       case conf =>
@@ -218,12 +221,13 @@ private[sql] class OrcRelation(
           classOf[MapRedOutputFormat[_, _]])
     }
 
-    new OutputWriterFactory {
+    new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
+          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, dataSchema, context)
+        new OrcOutputWriter(path, bucketId, dataSchema, context)
       }
     }
   }
@@ -289,8 +293,8 @@ private[orc] case class OrcTableScan(
   }
 
   def execute(): RDD[InternalRow] = {
-    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = job.getConfiguration
 
     // Tries to push down filters if ORC filter push-down is enabled
     if (sqlContext.conf.orcFilterPushDown) {

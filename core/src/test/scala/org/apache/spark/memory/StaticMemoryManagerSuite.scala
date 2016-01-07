@@ -17,17 +17,13 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.mockito.Mockito.when
 
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, TestBlockId}
-
+import org.apache.spark.storage.{MemoryStore, TestBlockId}
 
 class StaticMemoryManagerSuite extends MemoryManagerSuite {
   private val conf = new SparkConf().set("spark.storage.unrollFraction", "0.4")
-  private val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
   /**
    * Make a [[StaticMemoryManager]] and a [[MemoryStore]] with limited class dependencies.
@@ -36,38 +32,47 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
       maxExecutionMem: Long,
       maxStorageMem: Long): (StaticMemoryManager, MemoryStore) = {
     val mm = new StaticMemoryManager(
-      conf, maxExecutionMemory = maxExecutionMem, maxStorageMemory = maxStorageMem, numCores = 1)
+      conf,
+      maxOnHeapExecutionMemory = maxExecutionMem,
+      maxStorageMemory = maxStorageMem,
+      numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
   }
 
-  override protected def createMemoryManager(maxMemory: Long): MemoryManager = {
+  override protected def createMemoryManager(
+      maxOnHeapExecutionMemory: Long,
+      maxOffHeapExecutionMemory: Long): StaticMemoryManager = {
     new StaticMemoryManager(
-      conf,
-      maxExecutionMemory = maxMemory,
+      conf.clone
+        .set("spark.memory.fraction", "1")
+        .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
+        .set("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString),
+      maxOnHeapExecutionMemory = maxOnHeapExecutionMemory,
       maxStorageMemory = 0,
       numCores = 1)
   }
 
   test("basic execution memory") {
     val maxExecutionMem = 1000L
+    val taskAttemptId = 0L
     val (mm, _) = makeThings(maxExecutionMem, Long.MaxValue)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.doAcquireExecutionMemory(10L, evictedBlocks) === 10L)
+    assert(mm.acquireExecutionMemory(10L, taskAttemptId, MemoryMode.ON_HEAP) === 10L)
     assert(mm.executionMemoryUsed === 10L)
-    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.acquireExecutionMemory(100L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     // Acquire up to the max
-    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 890L)
+    assert(mm.acquireExecutionMemory(1000L, taskAttemptId, MemoryMode.ON_HEAP) === 890L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 0L)
+    assert(mm.acquireExecutionMemory(1L, taskAttemptId, MemoryMode.ON_HEAP) === 0L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
-    mm.releaseExecutionMemory(800L)
+    mm.releaseExecutionMemory(800L, taskAttemptId, MemoryMode.ON_HEAP)
     assert(mm.executionMemoryUsed === 200L)
     // Acquire after release
-    assert(mm.doAcquireExecutionMemory(1L, evictedBlocks) === 1L)
+    assert(mm.acquireExecutionMemory(1L, taskAttemptId, MemoryMode.ON_HEAP) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
-    mm.releaseExecutionMemory(maxExecutionMem)
+    mm.releaseExecutionMemory(maxExecutionMem, taskAttemptId, MemoryMode.ON_HEAP)
     assert(mm.executionMemoryUsed === 0L)
   }
 
@@ -77,33 +82,38 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     val (mm, ms) = makeThings(Long.MaxValue, maxStorageMem)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.acquireStorageMemory(dummyBlock, 10L, evictedBlocks))
-    // `ensureFreeSpace` should be called with the number of bytes requested
-    assertEnsureFreeSpaceCalled(ms, 10L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 10L)
+
     assert(mm.acquireStorageMemory(dummyBlock, 100L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, 100L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 110L)
     // Acquire more than the max, not granted
     assert(!mm.acquireStorageMemory(dummyBlock, maxStorageMem + 1L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, maxStorageMem + 1L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 110L)
     // Acquire up to the max, requests after this are still granted due to LRU eviction
     assert(mm.acquireStorageMemory(dummyBlock, maxStorageMem, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, 1000L)
+    assertEvictBlocksToFreeSpaceCalled(ms, 110L)
     assert(mm.storageMemoryUsed === 1000L)
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, 1L)
+    assertEvictBlocksToFreeSpaceCalled(ms, 1L)
+    assert(evictedBlocks.nonEmpty)
+    evictedBlocks.clear()
+    // Note: We evicted 1 byte to put another 1-byte block in, so the storage memory used remains at
+    // 1000 bytes. This is different from real behavior, where the 1-byte block would have evicted
+    // the 1000-byte block entirely. This is set up differently so we can write finer-grained tests.
     assert(mm.storageMemoryUsed === 1000L)
     mm.releaseStorageMemory(800L)
     assert(mm.storageMemoryUsed === 200L)
     // Acquire after release
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, 1L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 201L)
     mm.releaseAllStorageMemory()
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, 1L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 1L)
     // Release beyond what was acquired
     mm.releaseStorageMemory(100L)
@@ -113,22 +123,23 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
   test("execution and storage isolation") {
     val maxExecutionMem = 200L
     val maxStorageMem = 1000L
+    val taskAttemptId = 0L
     val dummyBlock = TestBlockId("ain't nobody love like you do")
     val (mm, ms) = makeThings(maxExecutionMem, maxStorageMem)
     // Only execution memory should increase
-    assert(mm.doAcquireExecutionMemory(100L, evictedBlocks) === 100L)
+    assert(mm.acquireExecutionMemory(100L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 100L)
-    assert(mm.doAcquireExecutionMemory(1000L, evictedBlocks) === 100L)
+    assert(mm.acquireExecutionMemory(1000L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.executionMemoryUsed === 200L)
     // Only storage memory should increase
     assert(mm.acquireStorageMemory(dummyBlock, 50L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, 50L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 200L)
     // Only execution memory should be released
-    mm.releaseExecutionMemory(133L)
+    mm.releaseExecutionMemory(133L, taskAttemptId, MemoryMode.ON_HEAP)
     assert(mm.storageMemoryUsed === 50L)
     assert(mm.executionMemoryUsed === 67L)
     // Only storage memory should be released
@@ -142,21 +153,30 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     val dummyBlock = TestBlockId("lonely water")
     val (mm, ms) = makeThings(Long.MaxValue, maxStorageMem)
     assert(mm.acquireUnrollMemory(dummyBlock, 100L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, 100L)
+    when(ms.currentUnrollMemory).thenReturn(100L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 100L)
     mm.releaseUnrollMemory(40L)
     assert(mm.storageMemoryUsed === 60L)
     when(ms.currentUnrollMemory).thenReturn(60L)
-    assert(mm.acquireUnrollMemory(dummyBlock, 500L, evictedBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 800L, evictedBlocks))
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.storageMemoryUsed === 860L)
     // `spark.storage.unrollFraction` is 0.4, so the max unroll space is 400 bytes.
-    // Since we already occupy 60 bytes, we will try to ensure only 400 - 60 = 340 bytes.
-    assertEnsureFreeSpaceCalled(ms, 340L)
-    assert(mm.storageMemoryUsed === 560L)
-    when(ms.currentUnrollMemory).thenReturn(560L)
-    assert(!mm.acquireUnrollMemory(dummyBlock, 800L, evictedBlocks))
-    assert(mm.storageMemoryUsed === 560L)
-    // We already have 560 bytes > the max unroll space of 400 bytes, so no bytes are freed
-    assertEnsureFreeSpaceCalled(ms, 0L)
+    // As of this point, cache memory is 800 bytes and current unroll memory is 60 bytes.
+    // Requesting 240 more bytes of unroll memory will leave our total unroll memory at
+    // 300 bytes, still under the 400-byte limit. Therefore, all 240 bytes are granted.
+    assert(mm.acquireUnrollMemory(dummyBlock, 240L, evictedBlocks))
+    assertEvictBlocksToFreeSpaceCalled(ms, 100L) // 860 + 240 - 1000
+    when(ms.currentUnrollMemory).thenReturn(300L) // 60 + 240
+    assert(mm.storageMemoryUsed === 1000L)
+    evictedBlocks.clear()
+    // We already have 300 bytes of unroll memory, so requesting 150 more will leave us
+    // above the 400-byte limit. Since there is not enough free memory, this request will
+    // fail even after evicting as much as we can (400 - 300 = 100 bytes).
+    assert(!mm.acquireUnrollMemory(dummyBlock, 150L, evictedBlocks))
+    assertEvictBlocksToFreeSpaceCalled(ms, 100L)
+    assert(mm.storageMemoryUsed === 900L)
     // Release beyond what was acquired
     mm.releaseUnrollMemory(maxStorageMem)
     assert(mm.storageMemoryUsed === 0L)

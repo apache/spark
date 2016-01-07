@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.local
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{SQLConf, Row}
+import org.apache.spark.sql.{Row, SQLConf}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -34,10 +34,6 @@ import org.apache.spark.sql.types.StructType
  * After consuming the iterator, close function must be called.
  */
 abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Logging {
-
-  protected val codegenEnabled: Boolean = conf.codegenEnabled
-
-  protected val unsafeEnabled: Boolean = conf.unsafeEnabled
 
   private[this] lazy val isTesting: Boolean = sys.props.contains("spark.testing")
 
@@ -73,18 +69,6 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
    */
   def close(): Unit
 
-  /** Specifies whether this operator outputs UnsafeRows */
-  def outputsUnsafeRows: Boolean = false
-
-  /** Specifies whether this operator is capable of processing UnsafeRows */
-  def canProcessUnsafeRows: Boolean = false
-
-  /**
-   * Specifies whether this operator is capable of processing Java-object-based Rows (i.e. rows
-   * that are not UnsafeRows).
-   */
-  def canProcessSafeRows: Boolean = true
-
   /**
    * Returns the content through the [[Iterator]] interface.
    */
@@ -107,67 +91,37 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
     result
   }
 
-  protected def newProjection(
-      expressions: Seq[Expression],
-      inputSchema: Seq[Attribute]): Projection = {
-    log.debug(
-      s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled) {
-      try {
-        GenerateProjection.generate(expressions, inputSchema)
-      } catch {
-        case NonFatal(e) =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate projection, fallback to interpret", e)
-            new InterpretedProjection(expressions, inputSchema)
-          }
-      }
-    } else {
-      new InterpretedProjection(expressions, inputSchema)
-    }
-  }
-
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(
-      s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled) {
-      try {
-        GenerateMutableProjection.generate(expressions, inputSchema)
-      } catch {
-        case NonFatal(e) =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate mutable projection, fallback to interpreted", e)
-            () => new InterpretedMutableProjection(expressions, inputSchema)
-          }
-      }
-    } else {
-      () => new InterpretedMutableProjection(expressions, inputSchema)
+      s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
+    try {
+      GenerateMutableProjection.generate(expressions, inputSchema)
+    } catch {
+      case NonFatal(e) =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate mutable projection, fallback to interpreted", e)
+          () => new InterpretedMutableProjection(expressions, inputSchema)
+        }
     }
   }
 
   protected def newPredicate(
       expression: Expression,
       inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
-    if (codegenEnabled) {
-      try {
-        GeneratePredicate.generate(expression, inputSchema)
-      } catch {
-        case NonFatal(e) =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate predicate, fallback to interpreted", e)
-            InterpretedPredicate.create(expression, inputSchema)
-          }
-      }
-    } else {
-      InterpretedPredicate.create(expression, inputSchema)
+    try {
+      GeneratePredicate.generate(expression, inputSchema)
+    } catch {
+      case NonFatal(e) =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate predicate, fallback to interpreted", e)
+          InterpretedPredicate.create(expression, inputSchema)
+        }
     }
   }
 }

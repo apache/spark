@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.expressions.{Literal, GreaterThan, Not, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GreaterThan, Literal, Not}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, LogicalPlan, Command}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 private[sql] case class TestCommand(cmd: String) extends LogicalPlan with Command {
@@ -125,5 +125,26 @@ class SqlParserSuite extends PlanTest {
 
     checkSingleUnit("13.123456789", "second")
     checkSingleUnit("-13.123456789", "second")
+  }
+
+  test("support scientific notation") {
+    def assertRight(input: String, output: Double): Unit = {
+      val parsed = SqlParser.parse("SELECT " + input)
+      val expected = Project(
+        UnresolvedAlias(
+          Literal(output)
+        ) :: Nil,
+        OneRowRelation)
+      comparePlans(parsed, expected)
+    }
+
+    assertRight("9.0e1", 90)
+    assertRight(".9e+2", 90)
+    assertRight("0.9e+2", 90)
+    assertRight("900e-1", 90)
+    assertRight("900.0E-1", 90)
+    assertRight("9.e+1", 90)
+
+    intercept[RuntimeException](SqlParser.parse("SELECT .e3"))
   }
 }

@@ -25,22 +25,22 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
+import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
-import org.apache.spark.network.netty.NettyBlockTransferService
-import org.apache.spark.rpc.RpcEnv
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.memory.StaticMemoryManager
+import org.apache.spark.network.netty.NettyBlockTransferService
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
-
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with ResetSystemProperties {
@@ -66,7 +66,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   private def makeBlockManager(
       maxMem: Long,
-      name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
+      name: String = SparkContext.DRIVER_IDENTIFIER,
+      master: BlockManagerMaster = this.master): BlockManager = {
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
     val blockManager = new BlockManager(name, rpcEnv, master, serializer, conf,
@@ -77,6 +78,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
@@ -95,22 +97,26 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   override def afterEach(): Unit = {
-    if (store != null) {
-      store.stop()
-      store = null
+    try {
+      if (store != null) {
+        store.stop()
+        store = null
+      }
+      if (store2 != null) {
+        store2.stop()
+        store2 = null
+      }
+      if (store3 != null) {
+        store3.stop()
+        store3 = null
+      }
+      rpcEnv.shutdown()
+      rpcEnv.awaitTermination()
+      rpcEnv = null
+      master = null
+    } finally {
+      super.afterEach()
     }
-    if (store2 != null) {
-      store2.stop()
-      store2 = null
-    }
-    if (store3 != null) {
-      store3.stop()
-      store3 = null
-    }
-    rpcEnv.shutdown()
-    rpcEnv.awaitTermination()
-    rpcEnv = null
-    master = null
   }
 
   test("StorageLevel object caching") {
@@ -449,6 +455,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
     assert(list2DiskGet.get.bytes > 0)
     assert(list2DiskGet.get.readMethod === DataReadMethod.Disk)
+  }
+
+  test("optimize a location order of blocks") {
+    val localHost = Utils.localHostName()
+    val otherHost = "otherHost"
+    val bmMaster = mock(classOf[BlockManagerMaster])
+    val bmId1 = BlockManagerId("id1", localHost, 1)
+    val bmId2 = BlockManagerId("id2", localHost, 2)
+    val bmId3 = BlockManagerId("id3", otherHost, 3)
+    when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
+
+    val blockManager = makeBlockManager(128, "exec", bmMaster)
+    val getLocations = PrivateMethod[Seq[BlockManagerId]]('getLocations)
+    val locations = blockManager invokePrivate getLocations(BroadcastBlockId(0))
+    assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
 
   test("SPARK-9591: getRemoteBytes from another location when Exception throw") {
@@ -825,7 +846,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val memoryManager = new StaticMemoryManager(
       conf,
-      maxExecutionMemory = Long.MaxValue,
+      maxOnHeapExecutionMemory = Long.MaxValue,
       maxStorageMemory = 1200,
       numCores = 1)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,

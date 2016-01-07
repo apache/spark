@@ -22,13 +22,13 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{TableIdentifier, DefaultParserDialect}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.{DefaultParserDialect, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, FunctionRegistry}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -915,6 +915,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
+  test("window function: distinct should not be silently ignored") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    val e = intercept[AnalysisException] {
+      sql(
+        """
+          |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
+          |from windowData
+        """.stripMargin)
+    }
+    assert(e.getMessage.contains("Distinct window functions are not supported"))
+  }
+
   test("window function: expressions in arguments of a window functions") {
     val data = Seq(
       WindowData(1, "a", 5),
@@ -1427,5 +1448,56 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
       checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
     }
+  }
+
+  test("SPARK-11453: append data to partitioned table") {
+    withTable("tbl11453") {
+      Seq("1" -> "10", "2" -> "20").toDF("i", "j")
+        .write.partitionBy("i").saveAsTable("tbl11453")
+
+      Seq("3" -> "30").toDF("i", "j")
+        .write.mode(SaveMode.Append).partitionBy("i").saveAsTable("tbl11453")
+      checkAnswer(
+        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Nil)
+
+      // make sure case sensitivity is correct.
+      Seq("4" -> "40").toDF("i", "j")
+        .write.mode(SaveMode.Append).partitionBy("I").saveAsTable("tbl11453")
+      checkAnswer(
+        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Row("4", "40") :: Nil)
+    }
+  }
+
+  test("SPARK-11590: use native json_tuple in lateral view") {
+    checkAnswer(sql(
+      """
+        |SELECT a, b
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
+        |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt AS a, b
+      """.stripMargin), Row("value1", "12"))
+
+    // we should use `c0`, `c1`... as the name of fields if no alias is provided, to follow hive.
+    checkAnswer(sql(
+      """
+        |SELECT c0, c1
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
+        |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt
+      """.stripMargin), Row("value1", "12"))
+
+    // we can also use `json_tuple` in project list.
+    checkAnswer(sql(
+      """
+        |SELECT json_tuple(json, 'f1', 'f2')
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
+      """.stripMargin), Row("value1", "12"))
+
+    // we can also mix `json_tuple` with other project expressions.
+    checkAnswer(sql(
+      """
+        |SELECT json_tuple(json, 'f1', 'f2'), 3.14, str
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
+      """.stripMargin), Row("value1", "12", 3.14, "hello"))
   }
 }

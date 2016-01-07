@@ -22,8 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
@@ -110,6 +110,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.MILLISECOND, 0)
     assert(stringToDate(UTF8String.fromString("2015")).get ===
       millisToDays(c.getTimeInMillis))
+    c.set(1, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToDate(UTF8String.fromString("0001")).get ===
+      millisToDays(c.getTimeInMillis))
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
@@ -134,11 +138,15 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("2015.03.18")).isEmpty)
     assert(stringToDate(UTF8String.fromString("20150318")).isEmpty)
     assert(stringToDate(UTF8String.fromString("2015-031-8")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("02015-03-18")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("015-03-18")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("015")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
   }
 
   test("string to time") {
     // Tests with UTC.
-    var c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.set(Calendar.MILLISECOND, 0)
 
     c.set(1900, 0, 1, 0, 0, 0)
@@ -174,9 +182,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.MILLISECOND, 0)
     assert(stringToTimestamp(UTF8String.fromString("1969-12-31 16:00:00")).get ===
       c.getTimeInMillis * 1000)
-    c.set(2015, 0, 1, 0, 0, 0)
+    c.set(1, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(stringToTimestamp(UTF8String.fromString("2015")).get ===
+    assert(stringToTimestamp(UTF8String.fromString("0001")).get ===
       c.getTimeInMillis * 1000)
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
@@ -319,6 +327,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("2011-05-06 07:08:09.1000")).get === c.getTimeInMillis * 1000)
 
     assert(stringToTimestamp(UTF8String.fromString("238")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("00238")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18 123142")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18T123123")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18X")).isEmpty)
@@ -326,12 +335,22 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToTimestamp(UTF8String.fromString("2015.03.18")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("20150318")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-031-8")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("02015-01-18")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("015-01-18")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-20:0")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-0:70")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-1:0:0")).isEmpty)
+
+    // Truncating the fractional seconds
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-03-18T12:03:17.123456789+0:00")).get ===
+        c.getTimeInMillis * 1000 + 123456)
   }
 
   test("hours") {
@@ -358,7 +377,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(getSeconds(c.getTimeInMillis * 1000) === 9)
   }
 
-  test("hours / miniute / seconds") {
+  test("hours / minutes / seconds") {
     Seq(Timestamp.valueOf("2015-06-11 10:12:35.789"),
       Timestamp.valueOf("2015-06-11 20:13:40.789"),
       Timestamp.valueOf("1900-06-11 12:14:50.789"),

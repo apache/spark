@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -35,13 +36,26 @@ case class Corr(
     inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate {
 
+  def this(left: Expression, right: Expression) =
+    this(left, right, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+
   override def children: Seq[Expression] = Seq(left, right)
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
   override def dataType: DataType = DoubleType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (left.dataType.isInstanceOf[DoubleType] && right.dataType.isInstanceOf[DoubleType]) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"corr requires that both arguments are double type, " +
+          s"not (${left.dataType}, ${right.dataType}).")
+    }
+  }
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 

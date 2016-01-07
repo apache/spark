@@ -19,11 +19,11 @@ package org.apache.spark
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
+import org.apache.spark.util.Utils
 
 class SparkContextSchedulerCreationSuite
   extends SparkFunSuite with LocalSparkContext with PrivateMethodTester with Logging {
@@ -175,6 +175,11 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("mesos with zookeeper") {
+    testMesos("mesos://zk://localhost:1234,localhost:2345",
+      classOf[MesosSchedulerBackend], coarse = false)
+  }
+
+  test("mesos with zookeeper and Master URL starting with zk://") {
     testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
   }
 }

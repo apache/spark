@@ -21,7 +21,8 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.memory.{TaskMemoryManager, StaticMemoryManager}
+import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -30,10 +31,8 @@ import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.MemoryLocation
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator, Utils}
 import org.apache.spark.util.collection.CompactBuffer
-import org.apache.spark.{SparkConf, SparkEnv}
-
 
 /**
  * Interface for a hashed relation by some key. Use [[HashedRelation.apply]] to create a concrete
@@ -189,7 +188,9 @@ private[execution] object HashedRelation {
  */
 private[joins] final class UnsafeHashedRelation(
     private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
-  extends HashedRelation with Externalizable {
+  extends HashedRelation
+  with KnownSizeEstimation
+  with Externalizable {
 
   private[joins] def this() = this(null)  // Needed for serialization
 
@@ -215,6 +216,14 @@ private[joins] final class UnsafeHashedRelation(
     }
   }
 
+  override def estimatedSize: Long = {
+    if (binaryMap != null) {
+      binaryMap.getTotalMemoryConsumption
+    } else {
+      SizeEstimator.estimate(hashTable)
+    }
+  }
+
   override def get(key: InternalRow): Seq[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
 
@@ -235,8 +244,8 @@ private[joins] final class UnsafeHashedRelation(
           val sizeInBytes = Platform.getInt(base, offset + 4)
           offset += 8
 
-          val row = new UnsafeRow
-          row.pointTo(base, offset, numFields, sizeInBytes)
+          val row = new UnsafeRow(numFields)
+          row.pointTo(base, offset, sizeInBytes)
           buffer += row
           offset += sizeInBytes
         }
@@ -324,7 +333,11 @@ private[joins] final class UnsafeHashedRelation(
     // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "false"), Long.MaxValue, Long.MaxValue, 1), 0)
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))

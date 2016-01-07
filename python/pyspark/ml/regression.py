@@ -35,12 +35,12 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver):
+                       HasStandardization, HasSolver, HasWeightCol):
     """
     Linear regression.
 
     The learning objective is to minimize the squared error, with regularization.
-    The specific squared error loss function used is: L = 1/2n ||A weights - y||^2^
+    The specific squared error loss function used is: L = 1/2n ||A coefficients - y||^2^
 
     This support multiple types of regularization:
      - none (a.k.a. ordinary least squares)
@@ -50,9 +50,9 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
-    ...     (1.0, Vectors.dense(1.0)),
-    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal")
+    ...     (1.0, 2.0, Vectors.dense(1.0)),
+    ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
@@ -75,11 +75,11 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 standardization=True, solver="auto"):
+                 standardization=True, solver="auto", weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 standardization=True, solver="auto")
+                 standardization=True, solver="auto", weightCol=None)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -92,11 +92,11 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  standardization=True, solver="auto"):
+                  standardization=True, solver="auto", weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  standardization=True, solver="auto")
+                  standardization=True, solver="auto", weightCol=None)
         Sets params for linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -386,7 +386,8 @@ class GBTParams(TreeEnsembleParams):
 
 @inherit_doc
 class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval):
+                            DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
+                            HasSeed):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for regression.
@@ -415,11 +416,13 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance"):
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
+                 seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance")
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                 impurity="variance", seed=None)
         """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -435,11 +438,12 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance"):
+                  impurity="variance", seed=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance")
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
+                  impurity="variance", seed=None)
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self.setParams._input_kwargs

@@ -20,17 +20,26 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.{File, StringWriter}
 import java.sql.{Date, Timestamp}
 
+import scala.collection.JavaConverters._
+
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.spark.rdd.RDD
+import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalactic.Tolerance._
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+class TestFileFilter extends PathFilter {
+  override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
+}
 
 class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
@@ -588,7 +597,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       relation.isInstanceOf[JSONRelation],
       "The DataFrame returned by jsonFile should be based on JSONRelation.")
     assert(relation.asInstanceOf[JSONRelation].paths === Array(path))
-    assert(relation.asInstanceOf[JSONRelation].samplingRatio === (0.49 +- 0.001))
+    assert(relation.asInstanceOf[JSONRelation].options.samplingRatio === (0.49 +- 0.001))
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
@@ -597,7 +606,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
     assert(relationWithSchema.paths === Array(path))
     assert(relationWithSchema.schema === schema)
-    assert(relationWithSchema.samplingRatio > 0.99)
+    assert(relationWithSchema.options.samplingRatio > 0.99)
   }
 
   test("Loading a JSON dataset from a text file") {
@@ -1165,31 +1174,28 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("JSONRelation equality test") {
     val relation0 = new JSONRelation(
       Some(empty),
-      1.0,
-      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None)(sqlContext)
     val logicalRelation0 = LogicalRelation(relation0)
     val relation1 = new JSONRelation(
       Some(singleRow),
-      1.0,
-      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None)(sqlContext)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
       Some(singleRow),
-      0.5,
-      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None,
+      parameters = Map("samplingRatio" -> "0.5"))(sqlContext)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
       Some(singleRow),
-      1.0,
-      false,
       Some(StructType(StructField("b", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None)(sqlContext)
     val logicalRelation3 = LogicalRelation(relation3)
 
     assert(relation0 !== relation1)
@@ -1232,7 +1238,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = InferSchema(empty, 1.0, "")
+    val emptySchema = InferSchema.infer(empty, "", JSONOptions())
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1256,7 +1262,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = InferSchema(emptyRecords, 1.0, "")
+    val emptySchema = InferSchema.infer(emptyRecords, "", JSONOptions())
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1393,4 +1399,70 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
+
+  test("SPARK-11544 test pathfilter") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = sqlContext.range(2)
+      df.write.json(path + "/p=1")
+      df.write.json(path + "/p=2")
+      assert(sqlContext.read.json(path).count() === 4)
+
+      val clonedConf = new Configuration(hadoopConfiguration)
+      try {
+        // Setting it twice as the name of the propery has changed between hadoop versions.
+        hadoopConfiguration.setClass(
+          "mapred.input.pathFilter.class",
+          classOf[TestFileFilter],
+          classOf[PathFilter])
+        hadoopConfiguration.setClass(
+          "mapreduce.input.pathFilter.class",
+          classOf[TestFileFilter],
+          classOf[PathFilter])
+        assert(sqlContext.read.json(path).count() === 2)
+      } finally {
+        // Hadoop 1 doesn't have `Configuration.unset`
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      }
+    }
+  }
+
+  test("SPARK-12057 additional corrupt records do not throw exceptions") {
+    // Test if we can query corrupt records.
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      withTempTable("jsonTable") {
+        val schema = StructType(
+          StructField("_unparsed", StringType, true) ::
+            StructField("dummy", StringType, true) :: Nil)
+
+        {
+          // We need to make sure we can infer the schema.
+          val jsonDF = sqlContext.read.json(additionalCorruptRecords)
+          assert(jsonDF.schema === schema)
+        }
+
+        {
+          val jsonDF = sqlContext.read.schema(schema).json(additionalCorruptRecords)
+          jsonDF.registerTempTable("jsonTable")
+
+          // In HiveContext, backticks should be used to access columns starting with a underscore.
+          checkAnswer(
+            sql(
+              """
+                |SELECT dummy, _unparsed
+                |FROM jsonTable
+              """.stripMargin),
+            Row("test", null) ::
+              Row(null, """[1,2,3]""") ::
+              Row(null, """":"test", "a":1}""") ::
+              Row(null, """42""") ::
+              Row(null, """     ","ian":"test"}""") :: Nil
+          )
+        }
+      }
+    }
+  }
+
 }

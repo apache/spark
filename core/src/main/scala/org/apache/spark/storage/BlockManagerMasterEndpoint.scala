@@ -19,14 +19,13 @@ package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.immutable.HashSet
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, ThreadSafeRpcEndpoint}
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -75,8 +74,8 @@ class BlockManagerMasterEndpoint(
     case GetPeers(blockManagerId) =>
       context.reply(getPeers(blockManagerId))
 
-    case GetRpcHostPortForExecutor(executorId) =>
-      context.reply(getRpcHostPortForExecutor(executorId))
+    case GetExecutorEndpointRef(executorId) =>
+      context.reply(getExecutorEndpointRef(executorId))
 
     case GetMemoryStatus =>
       context.reply(memoryStatus)
@@ -388,15 +387,14 @@ class BlockManagerMasterEndpoint(
   }
 
   /**
-   * Returns the hostname and port of an executor, based on the [[RpcEnv]] address of its
-   * [[BlockManagerSlaveEndpoint]].
+   * Returns an [[RpcEndpointRef]] of the [[BlockManagerSlaveEndpoint]] for sending RPC messages.
    */
-  private def getRpcHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+  private def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
       info <- blockManagerInfo.get(blockManagerId)
     ) yield {
-      (info.slaveEndpoint.address.host, info.slaveEndpoint.address.port)
+      info.slaveEndpoint
     }
   }
 

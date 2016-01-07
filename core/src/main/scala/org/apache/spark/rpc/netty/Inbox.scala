@@ -21,18 +21,19 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
 
 private[netty] sealed trait InboxMessage
 
-private[netty] case class ContentMessage(
+private[netty] case class OneWayMessage(
+    senderAddress: RpcAddress,
+    content: Any) extends InboxMessage
+
+private[netty] case class RpcMessage(
     senderAddress: RpcAddress,
     content: Any,
-    needReply: Boolean,
     context: NettyRpcCallContext) extends InboxMessage
 
 private[netty] case object OnStart extends InboxMessage
@@ -98,28 +99,23 @@ private[netty] class Inbox(
     while (true) {
       safelyCall(endpoint) {
         message match {
-          case ContentMessage(_sender, content, needReply, context) =>
-            // The partial function to call
-            val pf = if (needReply) endpoint.receiveAndReply(context) else endpoint.receive
+          case RpcMessage(_sender, content, context) =>
             try {
-              pf.applyOrElse[Any, Unit](content, { msg =>
+              endpoint.receiveAndReply(context).applyOrElse[Any, Unit](content, { msg =>
                 throw new SparkException(s"Unsupported message $message from ${_sender}")
               })
-              if (!needReply) {
-                context.finish()
-              }
             } catch {
               case NonFatal(e) =>
-                if (needReply) {
-                  // If the sender asks a reply, we should send the error back to the sender
-                  context.sendFailure(e)
-                } else {
-                  context.finish()
-                }
+                context.sendFailure(e)
                 // Throw the exception -- this exception will be caught by the safelyCall function.
                 // The endpoint's onError function will be called.
                 throw e
             }
+
+          case OneWayMessage(_sender, content) =>
+            endpoint.receive.applyOrElse[Any, Unit](content, { msg =>
+              throw new SparkException(s"Unsupported message $message from ${_sender}")
+            })
 
           case OnStart =>
             endpoint.onStart()
@@ -193,8 +189,10 @@ private[netty] class Inbox(
 
   def isEmpty: Boolean = inbox.synchronized { messages.isEmpty }
 
-  /** Called when we are dropping a message. Test cases override this to test message dropping. */
-  @VisibleForTesting
+  /**
+   * Called when we are dropping a message. Test cases override this to test message dropping.
+   * Exposed for testing.
+   */
   protected def onDrop(message: InboxMessage): Unit = {
     logWarning(s"Drop $message because $endpointRef is stopped")
   }

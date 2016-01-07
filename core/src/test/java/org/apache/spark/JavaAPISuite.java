@@ -146,21 +146,29 @@ public class JavaAPISuite implements Serializable {
   public void sample() {
     List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     JavaRDD<Integer> rdd = sc.parallelize(ints);
-    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 3);
+    // the seeds here are "magic" to make this work out nicely
+    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 8);
     Assert.assertEquals(2, sample20.count());
-    JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 5);
+    JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 2);
     Assert.assertEquals(2, sample20WithoutReplacement.count());
   }
 
   @Test
   public void randomSplit() {
-    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    List<Integer> ints = new ArrayList<>(1000);
+    for (int i = 0; i < 1000; i++) {
+      ints.add(i);
+    }
     JavaRDD<Integer> rdd = sc.parallelize(ints);
     JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 31);
+    // the splits aren't perfect -- not enough data for them to be -- just check they're about right
     Assert.assertEquals(3, splits.length);
-    Assert.assertEquals(1, splits[0].count());
-    Assert.assertEquals(2, splits[1].count());
-    Assert.assertEquals(7, splits[2].count());
+    long s0 = splits[0].count();
+    long s1 = splits[1].count();
+    long s2 = splits[2].count();
+    Assert.assertTrue(s0 + " not within expected range", s0 > 150 && s0 < 250);
+    Assert.assertTrue(s1 + " not within expected range", s1 > 250 && s0 < 350);
+    Assert.assertTrue(s2 + " not within expected range", s2 > 430 && s2 < 570);
   }
 
   @Test
@@ -680,13 +688,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void toArray() {
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3));
-    List<Integer> list = rdd.toArray();
-    Assert.assertEquals(Arrays.asList(1, 2, 3), list);
-  }
-
-  @Test
   public void cartesian() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));
@@ -965,6 +966,19 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
   }
 
+  @Test
+  public void getNumPartitions(){
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaDoubleRDD rdd2 = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0), 2);
+    JavaPairRDD<String, Integer> rdd3 = sc.parallelizePairs(Arrays.asList(
+            new Tuple2<>("a", 1),
+            new Tuple2<>("aa", 2),
+            new Tuple2<>("aaa", 3)
+    ), 2);
+    Assert.assertEquals(3, rdd1.getNumPartitions());
+    Assert.assertEquals(2, rdd2.getNumPartitions());
+    Assert.assertEquals(2, rdd3.getNumPartitions());
+  }
 
   @Test
   public void repartition() {
@@ -1225,7 +1239,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<IntWritable, Text> output = sc.newAPIHadoopFile(outputDir,
         org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat.class,
-        IntWritable.class, Text.class, new Job().getConfiguration());
+        IntWritable.class, Text.class, Job.getInstance().getConfiguration());
     Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>, String>() {
       @Override
       public String call(Tuple2<IntWritable, Text> x) {
@@ -1566,11 +1580,11 @@ public class JavaAPISuite implements Serializable {
     }
     double relativeSD = 0.001;
     JavaPairRDD<Integer, Integer> pairRdd = sc.parallelizePairs(arrayData);
-    List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(relativeSD, 8).collect();
-    for (Tuple2<Integer, Object> resItem : res) {
-      double count = (double)resItem._1();
-      Long resCount = (Long)resItem._2();
-      Double error = Math.abs((resCount - count) / count);
+    List<Tuple2<Integer, Long>> res =  pairRdd.countApproxDistinctByKey(relativeSD, 8).collect();
+    for (Tuple2<Integer, Long> resItem : res) {
+      double count = resItem._1();
+      long resCount = resItem._2();
+      double error = Math.abs((resCount - count) / count);
       Assert.assertTrue(error < 0.1);
     }
 
@@ -1619,12 +1633,12 @@ public class JavaAPISuite implements Serializable {
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
-    Map<Integer, Long> wrCounts = (Map<Integer, Long>) (Object) wr.countByKey();
+    Map<Integer, Long> wrCounts = wr.countByKey();
     Assert.assertEquals(2, wrCounts.size());
     Assert.assertTrue(wrCounts.get(0) > 0);
     Assert.assertTrue(wrCounts.get(1) > 0);
     JavaPairRDD<Integer, Integer> wor = rdd2.sampleByKey(false, fractions, 1L);
-    Map<Integer, Long> worCounts = (Map<Integer, Long>) (Object) wor.countByKey();
+    Map<Integer, Long> worCounts = wor.countByKey();
     Assert.assertEquals(2, worCounts.size());
     Assert.assertTrue(worCounts.get(0) > 0);
     Assert.assertTrue(worCounts.get(1) > 0);
@@ -1645,12 +1659,12 @@ public class JavaAPISuite implements Serializable {
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
-    Map<Integer, Long> wrExactCounts = (Map<Integer, Long>) (Object) wrExact.countByKey();
+    Map<Integer, Long> wrExactCounts = wrExact.countByKey();
     Assert.assertEquals(2, wrExactCounts.size());
     Assert.assertTrue(wrExactCounts.get(0) == 2);
     Assert.assertTrue(wrExactCounts.get(1) == 4);
     JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKeyExact(false, fractions, 1L);
-    Map<Integer, Long> worExactCounts = (Map<Integer, Long>) (Object) worExact.countByKey();
+    Map<Integer, Long> worExactCounts = worExact.countByKey();
     Assert.assertEquals(2, worExactCounts.size());
     Assert.assertTrue(worExactCounts.get(0) == 2);
     Assert.assertTrue(worExactCounts.get(1) == 4);

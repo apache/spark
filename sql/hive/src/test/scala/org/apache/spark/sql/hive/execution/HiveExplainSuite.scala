@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * A set of tests that validates support for Hive Explain command.
@@ -37,8 +37,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==",
-                   "== Physical Plan ==",
-                   "Code Generation")
+                   "== Physical Plan ==")
   }
 
   test("explain create table command") {

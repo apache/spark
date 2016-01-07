@@ -20,16 +20,15 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.annotations.VisibleForTesting
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer._
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
@@ -68,24 +67,24 @@ import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
  *
  * At a high level, this class works internally as follows:
  *
- * - We repeatedly fill up buffers of in-memory data, using either a PartitionedAppendOnlyMap if
- *   we want to combine by key, or a PartitionedPairBuffer if we don't.
- *   Inside these buffers, we sort elements by partition ID and then possibly also by key.
- *   To avoid calling the partitioner multiple times with each key, we store the partition ID
- *   alongside each record.
+ *  - We repeatedly fill up buffers of in-memory data, using either a PartitionedAppendOnlyMap if
+ *    we want to combine by key, or a PartitionedPairBuffer if we don't.
+ *    Inside these buffers, we sort elements by partition ID and then possibly also by key.
+ *    To avoid calling the partitioner multiple times with each key, we store the partition ID
+ *    alongside each record.
  *
- * - When each buffer reaches our memory limit, we spill it to a file. This file is sorted first
- *   by partition ID and possibly second by key or by hash code of the key, if we want to do
- *   aggregation. For each file, we track how many objects were in each partition in memory, so we
- *   don't have to write out the partition ID for every element.
+ *  - When each buffer reaches our memory limit, we spill it to a file. This file is sorted first
+ *    by partition ID and possibly second by key or by hash code of the key, if we want to do
+ *    aggregation. For each file, we track how many objects were in each partition in memory, so we
+ *    don't have to write out the partition ID for every element.
  *
- * - When the user requests an iterator or file output, the spilled files are merged, along with
- *   any remaining in-memory data, using the same sort order defined above (unless both sorting
- *   and aggregation are disabled). If we need to aggregate by key, we either use a total ordering
- *   from the ordering parameter, or read the keys with the same hash code and compare them with
- *   each other for equality to merge values.
+ *  - When the user requests an iterator or file output, the spilled files are merged, along with
+ *    any remaining in-memory data, using the same sort order defined above (unless both sorting
+ *    and aggregation are disabled). If we need to aggregate by key, we either use a total ordering
+ *    from the ordering parameter, or read the keys with the same hash code and compare them with
+ *    each other for equality to merge values.
  *
- * - Users are expected to call stop() at the end to delete all the intermediate files.
+ *  - Users are expected to call stop() at the end to delete all the intermediate files.
  */
 private[spark] class ExternalSorter[K, V, C](
     context: TaskContext,
@@ -608,8 +607,8 @@ private[spark] class ExternalSorter[K, V, C](
    *
    * For now, we just merge all the spilled files in once pass, but this can be modified to
    * support hierarchical merging.
+   * Exposed for testing.
    */
-  @VisibleForTesting
   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
     val usingMap = aggregator.isDefined
     val collection: WritablePartitionedPairCollection[K, C] = if (usingMap) map else buffer
@@ -639,7 +638,6 @@ private[spark] class ExternalSorter[K, V, C](
    * called by the SortShuffleWriter.
    *
    * @param blockId block ID to write to. The index file will be blockId.name + ".index".
-   * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
   def writePartitionedFile(

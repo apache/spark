@@ -266,7 +266,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return [
             MultivariateGaussian(gaussian[0], gaussian[1])
-            for gaussian in zip(*self.call("gaussians"))]
+            for gaussian in self.call("gaussians")]
 
     @property
     @since('1.4.0')
@@ -346,7 +346,7 @@ class GaussianMixture(object):
             if initialModel.k != k:
                 raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
                                 % (initialModel.k, k))
-            initialModelWeights = initialModel.weights
+            initialModelWeights = list(initialModel.weights)
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
         java_model = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),
@@ -671,7 +671,7 @@ class StreamingKMeans(object):
         return dstream.mapValues(lambda x: self._model.predict(x))
 
 
-class LDAModel(JavaModelWrapper):
+class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
 
     """ A clustering model derived from the LDA method.
 
@@ -691,9 +691,14 @@ class LDAModel(JavaModelWrapper):
     ...     [2, SparseVector(2, {0: 1.0})],
     ... ]
     >>> rdd =  sc.parallelize(data)
-    >>> model = LDA.train(rdd, k=2)
+    >>> model = LDA.train(rdd, k=2, seed=1)
     >>> model.vocabSize()
     2
+    >>> model.describeTopics()
+    [([1, 0], [0.5..., 0.49...]), ([0, 1], [0.5..., 0.49...])]
+    >>> model.describeTopics(1)
+    [([1], [0.5...]), ([0], [0.5...])]
+
     >>> topics = model.topicsMatrix()
     >>> topics_expect = array([[0.5,  0.5], [0.5, 0.5]])
     >>> assert_almost_equal(topics, topics_expect, 1)
@@ -724,18 +729,23 @@ class LDAModel(JavaModelWrapper):
         """Vocabulary size (number of terms or terms in the vocabulary)"""
         return self.call("vocabSize")
 
-    @since('1.5.0')
-    def save(self, sc, path):
-        """Save the LDAModel on to disk.
+    @since('1.6.0')
+    def describeTopics(self, maxTermsPerTopic=None):
+        """Return the topics described by weighted terms.
 
-        :param sc: SparkContext
-        :param path: str, path to where the model needs to be stored.
+        WARNING: If vocabSize and k are large, this can return a large object!
+
+        :param maxTermsPerTopic: Maximum number of terms to collect for each topic.
+            (default: vocabulary size)
+        :return: Array over topics. Each topic is represented as a pair of matching arrays:
+            (term indices, term weights in topic).
+            Each topic's terms are sorted in order of decreasing weight.
         """
-        if not isinstance(sc, SparkContext):
-            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
-        self._java_model.save(sc._jsc.sc(), path)
+        if maxTermsPerTopic is None:
+            topics = self.call("describeTopics")
+        else:
+            topics = self.call("describeTopics", maxTermsPerTopic)
+        return topics
 
     @classmethod
     @since('1.5.0')
@@ -749,9 +759,8 @@ class LDAModel(JavaModelWrapper):
             raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
-        java_model = sc._jvm.org.apache.spark.mllib.clustering.DistributedLDAModel.load(
-            sc._jsc.sc(), path)
-        return cls(java_model)
+        model = callMLlibFunc("loadLDAModel", sc, path)
+        return LDAModel(model)
 
 
 class LDA(object):

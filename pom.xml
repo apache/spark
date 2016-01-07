@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.6.0-SNAPSHOT</version>
+  <version>2.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -88,7 +88,6 @@
   <modules>
     <module>tags</module>
     <module>core</module>
-    <module>bagel</module> <!-- Deprecated -->
     <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
@@ -98,6 +97,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>docker-integration-tests</module>
     <module>unsafe</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -152,13 +152,16 @@
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
-    <aws.java.sdk.version>1.9.40</aws.java.sdk.version>
     <aws.kinesis.client.version>1.4.0</aws.kinesis.client.version>
+    <!-- the producer is used in tests -->
+    <aws.kinesis.producer.version>0.10.1</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
+    <!-- managed up from 3.2.1 for SPARK-11652 -->
+    <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.10.5</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
@@ -180,6 +183,7 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>1.3.9</jsr305.version>
     <libthrift.version>0.9.2</libthrift.version>
+    <antlr.version>3.5.2</antlr.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -189,7 +193,7 @@
       declared in the projects that build assemblies.
 
       For other projects the scope should remain as "compile", otherwise they are not available
-      during compilation if the dependency is transivite (e.g. "bagel/" depending on "core/" and
+      during compilation if the dependency is transivite (e.g. "graphx/" depending on "core/" and
       needing Hadoop classes in the classpath to compile).
     -->
     <flume.deps.scope>compile</flume.deps.scope>
@@ -390,6 +394,14 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
+           For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
+      <dependency>
+        <groupId>org.apache.xbean</groupId>
+        <artifactId>xbean-asm5-shaded</artifactId>
+        <version>4.4</version>
+      </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
            in the modules where we want the shaded classes to appear in the
@@ -463,6 +475,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>${commons.math3.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-collections</groupId>
+        <artifactId>commons-collections</artifactId>
+        <version>${commons.collections.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.ivy</groupId>
@@ -624,6 +641,11 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.roaringbitmap</groupId>
+        <artifactId>RoaringBitmap</artifactId>
+        <version>0.5.11</version>
+      </dependency>
+      <dependency>
         <groupId>commons-net</groupId>
         <artifactId>commons-net</artifactId>
         <version>2.2</version>
@@ -774,6 +796,47 @@
         <groupId>com.novocode</groupId>
         <artifactId>junit-interface</artifactId>
         <version>0.11</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.spotify</groupId>
+        <artifactId>docker-client</artifactId>
+        <classifier>shaded</classifier>
+        <version>3.2.1</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <artifactId>guava</artifactId>
+            <groupId>com.google.guava</groupId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>httpclient</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>mysql</groupId>
+        <artifactId>mysql-connector-java</artifactId>
+        <version>5.1.34</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <version>9.3-1102-jdbc41</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1781,6 +1844,11 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr-runtime</artifactId>
+        <version>${antlr.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -1888,6 +1956,11 @@
             </compilerArgs>
           </configuration>
         </plugin>
+        <plugin>
+          <groupId>org.antlr</groupId>
+          <artifactId>antlr3-maven-plugin</artifactId>
+          <version>3.5.2</version>
+        </plugin>
         <!-- Surefire runs all Java tests -->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -1922,7 +1995,6 @@
               <spark.master.rest.enabled>false</spark.master.rest.enabled>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
-              <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
@@ -1961,7 +2033,6 @@
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
-              <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
@@ -2051,6 +2122,23 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
           <version>2.8.2</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <executions>
+            <execution>
+              <id>default-cli</id>
+              <goals>
+                 <goal>build-classpath</goal>
+              </goals>
+              <configuration>
+                <!-- This includes dependencies with 'runtime' and 'compile' scopes;
+                     see the docs for includeScope for more details -->
+                <includeScope>runtime</includeScope>
+              </configuration>
+            </execution>
+          </executions>
         </plugin>
         <!-- This plugin's configuration is used to store Eclipse m2e settings only. -->
         <!-- It has no influence on the Maven build itself. -->
@@ -2201,7 +2289,7 @@
       <plugin>
         <groupId>org.scalastyle</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
-        <version>0.7.0</version>
+        <version>0.8.0</version>
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>true</failOnViolation>
@@ -2211,6 +2299,30 @@
           <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
           <configLocation>scalastyle-config.xml</configLocation>
           <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
+          <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
+          <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>2.17</version>
+        <configuration>
+          <verbose>false</verbose>
+          <failOnViolation>false</failOnViolation>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <failOnWarning>false</failOnWarning>
+          <sourceDirectory>${basedir}/src/main/java</sourceDirectory>
+          <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
+          <configLocation>checkstyle.xml</configLocation>
+          <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
         </configuration>
@@ -2356,19 +2468,6 @@
     <!-- Hadoop-a.b.c dependencies can be found at
     http://hadoop.apache.org/docs/ra.b.c/hadoop-project-dist/hadoop-common/dependency-analysis.html
     -->
-
-    <profile>
-      <id>hadoop-1</id>
-      <properties>
-        <hadoop.version>1.2.1</hadoop.version>
-        <protobuf.version>2.4.1</protobuf.version>
-        <hbase.version>0.98.7-hadoop1</hbase.version>
-        <avro.mapred.classifier>hadoop1</avro.mapred.classifier>
-        <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
-        <akka.group>org.spark-project.akka</akka.group>
-        <akka.version>2.3.4-spark</akka.version>
-      </properties>
-    </profile>
 
     <profile>
       <id>hadoop-2.2</id>
