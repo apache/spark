@@ -750,7 +750,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.memory.offHeap.enabled</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
   </td>
