@@ -1074,7 +1074,7 @@ abstract class RDD[T: ClassTag](
    *
    * @param zeroValue the initial value for the accumulated result of each partition for the op
    *                  operator, and also the initial value for the combine results from different
-   *                  partitions for the op operator also. 
+   *                  partitions for the op operator also.
    *                  - this will typically be the neutral element.
    *                  (e.g. Nil for list concatenation or 0 for summation)
    * @param op an operator used to both accumulate results within a partition and combine results
@@ -1097,10 +1097,10 @@ abstract class RDD[T: ClassTag](
    * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
-   * 
+   *
    * @param zeroValue the initial value for the accumulated result of each partition for the seqOp
    *                  operator, and also the initial value for the combine results from different
-   *                  partitions for the conbOp operator,  
+   *                  partitions for the conbOp operator.
    *                  - this will typically be the neutral element.
    *                  (e.g. Nil for list concatenation or 0 for summation)
    * @param seqOp an operator used to accumulate results within a partition
