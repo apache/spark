@@ -21,6 +21,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
+import java.util.Queue;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
@@ -44,7 +45,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
   private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
 
+  @Nullable
   private final PrefixComparator prefixComparator;
+  @Nullable
   private final RecordComparator recordComparator;
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
@@ -421,7 +424,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     public SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
       this.upstream = inMemIterator;
-      this.numRecords = inMemIterator.numRecordsLeft();
+      this.numRecords = inMemIterator.getNumRecords();
+    }
+
+    public int getNumRecords() {
+      return numRecords;
     }
 
     public long spill() throws IOException {
@@ -515,5 +522,82 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     public long getKeyPrefix() {
       return upstream.getKeyPrefix();
     }
+  }
+
+  /**
+   * Returns a iterator, which will return the rows in the order as inserted.
+   *
+   * It is the caller's responsibility to call `cleanupResources()`
+   * after consuming this iterator.
+   *
+   * TODO: support forced spilling
+   */
+  public UnsafeSorterIterator getIterator() throws IOException {
+    if (spillWriters.isEmpty()) {
+      assert(inMemSorter != null);
+      return inMemSorter.getSortedIterator();
+    } else {
+      LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
+      for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
+        queue.add(spillWriter.getReader(blockManager));
+      }
+      if (inMemSorter != null) {
+        queue.add(inMemSorter.getSortedIterator());
+      }
+      return new ChainedIterator(queue);
+    }
+  }
+
+  /**
+   * Chain multiple UnsafeSorterIterator together as single one.
+   */
+  class ChainedIterator extends UnsafeSorterIterator {
+
+    private final Queue<UnsafeSorterIterator> iterators;
+    private UnsafeSorterIterator current;
+    private int numRecords;
+
+    public ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
+      assert iterators.size() > 0;
+      this.numRecords = 0;
+      for (UnsafeSorterIterator iter: iterators) {
+        this.numRecords += iter.getNumRecords();
+      }
+      this.iterators = iterators;
+      this.current = iterators.remove();
+    }
+
+    @Override
+    public int getNumRecords() {
+      return numRecords;
+    }
+
+    @Override
+    public boolean hasNext() {
+      while (!current.hasNext() && !iterators.isEmpty()) {
+        current = iterators.remove();
+      }
+      return current.hasNext();
+    }
+
+    @Override
+    public void loadNext() throws IOException {
+      while (!current.hasNext() && !iterators.isEmpty()) {
+        current = iterators.remove();
+      }
+      current.loadNext();
+    }
+
+    @Override
+    public Object getBaseObject() { return current.getBaseObject(); }
+
+    @Override
+    public long getBaseOffset() { return current.getBaseOffset(); }
+
+    @Override
+    public int getRecordLength() { return current.getRecordLength(); }
+
+    @Override
+    public long getKeyPrefix() { return current.getKeyPrefix(); }
   }
 }
