@@ -23,6 +23,7 @@ import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Benchmark
+import org.apache.spark.util.collection.BitSet
 
 /**
  * Benchmark to low level memory access using different ways to manage buffers.
@@ -266,7 +267,54 @@ object ColumnarBatchBenchmark {
     benchmark.run()
   }
 
+  def booleanAccess(iters: Int): Unit = {
+    val count = 8 * 1024
+    val benchmark = new Benchmark("Boolean Read/Write", iters * count)
+    benchmark.addCase("Bitset") { i: Int => {
+      val b = new BitSet(count)
+      var sum = 0L
+      for (n <- 0L until iters) {
+        var i = 0
+        while (i < count) {
+          if (i % 2 == 0) b.set(i)
+          i += 1
+        }
+        i = 0
+        while (i < count) {
+          if (b.get(i)) sum += 1
+          i += 1
+        }
+      }
+    }}
+
+    benchmark.addCase("Byte Array") { i: Int => {
+      val b = new Array[Byte](count)
+      var sum = 0L
+      for (n <- 0L until iters) {
+        var i = 0
+        while (i < count) {
+          if (i % 2 == 0) b(i) = 1;
+          i += 1
+        }
+        i = 0
+        while (i < count) {
+          if (b(i) == 1) sum += 1
+          i += 1
+        }
+      }
+    }}
+    /*
+    Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+    Boolean Read/Write:          Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------
+    Bitset                             895.88           374.54         1.00 X
+    Byte Array                         578.96           579.56         1.55 X
+    */
+    benchmark.run()
+  }
+
   def main(args: Array[String]): Unit = {
     intAccess(1024 * 40)
+    booleanAccess(1024 * 40)
   }
 }
