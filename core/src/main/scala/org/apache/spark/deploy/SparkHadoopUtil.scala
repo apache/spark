@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, DataInputStream}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Comparator}
+import java.net.InetAddress
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -33,7 +34,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation, SecurityUtil}
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
@@ -126,7 +127,15 @@ class SparkHadoopUtil extends Logging {
   def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
-    UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+    var principal = SecurityUtil.getServerPrincipal(principalName, InetAddress.getLocalHost)
+    UserGroupInformation.loginUserFromKeytab(principal, keytabFilename)
+  }
+
+  def loginUserFromKeytabAndReturnUGI(
+        principalName: String,
+        keytabFilename: String): UserGroupInformation = {
+    var principal = SecurityUtil.getServerPrincipal(principalName, InetAddress.getLocalHost)
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytabFilename)
   }
 
   /**

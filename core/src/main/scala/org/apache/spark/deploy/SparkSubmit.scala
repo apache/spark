@@ -561,7 +561,7 @@ object SparkSubmit {
           sysProps.put("spark.yarn.keytab", args.keytab)
           sysProps.put("spark.yarn.principal", args.principal)
 
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+          SparkHadoopUtil.get.loginUserFromKeytab(args.principal, args.keytab)
         }
       }
     }

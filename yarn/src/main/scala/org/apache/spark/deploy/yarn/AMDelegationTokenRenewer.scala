@@ -162,7 +162,7 @@ private[yarn] class AMDelegationTokenRenewer(
     // to login and then relogin every time (the HDFS API may not relogin since we don't use this
     // UGI directly for HDFS communication.
     logInfo(s"Attempting to login to KDC using principal: $principal")
-    val keytabLoggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+    val keytabLoggedInUGI = SparkHadoopUtil.get.loginUserFromKeytabAndReturnUGI(principal, keytab)
     logInfo("Successfully logged into KDC.")
     val tempCreds = keytabLoggedInUGI.getCredentials
     val credentialsPath = new Path(credentialsFile)
