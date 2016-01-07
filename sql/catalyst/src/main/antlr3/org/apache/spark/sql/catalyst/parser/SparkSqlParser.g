@@ -2246,7 +2246,7 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
-              ^(TOK_UNIONALL {$setOpSelectStatement.tree} $b)
+              ^($u {$setOpSelectStatement.tree} $b)
               {adaptor.create(Identifier, generateUnionAlias())}
              )
           )
@@ -2256,12 +2256,12 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
           )
        )
    -> {$setOpSelectStatement.tree != null && $u.tree.getType()!=SparkSqlParser.TOK_UNIONDISTINCT}?
-      ^(TOK_UNIONALL {$setOpSelectStatement.tree} $b)
+      ^($u {$setOpSelectStatement.tree} $b)
    -> {$setOpSelectStatement.tree == null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
-              ^(TOK_UNIONALL {$t} $b)
+              ^($u {$t} $b)
               {adaptor.create(Identifier, generateUnionAlias())}
              )
            )
@@ -2270,7 +2270,7 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
             ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
          )
        )
-   -> ^(TOK_UNIONALL {$t} $b)
+   -> ^($u {$t} $b)
    )+
    o=orderByClause?
    c=clusterByClause?
