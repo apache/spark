@@ -389,6 +389,11 @@ private[serializer] object KryoSerializer {
   )
 }
 
+/**
+ * This is a bridge class to wrap KryoInput as an InputStream and ObjectInput. It forwards all
+ * methods of InputStream and ObjectInput to KryoInput. It's usually helpful when an API expects
+ * an InputStream or ObjectInput but you want to use Kryo.
+ */
 private[spark] class KryoInputObjectInputBridge(
     kryo: Kryo, input: KryoInput) extends FilterInputStream(input) with ObjectInput {
   override def readLong(): Long = input.readLong()
@@ -412,6 +417,11 @@ private[spark] class KryoInputObjectInputBridge(
   override def readObject(): AnyRef = kryo.readClassAndObject(input)
 }
 
+/**
+ * This is a bridge class to wrap KryoOutput as an OutputStream and ObjectOutput. It forwards all
+ * methods of OutputStream and ObjectOutput to KryoOutput. It's usually helpful when an API expects
+ * an OutputStream or ObjectOutput but you want to use Kryo.
+ */
 private[spark] class KryoOutputObjectOutputBridge(
     kryo: Kryo, output: KryoOutput) extends FilterOutputStream(output) with ObjectOutput  {
   override def writeFloat(v: Float): Unit = output.writeFloat(v)

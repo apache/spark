@@ -215,7 +215,6 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
    * Serialize the map data. Besides serialization, this method actually compact the deltas
    * (if needed) in a single pass over all the data in the map.
    */
-
   private def writeObjectInternal(outputStream: ObjectOutput): Unit = {
     // Write the data in the delta of this state map
     outputStream.writeInt(deltaMap.size)
@@ -318,7 +317,6 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     writeObjectInternal(outputStream)
   }
 
-  /** Deserialize the map data. */
   private def readObject(inputStream: ObjectInputStream): Unit = {
     // Read the non-transient fields, especially class tags, etc.
     inputStream.defaultReadObject()
