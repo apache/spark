@@ -129,19 +129,6 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("SPARK-12662 fix DataFrame.randomSplit to avoid creating overlapping splits") {
-    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-    val args = Seq(
-      "--class", SPARK_12662.getClass.getName.stripSuffix("$"),
-      "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
-      "--conf", "spark.ui.enabled=false",
-      "--conf", "spark.master.rest.enabled=false",
-      "--driver-java-options", "-Dderby.system.durability=test",
-      unusedJar.toString)
-    runSparkSubmit(args)
-  }
-
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -380,51 +367,6 @@ object SPARK_11009 extends QueryTest {
       if (df3.rdd.count() != 0) {
         throw new Exception("df3 should have 0 output row.")
       }
-    } finally {
-      sparkContext.stop()
-    }
-  }
-}
-
-/**
- * This object is used to test SPARK-12662: https://issues.apache.org/jira/browse/SPARK-12662.
- * This test ensures that [[org.apache.spark.sql.DataFrame.randomSplit]] does not create overlapping
- * splits even when the underlying dataframe doesn't guarantee a deterministic ordering of rows in
- * each partition.
- */
-object SPARK_12662 extends QueryTest {
-  import org.apache.spark.sql.functions._
-
-  protected var sqlContext: SQLContext = _
-
-  def main(args: Array[String]): Unit = {
-    Utils.configTestLog4j("INFO")
-
-    val sparkContext = new SparkContext(
-      new SparkConf()
-        .set("spark.sql.shuffle.partitions", "100"))
-
-    val hiveContext = new TestHiveContext(sparkContext)
-    sqlContext = hiveContext
-
-    try {
-      val n = 600
-      val data = sqlContext.range(n).toDF("id").repartition(200, col("id"))
-      val splits = data.randomSplit(Array[Double](1, 2, 3), seed = 1)
-      assert(splits.length == 3, "wrong number of splits")
-
-      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
-        data.sort(col("id")).collect().toList, "incomplete or wrong split")
-
-      for (id <- splits.indices) {
-        assert(splits(id).intersect(splits((id + 1) % splits.length)).collect().isEmpty,
-          s"split $id overlaps with split ${(id + 1) % splits.length}")
-      }
-
-      val s = splits.map(_.count())
-      assert(math.abs(s(0) - 100) < 50) // std =  9.13
-      assert(math.abs(s(1) - 200) < 50) // std = 11.55
-      assert(math.abs(s(2) - 300) < 50) // std = 12.25
     } finally {
       sparkContext.stop()
     }
