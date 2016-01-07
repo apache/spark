@@ -57,9 +57,9 @@ class BinaryClassificationEvaluatorSuite
     assert(evaluator.evaluate(doubleDF) === 1.0)
 
     val stringDF = sqlContext.createDataFrame(Seq(
-      (0d, "0.0d"),
-      (1d, "1.0d"),
-      (0d, "0.0d")
+      (0d, "0d"),
+      (1d, "1d"),
+      (0d, "0d")
     )).toDF("label", "rawPrediction")
     val thrown = intercept[IllegalArgumentException] {
       evaluator.evaluate(stringDF)
