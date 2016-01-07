@@ -448,6 +448,7 @@ object NullPropagation extends Rule[LogicalPlan] {
  */
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case o: ObjectOperator => o
     case q: LogicalPlan => q transformExpressionsDown {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal

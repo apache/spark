@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst
 
 import java.io._
 
+import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 
-package object util {
+package object util extends Logging{
 
   /** Silences output to stderr or stdout for the duration of f */
   def quietly[A](f: => A): A = {
@@ -40,6 +41,24 @@ package object util {
       System.setErr(origErr)
       System.setOut(origOut)
     }
+  }
+
+  private val analysisRule = """.*org\.apache\.spark\.sql\.catalyst\.analysis\.([A-Za-z]+).*""".r
+
+  /**
+   * Logs along with the name of the analyzer rule that is running.  This is pretty expensive so
+   * always logs at warning.
+   */
+  def logRule(msg: String): Unit = {
+    val error = try sys.error("") catch {
+      case e: Exception =>
+        stackTraceToString(e)
+    }
+
+    val rule = error.split("\n").collect {
+      case analysisRule(r) => r
+    }.headOption.getOrElse("unknown rule")
+    logWarning(s"$rule: $msg")
   }
 
   def fileToString(file: File, encoding: String = "UTF-8"): String = {
