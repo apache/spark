@@ -33,8 +33,7 @@ import org.apache.spark.util.random.RandomSampler
 /**
  * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
  */
-/* private[sql] */
-class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
+private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   object Token {
     def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
       CurrentOrigin.setPosition(node.line, node.positionInLine)
