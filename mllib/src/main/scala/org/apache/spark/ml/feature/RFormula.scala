@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.param.{Param, ParamMap}
@@ -163,10 +163,10 @@ class RFormula(override val uid: String)
   override def toString: String = s"RFormula(${get(formula)}) (uid=$uid)"
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object RFormula extends DefaultParamsReadable[RFormula] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): RFormula = super.load(path)
 }
 
@@ -238,17 +238,17 @@ class RFormulaModel private[feature](
       "Label column already exists and is not of type DoubleType.")
   }
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter = new RFormulaModel.RFormulaModelWriter(this)
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object RFormulaModel extends MLReadable[RFormulaModel] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[RFormulaModel] = new RFormulaModelReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): RFormulaModel = super.load(path)
 
   /** [[MLWriter]] instance for [[RFormulaModel]] */
@@ -315,17 +315,17 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
 
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter = new ColumnPruner.ColumnPrunerWriter(this)
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 private object ColumnPruner extends MLReadable[ColumnPruner] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[ColumnPruner] = new ColumnPrunerReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): ColumnPruner = super.load(path)
 
   /** [[MLWriter]] instance for [[ColumnPruner]] */
@@ -413,17 +413,17 @@ private class VectorAttributeRewriter(
 
   override def copy(extra: ParamMap): VectorAttributeRewriter = defaultCopy(extra)
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter = new VectorAttributeRewriter.VectorAttributeRewriterWriter(this)
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewriter] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[VectorAttributeRewriter] = new VectorAttributeRewriterReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): VectorAttributeRewriter = super.load(path)
 
   /** [[MLWriter]] instance for [[VectorAttributeRewriter]] */
