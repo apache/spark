@@ -68,8 +68,9 @@ class Accumulable[R, T] private[spark] (
 
   val id: Long = Accumulators.newId()
 
-  @volatile private var value_ : R = initialValue
-  val zero = param.zero(initialValue)
+  @volatile @transient private var value_ : R = initialValue // Current value on driver
+  val zero = param.zero(initialValue)  // Zero value to be passed to executors
+  private var deserialized = false
 
   // Avoid leaking accumulators on executors
   if (isDriver) {
@@ -115,10 +116,11 @@ class Accumulable[R, T] private[spark] (
    * Access the accumulator's current value; only allowed on driver.
    */
   def value: R = {
-    if (!isDriver) {
+    if (!deserialized) {
+      value_
+    } else {
       throw new UnsupportedOperationException("Can't read accumulator value in task")
     }
-    value_
   }
 
   /**
@@ -135,22 +137,18 @@ class Accumulable[R, T] private[spark] (
   /**
    * Set the accumulator's value; only allowed on driver.
    */
-  def value_= (newValue: R): Unit = {
-    if (!isDriver) {
+  def value_= (newValue: R) {
+    if (!deserialized) {
+      value_ = newValue
+    } else {
       throw new UnsupportedOperationException("Can't assign accumulator value in task")
     }
-    value_ = newValue
   }
 
   /**
-   * Set the accumulator's value.
+   * Set the accumulator's value. For internal use only.
    */
   private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
-
-  /**
-   * Reset the accumulator's value to zero.
-   */
-  private[spark] def resetValue(): Unit = { setValue(zero) }
 
   /**
    * Whether we are on the driver or the executors.
@@ -163,6 +161,8 @@ class Accumulable[R, T] private[spark] (
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
+    value_ = zero
+    deserialized = true
     // Automatically register the accumulator when it is deserialized with the task closure.
     val taskContext = TaskContext.get()
     if (taskContext != null) {

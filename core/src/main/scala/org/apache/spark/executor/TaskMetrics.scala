@@ -80,37 +80,37 @@ class TaskMetrics private[spark] (
   /**
    * Time taken on the executor to deserialize this task.
    */
-  def executorDeserializeTime: Long = _executorDeserializeTime.value
+  def executorDeserializeTime: Long = _executorDeserializeTime.localValue
 
   /**
    * Time the executor spends actually running the task (including fetching shuffle data).
    */
-  def executorRunTime: Long = _executorRunTime.value
+  def executorRunTime: Long = _executorRunTime.localValue
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult.
    */
-  def resultSize: Long = _resultSize.value
+  def resultSize: Long = _resultSize.localValue
 
   /**
    * Amount of time the JVM spent in garbage collection while executing this task.
    */
-  def jvmGCTime: Long = _jvmGCTime.value
+  def jvmGCTime: Long = _jvmGCTime.localValue
 
   /**
    * Amount of time spent serializing the task result.
    */
-  def resultSerializationTime: Long = _resultSerializationTime.value
+  def resultSerializationTime: Long = _resultSerializationTime.localValue
 
   /**
    * The number of in-memory bytes spilled by this task.
    */
-  def memoryBytesSpilled: Long = _memoryBytesSpilled.value
+  def memoryBytesSpilled: Long = _memoryBytesSpilled.localValue
 
   /**
    * The number of on-disk bytes spilled by this task.
    */
-  def diskBytesSpilled: Long = _diskBytesSpilled.value
+  def diskBytesSpilled: Long = _diskBytesSpilled.localValue
 
   /**
    * Peak memory used by internal data structures created during shuffles, aggregations and
@@ -118,7 +118,7 @@ class TaskMetrics private[spark] (
    * across all such data structures created in this task. For SQL jobs, this only tracks all
    * unsafe operators and ExternalSort.
    */
-  def peakExecutionMemory: Long = _peakExecutionMemory.value
+  def peakExecutionMemory: Long = _peakExecutionMemory.localValue
 
   private[spark] def setExecutorDeserializeTime(v: Long) = _executorDeserializeTime.setValue(v)
   private[spark] def setExecutorRunTime(v: Long) = _executorRunTime.setValue(v)
@@ -137,8 +137,6 @@ class TaskMetrics private[spark] (
     val name = a.name.get
     assert(a.isInternal, s"internal accumulator $name (${a.id}) is not marked as 'internal'")
     assert(!accumMap.contains(name), s"found duplicate internal accumulator name: $name")
-    // Note: reset the value here so we don't double count the values in local mode
-    a.resetValue()
     accumMap(name) = a
   }
 
@@ -292,7 +290,9 @@ class TaskMetrics private[spark] (
   /**
    * Return a map from accumulator ID to the accumulator's latest value in this task.
    */
-  def accumulatorUpdates(): Map[Long, Any] = accumMap.values.map { a => (a.id, a.value) }.toMap
+  def accumulatorUpdates(): Map[Long, Any] = {
+    accumMap.values.map { a => (a.id, a.localValue) }.toMap
+  }
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
@@ -363,12 +363,12 @@ class InputMetrics private (
   /**
    * Total number of bytes read.
    */
-  def bytesRead: Long = _bytesRead.value
+  def bytesRead: Long = _bytesRead.localValue
 
   /**
    * Total number of records read.
    */
-  def recordsRead: Long = _recordsRead.value
+  def recordsRead: Long = _recordsRead.localValue
 
   private[spark] def setBytesRead(v: Long): Unit = _bytesRead.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
@@ -398,12 +398,12 @@ class OutputMetrics private (
   /**
    * Total number of bytes written.
    */
-  def bytesWritten: Long = _bytesWritten.value
+  def bytesWritten: Long = _bytesWritten.localValue
 
   /**
    * Total number of records written.
    */
-  def recordsWritten: Long = _recordsWritten.value
+  def recordsWritten: Long = _recordsWritten.localValue
 
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
@@ -450,34 +450,34 @@ class ShuffleReadMetrics private (
   /**
    * Number of remote blocks fetched in this shuffle by this task.
    */
-  def remoteBlocksFetched: Long = _remoteBlocksFetched.value
+  def remoteBlocksFetched: Long = _remoteBlocksFetched.localValue
 
   /**
    * Number of local blocks fetched in this shuffle by this task.
    */
-  def localBlocksFetched: Long = _localBlocksFetched.value
+  def localBlocksFetched: Long = _localBlocksFetched.localValue
 
   /**
    * Total number of remote bytes read from the shuffle by this task.
    */
-  def remoteBytesRead: Long = _remoteBytesRead.value
+  def remoteBytesRead: Long = _remoteBytesRead.localValue
 
   /**
    * Shuffle data that was read from the local disk (as opposed to from a remote executor).
    */
-  def localBytesRead: Long = _localBytesRead.value
+  def localBytesRead: Long = _localBytesRead.localValue
 
   /**
    * Time the task spent waiting for remote shuffle blocks. This only includes the time
    * blocking on shuffle input data. For instance if block B is being fetched while the task is
    * still not finished processing block A, it is not considered to be blocking on block B.
    */
-  def fetchWaitTime: Long = _fetchWaitTime.value
+  def fetchWaitTime: Long = _fetchWaitTime.localValue
 
   /**
    * Total number of records read from the shuffle by this task.
    */
-  def recordsRead: Long = _recordsRead.value
+  def recordsRead: Long = _recordsRead.localValue
 
   /**
    * Total bytes fetched in the shuffle by this task (both remote and local).
@@ -539,17 +539,17 @@ class ShuffleWriteMetrics private (
   /**
    * Number of bytes written for the shuffle by this task.
    */
-  def bytesWritten: Long = _bytesWritten.value
+  def bytesWritten: Long = _bytesWritten.localValue
 
   /**
    * Total number of records written to the shuffle by this task.
    */
-  def recordsWritten: Long = _recordsWritten.value
+  def recordsWritten: Long = _recordsWritten.localValue
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
-  def shuffleWriteTime: Long = _shuffleWriteTime.value
+  def shuffleWriteTime: Long = _shuffleWriteTime.localValue
 
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
