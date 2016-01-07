@@ -932,9 +932,12 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       """
   }
 
-  override def sql: Option[String] = dataType match {
-    case _: ArrayType | _: MapType | _: StructType => None
-    case _ => child.sql.map(childSQL => s"CAST($childSQL AS ${dataType.sql})")
+  override def sql: String = dataType match {
+    // HiveQL doesn't allow casting to complex types. For logical plans translated from HiveQL, this
+    // type of casting can only be introduced by the analyzer, and can be omitted when converting
+    // back to SQL query string.
+    case _: ArrayType | _: MapType | _: StructType => child.sql
+    case _ => s"CAST(${child.sql} AS ${dataType.sql})"
   }
 }
 

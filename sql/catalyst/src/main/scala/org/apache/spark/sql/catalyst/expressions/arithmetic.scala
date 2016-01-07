@@ -55,7 +55,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
     }
   }
 
-  override def sql: Option[String] = child.sql.map(sql => s"(-$sql)")
+  override def sql: String = s"(-${child.sql})"
 }
 
 case class UnaryPositive(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -70,7 +70,7 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
 
   protected override def nullSafeEval(input: Any): Any = input
 
-  override def sql: Option[String] = child.sql.map(sql => s"(+$sql)")
+  override def sql: String = s"(+${child.sql})"
 }
 
 /**
@@ -96,7 +96,7 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 
-  override def sql: Option[String] = child.sql.map(sql => s"$prettyName($sql)")
+  override def sql: String = s"$prettyName(${child.sql})"
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
@@ -520,8 +520,5 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
     if (r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
   }
 
-  override def sql: Option[String] = for {
-    leftSQL <- left.sql
-    rightSQL <- right.sql
-  } yield s"$prettyName($leftSQL, $rightSQL)"
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }

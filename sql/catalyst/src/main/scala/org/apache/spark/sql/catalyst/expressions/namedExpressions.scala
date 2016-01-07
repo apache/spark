@@ -165,10 +165,10 @@ case class Alias(child: Expression, name: String)(
     case _ => false
   }
 
-  override def sql: Option[String] = {
+  override def sql: String = {
     val qualifiersString =
       if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
-    child.sql.map(childSQL => s"$childSQL AS $qualifiersString`$name`")
+    s"${child.sql} AS $qualifiersString`$name`"
   }
 }
 
@@ -278,10 +278,10 @@ case class AttributeReference(
   // tree string.
   override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
 
-  override def sql: Option[String] = {
+  override def sql: String = {
     val qualifiersString =
       if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
-    Some(s"$qualifiersString`$name`")
+    s"$qualifiersString`$name`"
   }
 }
 

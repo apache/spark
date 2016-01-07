@@ -60,10 +60,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
     }
   }
 
-  override def sql: Option[String] = for {
-    leftSQL <- left.sql
-    rightSQL <- right.sql
-  } yield s"$leftSQL ${prettyName.toUpperCase} $rightSQL"
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase} ${right.sql}"
 }
 
 

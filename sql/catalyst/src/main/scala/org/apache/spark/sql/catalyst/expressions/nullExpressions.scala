@@ -83,6 +83,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       """
     }.mkString("\n")
   }
+
+  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 
@@ -194,7 +196,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     eval.code
   }
 
-  override def sql: Option[String] = child.sql.map(childSQL => s"($childSQL IS NULL)")
+  override def sql: String = s"(${child.sql} IS NULL)"
 }
 
 
@@ -215,7 +217,7 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     eval.code
   }
 
-  override def sql: Option[String] = child.sql.map(childSQL => s"($childSQL IS NOT NULL)")
+  override def sql: String = s"(${child.sql} IS NOT NULL)"
 }
 
 

@@ -75,11 +75,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
 
-  override def sql: Option[String] = for {
-    predicateSQL <- predicate.sql
-    trueSQL <- trueValue.sql
-    falseSQL <- falseValue.sql
-  } yield s"(IF($predicateSQL, $trueSQL, $falseSQL))"
+  override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
 }
 
 trait CaseWhenLike extends Expression {
@@ -213,23 +209,21 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     }.mkString
   }
 
-  override def sql: Option[String] = {
-    sequenceOption(branches.map(_.sql)).map {
-      case branchesSQL =>
-        val (cases, maybeElse) = if (branches.length % 2 == 0) {
-          (branchesSQL, None)
-        } else {
-          (branchesSQL.init, Some(branchesSQL.last))
-        }
-
-        val head = s"CASE "
-        val tail = maybeElse.map(e => s" ELSE $e").getOrElse("") + " END"
-        val body = cases.grouped(2).map {
-          case Seq(whenExpr, thenExpr) => s"WHEN $whenExpr THEN $thenExpr"
-        }.mkString(" ")
-
-        head + body + tail
+  override def sql: String = {
+    val branchesSQL = branches.map(_.sql)
+    val (cases, maybeElse) = if (branches.length % 2 == 0) {
+      (branchesSQL, None)
+    } else {
+      (branchesSQL.init, Some(branchesSQL.last))
     }
+
+    val head = s"CASE "
+    val tail = maybeElse.map(e => s" ELSE $e").getOrElse("") + " END"
+    val body = cases.grouped(2).map {
+      case Seq(whenExpr, thenExpr) => s"WHEN $whenExpr THEN $thenExpr"
+    }.mkString(" ")
+
+    head + body + tail
   }
 }
 
@@ -336,10 +330,9 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     }.mkString
   }
 
-  override def sql: Option[String] = for {
-    keySQL <- key.sql
-    branchesSQL <- sequenceOption(branches.map(_.sql))
-  } yield {
+  override def sql: String = {
+    val keySQL = key.sql
+    val branchesSQL = branches.map(_.sql)
     val (cases, maybeElse) = if (branches.length % 2 == 0) {
       (branchesSQL, None)
     } else {

@@ -24,18 +24,9 @@ import org.apache.spark.sql.{DataFrame, QueryTest}
 
 abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
   protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
-    val maybeSQL = e.sql
-
-    if (maybeSQL.isEmpty) {
-      fail(
-        s"""Cannot convert the following expression to SQL form:
-           |
-           |${e.treeString}
-         """.stripMargin)
-    }
-
+    val actualSQL = e.sql
     try {
-      assert(maybeSQL.get === expectedSQL)
+      assert(actualSQL === expectedSQL)
     } catch {
       case cause: Throwable =>
         fail(

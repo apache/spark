@@ -226,10 +226,13 @@ abstract class Expression extends TreeNode[Expression] {
     .replace("\\u", "\\\\u")
 
   /**
-   * Returns SQL representation of this expression if there is one (some expressions, e.g.
-   * `ScalaUDF`, don't have SQL representations).
+   * Returns SQL representation of this expression.  For expressions that don't have a SQL
+   * representation (e.g. `ScalaUDF`), this method should throw an `UnsupportedOperationException`.
    */
-  def sql: Option[String] = None
+  @throws[UnsupportedOperationException](cause = "Expression doesn't have a SQL representation")
+  def sql: String = throw new UnsupportedOperationException(
+    s"Cannot map expression $this to its SQL representation"
+  )
 }
 
 
@@ -364,7 +367,7 @@ abstract class UnaryExpression extends Expression {
     }
   }
 
-  override def sql: Option[String] = child.sql.map(childSQL => s"($prettyName($childSQL))")
+  override def sql: String = s"($prettyName(${child.sql}))"
 }
 
 
@@ -465,6 +468,8 @@ abstract class BinaryExpression extends Expression {
       """
     }
   }
+
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
 
@@ -502,10 +507,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
     }
   }
 
-  override def sql: Option[String] = for {
-    lhs <- left.sql
-    rhs <- right.sql
-  } yield s"($lhs $symbol $rhs)"
+  override def sql: String = s"(${left.sql} $symbol ${right.sql})"
 }
 
 
@@ -608,8 +610,8 @@ abstract class TernaryExpression extends Expression {
     }
   }
 
-  override def sql: Option[String] = sequenceOption(children.map(_.sql)).map {
-    case Seq(child1, child2, child3) =>
-      s"$prettyName($child1, $child2, $child3)"
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql).mkString(", ")
+    s"$prettyName($childrenSQL)"
   }
 }

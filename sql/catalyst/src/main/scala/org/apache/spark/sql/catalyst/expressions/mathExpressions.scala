@@ -71,7 +71,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
   }
 
-  override def sql: Option[String] = child.sql.map(childSQL => s"$name($childSQL)")
+  override def sql: String = s"$name(${child.sql})"
 }
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)

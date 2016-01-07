@@ -189,11 +189,7 @@ private[hive] case class HiveSimpleUDF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def sql: Option[String] = {
-    sequenceOption(children.map(_.sql)).map { argsSQL =>
-      s"$name(${argsSQL.mkString(", ")})"
-    }
-  }
+  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 // Adapter from Catalyst ExpressionResult to Hive DeferredObject
@@ -262,11 +258,7 @@ private[hive] case class HiveGenericUDF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def sql: Option[String] = {
-    sequenceOption(children.map(_.sql)).map { argsSQL =>
-      s"$name(${argsSQL.mkString(", ")})"
-    }
-  }
+  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 /**
@@ -348,11 +340,7 @@ private[hive] case class HiveGenericUDTF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def sql: Option[String] = {
-    sequenceOption(children.map(_.sql)).map { argsSQL =>
-      s"$name(${argsSQL.mkString(", ")})"
-    }
-  }
+  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 /**
@@ -446,9 +434,8 @@ private[hive] case class HiveUDAFFunction(
 
   override val dataType: DataType = inspectorToDataType(returnInspector)
 
-  override def sql: Option[String] = {
-    sequenceOption(children.map(_.sql)).map { argsSQL =>
-      s"$name(${argsSQL.mkString(", ")})"
-    }
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else " "
+    s"$name($distinct${children.map(_.sql).mkString(", ")})"
   }
 }

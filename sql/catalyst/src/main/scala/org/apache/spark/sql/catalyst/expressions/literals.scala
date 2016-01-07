@@ -215,7 +215,7 @@ case class Literal protected (value: Any, dataType: DataType)
     }
   }
 
-  override def sql: Option[String] = Option((value, dataType) match {
+  override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null =>
       "NULL"
 
@@ -248,7 +248,7 @@ case class Literal protected (value: Any, dataType: DataType)
       s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
 
     case _ => value.toString
-  })
+  }
 }
 
 // TODO: Specialize

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.{sequenceOption, TypeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -102,7 +102,7 @@ case class Not(child: Expression)
     defineCodeGen(ctx, ev, c => s"!($c)")
   }
 
-  override def sql: Option[String] = child.sql.map(childSQL => s"(NOT $childSQL)")
+  override def sql: String = s"(NOT ${child.sql})"
 }
 
 
@@ -179,11 +179,12 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
     """
   }
 
-  override def sql: Option[String] = for {
-    childrenSQL <- sequenceOption(children.map(_.sql))
-    valueSQL = childrenSQL.head
-    listSQL = childrenSQL.tail
-  } yield s"($valueSQL IN (${listSQL.mkString(", ")}))"
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql)
+    val valueSQL = childrenSQL.head
+    val listSQL = childrenSQL.tail.mkString(", ")
+    s"($valueSQL IN ($listSQL))"
+  }
 }
 
 /**
@@ -235,10 +236,11 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
      """
   }
 
-  override def sql: Option[String] = for {
-    valueSQL <- child.sql
-    listSQL <- sequenceOption(hset.toSeq.map(Literal(_).sql))
-  } yield s"($valueSQL IN (${listSQL.mkString(", ")}))"
+  override def sql: String = {
+    val valueSQL = child.sql
+    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    s"($valueSQL IN ($listSQL))"
+  }
 }
 
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
@@ -288,10 +290,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
      """
   }
 
-  override def sql: Option[String] = for {
-    lhs <- left.sql
-    rhs <- right.sql
-  } yield s"($lhs AND $rhs)"
+  override def sql: String = s"(${left.sql} AND ${right.sql})"
 }
 
 
@@ -342,10 +341,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
      """
   }
 
-  override def sql: Option[String] = for {
-    lhs <- left.sql
-    rhs <- right.sql
-  } yield s"($lhs OR $rhs)"
+  override def sql: String = s"(${left.sql} OR ${right.sql})"
 }
 
 
@@ -362,11 +358,6 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
       defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
-
-  override def sql: Option[String] = for {
-    lhs <- left.sql
-    rhs <- right.sql
-  } yield s"($lhs $symbol $rhs)"
 }
 
 

@@ -20,11 +20,10 @@ package org.apache.spark.sql.hive
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -40,7 +39,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   def toSQL: Option[String] = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
-    val maybeSQL = toSQL(canonicalizedPlan)
+    val maybeSQL = try {
+      toSQL(canonicalizedPlan)
+    } catch { case cause: UnsupportedOperationException =>
+      logInfo(s"Failed to build SQL query string because: ${cause.getMessage}")
+      None
+    }
 
     if (maybeSQL.isDefined) {
       logDebug(
@@ -72,31 +76,30 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       child: LogicalPlan,
       isDistinct: Boolean): Option[String] = {
     for {
-      listSQL <- sequenceOption(projectList.map(_.sql))
       childSQL <- toSQL(child)
-      from = child match {
-        case OneRowRelation => ""
+      listSQL = projectList.map(_.sql).mkString(", ")
+      maybeFrom = child match {
+        case OneRowRelation => " "
         case _ => " FROM "
       }
-      distinct = if (isDistinct) " DISTINCT" else ""
-    } yield s"SELECT$distinct ${listSQL.mkString(", ")}$from$childSQL"
+      distinct = if (isDistinct) " DISTINCT " else " "
+    } yield s"SELECT$distinct$listSQL$maybeFrom$childSQL"
   }
 
   private def aggregateToSQL(
       groupingExprs: Seq[Expression],
       aggExprs: Seq[Expression],
       child: LogicalPlan): Option[String] = {
-    for {
-      aggSQL <- sequenceOption(aggExprs.map(_.sql))
-      groupingSQL <- sequenceOption(groupingExprs.map(_.sql))
-      maybeGroupBy = if (groupingSQL.isEmpty) "" else " GROUP BY "
-      maybeFrom = child match {
-        case OneRowRelation => ""
-        case _ => " FROM "
-      }
-      childSQL <- toSQL(child).map(maybeFrom + _)
-    } yield {
-      s"SELECT ${aggSQL.mkString(", ")}$childSQL$maybeGroupBy${groupingSQL.mkString(", ")}"
+    val aggSQL = aggExprs.map(_.sql).mkString(", ")
+    val groupingSQL = groupingExprs.map(_.sql).mkString(", ")
+    val maybeGroupBy = if (groupingSQL.isEmpty) "" else " GROUP BY "
+    val maybeFrom = child match {
+      case OneRowRelation => " "
+      case _ => " FROM "
+    }
+
+    toSQL(child).map { childSQL =>
+      s"SELECT $aggSQL$maybeFrom$childSQL$maybeGroupBy$groupingSQL"
     }
   }
 
@@ -112,18 +115,18 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case Limit(limit, child) =>
       for {
-        limitSQL <- limit.sql
         childSQL <- toSQL(child)
+        limitSQL = limit.sql
       } yield s"$childSQL LIMIT $limitSQL"
 
     case Filter(condition, child) =>
       for {
-        conditionSQL <- condition.sql
         childSQL <- toSQL(child)
         whereOrHaving = child match {
           case _: Aggregate => "HAVING"
           case _ => "WHERE"
         }
+        conditionSQL = condition.sql
       } yield s"$childSQL $whereOrHaving $conditionSQL"
 
     case Union(left, right) =>
@@ -148,7 +151,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         leftSQL <- toSQL(left)
         rightSQL <- toSQL(right)
         joinTypeSQL = joinType.sql
-        conditionSQL = condition.flatMap(_.sql).map(" ON " + _).getOrElse("")
+        conditionSQL = condition.map(" ON " + _.sql).getOrElse("")
       } yield s"$leftSQL $joinTypeSQL JOIN $rightSQL$conditionSQL"
 
     case MetastoreRelation(database, table, alias) =>
@@ -158,24 +161,22 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))
         if orders.map(_.child) == partitionExprs =>
       for {
-        partitionExprsSQL <- sequenceOption(partitionExprs.map(_.sql))
         childSQL <- toSQL(child)
-      } yield s"$childSQL CLUSTER BY ${partitionExprsSQL.mkString(", ")}"
+        partitionExprsSQL = partitionExprs.map(_.sql).mkString(", ")
+      } yield s"$childSQL CLUSTER BY $partitionExprsSQL"
 
     case Sort(orders, global, child) =>
       for {
         childSQL <- toSQL(child)
-        ordersSQL <- sequenceOption(orders.map { case SortOrder(e, dir) =>
-          e.sql.map(sql => s"$sql ${dir.sql}")
-        })
+        ordersSQL = orders.map { case SortOrder(e, dir) => s"${e.sql} ${dir.sql}" }.mkString(", ")
         orderOrSort = if (global) "ORDER" else "SORT"
-      } yield s"$childSQL $orderOrSort BY ${ordersSQL.mkString(", ")}"
+      } yield s"$childSQL $orderOrSort BY $ordersSQL"
 
     case RepartitionByExpression(partitionExprs, child, _) =>
       for {
-        partitionExprsSQL <- sequenceOption(partitionExprs.map(_.sql))
         childSQL <- toSQL(child)
-      } yield s"$childSQL DISTRIBUTE BY ${partitionExprsSQL.mkString(", ")}"
+        partitionExprsSQL = partitionExprs.map(_.sql).mkString(", ")
+      } yield s"$childSQL DISTRIBUTE BY $partitionExprsSQL"
 
     case OneRowRelation =>
       Some("")
