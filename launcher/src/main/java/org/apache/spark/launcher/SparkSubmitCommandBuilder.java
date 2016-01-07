@@ -273,7 +273,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     List<String> args = new ArrayList<String>();
     args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
-    Collections.addAll(args, "--no-site-file", "--no-environ", "--no-restore");
+    // Allow save/restore for SparkR shell
+    Collections.addAll(args, "--no-site-file", "--no-environ");
     return args;
   }
 
