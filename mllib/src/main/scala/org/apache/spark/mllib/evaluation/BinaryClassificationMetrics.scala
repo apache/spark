@@ -247,7 +247,8 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    *
    * Otherwise, the actual number of bins is equal to `numBins`.
    *
-   * @see [[http://en.wikipedia.org/wiki/Calibration_%28statistics%29#In_classification Wikipedia article on calibration in classification]]
+   * @see Wikipedia article on calibration in classification:
+   * [[http://en.wikipedia.org/wiki/Calibration_%28statistics%29#In_classification Link to article]]
    *
    * @see Mahdi Pakdaman Naeini, Gregory F. Cooper, Milos Hauskrecht.
    * Binary Classifier Calibration: Non-parametric approach.
@@ -266,20 +267,20 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   def calibration(): RDD[((Double, Double), (Double, Long))] = {
     assessedCalibration
   }
-  
+
   private lazy val assessedCalibration: RDD[((Double, Double), (Double, Long))] = {
     val distinctScoresAndLabelCounts = scoreAndLabels.combineByKey(
       createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
       mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     ).sortByKey(ascending = true)
-  
+
     val binnedDistinctScoresAndLabelCounts =
       if (numBins == 0) {
         distinctScoresAndLabelCounts.map { case (score, count) => ((score, score), count) }
       } else {
         val distinctScoresCount = distinctScoresAndLabelCounts.count()
-  
+
         var groupCount =
           if (distinctScoresCount % numBins == 0) {
             distinctScoresCount / numBins
@@ -287,7 +288,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
             // prevent the last bin from being very small compared to the others
             distinctScoresCount / numBins + 1
           }
-        
+
         if (groupCount < 2) {
           logInfo(s"Too few distinct scores ($distinctScoresCount) for $numBins bins to be useful;"
             + " proceed with number of bins == number of distinct scores.")
@@ -308,7 +309,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
           })
         }
       }
-  
+
     binnedDistinctScoresAndLabelCounts.map { case (bounds, counts) =>
       val n = counts.numPositives + counts.numNegatives
       (bounds, (counts.numPositives / n.toDouble, n))
