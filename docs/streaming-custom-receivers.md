@@ -257,9 +257,9 @@ The following table summarizes the characteristics of both types of receivers
 
 ## Implementing and Using a Custom Actor-based Receiver
 
-Custom [Akka Actors](http://doc.akka.io/docs/akka/2.2.4/scala/actors.html) can also be used to
+Custom [Akka Actors](http://doc.akka.io/docs/akka/2.3.11/scala/actors.html) can also be used to
 receive data. The [`ActorHelper`](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
-trait can be applied on any Akka actor, which allows received data to be stored in Spark using
+trait can be mixed in to any Akka actor, which allows received data to be stored in Spark using
  `store(...)` methods. The supervisor strategy of this actor can be configured to handle failures, etc.
 
 {% highlight scala %}
@@ -273,8 +273,8 @@ class CustomActor extends Actor with ActorHelper {
 And a new input stream can be created with this custom actor as
 
 {% highlight scala %}
-// Assuming ssc is the StreamingContext
-val lines = ssc.actorStream[String](Props(new CustomActor()), "CustomReceiver")
+val ssc: StreamingContext = ...
+val lines = ssc.actorStream[String](Props[CustomActor], "CustomReceiver")
 {% endhighlight %}
 
 See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/ActorWordCount.scala)
