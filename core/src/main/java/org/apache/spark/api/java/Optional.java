@@ -22,8 +22,40 @@ import java.io.Serializable;
 import com.google.common.base.Preconditions;
 
 /**
- * API copied from {@code java.util.Optional} in Java 8 and
- * {@code com.google.common.base.Optional } and reimplemented.
+ * <p>Like {@code java.util.Optional} in Java 8, {@code scala.Option} in Scala, and
+ * {@code com.google.common.base.Optional} in Google Guava, this class represents a
+ * value of a given type that may or may not exist. It is used in methods that wish
+ * to optionally return a value, in preference to returning {@code null}.</p>
+ *
+ * <p>In fact, the class here is a reimplementation of the essential API of both
+ * {@code java.util.Optional} and {@code com.google.common.base.Optional}. From
+ * {@code java.util.Optional}, it implements:</p>
+ *
+ * <ul>
+ *   <li>{@link #empty()}</li>
+ *   <li>{@link #of(Object)}</li>
+ *   <li>{@link #ofNullable(Object)}</li>
+ *   <li>{@link #get()}</li>
+ *   <li>{@link #orElse(Object)}</li>
+ *   <li>{@link #isPresent()}</li>
+ * </ul>
+ *
+ * <p>From {@code com.google.common.base.Optional} it implements:</p>
+ *
+ * <ul>
+ *   <li>{@link #absent()}</li>
+ *   <li>{@link #of(Object)}</li>
+ *   <li>{@link #fromNullable(Object)}</li>
+ *   <li>{@link #get()}</li>
+ *   <li>{@link #or(Object)}</li>
+ *   <li>{@link #orNull()}</li>
+ *   <li>{@link #isPresent()}</li>
+ * </ul>
+ *
+ * <p>{@code java.util.Optional} itself is not used at this time because the
+ * project does not require Java 8. Using {@code com.google.common.base.Optional}
+ * has in the past caused serious library version conflicts with Guava that can't
+ * be resolved by shading. Hence this work-alike clone.</p>
  *
  * @param <T> type of value held inside
  */
