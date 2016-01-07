@@ -351,8 +351,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Union(unionChildren.map(planLater)) :: Nil
       case logical.Except(left, right) =>
         execution.Except(planLater(left), planLater(right)) :: Nil
-      case logical.Intersect(left, right) =>
-        execution.Intersect(planLater(left), planLater(right)) :: Nil
       case g @ logical.Generate(generator, join, outer, _, _, child) =>
         execution.Generate(
           generator, join = join, outer = outer, g.output, planLater(child)) :: Nil

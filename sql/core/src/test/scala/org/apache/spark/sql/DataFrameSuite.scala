@@ -25,7 +25,8 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.catalyst.plans.LeftSemi
+import org.apache.spark.sql.catalyst.plans.logical.{Intersect, OneRowRelation, Join}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
@@ -322,13 +323,32 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("intersect") {
+    val intersectDF = lowerCaseData.intersect(lowerCaseData)
+
+    // Before Optimizer, the operator is Intersect
+    assert(intersectDF.queryExecution.analyzed.collect {
+      case j@Intersect(_, _) => j
+    }.size === 1)
+
+    // Before Optimizer, the operator is converted to LeftSemi Join
+    assert(intersectDF.queryExecution.optimizedPlan.collect {
+      case j@Join(_, _, LeftSemi, _) => j
+    }.size === 1)
+
     checkAnswer(
-      lowerCaseData.intersect(lowerCaseData),
+      intersectDF,
       Row(1, "a") ::
       Row(2, "b") ::
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+
+    checkAnswer(
+      nullInts.intersect(nullInts),
+      Row(1) ::
+      Row(2) ::
+      Row(3) ::
+      Row(null) :: Nil)
   }
 
   test("udf") {

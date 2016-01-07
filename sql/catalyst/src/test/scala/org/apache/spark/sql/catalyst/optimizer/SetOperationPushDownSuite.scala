@@ -37,27 +37,21 @@ class SetOperationPushDownSuite extends PlanTest {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
   val testUnion = Union(testRelation, testRelation2)
-  val testIntersect = Intersect(testRelation, testRelation2)
   val testExcept = Except(testRelation, testRelation2)
 
-  test("union/intersect/except: filter to each side") {
+  test("union/except: filter to each side") {
     val unionQuery = testUnion.where('a === 1)
-    val intersectQuery = testIntersect.where('b < 10)
     val exceptQuery = testExcept.where('c >= 5)
 
     val unionOptimized = Optimize.execute(unionQuery.analyze)
-    val intersectOptimized = Optimize.execute(intersectQuery.analyze)
     val exceptOptimized = Optimize.execute(exceptQuery.analyze)
 
     val unionCorrectAnswer =
       Union(testRelation.where('a === 1), testRelation2.where('d === 1)).analyze
-    val intersectCorrectAnswer =
-      Intersect(testRelation.where('b < 10), testRelation2.where('e < 10)).analyze
     val exceptCorrectAnswer =
       Except(testRelation.where('c >= 5), testRelation2.where('f >= 5)).analyze
 
     comparePlans(unionOptimized, unionCorrectAnswer)
-    comparePlans(intersectOptimized, intersectCorrectAnswer)
     comparePlans(exceptOptimized, exceptCorrectAnswer)
   }
 
@@ -70,13 +64,8 @@ class SetOperationPushDownSuite extends PlanTest {
   }
 
   test("SPARK-10539: Project should not be pushed down through Intersect or Except") {
-    val intersectQuery = testIntersect.select('b, 'c)
     val exceptQuery = testExcept.select('a, 'b, 'c)
-
-    val intersectOptimized = Optimize.execute(intersectQuery.analyze)
     val exceptOptimized = Optimize.execute(exceptQuery.analyze)
-
-    comparePlans(intersectOptimized, intersectQuery.analyze)
     comparePlans(exceptOptimized, exceptQuery.analyze)
   }
 }
