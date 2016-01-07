@@ -95,7 +95,6 @@ private[spark] class TaskContextImpl(
   @transient private val accumulators = new HashMap[Long, GenericAccumulable[_, _, _]]
 
   private[spark] override def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit = synchronized {
-    println("Registering accumulator "+a+"in stage"+stageId+"split "+partitionId)
     accumulators(a.id) = a
   }
 
@@ -113,23 +112,4 @@ private[spark] class TaskContextImpl(
     internalAccumulators.foreach(registerAccumulator)
     internalAccumulators.map { a => (a.name.get, a) }.toMap
   }
-
-  @transient private var computeRddId: Int = -1
-  @transient private var computeSplitId: Int = -1
-
-  /**
-   * Set IDs of RDD and Split being computed. This is used by consistent accumulators.
-   */
-  private[spark] def setComputeRDDSplit(rddId: Int, splitId: Int): Unit = {
-    computeRddId = rddId
-    computeSplitId = splitId
-  }
-
-  /**
-   * Return the IDs of RDD and Split being computed. This is used by consistent accumulators.
-   */
-  private[spark] def getComputeRDDSplit(): (Int, Int) = {
-    (computeRddId, computeSplitId)
-  }
-
 }
