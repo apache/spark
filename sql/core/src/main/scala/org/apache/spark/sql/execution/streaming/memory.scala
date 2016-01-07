@@ -113,7 +113,7 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   /** Used to convert an [[InternalRow]] to an external [[Row]] for comparison in testing. */
   private val externalRowConverter = RowEncoder(schema)
 
-  override def currentProgress: Option[Offset] = batches.lastOption.map(_.end)
+  override def currentOffset: Option[Offset] = batches.lastOption.map(_.end)
 
   override def addBatch(nextBatch: Batch): Unit = {
     batches.append(nextBatch)

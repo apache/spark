@@ -36,7 +36,7 @@ trait Sink {
    * function will be called by Spark when restarting a stream in order to determine at which point
    * in streamed input data computation should be resumed from.
    */
-  def currentProgress: Option[Offset]
+  def currentOffset: Option[Offset]
 
   /**
    * Accepts a new batch of data as well as a [[StreamProgress]] that denotes how far in the input

@@ -622,6 +622,15 @@ class SQLContext private[sql](
   @Experimental
   def read: DataFrameReader = new DataFrameReader(this)
 
+
+  /**
+   * :: Experimental ::
+   * Returns a [[DataStreamReader]] than can be used to create queries that execute continuously
+   * as new data arrives.
+   */
+  @Experimental
+  def stream: DataStreamReader = new DataStreamReader(this)
+
   /**
    * :: Experimental ::
    * Creates an external table from the given path and returns the corresponding DataFrame.

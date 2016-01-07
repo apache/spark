@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{StandingQuery, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
 
@@ -35,7 +35,7 @@ import scala.collection.mutable.ArrayBuffer
 class StreamExecution(
     sqlContext: SQLContext,
     private[sql] val logicalPlan: LogicalPlan,
-    val sink: Sink) extends Logging {
+    val sink: Sink) extends StandingQuery with Logging {
 
   /** Minimum amount of time in between the start of each batch. */
   val minBatchTime = 10
@@ -50,7 +50,7 @@ class StreamExecution(
   // Start the execution at the current offsets stored in the sink. (i.e. avoid reprocessing data
   // that we have already processed).
   {
-    sink.currentProgress match {
+    sink.currentOffset match {
       case Some(c: CompositeOffset) =>
         val storedProgress = c.offsets
         val sources = logicalPlan collect {
@@ -120,6 +120,11 @@ class StreamExecution(
     val newPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
     }
+
+//    println(logicalPlan)
+//    println(replacementMap)
+//    println(withNewSources)
+//    println(newPlan)
 
     if (newOffsets.nonEmpty) {
       val optimizerStart = System.nanoTime()

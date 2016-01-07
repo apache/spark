@@ -27,7 +27,8 @@ class StreamProgress extends Serializable {
     with mutable.SynchronizedMap[Source, Offset]
 
   private[streaming] def update(source: Source, newOffset: Offset): Unit = {
-    currentOffsets.get(source).foreach(old => assert(newOffset > old))
+    currentOffsets.get(source).foreach(old =>
+      assert(newOffset > old, s"Stream going backwards $newOffset -> $old"))
     currentOffsets.put(source, newOffset)
   }
 
