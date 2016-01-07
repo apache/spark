@@ -41,7 +41,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
     Batch("Intersect", FixedPoint(100),
-      ReplaceIntersectWithLeftSemi) ::
+      ReplaceIntersectWithSemiJoin) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -955,20 +955,15 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  * Replaces logical [[Intersect]] operator with a left-semi [[Join]] operator.
  * {{{
  *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2
- *   ==>  SELECT a1, a2 FROM Tab1, Tab2 ON a1<=>b1 AND a2<=>b2
+ *   ==>  SELECT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
  * }}}
  */
-object ReplaceIntersectWithLeftSemi extends Rule[LogicalPlan] {
-  private def buildCond (left: LogicalPlan, right: LogicalPlan): Seq[Expression] = {
-    require(left.output.length == right.output.length)
-    left.output.zip(right.output).map { case (l, r) =>
-      EqualNullSafe(l, r)
-    }
-  }
-
+object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Intersect(left, right) =>
-      Join(left, right, LeftSemi, buildCond(left, right).reduceLeftOption(And))
+      val joinCond = left.output.zip(right.output).map { case (l, r) =>
+        EqualNullSafe(l, r) }
+      Join(left, right, LeftSemi, joinCond.reduceLeftOption(And))
   }
 }
 

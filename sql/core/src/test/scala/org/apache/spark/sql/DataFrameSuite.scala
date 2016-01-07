@@ -323,26 +323,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("intersect") {
-    val intersectDF = lowerCaseData.intersect(lowerCaseData)
-
-    // Before Optimizer, the operator is Intersect
-    assert(intersectDF.queryExecution.analyzed.collect {
-      case j@Intersect(_, _) => j
-    }.size === 1)
-
-    // Before Optimizer, the operator is converted to LeftSemi Join
-    assert(intersectDF.queryExecution.optimizedPlan.collect {
-      case j@Join(_, _, LeftSemi, _) => j
-    }.size === 1)
-
     checkAnswer(
-      intersectDF,
+      lowerCaseData.intersect(lowerCaseData),
       Row(1, "a") ::
       Row(2, "b") ::
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
 
+    // check null equality
     checkAnswer(
       nullInts.intersect(nullInts),
       Row(1) ::
