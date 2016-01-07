@@ -101,9 +101,6 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case Project(list, child) =>
       projectToSQL(list, child, isDistinct = false)
 
-    case Aggregate(groupingExprs, aggExprs, Aggregate(_, _, Expand(_, _, child))) =>
-      aggregateToSQL(groupingExprs, aggExprs, child)
-
     case Aggregate(groupingExprs, aggExprs, child) =>
       aggregateToSQL(groupingExprs, aggExprs, child)
 

@@ -34,7 +34,7 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
     checkSQL(Literal(2.5D), "2.5")
     checkSQL(
       Literal(Timestamp.valueOf("2016-01-01 00:00:00")),
-      "CAST('2016-01-01 00:00:00.0' AS TIMESTAMP)")
+      "TIMESTAMP('2016-01-01 00:00:00.0')")
     // TODO tests for decimals
   }
 
