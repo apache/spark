@@ -13,6 +13,8 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+   This file is an adaptation of Hive's org/apache/hadoop/hive/ql/HiveParser.g grammar.
 */
 parser grammar SparkSqlParser;
 
@@ -86,6 +88,8 @@ TOK_DISTRIBUTEBY;
 TOK_SORTBY;
 TOK_UNIONALL;
 TOK_UNIONDISTINCT;
+TOK_EXCEPT;
+TOK_INTERSECT;
 TOK_JOIN;
 TOK_LEFTOUTERJOIN;
 TOK_RIGHTOUTERJOIN;
@@ -369,18 +373,15 @@ TOK_SET_AUTOCOMMIT;
 
 // Package headers
 @header {
-package org.apache.spark.sql.parser;
+package org.apache.spark.sql.catalyst.parser;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
 }
 
 
 @members {
-  ArrayList<ParseError> errors = new ArrayList<ParseError>();
   Stack msgs = new Stack<String>();
 
   private static HashMap<String, String> xlateMap;
@@ -563,9 +564,10 @@ import org.apache.hadoop.hive.conf.HiveConf;
   }
 
   @Override
-  public void displayRecognitionError(String[] tokenNames,
-      RecognitionException e) {
-    errors.add(new ParseError(this, e, tokenNames));
+  public void displayRecognitionError(String[] tokenNames, RecognitionException e) {
+    if (reporter != null) {
+      reporter.report(this, e, tokenNames);
+    }
   }
 
   @Override
@@ -654,15 +656,20 @@ import org.apache.hadoop.hive.conf.HiveConf;
   private CommonTree throwColumnNameException() throws RecognitionException {
     throw new FailedPredicateException(input, Arrays.toString(excludedCharForColumnName) + " can not be used in column name in create table statement.", "");
   }
-  private Configuration hiveConf;
-  public void setHiveConf(Configuration hiveConf) {
-    this.hiveConf = hiveConf;
+
+  private ParserConf parserConf;
+  private ParseErrorReporter reporter;
+
+  public void configure(ParserConf parserConf, ParseErrorReporter reporter) {
+    this.parserConf = parserConf;
+    this.reporter = reporter;
   }
+
   protected boolean useSQL11ReservedKeywordsForIdentifier() {
-    if(hiveConf==null){
-      return false;
+    if (parserConf == null) {
+      return true;
     }
-    return !HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS);
+    return !parserConf.supportSQL11ReservedKeywords();
   }
 }
 
@@ -2117,6 +2124,8 @@ setOperator
 @after { popMsg(state); }
     : KW_UNION KW_ALL -> ^(TOK_UNIONALL)
     | KW_UNION KW_DISTINCT? -> ^(TOK_UNIONDISTINCT)
+    | KW_EXCEPT -> ^(TOK_EXCEPT)
+    | KW_INTERSECT -> ^(TOK_INTERSECT)
     ;
 
 queryStatementExpression[boolean topLevel]
@@ -2237,7 +2246,7 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
-              ^(TOK_UNIONALL {$setOpSelectStatement.tree} $b)
+              ^($u {$setOpSelectStatement.tree} $b)
               {adaptor.create(Identifier, generateUnionAlias())}
              )
           )
@@ -2247,12 +2256,12 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
           )
        )
    -> {$setOpSelectStatement.tree != null && $u.tree.getType()!=SparkSqlParser.TOK_UNIONDISTINCT}?
-      ^(TOK_UNIONALL {$setOpSelectStatement.tree} $b)
+      ^($u {$setOpSelectStatement.tree} $b)
    -> {$setOpSelectStatement.tree == null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
-              ^(TOK_UNIONALL {$t} $b)
+              ^($u {$t} $b)
               {adaptor.create(Identifier, generateUnionAlias())}
              )
            )
@@ -2261,7 +2270,7 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
             ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
          )
        )
-   -> ^(TOK_UNIONALL {$t} $b)
+   -> ^($u {$t} $b)
    )+
    o=orderByClause?
    c=clusterByClause?

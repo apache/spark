@@ -750,7 +750,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.memory.offHeap.enabled</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
   </td>
@@ -821,17 +821,6 @@ Apart from these, the following properties are also available, and may be useful
     Size of each piece of a block for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
     too small, <code>BlockManager</code> might take a performance hit.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.cleaner.ttl</code></td>
-  <td>(infinite)</td>
-  <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
-    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
-    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
-    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
-    this duration will be cleared as well.
   </td>
 </tr>
 <tr>

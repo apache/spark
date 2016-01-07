@@ -15,31 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.sql.catalyst
 
-import scala.util.Random
+import org.apache.spark.sql.catalyst.plans.PlanTest
 
-import org.apache.spark.SparkFunSuite
+class CatalystQlSuite extends PlanTest {
 
-/**
- * Tests org.apache.spark.util.Vector functionality
- */
-@deprecated("suppress compile time deprecation warning", "1.0.0")
-class VectorSuite extends SparkFunSuite {
-
-  def verifyVector(vector: Vector, expectedLength: Int): Unit = {
-    assert(vector.length == expectedLength)
-    assert(vector.elements.min > 0.0)
-    assert(vector.elements.max < 1.0)
-  }
-
-  test("random with default random number generator") {
-    val vector100 = Vector.random(100)
-    verifyVector(vector100, 100)
-  }
-
-  test("random with given random number generator") {
-    val vector100 = Vector.random(100, new Random(100))
-    verifyVector(vector100, 100)
+  test("parse union/except/intersect") {
+    val paresr = new CatalystQl()
+    paresr.createPlan("select * from t1 union all select * from t2")
+    paresr.createPlan("select * from t1 union distinct select * from t2")
+    paresr.createPlan("select * from t1 union select * from t2")
+    paresr.createPlan("select * from t1 except select * from t2")
+    paresr.createPlan("select * from t1 intersect select * from t2")
   }
 }
