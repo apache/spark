@@ -56,6 +56,8 @@ class BisectingKMeansModel(JavaModelWrapper):
     >>> model = bskm.train(sc.parallelize(data), k=4)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([0.0, 0.0]))
     True
+    >>> model.predict(sc.parallelize([array([0.0, 0.0])])).first == model.predict(array([0.0, 0.0]))
+    True
     >>> model.k
     4
     >>> model.computeCost(array([0.0, 0.0]))
@@ -92,7 +94,7 @@ class BisectingKMeansModel(JavaModelWrapper):
         the clusters for.
         """
         if isinstance(x, RDD):
-            return x.map(self.predict(x))
+            return x.map(self.predict)
 
         x = _convert_to_vector(x)
         return self.call("predict", x)
