@@ -479,6 +479,8 @@ case object OneRowRelation extends LeafNode {
   override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
+trait ObjectOperator
+
 /**
  * A relation produced by applying `func` to each partition of the `child`. tEncoder/uEncoder are
  * used respectively to decode/encode from the JVM object representation expected by `func.`
@@ -488,7 +490,7 @@ case class MapPartitions[T, U](
     tEncoder: ExpressionEncoder[T],
     uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with ObjectOperator {
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -513,7 +515,7 @@ case class AppendColumns[T, U](
     tEncoder: ExpressionEncoder[T],
     uEncoder: ExpressionEncoder[U],
     newColumns: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with ObjectOperator {
   override def output: Seq[Attribute] = child.output ++ newColumns
   override def producedAttributes: AttributeSet = AttributeSet(newColumns)
 }
@@ -549,7 +551,7 @@ case class MapGroups[K, T, U](
     uEncoder: ExpressionEncoder[U],
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with ObjectOperator {
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -592,6 +594,6 @@ case class CoGroup[Key, Left, Right, Result](
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
     left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode {
+    right: LogicalPlan) extends BinaryNode with ObjectOperator {
   override def producedAttributes: AttributeSet = outputSet
 }
