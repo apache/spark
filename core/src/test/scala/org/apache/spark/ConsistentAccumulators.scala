@@ -29,6 +29,7 @@ import org.apache.spark.scheduler._
 
 class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
+  /*
   test ("basic accumulation"){
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
@@ -42,19 +43,31 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     d.foreach{x => longAcc += maxInt + x}
     longAcc.value should be (210L + maxInt * 20)
   }
+  */
 
   test("map + map + count") {
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc += x; x}
-    val c = b.map{x => acc += x; x}
+    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    val c = b.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
     c.count()
     acc.value should be (420)
   }
 
-  test("map + count + map + count") {
+  test("first + count") {
+    sc = new SparkContext("local", "test")
+    val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
+
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    b.first()
+    b.count()
+    acc.value should be (210)
+  }
+/*
+  def murh3() {
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
@@ -109,7 +122,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     c.count()
     acc.value should be (10100)
   }
-
+ */
 
   test ("garbage collection") {
     // Create an accumulator and let it go out of scope to test that it's properly garbage collected

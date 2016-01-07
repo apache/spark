@@ -176,14 +176,4 @@ abstract class TaskContext extends Serializable {
    * Accumulators for tracking internal metrics indexed by the name.
    */
   private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
-
-  /**
-   * Set IDs of RDD and Split being computed. This is used by consistent accumulators.
-   */
-  private[spark] def setComputeRDDSplit(rddId: Int, splitId: Int): Unit
-
-  /**
-   * Return the IDs of RDD and Split being computed. This is used by consistent accumulators.
-   */
-  private[spark] def getComputeRDDSplit(): (Int, Int)
 }

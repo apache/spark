@@ -95,6 +95,7 @@ private[spark] class TaskContextImpl(
   @transient private val accumulators = new HashMap[Long, GenericAccumulable[_, _, _]]
 
   private[spark] override def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit = synchronized {
+    println("Registering accumulator "+a+"in stage"+stageId+"split "+partitionId)
     accumulators(a.id) = a
   }
 
