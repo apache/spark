@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.mapreduce.TaskAttemptContext
+
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.{OutputWriter, OutputWriterFactory, HadoopFsRelationProvider, HadoopFsRelation}
+import org.apache.spark.sql.sources.{HadoopFsRelation, HadoopFsRelationProvider, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
 /**

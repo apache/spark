@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWriterFactory}
-import org.apache.spark.sql.types.{IntegerType, StructType, StringType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 
