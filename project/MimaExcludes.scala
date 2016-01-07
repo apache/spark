@@ -57,8 +57,7 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
-        ) ++
-      Seq(
+      ) ++ Seq(
         // SPARK-12481 Remove Hadoop 1.x
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.mapred.SparkHadoopMapRedUtil"),
         // SPARK-12615 Remove deprecated APIs in core
@@ -119,7 +118,12 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$")
+      ) ++ Seq(
+        // SPARK-12581 Support case-sensitive table names in postgresql
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcDialect.quoteIdentifier"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.MySQLDialect.quoteIdentifier")
       )
+
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),

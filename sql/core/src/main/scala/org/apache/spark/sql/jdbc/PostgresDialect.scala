@@ -68,6 +68,10 @@ private object PostgresDialect extends JdbcDialect {
     case _ => None
   }
 
+  override def quoteTableName(tableName: String): String = {
+    s""""$tableName""""
+  }
+
   override def getTableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
   }
