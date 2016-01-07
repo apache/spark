@@ -87,7 +87,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   }
 
   @transient
-  private[sql] lazy val interpretedOrdering: Ordering[util.ArrayData] = new Ordering[util.ArrayData] {
+  private[sql] lazy val interpretedOrdering: Ordering[util.ArrayData]
+      = new Ordering[util.ArrayData] {
     private[this] val elementOrdering: Ordering[Any] = elementType match {
       case dt: AtomicType => dt.ordering.asInstanceOf[Ordering[Any]]
       case a : ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
