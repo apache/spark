@@ -362,14 +362,16 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     bitmap.add(1)
     bitmap.add(3)
     bitmap.add(5)
-    bitmap.serialize(new KryoOutputDataOutputBridge(output))
+    // Ignore Kryo because it doesn't use writeObject
+    bitmap.serialize(new KryoOutputObjectOutputBridge(null, output))
     output.flush()
     output.close()
 
     val inStream = new FileInputStream(tmpfile)
     val input = new KryoInput(inStream)
     val ret = new RoaringBitmap
-    ret.deserialize(new KryoInputDataInputBridge(input))
+    // Ignore Kryo because it doesn't use readObject
+    ret.deserialize(new KryoInputObjectInputBridge(null, input))
     input.close()
     assert(ret == bitmap)
     Utils.deleteRecursively(dir)

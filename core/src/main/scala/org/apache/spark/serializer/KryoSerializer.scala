@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{DataInput, DataOutput, EOFException, InputStream, IOException, OutputStream}
+import java.io._
 import java.nio.ByteBuffer
 import javax.annotation.Nullable
 
@@ -378,18 +378,19 @@ private[serializer] object KryoSerializer {
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
     classOf[RoaringBitmap] -> new KryoClassSerializer[RoaringBitmap]() {
       override def write(kryo: Kryo, output: KryoOutput, bitmap: RoaringBitmap): Unit = {
-        bitmap.serialize(new KryoOutputDataOutputBridge(output))
+        bitmap.serialize(new KryoOutputObjectOutputBridge(kryo, output))
       }
       override def read(kryo: Kryo, input: KryoInput, cls: Class[RoaringBitmap]): RoaringBitmap = {
         val ret = new RoaringBitmap
-        ret.deserialize(new KryoInputDataInputBridge(input))
+        ret.deserialize(new KryoInputObjectInputBridge(kryo, input))
         ret
       }
     }
   )
 }
 
-private[serializer] class KryoInputDataInputBridge(input: KryoInput) extends DataInput {
+private[spark] class KryoInputObjectInputBridge(
+    kryo: Kryo, input: KryoInput) extends FilterInputStream(input) with ObjectInput {
   override def readLong(): Long = input.readLong()
   override def readChar(): Char = input.readChar()
   override def readFloat(): Float = input.readFloat()
@@ -408,9 +409,11 @@ private[serializer] class KryoInputDataInputBridge(input: KryoInput) extends Dat
   override def readBoolean(): Boolean = input.readBoolean()
   override def readUnsignedByte(): Int = input.readByteUnsigned()
   override def readDouble(): Double = input.readDouble()
+  override def readObject(): AnyRef = kryo.readClassAndObject(input)
 }
 
-private[serializer] class KryoOutputDataOutputBridge(output: KryoOutput) extends DataOutput {
+private[spark] class KryoOutputObjectOutputBridge(
+    kryo: Kryo, output: KryoOutput) extends FilterOutputStream(output) with ObjectOutput  {
   override def writeFloat(v: Float): Unit = output.writeFloat(v)
   // There is no "readChars" counterpart, except maybe "readLine", which is not supported
   override def writeChars(s: String): Unit = throw new UnsupportedOperationException("writeChars")
@@ -426,6 +429,7 @@ private[serializer] class KryoOutputDataOutputBridge(output: KryoOutput) extends
   override def writeChar(v: Int): Unit = output.writeChar(v.toChar)
   override def writeLong(v: Long): Unit = output.writeLong(v)
   override def writeByte(v: Int): Unit = output.writeByte(v)
+  override def writeObject(obj: AnyRef): Unit = kryo.writeClassAndObject(output, obj)
 }
 
 /**
