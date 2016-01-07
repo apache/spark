@@ -337,6 +337,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(2) ::
       Row(3) ::
       Row(null) :: Nil)
+
+    // check duplicate values
+    checkAnswer(
+      allNulls.intersect(allNulls),
+      Row(null) ::
+      Row(null) ::
+      Row(null) ::
+      Row(null) :: Nil)
   }
 
   test("udf") {
