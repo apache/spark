@@ -707,6 +707,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           tableIdent = TableIdentifier("wide_schema"),
           userSpecifiedSchema = Some(schema),
           partitionColumns = Array.empty[String],
+          bucketSpec = None,
           provider = "json",
           options = Map("path" -> "just a dummy path"),
           isExternal = false)
