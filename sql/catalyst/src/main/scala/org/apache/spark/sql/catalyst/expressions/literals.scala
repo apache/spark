@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.json4s.JsonAST._
 import java.sql.{Date, Timestamp}
+
+import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._

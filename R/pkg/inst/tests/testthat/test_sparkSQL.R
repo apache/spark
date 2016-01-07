@@ -423,12 +423,12 @@ test_that("read/write json files", {
 test_that("jsonRDD() on a RDD with json string", {
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
-  df <- jsonRDD(sqlContext, rdd)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
 
   rdd2 <- flatMap(rdd, function(x) c(x, x))
-  df <- jsonRDD(sqlContext, rdd2)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 6)
 })

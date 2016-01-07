@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.Preconditions;
@@ -121,14 +122,42 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
     super.initialize(inputSplit, taskAttemptContext);
+    initializeInternal();
+  }
 
+  /**
+   * Utility API that will read all the data in path. This circumvents the need to create Hadoop
+   * objects to use this class. `columns` can contain the list of columns to project.
+   */
+  @Override
+  public void initialize(String path, List<String> columns) throws IOException {
+    super.initialize(path, columns);
+    initializeInternal();
+  }
+
+  @Override
+  public boolean nextKeyValue() throws IOException, InterruptedException {
+    if (batchIdx >= numBatched) {
+      if (!loadBatch()) return false;
+    }
+    ++batchIdx;
+    return true;
+  }
+
+  @Override
+  public UnsafeRow getCurrentValue() throws IOException, InterruptedException {
+    return rows[batchIdx - 1];
+  }
+
+  @Override
+  public float getProgress() throws IOException, InterruptedException {
+    return (float) rowsReturned / totalRowCount;
+  }
+
+  private void initializeInternal() throws IOException {
     /**
      * Check that the requested schema is supported.
      */
-    if (requestedSchema.getFieldCount() == 0) {
-      // TODO: what does this mean?
-      throw new IOException("Empty request schema not supported.");
-    }
     int numVarLenFields = 0;
     originalTypes = new OriginalType[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
@@ -180,25 +209,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       rowWriters[i].initialize(rows[i], holder, requestedSchema.getFieldCount());
       rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, holder.buffer.length);
     }
-  }
-
-  @Override
-  public boolean nextKeyValue() throws IOException, InterruptedException {
-    if (batchIdx >= numBatched) {
-      if (!loadBatch()) return false;
-    }
-    ++batchIdx;
-    return true;
-  }
-
-  @Override
-  public UnsafeRow getCurrentValue() throws IOException, InterruptedException {
-    return rows[batchIdx - 1];
-  }
-
-  @Override
-  public float getProgress() throws IOException, InterruptedException {
-    return (float) rowsReturned / totalRowCount;
   }
 
   /**
@@ -253,9 +263,19 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         case INT96:
           throw new IOException("Unsupported " + columnReaders[i].descriptor.getType());
       }
-      numBatched = num;
-      batchIdx = 0;
     }
+
+    numBatched = num;
+    batchIdx = 0;
+
+    // Update the total row lengths if the schema contained variable length. We did not maintain
+    // this as we populated the columns.
+    if (containsVarLenFields) {
+      for (int i = 0; i < numBatched; ++i) {
+        rows[i].setTotalSize(rowWriters[i].holder().totalSize());
+      }
+    }
+
     return true;
   }
 

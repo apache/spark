@@ -458,7 +458,10 @@ setMethod("registerTempTable",
 setMethod("insertInto",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName, overwrite = FALSE) {
-            callJMethod(x@sdf, "insertInto", tableName, overwrite)
+            jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
+            write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "mode", jmode)
+            callJMethod(write, "insertInto", tableName)
           })
 
 #' Cache
@@ -1948,18 +1951,15 @@ setMethod("write.df",
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
-            allModes <- c("append", "overwrite", "error", "ignore")
-            # nolint start
-            if (!(mode %in% allModes)) {
-              stop('mode should be one of "append", "overwrite", "error", "ignore"')
-            }
-            # nolint end
-            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+            jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
                 options[["path"]] <- path
             }
-            callJMethod(df@sdf, "save", source, jmode, options)
+            write <- callJMethod(df@sdf, "write")
+            write <- callJMethod(write, "format", source)
+            write <- callJMethod(write, "mode", jmode)
+            write <- callJMethod(write, "save", path)
           })
 
 #' @rdname write.df
@@ -2013,15 +2013,14 @@ setMethod("saveAsTable",
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
-            allModes <- c("append", "overwrite", "error", "ignore")
-            # nolint start
-            if (!(mode %in% allModes)) {
-              stop('mode should be one of "append", "overwrite", "error", "ignore"')
-            }
-            # nolint end
-            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+            jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
-            callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
+
+            write <- callJMethod(df@sdf, "write")
+            write <- callJMethod(write, "format", source)
+            write <- callJMethod(write, "mode", jmode)
+            write <- callJMethod(write, "options", options)
+            callJMethod(write, "saveAsTable", tableName)
           })
 
 #' summary

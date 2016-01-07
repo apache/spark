@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.aggregate.{NoOp, DeclarativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
 /**

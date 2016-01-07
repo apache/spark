@@ -17,13 +17,13 @@
 
 package org.apache.spark.rdd
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException
-
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -439,66 +439,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val prunedData = prunedRdd.collect()
     assert(prunedData.size === 1)
     assert(prunedData(0) === 10)
-  }
-
-  test("mapWith") {
-    import java.util.Random
-    val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
-    @deprecated("suppress compile time deprecation warning", "1.0.0")
-    val randoms = ones.mapWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) => prng.nextDouble * t}.collect()
-    val prn42_3 = {
-      val prng42 = new Random(42)
-      prng42.nextDouble(); prng42.nextDouble(); prng42.nextDouble()
-    }
-    val prn43_3 = {
-      val prng43 = new Random(43)
-      prng43.nextDouble(); prng43.nextDouble(); prng43.nextDouble()
-    }
-    assert(randoms(2) === prn42_3)
-    assert(randoms(5) === prn43_3)
-  }
-
-  test("flatMapWith") {
-    import java.util.Random
-    val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
-    @deprecated("suppress compile time deprecation warning", "1.0.0")
-    val randoms = ones.flatMapWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) =>
-        val random = prng.nextDouble()
-        Seq(random * t, random * t * 10)}.
-      collect()
-    val prn42_3 = {
-      val prng42 = new Random(42)
-      prng42.nextDouble(); prng42.nextDouble(); prng42.nextDouble()
-    }
-    val prn43_3 = {
-      val prng43 = new Random(43)
-      prng43.nextDouble(); prng43.nextDouble(); prng43.nextDouble()
-    }
-    assert(randoms(5) === prn42_3 * 10)
-    assert(randoms(11) === prn43_3 * 10)
-  }
-
-  test("filterWith") {
-    import java.util.Random
-    val ints = sc.makeRDD(Array(1, 2, 3, 4, 5, 6), 2)
-    @deprecated("suppress compile time deprecation warning", "1.0.0")
-    val sample = ints.filterWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) => prng.nextInt(3) == 0}.
-      collect()
-    val checkSample = {
-      val prng42 = new Random(42)
-      val prng43 = new Random(43)
-      Array(1, 2, 3, 4, 5, 6).filter{i =>
-        if (i < 4) 0 == prng42.nextInt(3) else 0 == prng43.nextInt(3)
-      }
-    }
-    assert(sample.size === checkSample.size)
-    for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
   }
 
   test("collect large number of empty partitions") {

@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{TableIdentifier, CatalystConf, EmptyConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, EmptyConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**

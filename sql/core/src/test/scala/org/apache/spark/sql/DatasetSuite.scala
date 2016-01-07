@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
@@ -25,7 +25,6 @@ import scala.language.postfixOps
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._

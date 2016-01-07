@@ -301,6 +301,8 @@ class KMeans private (
         contribs.iterator
       }.reduceByKey(mergeContribs).collectAsMap()
 
+      bcActiveCenters.unpersist(blocking = false)
+
       // Update the cluster centers and costs for each active run
       for ((run, i) <- activeRuns.zipWithIndex) {
         var changed = false
@@ -419,7 +421,10 @@ class KMeans private (
             s0
           }
         )
+
+      bcNewCenters.unpersist(blocking = false)
       preCosts.unpersist(blocking = false)
+
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointsWithCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
         pointsWithCosts.flatMap { case (p, c) =>
@@ -448,6 +453,9 @@ class KMeans private (
         ((r, KMeans.findClosest(bcCenters.value(r), p)._1), 1.0)
       }
     }.reduceByKey(_ + _).collectAsMap()
+
+    bcCenters.unpersist(blocking = false)
+
     val finalCenters = (0 until runs).par.map { r =>
       val myCenters = centers(r).toArray
       val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray

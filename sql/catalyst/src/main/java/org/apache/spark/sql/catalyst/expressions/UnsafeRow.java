@@ -177,6 +177,10 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     pointTo(buf, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
   }
 
+  public void setTotalSize(int sizeInBytes) {
+    this.sizeInBytes = sizeInBytes;
+  }
+
   public void setNotNullAt(int i) {
     assertIndexIsValid(i);
     BitSetMethods.unset(baseObject, baseOffset, i);
@@ -560,6 +564,10 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   @Override
   public int hashCode() {
     return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+  }
+
+  public int hashCode(int seed) {
+    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, seed);
   }
 
   @Override
