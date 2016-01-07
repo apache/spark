@@ -25,8 +25,7 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.LeftSemi
-import org.apache.spark.sql.catalyst.plans.logical.{Intersect, OneRowRelation, Join}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
