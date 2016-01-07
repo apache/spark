@@ -89,16 +89,16 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
   extends StateMap[K, S] with KryoSerializable { self =>
 
   def this(initialCapacity: Int, deltaChainThreshold: Int)
-      (implicit keyClassTag: ClassTag[K], valueClassTag: ClassTag[S]) = this(
+      (implicit keyClassTag: ClassTag[K], stateClassTag: ClassTag[S]) = this(
     new EmptyStateMap[K, S],
     initialCapacity = initialCapacity,
     deltaChainThreshold = deltaChainThreshold)
 
   def this(deltaChainThreshold: Int)
-      (implicit keyClassTag: ClassTag[K], valueClassTag: ClassTag[S]) = this(
+      (implicit keyClassTag: ClassTag[K], stateClassTag: ClassTag[S]) = this(
     initialCapacity = DEFAULT_INITIAL_CAPACITY, deltaChainThreshold = deltaChainThreshold)
 
-  def this()(implicit keyClassTag: ClassTag[K], valueClassTag: ClassTag[S]) = {
+  def this()(implicit keyClassTag: ClassTag[K], stateClassTag: ClassTag[S]) = {
     this(DELTA_CHAIN_LENGTH_THRESHOLD)
   }
 
