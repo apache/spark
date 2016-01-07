@@ -83,7 +83,6 @@ object ConditionalRandomFieldExample {
       val rowRddT = sc.textFile(test).filter(_.nonEmpty).map(_.split("\t"))
       val modelRDD = sc.parallelize(model.load(sc, modelPath).CRFSeries)
       val newResult = CRF.verifyCRF(rowRddT, modelRDD)
-
       var idx: Int = 0
       var temp: String = ""
       while (idx < newResult.CRFSeries(0).length) {
