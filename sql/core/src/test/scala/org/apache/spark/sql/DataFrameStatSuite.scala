@@ -80,10 +80,16 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
         s"split $id overlaps with split ${(id + 1) % splits.length}")
     }
 
+    // Verify sample sizes
     val s = splits.map(_.count())
     assert(math.abs(s(0) - 100) < 50) // std =  9.13
     assert(math.abs(s(1) - 200) < 50) // std = 11.55
     assert(math.abs(s(2) - 300) < 50) // std = 12.25
+
+    // Verify that the results are deterministic across multiple runs
+    val firstRun = splits.toSeq.map(_.collect().toSeq)
+    val secondRun = data.randomSplit(Array[Double](1, 2, 3), seed = 1).toSeq.map(_.collect().toSeq)
+    assert(firstRun == secondRun)
   }
 
   test("pearson correlation") {
