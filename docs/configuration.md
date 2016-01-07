@@ -1604,28 +1604,18 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
   <td>false</td>
   <td>
-    Whether to close the file after writing a write ahead log record on the driver. Because S3 doesn't
-    support flushing of data, when using S3 for checkpointing, you should enable it to achieve read
-    after write consistency.
+    Whether to close the file after writing a write ahead log record on the driver. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
+    on the driver.
   </td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
   <td>false</td>
   <td>
-    Whether to close the file after writing a write ahead log record on the receivers. Because S3
-    doesn't support flushing of data, when using S3 for checkpointing, you should enable it to
-    achieve read after write consistency.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.streaming.driver.writeAheadLog.allowBatching</code></td>
-  <td>true</td>
-  <td>
-    Whether to batch write ahead logs on the driver to write. When using S3 for checkpointing, write
-    operations on the driver usually take too long. Enabling batching write ahead logs will improve
-    the performance of write operations. Moreover, it's also very helpful to scale to a large number
-    of receivers.
+    Whether to close the file after writing a write ahead log record on the receivers. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the data WAL
+    on the receivers.
   </td>
 </tr>
 </table>
