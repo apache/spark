@@ -121,6 +121,10 @@ $(document).ready(function() {
 
         if (hasMultipleAttempts) {
           jQuery.extend(conf, rowGroupConf);
+          var rowGroupCells = document.getElementsByClassName("rowGroupColumn");
+          for (i = 0; i < rowGroupCells.length; i++) {
+            rowGroupCells[i].style='background-color: #ffffff';
+          }
         }
 
         if ($(selector.concat(" tr")).length <= 25) {
