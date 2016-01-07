@@ -1006,6 +1006,8 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def unionAll(other: DataFrame): DataFrame = withPlan {
+    // This breaks caching, but it's usually ok because it addresses a very specific use case:
+    // using union to union many files or partitions.
     CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
 

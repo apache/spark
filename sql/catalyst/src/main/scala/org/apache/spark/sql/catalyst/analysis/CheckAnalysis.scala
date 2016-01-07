@@ -190,7 +190,7 @@ trait CheckAnalysis {
                s"${right.output.length}")
 
           case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
-            s.children.filter(_.output.length != s.children.head.output.length).foreach { child =>
+            s.children.filter(_.output.length != s.children.head.output.length).exists { child =>
               failAnalysis(
                 s"""
                   |Unions can only be performed on tables with the same number of columns,

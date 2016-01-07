@@ -38,7 +38,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
-    //   since they could add/move extra operators between two adjacent Union operators.
+    //   since it can reduce the number of iteration and the other rules could add/move
+    //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", FixedPoint(100),
