@@ -156,8 +156,10 @@ private[spark] object UIUtils extends Logging {
   def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
     <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>

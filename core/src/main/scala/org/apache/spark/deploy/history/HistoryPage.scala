@@ -108,7 +108,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               }
               }
             </a>
-          </div> 
+          </div>
         <script src={UIUtils.prependBaseUri("/static/historypage.js")}> </script>
 
       </div>
