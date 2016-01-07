@@ -19,6 +19,7 @@ package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.nlp.ConditionalRandomField
 import org.apache.spark.mllib.linalg.{VectorUDT}
+import org.apache.spark.mllib.nlp.{CRF, CRFModel}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.{StructType, ArrayType, StructField}
@@ -37,22 +38,23 @@ object ConditionalRandomFieldExample {
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
       // scalastyle:off println
-      System.err.println("Usage: ml.CRFExample <modelFile> <featureFile>")
+      System.err.println("Usage: ml.CRFExample <modelFile> <featureFile> <testFile>")
       // scalastyle:on println
       System.exit(1)
     }
     val template = args(0)
     val feature = args(1)
+    val test = args(2)
 
     // Creates a Spark context and a SQL context
     val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
-    .set(s"spark.yarn.jar",s"/home/hujiayin/git/spark/yarn/target/spark.yarn.jar")
+      .set(s"spark.yarn.jar", s"/home/hujiayin/git/spark/yarn/target/spark.yarn.jar")
 
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
 
     // Loads data
     /*
+    val sqlContext = new SQLContext(sc)
     val rowRDD = sc.textFile(template).filter(_.nonEmpty).map(x => Row(Array(x.split("\t"))))
     val itemType = ScalaReflection.schemaFor[Array[String]].dataType
     val fields = Array(StructField("Values", ArrayType(itemType)))
@@ -74,12 +76,27 @@ object ConditionalRandomFieldExample {
     val crf = new ConditionalRandomField()
     val model = crf.trainRdd(rowRDD, rowRddF, sc)
 
+    val modelPath = "/home/hujiayin/git/CRFConfig/CRFOutput"
+    model.save(sc, modelPath)
 
-    // Shows the result
-    // scalastyle:off println
-    println("CRF expectations:")
-    model.CRFSeries.foreach(println)
-    // scalastyle:on println
+    if (args(2) != "") {
+      val rowRddT = sc.textFile(test).filter(_.nonEmpty).map(_.split("\t"))
+      val modelRDD = sc.parallelize(model.load(sc, modelPath).CRFSeries)
+      val newResult = CRF.verifyCRF(rowRddT, modelRDD)
+
+      var idx: Int = 0
+      var temp: String = ""
+      while (idx < newResult.CRFSeries(0).length) {
+        temp += newResult.CRFSeries(0)(idx)
+        if ((idx + 1) % 2 == 0) {
+          // scalastyle:off println
+          println(temp)
+          // scalastyle:on println
+          temp = ""
+        }
+        idx += 1
+      }
+    }
 
     sc.stop()
   }

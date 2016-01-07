@@ -35,7 +35,6 @@ class ConditionalRandomField {
     template.foreach{row =>
       val t: ArrayBuffer[String] = new ArrayBuffer[String]()
       t.append(row.toString())
-      println(row.toString())
       tArr.append(t.toArray)
     }
     val tRdd = sc.parallelize(tArr)
