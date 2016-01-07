@@ -234,7 +234,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .load(testFile(carsFile))
 
-      cars.write
+      cars.repartition(1).write
         .format("csv")
         .option("header", "true")
         .save(csvDir)
@@ -256,7 +256,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .load(testFile(carsFile))
 
-      cars.write
+      cars.repartition(1).write
         .format("csv")
         .option("header", "true")
         .option("quote", "\"")
