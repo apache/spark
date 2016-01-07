@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{TableIdentifier, CatalystConf, EmptyConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, EmptyConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
@@ -104,7 +104,7 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     val tableName = getTableName(tableIdent)
     val table = tables.get(tableName)
     if (table == null) {
-      throw new NoSuchTableException
+      throw new AnalysisException("Table not found: " + tableName)
     }
     val tableWithQualifiers = Subquery(tableName, table)
 

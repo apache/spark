@@ -30,15 +30,15 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  * sender. The receiver is expected to set a temporary channel handler that will consume the
  * number of bytes this message says the stream has.
  */
-public final class StreamResponse extends ResponseWithBody {
-   public final String streamId;
-   public final long byteCount;
+public final class StreamResponse extends AbstractResponseMessage {
+  public final String streamId;
+  public final long byteCount;
 
-   public StreamResponse(String streamId, long byteCount, ManagedBuffer buffer) {
-     super(buffer, false);
-     this.streamId = streamId;
-     this.byteCount = byteCount;
-   }
+  public StreamResponse(String streamId, long byteCount, ManagedBuffer buffer) {
+    super(buffer, false);
+    this.streamId = streamId;
+    this.byteCount = byteCount;
+  }
 
   @Override
   public Type type() { return Type.StreamResponse; }
@@ -68,7 +68,7 @@ public final class StreamResponse extends ResponseWithBody {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(byteCount, streamId);
+    return Objects.hashCode(byteCount, streamId, body());
   }
 
   @Override
@@ -85,6 +85,7 @@ public final class StreamResponse extends ResponseWithBody {
     return Objects.toStringHelper(this)
       .add("streamId", streamId)
       .add("byteCount", byteCount)
+      .add("body", body())
       .toString();
   }
 

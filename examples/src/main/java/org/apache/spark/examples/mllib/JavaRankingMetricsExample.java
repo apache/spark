@@ -120,8 +120,8 @@ public class JavaRankingMetricsExample {
         }
       }
     );
-    JavaRDD<Tuple2<List<Integer>, List<Integer>>> relevantDocs = userMoviesList.join
-      (userRecommendedList).values();
+    JavaRDD<Tuple2<List<Integer>, List<Integer>>> relevantDocs = userMoviesList.join(
+      userRecommendedList).values();
 
     // Instantiate the metrics object
     RankingMetrics metrics = RankingMetrics.of(relevantDocs);

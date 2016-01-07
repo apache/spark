@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.param.{Param, ParamMap}
@@ -149,6 +149,7 @@ class RFormula(override val uid: String)
 
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
     } else {
@@ -188,6 +189,7 @@ class RFormulaModel private[feature](
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     checkCanTransform(schema)
     val withFeatures = pipelineModel.transformSchema(schema)
     if (hasLabelCol(withFeatures)) {
@@ -307,6 +309,7 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
   }
 
@@ -402,6 +405,7 @@ private class VectorAttributeRewriter(
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     StructType(
       schema.fields.filter(_.name != vectorCol) ++
       schema.fields.filter(_.name == vectorCol))

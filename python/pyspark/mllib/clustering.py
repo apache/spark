@@ -346,7 +346,7 @@ class GaussianMixture(object):
             if initialModel.k != k:
                 raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
                                 % (initialModel.k, k))
-            initialModelWeights = initialModel.weights
+            initialModelWeights = list(initialModel.weights)
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
         java_model = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),

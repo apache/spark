@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import scala.util.Try
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback,
+  GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-
-import scala.util.Try
 
 /**
  * Returns the current date at the start of query evaluation.
@@ -340,6 +340,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
 
   override def dataType: DataType = LongType
+  override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
 
@@ -455,6 +456,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
   }
 
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
@@ -561,6 +563,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
 
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
 
   override def nullSafeEval(start: Any, dayOfW: Any): Any = {
     val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
@@ -832,6 +835,7 @@ case class TruncDate(date: Expression, format: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
   override def prettyName: String = "trunc"
 
   private lazy val truncLevel: Int =

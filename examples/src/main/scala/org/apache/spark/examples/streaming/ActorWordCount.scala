@@ -22,13 +22,13 @@ import scala.collection.mutable.LinkedList
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
+import akka.actor.{actorRef2Scala, Actor, ActorRef, Props}
 
-import org.apache.spark.{SparkConf, SecurityManager}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
-import org.apache.spark.util.AkkaUtils
 import org.apache.spark.streaming.receiver.ActorHelper
+import org.apache.spark.util.AkkaUtils
 
 case class SubscribeReceiver(receiverActor: ActorRef)
 case class UnsubscribeReceiver(receiverActor: ActorRef)

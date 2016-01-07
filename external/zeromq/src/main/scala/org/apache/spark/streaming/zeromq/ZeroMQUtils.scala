@@ -17,8 +17,8 @@
 
 package org.apache.spark.streaming.zeromq
 
-import scala.reflect.ClassTag
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import akka.actor.{Props, SupervisorStrategy}
 import akka.util.ByteString

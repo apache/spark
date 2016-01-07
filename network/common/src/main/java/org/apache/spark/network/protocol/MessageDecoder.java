@@ -63,6 +63,9 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
       case RpcFailure:
         return RpcFailure.decode(in);
 
+      case OneWayMessage:
+        return OneWayMessage.decode(in);
+
       case StreamRequest:
         return StreamRequest.decode(in);
 

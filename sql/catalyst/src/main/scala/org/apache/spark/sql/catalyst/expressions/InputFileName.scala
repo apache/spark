@@ -19,13 +19,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.rdd.SqlNewHadoopRDDState
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Expression that returns the name of the current file being read in using [[SqlNewHadoopRDD]]
  */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the name of the current file being read if available",
+  extended = "> SELECT _FUNC_();\n ''")
 case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = true

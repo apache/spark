@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -80,11 +80,13 @@ class RowEncoderSuite extends SparkFunSuite {
   private val structOfString = new StructType().add("str", StringType)
   private val structOfUDT = new StructType().add("udt", new ExamplePointUDT, false)
   private val arrayOfString = ArrayType(StringType)
+  private val arrayOfNull = ArrayType(NullType)
   private val mapOfString = MapType(StringType, StringType)
   private val arrayOfUDT = ArrayType(new ExamplePointUDT, false)
 
   encodeDecodeTest(
     new StructType()
+      .add("null", NullType)
       .add("boolean", BooleanType)
       .add("byte", ByteType)
       .add("short", ShortType)
@@ -97,15 +99,17 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
-      .add("udt", new ExamplePointUDT, false))
+      .add("udt", new ExamplePointUDT))
 
   encodeDecodeTest(
     new StructType()
+      .add("arrayOfNull", arrayOfNull)
       .add("arrayOfString", arrayOfString)
       .add("arrayOfArrayOfString", ArrayType(arrayOfString))
       .add("arrayOfArrayOfInt", ArrayType(ArrayType(IntegerType)))
       .add("arrayOfMap", ArrayType(mapOfString))
-      .add("arrayOfStruct", ArrayType(structOfString)))
+      .add("arrayOfStruct", ArrayType(structOfString))
+      .add("arrayOfUDT", arrayOfUDT))
 
   encodeDecodeTest(
     new StructType()
@@ -126,18 +130,6 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("structOfArrayAndMap",
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
-
-  test(s"encode/decode: arrayOfUDT") {
-    val schema = new StructType()
-      .add("arrayOfUDT", arrayOfUDT)
-
-    val encoder = RowEncoder(schema)
-
-    val input: Row = Row(Seq(new ExamplePoint(0.1, 0.2), new ExamplePoint(0.3, 0.4)))
-    val row = encoder.toRow(input)
-    val convertedBack = encoder.fromRow(row)
-    assert(input.getSeq[ExamplePoint](0) == convertedBack.getSeq[ExamplePoint](0))
-  }
 
   test(s"encode/decode: Product") {
     val schema = new StructType()

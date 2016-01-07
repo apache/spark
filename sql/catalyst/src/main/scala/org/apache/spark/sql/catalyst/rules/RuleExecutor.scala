@@ -59,7 +59,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
-  protected val batches: Seq[Batch]
+  protected def batches: Seq[Batch]
 
 
   /**

@@ -25,9 +25,9 @@ import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
-import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -529,17 +529,21 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val model: LinearRegressionModel,
-    val diagInvAtWA: Array[Double]) extends Serializable {
+    private val diagInvAtWA: Array[Double]) extends Serializable {
 
   @transient private val metrics = new RegressionMetrics(
     predictions
       .select(predictionCol, labelCol)
-      .map { case Row(pred: Double, label: Double) => (pred, label) } )
+      .map { case Row(pred: Double, label: Double) => (pred, label) },
+    !model.getFitIntercept)
 
   /**
    * Returns the explained variance regression score.
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
@@ -547,6 +551,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
@@ -554,6 +561,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
@@ -561,6 +571,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
@@ -568,6 +581,9 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns R^2^, the coefficient of determination.
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @Since("1.5.0")
   val r2: Double = metrics.r2

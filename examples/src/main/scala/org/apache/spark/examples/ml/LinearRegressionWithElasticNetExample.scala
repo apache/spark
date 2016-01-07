@@ -18,11 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.regression.LinearRegression
 // $example off$
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object LinearRegressionWithElasticNetExample {
 
@@ -33,7 +33,8 @@ object LinearRegressionWithElasticNetExample {
 
     // $example on$
     // Load training data
-    val training = sqlCtx.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val training = sqlCtx.read.format("libsvm")
+      .load("data/mllib/sample_linear_regression_data.txt")
 
     val lr = new LinearRegression()
       .setMaxIter(10)

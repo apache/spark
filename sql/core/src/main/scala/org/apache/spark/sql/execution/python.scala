@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
-import org.apache.spark.{Logging => SparkLogging, TaskContext, Accumulator}
-import org.apache.spark.api.python.{PythonRunner, PythonBroadcast, PythonRDD, SerDeUtil}
+import org.apache.spark.{Accumulator, Logging => SparkLogging, TaskContext}
+import org.apache.spark.api.python.{PythonBroadcast, PythonRDD, PythonRunner, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayBasedMapData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -121,11 +121,13 @@ object EvaluatePython {
 
   def takeAndServe(df: DataFrame, n: Int): Int = {
     registerPicklers()
-    val iter = new SerDeUtil.AutoBatchedPickler(
-      df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
-        EvaluatePython.toJava(row, df.schema)
-      })
-    PythonRDD.serveIterator(iter, s"serve-DataFrame")
+    df.withNewExecutionId {
+      val iter = new SerDeUtil.AutoBatchedPickler(
+        df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
+          EvaluatePython.toJava(row, df.schema)
+        })
+      PythonRDD.serveIterator(iter, s"serve-DataFrame")
+    }
   }
 
   /**
@@ -349,10 +351,6 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
-  override def outputsUnsafeRows: Boolean = false
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
-
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
@@ -398,13 +396,14 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       val unpickle = new Unpickler
       val row = new GenericMutableRow(1)
       val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(output, output)
 
       outputIterator.flatMap { pickedResult =>
         val unpickledBatch = unpickle.loads(pickedResult)
         unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
       }.map { result =>
         row(0) = EvaluatePython.fromJava(result, udf.dataType)
-        joined(queue.poll(), row)
+        resultProj(joined(queue.poll(), row))
       }
     }
   }

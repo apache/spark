@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.util.Random
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, MutableRow, BoundReference}
-import org.apache.spark.sql.types.{DataType, IntegerType}
-
 import scala.collection.mutable
+
 import org.scalatest.Assertions._
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class HyperLogLogPlusPlusSuite extends SparkFunSuite {
 

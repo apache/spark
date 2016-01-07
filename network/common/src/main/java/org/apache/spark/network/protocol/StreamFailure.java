@@ -26,7 +26,7 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 /**
  * Message indicating an error when transferring a stream.
  */
-public final class StreamFailure implements ResponseMessage {
+public final class StreamFailure extends AbstractMessage implements ResponseMessage {
   public final String streamId;
   public final String error;
 

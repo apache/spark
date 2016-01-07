@@ -29,14 +29,17 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.{SQLContext, SQLConf}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.util.{ShutdownHookManager, Utils}
-import org.apache.spark.{SparkConf, SparkContext}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
@@ -87,7 +90,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     dir
   }
 
-  private lazy val temporaryConfig = newTemporaryConfiguration()
+  private lazy val temporaryConfig = newTemporaryConfiguration(useInMemoryDerby = false)
 
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] = {
@@ -410,7 +413,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     try {
       // HACK: Hive is too noisy by default.
       org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
-        log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
+        val logger = log.asInstanceOf[org.apache.log4j.Logger]
+        if (!logger.getName.contains("org.apache.spark")) {
+          logger.setLevel(org.apache.log4j.Level.WARN)
+        }
       }
 
       cacheManager.clearCache()
@@ -443,16 +449,30 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       defaultOverrides()
 
       runSqlHive("USE default")
-
-      // Just loading src makes a lot of tests pass.  This is because some tests do something like
-      // drop an index on src at the beginning.  Since we just pass DDL to hive this bypasses our
-      // Analyzer and thus the test table auto-loading mechanism.
-      // Remove after we handle more DDL operations natively.
-      loadTestTable("src")
-      loadTestTable("srcpart")
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
+    }
+  }
+
+  @transient
+  override protected[sql] lazy val functionRegistry = new TestHiveFunctionRegistry(
+    org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtin.copy(), this.executionHive)
+}
+
+private[hive] class TestHiveFunctionRegistry(fr: SimpleFunctionRegistry, client: ClientWrapper)
+  extends HiveFunctionRegistry(fr, client) {
+
+  private val removedFunctions =
+    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
+
+  def unregisterFunction(name: String): Unit = {
+    fr.functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
+  }
+
+  def restore(): Unit = {
+    removedFunctions.foreach {
+      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
     }
   }
 }

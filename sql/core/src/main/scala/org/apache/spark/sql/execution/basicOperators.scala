@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.{HashPartitioner, SparkEnv}
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,19 +26,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
-import org.apache.spark.{HashPartitioner, SparkEnv}
-
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
 
   override private[sql] lazy val metrics = Map(
     "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
-
-  override def outputsUnsafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -79,12 +75,6 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-
-  override def canProcessUnsafeRows: Boolean = true
-
-  override def canProcessSafeRows: Boolean = true
 }
 
 /**
@@ -107,10 +97,6 @@ case class Sample(
 {
   override def output: Seq[Attribute] = child.output
 
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
-
   protected override def doExecute(): RDD[InternalRow] = {
     if (withReplacement) {
       // Disable gap sampling since the gap sampling method buffers two rows internally,
@@ -126,15 +112,76 @@ case class Sample(
   }
 }
 
+case class Range(
+    start: Long,
+    step: Long,
+    numSlices: Int,
+    numElements: BigInt,
+    output: Seq[Attribute])
+  extends LeafNode {
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    sqlContext
+      .sparkContext
+      .parallelize(0 until numSlices, numSlices)
+      .mapPartitionsWithIndex((i, _) => {
+        val partitionStart = (i * numElements) / numSlices * step + start
+        val partitionEnd = (((i + 1) * numElements) / numSlices) * step + start
+        def getSafeMargin(bi: BigInt): Long =
+          if (bi.isValidLong) {
+            bi.toLong
+          } else if (bi > 0) {
+            Long.MaxValue
+          } else {
+            Long.MinValue
+          }
+        val safePartitionStart = getSafeMargin(partitionStart)
+        val safePartitionEnd = getSafeMargin(partitionEnd)
+        val rowSize = UnsafeRow.calculateBitSetWidthInBytes(1) + LongType.defaultSize
+        val unsafeRow = UnsafeRow.createFromByteArray(rowSize, 1)
+
+        new Iterator[InternalRow] {
+          private[this] var number: Long = safePartitionStart
+          private[this] var overflow: Boolean = false
+
+          override def hasNext =
+            if (!overflow) {
+              if (step > 0) {
+                number < safePartitionEnd
+              } else {
+                number > safePartitionEnd
+              }
+            } else false
+
+          override def next() = {
+            val ret = number
+            number += step
+            if (number < ret ^ step < 0) {
+              // we have Long.MaxValue + Long.MaxValue < Long.MaxValue
+              // and Long.MinValue + Long.MinValue > Long.MinValue, so iff the step causes a step
+              // back, we are pretty sure that we have an overflow.
+              overflow = true
+            }
+
+            unsafeRow.setLong(0, ret)
+            unsafeRow
+          }
+        }
+      })
+  }
+}
+
 /**
  * Union two plans, without a distinct. This is UNION ALL in SQL.
  */
 case class Union(children: Seq[SparkPlan]) extends SparkPlan {
-  // TODO: attributes output by union should be distinct for nullability purposes
-  override def output: Seq[Attribute] = children.head.output
-  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
+  override def output: Seq[Attribute] = {
+    children.tail.foldLeft(children.head.output) { case (currentOutput, child) =>
+      currentOutput.zip(child.output).map { case (a1, a2) =>
+        a1.withNullability(a1.nullable || a2.nullable)
+      }
+    }
+  }
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
 }
@@ -201,12 +248,14 @@ case class TakeOrderedAndProject(
   // and this ordering needs to be created on the driver in order to be passed into Spark core code.
   private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
 
-  // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
-  @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
-
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    projection.map(data.map(_)).getOrElse(data)
+    if (projectList.isDefined) {
+      val proj = UnsafeProjection.create(projectList.get, child.output)
+      data.map(r => proj(r).copy())
+    } else {
+      data
+    }
   }
 
   override def executeCollect(): Array[InternalRow] = {
@@ -244,8 +293,6 @@ case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().coalesce(numPartitions, shuffle = false)
   }
-
-  override def canProcessUnsafeRows: Boolean = true
 }
 
 /**
@@ -292,6 +339,7 @@ case class MapPartitions[T, U](
     uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
+  override def producedAttributes: AttributeSet = outputSet
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -310,10 +358,7 @@ case class AppendColumns[T, U](
     uEncoder: ExpressionEncoder[U],
     newColumns: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
-
-  // We are using an unsafe combiner.
-  override def canProcessSafeRows: Boolean = false
-  override def canProcessUnsafeRows: Boolean = true
+  override def producedAttributes: AttributeSet = AttributeSet(newColumns)
 
   override def output: Seq[Attribute] = child.output ++ newColumns
 
@@ -342,6 +387,7 @@ case class MapGroups[K, T, U](
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
+  override def producedAttributes: AttributeSet = outputSet
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(groupingAttributes) :: Nil
@@ -370,17 +416,18 @@ case class MapGroups[K, T, U](
  * iterators containing all elements in the group from left and right side.
  * The result of this function is encoded and flattened before being output.
  */
-case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
-    kEncoder: ExpressionEncoder[K],
+case class CoGroup[Key, Left, Right, Result](
+    func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+    keyEnc: ExpressionEncoder[Key],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
-    rEncoder: ExpressionEncoder[R],
+    resultEnc: ExpressionEncoder[Result],
     output: Seq[Attribute],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
+  override def producedAttributes: AttributeSet = outputSet
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
@@ -392,15 +439,17 @@ case class CoGroup[K, Left, Right, R](
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
-      val groupKeyEncoder = kEncoder.bind(leftGroup)
+      val boundKeyEnc = keyEnc.bind(leftGroup)
+      val boundLeftEnc = leftEnc.bind(left.output)
+      val boundRightEnc = rightEnc.bind(right.output)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
         case (key, leftResult, rightResult) =>
           val result = func(
-            groupKeyEncoder.fromRow(key),
-            leftResult.map(leftEnc.fromRow),
-            rightResult.map(rightEnc.fromRow))
-          result.map(rEncoder.toRow)
+            boundKeyEnc.fromRow(key),
+            leftResult.map(boundLeftEnc.fromRow),
+            rightResult.map(boundRightEnc.fromRow))
+          result.map(resultEnc.toRow)
       }
     }
   }

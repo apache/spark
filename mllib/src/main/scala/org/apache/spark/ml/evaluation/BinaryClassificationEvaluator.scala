@@ -20,7 +20,7 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -33,14 +33,13 @@ import org.apache.spark.sql.types.DoubleType
 @Since("1.2.0")
 @Experimental
 class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Evaluator with HasRawPredictionCol with HasLabelCol {
+  extends Evaluator with HasRawPredictionCol with HasLabelCol with DefaultParamsWritable {
 
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("binEval"))
 
   /**
-   * param for metric name in evaluation
-   * Default: areaUnderROC
+   * param for metric name in evaluation (supports `"areaUnderROC"` (default), `"areaUnderPR"`)
    * @group param
    */
   @Since("1.2.0")
@@ -104,4 +103,11 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object BinaryClassificationEvaluator extends DefaultParamsReadable[BinaryClassificationEvaluator] {
+
+  @Since("1.6.0")
+  override def load(path: String): BinaryClassificationEvaluator = super.load(path)
 }

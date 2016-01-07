@@ -201,7 +201,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     }
 
     def save(sc: SparkContext, path: String, model: DecisionTreeModel): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
@@ -242,7 +242,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       // Load Parquet data.
       val dataRDD = sqlContext.read.parquet(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
