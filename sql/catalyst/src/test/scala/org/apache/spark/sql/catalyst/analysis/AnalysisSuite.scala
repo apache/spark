@@ -220,6 +220,24 @@ class AnalysisSuite extends AnalysisTest {
     // checkUDF(udf4, expected4)
   }
 
+  test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
+    val a = testRelation2.output(0)
+    val c = testRelation2.output(2)
+    val alias1 = a.as("a1")
+    val alias2 = c.as("a2")
+    val alias3 = count(a).as("a3")
+
+    val plan = testRelation2
+      .groupBy('a, 'c)('a.as("a1"), 'c.as("a2"), count('a).as("a3"))
+      .orderBy('a1.asc, 'c.asc)
+
+    val expected = testRelation2
+      .groupBy(a, c)(alias1, alias2, alias3)
+      .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
+      .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
+    checkAnalysis(plan, expected)
+  }
+
   test("analyzer should replace current_timestamp with literals") {
     val in = Project(Seq(Alias(CurrentTimestamp(), "a")(), Alias(CurrentTimestamp(), "b")()),
       LocalRelation())
@@ -255,5 +273,11 @@ class AnalysisSuite extends AnalysisTest {
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
+  }
+
+  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+    val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
+    val plan = relation.select(CaseWhen(Seq(Literal(true), 'a, 'b)).as("val"))
+    assertAnalysisSuccess(plan)
   }
 }

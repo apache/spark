@@ -20,7 +20,7 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DoubleType, FloatType}
 @Since("1.4.0")
 @Experimental
 final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Evaluator with HasPredictionCol with HasLabelCol {
+  extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regEval"))
@@ -73,10 +73,15 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   override def evaluate(dataset: DataFrame): Double = {
     val schema = dataset.schema
+    val predictionColName = $(predictionCol)
     val predictionType = schema($(predictionCol)).dataType
-    require(predictionType == FloatType || predictionType == DoubleType)
+    require(predictionType == FloatType || predictionType == DoubleType,
+      s"Prediction column $predictionColName must be of type float or double, " +
+        s" but not $predictionType")
+    val labelColName = $(labelCol)
     val labelType = schema($(labelCol)).dataType
-    require(labelType == FloatType || labelType == DoubleType)
+    require(labelType == FloatType || labelType == DoubleType,
+      s"Label column $labelColName must be of type float or double, but not $labelType")
 
     val predictionAndLabels = dataset
       .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
@@ -103,4 +108,11 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): RegressionEvaluator = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object RegressionEvaluator extends DefaultParamsReadable[RegressionEvaluator] {
+
+  @Since("1.6.0")
+  override def load(path: String): RegressionEvaluator = super.load(path)
 }

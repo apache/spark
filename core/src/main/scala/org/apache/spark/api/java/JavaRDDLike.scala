@@ -18,8 +18,8 @@
 package org.apache.spark.api.java
 
 import java.{lang => jl}
-import java.lang.{Iterable => JIterable, Long => JLong}
-import java.util.{Comparator, List => JList, Iterator => JIterator}
+import java.lang.{Iterable => JIterable}
+import java.util.{Comparator, Iterator => JIterator, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -28,6 +28,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark._
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
@@ -56,11 +57,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  @deprecated("Use partitions() instead.", "1.1.0")
-  def splits: JList[Partition] = rdd.partitions.toSeq.asJava
-
   /** Set of partitions in this RDD. */
   def partitions: JList[Partition] = rdd.partitions.toSeq.asJava
+
+  /** Return the number of partitions in this RDD. */
+  @Since("1.6.0")
+  def getNumPartitions: Int = rdd.getNumPartitions
 
   /** The partitioner of this RDD. */
   def partitioner: Optional[Partitioner] = JavaUtils.optionToOptional(rdd.partitioner)
@@ -303,8 +305,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    */
-  def zipWithUniqueId(): JavaPairRDD[T, JLong] = {
-    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, JLong]]
+  def zipWithUniqueId(): JavaPairRDD[T, jl.Long] = {
+    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, jl.Long]]
   }
 
   /**
@@ -314,8 +316,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
    */
-  def zipWithIndex(): JavaPairRDD[T, JLong] = {
-    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, JLong]]
+  def zipWithIndex(): JavaPairRDD[T, jl.Long] = {
+    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, jl.Long]]
   }
 
   // Actions (launch a job to return a value to the user program)
@@ -340,13 +342,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def toLocalIterator(): JIterator[T] =
      asJavaIteratorConverter(rdd.toLocalIterator).asJava
-
-  /**
-   * Return an array that contains all of the elements in this RDD.
-   * @deprecated As of Spark 1.0.0, toArray() is deprecated, use {@link #collect()} instead
-   */
-  @deprecated("use collect()", "1.0.0")
-  def toArray(): JList[T] = collect()
 
   /**
    * Return an array that contains all of the elements in a specific partition of this RDD.
@@ -453,7 +448,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
   def countByValue(): java.util.Map[T, jl.Long] =
-    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new jl.Long(x._2)))))
+    mapAsSerializableJavaMap(rdd.countByValue().mapValues(jl.Long.valueOf))
 
   /**
    * (Experimental) Approximate version of countByValue().
@@ -556,7 +551,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Returns the top k (largest) elements from this RDD as defined by
-   * the specified Comparator[T].
+   * the specified Comparator[T] and maintains the order.
    * @param num k, the number of top elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
@@ -567,7 +562,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Returns the top k (largest) elements from this RDD using the
-   * natural ordering for T.
+   * natural ordering for T and maintains the order.
    * @param num k, the number of top elements to return
    * @return an array of top elements
    */
@@ -636,8 +631,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * The asynchronous version of `count`, which returns a
    * future for counting the number of elements in this RDD.
    */
-  def countAsync(): JavaFutureAction[JLong] = {
-    new JavaFutureActionWrapper[Long, JLong](rdd.countAsync(), JLong.valueOf)
+  def countAsync(): JavaFutureAction[jl.Long] = {
+    new JavaFutureActionWrapper[Long, jl.Long](rdd.countAsync(), jl.Long.valueOf)
   }
 
   /**

@@ -37,7 +37,7 @@ public class JavaLinearRegressionWithElasticNetExample {
     // $example on$
     // Load training data
     DataFrame training = sqlContext.read().format("libsvm")
-      .load("data/mllib/sample_libsvm_data.txt");
+      .load("data/mllib/sample_linear_regression_data.txt");
 
     LinearRegression lr = new LinearRegression()
       .setMaxIter(10)

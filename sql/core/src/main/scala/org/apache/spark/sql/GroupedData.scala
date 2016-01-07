@@ -21,12 +21,11 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedAlias, UnresolvedAttribute, Star}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Pivot, Rollup, Cube, Aggregate}
-import org.apache.spark.sql.types.{StringType, NumericType}
-
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
+import org.apache.spark.sql.types.NumericType
 
 /**
  * :: Experimental ::
@@ -58,10 +57,10 @@ class GroupedData protected[sql](
           df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case GroupedData.RollupType =>
         DataFrame(
-          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aliasedAgg))
+          df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.CubeType =>
         DataFrame(
-          df.sqlContext, Cube(groupingExprs, df.logicalPlan, aliasedAgg))
+          df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         DataFrame(
@@ -282,74 +281,96 @@ class GroupedData protected[sql](
   }
 
   /**
-    * (Scala-specific) Pivots a column of the current [[DataFrame]] and preform the specified
-    * aggregation.
-    * {{{
-    *   // Compute the sum of earnings for each year by course with each course as a separate column
-    *   df.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings"))
-    *   // Or without specifying column values
-    *   df.groupBy($"year").pivot($"course").agg(sum($"earnings"))
-    * }}}
-    * @param pivotColumn Column to pivot
-    * @param values Optional list of values of pivotColumn that will be translated to columns in the
-    *               output data frame. If values are not provided the method with do an immediate
-    *               call to .distinct() on the pivot column.
-    * @since 1.6.0
-    */
-  @scala.annotation.varargs
-  def pivot(pivotColumn: Column, values: Column*): GroupedData = groupType match {
-    case _: GroupedData.PivotType =>
-      throw new UnsupportedOperationException("repeated pivots are not supported")
-    case GroupedData.GroupByType =>
-      val pivotValues = if (values.nonEmpty) {
-        values.map {
-          case Column(literal: Literal) => literal
-          case other =>
-            throw new UnsupportedOperationException(
-              s"The values of a pivot must be literals, found $other")
-        }
-      } else {
-        // This is to prevent unintended OOM errors when the number of distinct values is large
-        val maxValues = df.sqlContext.conf.getConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
-        // Get the distinct values of the column and sort them so its consistent
-        val values = df.select(pivotColumn)
-          .distinct()
-          .sort(pivotColumn)
-          .map(_.get(0))
-          .take(maxValues + 1)
-          .map(Literal(_)).toSeq
-        if (values.length > maxValues) {
-          throw new RuntimeException(
-            s"The pivot column $pivotColumn has more than $maxValues distinct values, " +
-              "this could indicate an error. " +
-              "If this was intended, set \"" + SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key + "\" " +
-              s"to at least the number of distinct values of the pivot column.")
-        }
-        values
-      }
-      new GroupedData(df, groupingExprs, GroupedData.PivotType(pivotColumn.expr, pivotValues))
-    case _ =>
-      throw new UnsupportedOperationException("pivot is only supported after a groupBy")
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+   * There are two versions of pivot function: one that requires the caller to specify the list
+   * of distinct values to pivot on, and one that does not. The latter is more concise but less
+   * efficient, because Spark needs to first compute the list of distinct values internally.
+   *
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
+   *   df.groupBy("year").pivot("course", Seq("dotNET", "Java")).sum("earnings")
+   *
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy("year").pivot("course").sum("earnings")
+   * }}}
+   *
+   * @param pivotColumn Name of the column to pivot.
+   * @since 1.6.0
+   */
+  def pivot(pivotColumn: String): GroupedData = {
+    // This is to prevent unintended OOM errors when the number of distinct values is large
+    val maxValues = df.sqlContext.conf.getConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
+    // Get the distinct values of the column and sort them so its consistent
+    val values = df.select(pivotColumn)
+      .distinct()
+      .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
+      .map(_.get(0))
+      .take(maxValues + 1)
+      .toSeq
+
+    if (values.length > maxValues) {
+      throw new AnalysisException(
+        s"The pivot column $pivotColumn has more than $maxValues distinct values, " +
+          "this could indicate an error. " +
+          s"If this was intended, set ${SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key} " +
+          "to at least the number of distinct values of the pivot column.")
+    }
+
+    pivot(pivotColumn, values)
   }
 
   /**
-    * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
-    * {{{
-    *   // Compute the sum of earnings for each year by course with each course as a separate column
-    *   df.groupBy("year").pivot("course", "dotNET", "Java").sum("earnings")
-    *   // Or without specifying column values
-    *   df.groupBy("year").pivot("course").sum("earnings")
-    * }}}
-    * @param pivotColumn Column to pivot
-    * @param values Optional list of values of pivotColumn that will be translated to columns in the
-    *               output data frame. If values are not provided the method with do an immediate
-    *               call to .distinct() on the pivot column.
-    * @since 1.6.0
-    */
-  @scala.annotation.varargs
-  def pivot(pivotColumn: String, values: Any*): GroupedData = {
-    val resolvedPivotColumn = Column(df.resolve(pivotColumn))
-    pivot(resolvedPivotColumn, values.map(functions.lit): _*)
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+   * There are two versions of pivot function: one that requires the caller to specify the list
+   * of distinct values to pivot on, and one that does not. The latter is more concise but less
+   * efficient, because Spark needs to first compute the list of distinct values internally.
+   *
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
+   *   df.groupBy("year").pivot("course", Seq("dotNET", "Java")).sum("earnings")
+   *
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy("year").pivot("course").sum("earnings")
+   * }}}
+   *
+   * @param pivotColumn Name of the column to pivot.
+   * @param values List of values that will be translated to columns in the output DataFrame.
+   * @since 1.6.0
+   */
+  def pivot(pivotColumn: String, values: Seq[Any]): GroupedData = {
+    groupType match {
+      case GroupedData.GroupByType =>
+        new GroupedData(
+          df,
+          groupingExprs,
+          GroupedData.PivotType(df.resolve(pivotColumn), values.map(Literal.apply)))
+      case _: GroupedData.PivotType =>
+        throw new UnsupportedOperationException("repeated pivots are not supported")
+      case _ =>
+        throw new UnsupportedOperationException("pivot is only supported after a groupBy")
+    }
+  }
+
+  /**
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+   * There are two versions of pivot function: one that requires the caller to specify the list
+   * of distinct values to pivot on, and one that does not. The latter is more concise but less
+   * efficient, because Spark needs to first compute the list of distinct values internally.
+   *
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
+   *   df.groupBy("year").pivot("course", Arrays.<Object>asList("dotNET", "Java")).sum("earnings");
+   *
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy("year").pivot("course").sum("earnings");
+   * }}}
+   *
+   * @param pivotColumn Name of the column to pivot.
+   * @param values List of values that will be translated to columns in the output DataFrame.
+   * @since 1.6.0
+   */
+  def pivot(pivotColumn: String, values: java.util.List[Any]): GroupedData = {
+    pivot(pivotColumn, values.asScala)
   }
 }
 

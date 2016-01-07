@@ -1,0 +1,75 @@
+- text: Data types
+  url: mllib-data-types.html
+- text: Basic statistics
+  url: mllib-statistics.html
+  subitems:
+    - text: Summary statistics
+      url: mllib-statistics.html#summary-statistics
+    - text: Correlations
+      url: mllib-statistics.html#correlations
+    - text: Stratified sampling
+      url: mllib-statistics.html#stratified-sampling
+    - text: Hypothesis testing
+      url: mllib-statistics.html#hypothesis-testing
+    - text: Random data generation
+      url: mllib-statistics.html#random-data-generation
+- text: Classification and regression
+  url: mllib-classification-regression.html
+  subitems:
+    - text: Linear models (SVMs, logistic regression, linear regression)
+      url: mllib-linear-methods.html
+    - text: Naive Bayes
+      url: mllib-naive-bayes.html
+    - text: decision trees
+      url: mllib-decision-tree.html
+    - text: ensembles of trees (Random Forests and Gradient-Boosted Trees)
+      url: mllib-ensembles.html
+    - text: isotonic regression
+      url: mllib-isotonic-regression.html
+- text: Collaborative filtering
+  url: mllib-collaborative-filtering.html
+  subitems:
+    - text: alternating least squares (ALS)
+      url: mllib-collaborative-filtering.html#collaborative-filtering
+- text: Clustering
+  url: mllib-clustering.html
+  subitems:
+    - text: k-means
+      url: mllib-clustering.html#k-means
+    - text: Gaussian mixture
+      url: mllib-clustering.html#gaussian-mixture
+    - text: power iteration clustering (PIC)
+      url: mllib-clustering.html#power-iteration-clustering-pic
+    - text: latent Dirichlet allocation (LDA)
+      url: mllib-clustering.html#latent-dirichlet-allocation-lda
+    - text: streaming k-means
+      url: mllib-clustering.html#streaming-k-means
+- text: Dimensionality reduction
+  url: mllib-dimensionality-reduction.html
+  subitems:
+    - text: singular value decomposition (SVD)
+      url: mllib-dimensionality-reduction.html#singular-value-decomposition-svd
+    - text: principal component analysis (PCA)
+      url: mllib-dimensionality-reduction.html#principal-component-analysis-pca
+- text: Feature extraction and transformation
+  url: mllib-feature-extraction.html
+- text: Frequent pattern mining
+  url: mllib-frequent-pattern-mining.html
+  subitems:
+    - text: FP-growth
+      url: mllib-frequent-pattern-mining.html#fp-growth
+    - text: association rules
+      url: mllib-frequent-pattern-mining.html#association-rules
+    - text: PrefixSpan
+      url: mllib-frequent-pattern-mining.html#prefix-span
+- text: Evaluation metrics
+  url: mllib-evaluation-metrics.html
+- text: PMML model export
+  url: mllib-pmml-model-export.html
+- text: Optimization (developer)
+  url: mllib-optimization.html
+  subitems:
+    - text: stochastic gradient descent
+      url: mllib-optimization.html#stochastic-gradient-descent-sgd
+    - text: limited-memory BFGS (L-BFGS)
+      url: mllib-optimization.html#limited-memory-bfgs-l-bfgs

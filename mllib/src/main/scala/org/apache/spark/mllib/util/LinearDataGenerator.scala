@@ -24,7 +24,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{BLAS, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
@@ -131,35 +131,27 @@ object LinearDataGenerator {
       eps: Double,
       sparsity: Double): Seq[LabeledPoint] = {
     require(0.0 <= sparsity && sparsity <= 1.0)
+
     val rnd = new Random(seed)
-    val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(rnd.nextDouble()))
+    def rndElement(i: Int) = {(rnd.nextDouble() - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)}
 
-    val sparseRnd = new Random(seed)
-    x.foreach { v =>
-      var i = 0
-      val len = v.length
-      while (i < len) {
-        if (sparseRnd.nextDouble() < sparsity) {
-          v(i) = 0.0
-        } else {
-          v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
-        }
-        i += 1
-      }
-    }
-
-    val y = x.map { xi =>
-      blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
-    }
-
-    y.zip(x).map { p =>
-      if (sparsity == 0.0) {
+    if (sparsity == 0.0) {
+      (0 until nPoints).map { _ =>
+        val features = Vectors.dense(weights.indices.map { rndElement(_) }.toArray)
+        val label = BLAS.dot(Vectors.dense(weights), features) +
+          intercept + eps * rnd.nextGaussian()
         // Return LabeledPoints with DenseVector
-        LabeledPoint(p._1, Vectors.dense(p._2))
-      } else {
+        LabeledPoint(label, features)
+      }
+    } else {
+      (0 until nPoints).map { _ =>
+        val indices = weights.indices.filter { _ => rnd.nextDouble() <= sparsity}
+        val values = indices.map { rndElement(_) }
+        val features = Vectors.sparse(weights.length, indices.toArray, values.toArray)
+        val label = BLAS.dot(Vectors.dense(weights), features) +
+          intercept + eps * rnd.nextGaussian()
         // Return LabeledPoints with SparseVector
-        LabeledPoint(p._1, Vectors.dense(p._2).toSparse)
+        LabeledPoint(label, features)
       }
     }
   }

@@ -1332,12 +1332,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   public void testUpdateStateByKeyWithInitial() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
 
-    List<Tuple2<String, Integer>> initial = Arrays.asList (
+    List<Tuple2<String, Integer>> initial = Arrays.asList(
         new Tuple2<>("california", 1),
             new Tuple2<>("new york", 2));
 
     JavaRDD<Tuple2<String, Integer>> tmpRDD = ssc.sparkContext().parallelize(initial);
-    JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD (tmpRDD);
+    JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD(tmpRDD);
 
     List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
         Arrays.asList(new Tuple2<>("california", 5),

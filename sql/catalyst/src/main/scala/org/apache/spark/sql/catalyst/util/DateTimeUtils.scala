@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.{TimeZone, Calendar}
+import java.util.{Calendar, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
 import org.apache.spark.unsafe.types.UTF8String
@@ -325,6 +325,11 @@ object DateTimeUtils {
     if (!justTime && (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 ||
         segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) {
       return None
+    }
+
+    // Instead of return None, we truncate the fractional seconds to prevent inserting NULL
+    if (segments(6) > 999999) {
+      segments(6) = segments(6).toString.take(6).toInt
     }
 
     if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||

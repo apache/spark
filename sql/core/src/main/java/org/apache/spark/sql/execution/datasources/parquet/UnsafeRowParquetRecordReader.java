@@ -21,6 +21,20 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.parquet.Preconditions;
+import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.column.Dictionary;
+import org.apache.parquet.column.Encoding;
+import org.apache.parquet.column.page.*;
+import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.schema.OriginalType;
+import org.apache.parquet.schema.PrimitiveType;
+import org.apache.parquet.schema.Type;
+
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
@@ -28,27 +42,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.parquet.column.ValuesType.DEFINITION_LEVEL;
-import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
-import static org.apache.parquet.column.ValuesType.VALUES;
-
-import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.parquet.Preconditions;
-import org.apache.parquet.column.ColumnDescriptor;
-import org.apache.parquet.column.Dictionary;
-import org.apache.parquet.column.Encoding;
-import org.apache.parquet.column.page.DataPage;
-import org.apache.parquet.column.page.DataPageV1;
-import org.apache.parquet.column.page.DataPageV2;
-import org.apache.parquet.column.page.DictionaryPage;
-import org.apache.parquet.column.page.PageReadStore;
-import org.apache.parquet.column.page.PageReader;
-import org.apache.parquet.column.values.ValuesReader;
-import org.apache.parquet.io.api.Binary;
-import org.apache.parquet.schema.OriginalType;
-import org.apache.parquet.schema.PrimitiveType;
-import org.apache.parquet.schema.Type;
+import static org.apache.parquet.column.ValuesType.*;
 
 /**
  * A specialized RecordReader that reads into UnsafeRows directly using the Parquet column APIs.
@@ -109,20 +103,61 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   private static final int DEFAULT_VAR_LEN_SIZE = 32;
 
   /**
+   * Tries to initialize the reader for this split. Returns true if this reader supports reading
+   * this split and false otherwise.
+   */
+  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext) {
+    try {
+      initialize(inputSplit, taskAttemptContext);
+      return true;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
    * Implementation of RecordReader API.
    */
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
     super.initialize(inputSplit, taskAttemptContext);
+    initializeInternal();
+  }
 
+  /**
+   * Utility API that will read all the data in path. This circumvents the need to create Hadoop
+   * objects to use this class. `columns` can contain the list of columns to project.
+   */
+  @Override
+  public void initialize(String path, List<String> columns) throws IOException {
+    super.initialize(path, columns);
+    initializeInternal();
+  }
+
+  @Override
+  public boolean nextKeyValue() throws IOException, InterruptedException {
+    if (batchIdx >= numBatched) {
+      if (!loadBatch()) return false;
+    }
+    ++batchIdx;
+    return true;
+  }
+
+  @Override
+  public UnsafeRow getCurrentValue() throws IOException, InterruptedException {
+    return rows[batchIdx - 1];
+  }
+
+  @Override
+  public float getProgress() throws IOException, InterruptedException {
+    return (float) rowsReturned / totalRowCount;
+  }
+
+  private void initializeInternal() throws IOException {
     /**
      * Check that the requested schema is supported.
      */
-    if (requestedSchema.getFieldCount() == 0) {
-      // TODO: what does this mean?
-      throw new IOException("Empty request schema not supported.");
-    }
     int numVarLenFields = 0;
     originalTypes = new OriginalType[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
@@ -168,32 +203,12 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     rowWriters = new UnsafeRowWriter[rows.length];
 
     for (int i = 0; i < rows.length; ++i) {
-      rows[i] = new UnsafeRow();
+      rows[i] = new UnsafeRow(requestedSchema.getFieldCount());
       rowWriters[i] = new UnsafeRowWriter();
       BufferHolder holder = new BufferHolder(rowByteSize);
       rowWriters[i].initialize(rows[i], holder, requestedSchema.getFieldCount());
-      rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, requestedSchema.getFieldCount(),
-          holder.buffer.length);
+      rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, holder.buffer.length);
     }
-  }
-
-  @Override
-  public boolean nextKeyValue() throws IOException, InterruptedException {
-    if (batchIdx >= numBatched) {
-      if (!loadBatch()) return false;
-    }
-    ++batchIdx;
-    return true;
-  }
-
-  @Override
-  public UnsafeRow getCurrentValue() throws IOException, InterruptedException {
-    return rows[batchIdx - 1];
-  }
-
-  @Override
-  public float getProgress() throws IOException, InterruptedException {
-    return (float) rowsReturned / totalRowCount;
   }
 
   /**
@@ -248,9 +263,19 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         case INT96:
           throw new IOException("Unsupported " + columnReaders[i].descriptor.getType());
       }
-      numBatched = num;
-      batchIdx = 0;
     }
+
+    numBatched = num;
+    batchIdx = 0;
+
+    // Update the total row lengths if the schema contained variable length. We did not maintain
+    // this as we populated the columns.
+    if (containsVarLenFields) {
+      for (int i = 0; i < numBatched; ++i) {
+        rows[i].setTotalSize(rowWriters[i].holder().totalSize());
+      }
+    }
+
     return true;
   }
 
@@ -319,13 +344,15 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     for (int n = 0; n < num; ++n) {
       if (columnReaders[col].next()) {
         ByteBuffer bytes = columnReaders[col].nextBinary().toByteBuffer();
-        int len = bytes.limit() - bytes.position();
+        int len = bytes.remaining();
         if (originalTypes[col] == OriginalType.UTF8) {
-          UTF8String str = UTF8String.fromBytes(bytes.array(), bytes.position(), len);
+          UTF8String str =
+              UTF8String.fromBytes(bytes.array(), bytes.arrayOffset() + bytes.position(), len);
           rowWriters[n].write(col, str);
         } else {
-          rowWriters[n].write(col, bytes.array(), bytes.position(), len);
+          rowWriters[n].write(col, bytes.array(), bytes.arrayOffset() + bytes.position(), len);
         }
+        rows[n].setNotNullAt(col);
       } else {
         rows[n].setNullAt(col);
       }

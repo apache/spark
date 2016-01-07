@@ -51,7 +51,7 @@ else:
     raw_input = input
     xrange = range
 
-SPARK_EC2_VERSION = "1.5.0"
+SPARK_EC2_VERSION = "1.6.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -72,7 +72,10 @@ VALID_SPARK_VERSIONS = set([
     "1.3.1",
     "1.4.0",
     "1.4.1",
-    "1.5.0"
+    "1.5.0",
+    "1.5.1",
+    "1.5.2",
+    "1.6.0",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -87,7 +90,10 @@ SPARK_TACHYON_MAP = {
     "1.3.1": "0.5.0",
     "1.4.0": "0.6.4",
     "1.4.1": "0.6.4",
-    "1.5.0": "0.7.1"
+    "1.5.0": "0.7.1",
+    "1.5.1": "0.7.1",
+    "1.5.2": "0.7.1",
+    "1.6.0": "0.8.2",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
@@ -595,7 +601,7 @@ def launch_cluster(conn, opts, cluster_name):
             dev = BlockDeviceType()
             dev.ephemeral_name = 'ephemeral%d' % i
             # The first ephemeral drive is /dev/sdb.
-            name = '/dev/sd' + string.letters[i + 1]
+            name = '/dev/sd' + string.ascii_letters[i + 1]
             block_map[name] = dev
 
     # Launch slaves
@@ -1242,6 +1248,10 @@ def get_ip_address(instance, private_ips=False):
 def get_dns_name(instance, private_ips=False):
     dns = instance.public_dns_name if not private_ips else \
         instance.private_ip_address
+    if not dns:
+        raise UsageError("Failed to determine hostname of {0}.\n"
+                         "Please check that you provided --private-ips if "
+                         "necessary".format(instance))
     return dns
 
 
