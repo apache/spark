@@ -53,7 +53,8 @@ class GenericAccumulable[RR, R, T] private[spark] (
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean,
-    @transient process: R => RR)
+    @transient process: R => RR,
+    consistent: Boolean)
   extends Serializable {
 
   val id: Long = Accumulators.newId
@@ -70,6 +71,12 @@ class GenericAccumulable[RR, R, T] private[spark] (
    * reported correctly.
    */
   private[spark] def isInternal: Boolean = internal
+
+  /**
+   * If this [[Accumulable]] is consistent.
+   * Consistent accumulators will only be added to when a full partition is processed.
+   */
+  private[spark] def isConsistent: Boolean = consistent
 
   /**
    * Add more data to this accumulator / accumulable
@@ -181,7 +188,7 @@ class Accumulable[R, T] private[spark] (
     param: AccumulableParam[R, T],
     name: Option[String],
     internal: Boolean)
-    extends GenericAccumulable[R, R, T](initialValue, param, name, internal, identity) {
+    extends GenericAccumulable[R, R, T](initialValue, param, name, internal, identity, false) {
 
   private[spark] def this(
       @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
@@ -343,7 +350,7 @@ class ConsistentAccumulator[T] private[spark] (
     param: ConsistentAccumulatorParam[T],
     name: Option[String],
     internal: Boolean)
-  extends GenericAccumulable[T, UpdateTracking[T], (UpdateInfo, T)](initialValue, param, name, internal, {x => println(x); x.value}) {
+  extends GenericAccumulable[T, UpdateTracking[T], (UpdateInfo, T)](initialValue, param, name, internal, {x => println(x); x.value}, true) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(new UpdateTracking(initialValue),

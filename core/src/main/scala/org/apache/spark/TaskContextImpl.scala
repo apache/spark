@@ -102,8 +102,9 @@ private[spark] class TaskContextImpl(
     accumulators.filter(_._2.isInternal).mapValues(_.localValue).toMap
   }
 
-  private[spark] override def collectAccumulators(): Map[Long, Any] = synchronized {
-    accumulators.mapValues(_.localValue).toMap
+  private[spark] override def collectAccumulators(includeConsistent: Boolean): Map[Long, Any] = synchronized {
+    accumulators.filter(acc => includeConsistent || !acc._2.isConsistent).
+      mapValues(_.localValue).toMap
   }
 
   private[spark] override val internalMetricsToAccumulators: Map[String, Accumulator[Long]] = {

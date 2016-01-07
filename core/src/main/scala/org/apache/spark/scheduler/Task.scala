@@ -84,7 +84,8 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
     try {
-      (runTask(context), context.collectAccumulators())
+      val (result, readFullPartition) = runTask(context)
+      (result, context.collectAccumulators(readFullPartition))
     } finally {
       context.markTaskCompleted()
       try {
@@ -110,7 +111,8 @@ private[spark] abstract class Task[T](
     this.taskMemoryManager = taskMemoryManager
   }
 
-  def runTask(context: TaskContext): T
+  // Run a task returning the result and if all of the input was consumed.
+  def runTask(context: TaskContext): (T, Boolean)
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
