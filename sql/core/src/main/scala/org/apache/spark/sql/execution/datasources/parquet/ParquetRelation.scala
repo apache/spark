@@ -45,13 +45,13 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
-import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "parquet"
 
@@ -60,13 +60,17 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new ParquetRelation(paths, schema, None, partitionColumns, parameters)(sqlContext)
+    new ParquetRelation(paths, schema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
+private[sql] class ParquetOutputWriter(
+    path: String,
+    bucketId: Option[Int],
+    context: TaskAttemptContext)
   extends OutputWriter {
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
@@ -86,7 +90,8 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
           val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
-          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+          val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
         }
       }
     }
@@ -107,6 +112,7 @@ private[sql] class ParquetRelation(
     // This is for metastore conversion.
     private val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    override val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters)
@@ -123,6 +129,7 @@ private[sql] class ParquetRelation(
       maybeDataSchema,
       maybePartitionSpec,
       maybePartitionSpec.map(_.partitionColumns),
+      None,
       parameters)(sqlContext)
   }
 
@@ -216,7 +223,7 @@ private[sql] class ParquetRelation(
 
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
@@ -276,10 +283,13 @@ private[sql] class ParquetRelation(
           sqlContext.conf.parquetCompressionCodec.toUpperCase,
           CompressionCodecName.UNCOMPRESSED).name())
 
-    new OutputWriterFactory {
+    new BucketedOutputWriterFactory {
       override def newInstance(
-          path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, context)
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new ParquetOutputWriter(path, bucketId, context)
       }
     }
   }
