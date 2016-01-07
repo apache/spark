@@ -64,8 +64,8 @@ class BinaryClassificationEvaluatorSuite
     val thrown = intercept[IllegalArgumentException] {
       evaluator.evaluate(stringDF)
     }
-    assert(thrown.getMessage contains "Column rawPrediction must be of type equals to one of the " +
-      "following types [DoubleType, ")
-    assert(thrown.getMessage contains "but was actually of type StringType.")
+    assert(thrown.getMessage.replace("\n", "") contains "Column rawPrediction must be of type " +
+      "equals to one of the following types [DoubleType, ")
+    assert(thrown.getMessage.replace("\n", "") contains "but was actually of type StringType.")
   }
 }

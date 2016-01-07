@@ -56,7 +56,7 @@ private[spark] object SchemaUtils {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(dataTypes.exists(actualDataType.equals),
-      s"Column $colName must be of type equals to one of the following types " +
+      s"Column $colName must be of type equal to one of the following types: " +
         s"${dataTypes.mkString("[", ", ", "]")} but was actually of type $actualDataType.$message")
   }
 
