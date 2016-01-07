@@ -29,21 +29,32 @@ import org.apache.spark.scheduler._
 
 class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
-  /*
+  test("map + cache + first + count") {
+    sc = new SparkContext("local", "test")
+    val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
+
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    b.cache()
+    b.first()
+    acc.value should be > (0)
+    b.collect()
+    acc.value should be (210)
+  }
+
   test ("basic accumulation"){
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    d.foreach{x => acc += x}
+    d.mapWithAccumulator{case (ui, x) => acc += (ui, x)}.count()
     acc.value should be (210)
 
     val longAcc = sc.consistentAccumulator(0L)
     val maxInt = Integer.MAX_VALUE.toLong
-    d.foreach{x => longAcc += maxInt + x}
+    d.mapWithAccumulator{case (ui, x) => longAcc += (ui, maxInt + x)}.count()
     longAcc.value should be (210L + maxInt * 20)
   }
-  */
 
   test("map + map + count") {
     sc = new SparkContext("local", "test")
@@ -66,26 +77,29 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     b.count()
     acc.value should be (210)
   }
-/*
-  def murh3() {
+
+  test("map + count + count + map + count") {
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc += x; x}
+    val b = a.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
     b.count()
-    val c = b.map{x => acc += x; x}
+    acc.value should be (210)
+    b.count()
+    acc.value should be (210)
+    val c = b.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
     c.count()
     acc.value should be (420)
   }
 
-  //  test ("map + toLocalIterator + count"){
-  def murh2() {
+  test ("map + toLocalIterator + count"){
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
-    val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc += x; x}
+    val a = sc.parallelize(1 to 100, 10)
+    val b = a.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
+    // This depends on toLocalIterators per-partition fetch behaviour
     println(b.toLocalIterator.take(2).toList)
     acc.value should be > (0)
     b.count()
@@ -93,36 +107,13 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     b.count()
     acc.value should be (5050)
 
-    val c = b.map{x => acc += x; x}
+    val c = b.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
     c.cache()
     println(c.toLocalIterator.take(2).toList)
     acc.value should be > (5050)
     c.count()
     acc.value should be (10100)
   }
-
-  //  skip ("map + first + count"){
-  def murh() {
-    sc = new SparkContext("local", "test")
-    val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
-
-    val a = sc.parallelize(1 to 100, 10)
-    val b = a.map{x => acc += x; x}
-    b.first()
-    acc.value should be > (0)
-    b.count()
-    acc.value should be (5050)
-    b.count()
-    acc.value should be (5050)
-
-    val c = b.map{x => acc += x; x}
-    c.cache()
-    c.first()
-    acc.value should be > (5050)
-    c.count()
-    acc.value should be (10100)
-  }
- */
 
   test ("garbage collection") {
     // Create an accumulator and let it go out of scope to test that it's properly garbage collected
