@@ -32,7 +32,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
+import org.apache.spark.util.{CallSite, Utils}
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -269,18 +269,6 @@ abstract class DStream[T: ClassTag] (
       "The remember duration for " + this.getClass.getSimpleName + " has been set to " +
         rememberDuration + " which is not more than the checkpoint interval (" +
         checkpointDuration + "). Please set it to higher than " + checkpointDuration + "."
-    )
-
-    val metadataCleanerDelay = MetadataCleaner.getDelaySeconds(ssc.conf)
-    logInfo("metadataCleanupDelay = " + metadataCleanerDelay)
-    require(
-      metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
-      "It seems you are doing some DStream window operation or setting a checkpoint interval " +
-        "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
-        "than " + rememberDuration.milliseconds / 1000 + " seconds. But Spark's metadata cleanup" +
-        "delay is set to " + metadataCleanerDelay + " seconds, which is not sufficient. Please " +
-        "set the Java cleaner delay to more than " +
-        math.ceil(rememberDuration.milliseconds / 1000.0).toInt + " seconds."
     )
 
     dependencies.foreach(_.validateAtStart())

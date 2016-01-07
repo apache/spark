@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.collection.JavaConverters._
 
@@ -27,7 +27,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import org.apache.spark.util.Utils
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
@@ -63,10 +63,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
 
-  private val shuffleStates = new TimeStampedHashMap[ShuffleId, ShuffleState]
-
-  private val metadataCleaner =
-    new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
+  private val shuffleStates = new ConcurrentHashMap[ShuffleId, ShuffleState]
 
   /**
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
@@ -75,9 +72,12 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   def forMapTask(shuffleId: Int, mapId: Int, numReducers: Int, serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numReducers))
-      private val shuffleState = shuffleStates(shuffleId)
-
+      private val shuffleState: ShuffleState = {
+        // Note: we do _not_ want to just wrap this java ConcurrentHashMap into a Scala map and use
+        // .getOrElseUpdate() because that's actually NOT atomic.
+        shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numReducers))
+        shuffleStates.get(shuffleId)
+      }
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
       val writers: Array[DiskBlockObjectWriter] = {
@@ -114,7 +114,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
 
   /** Remove all the blocks / files related to a particular shuffle. */
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
-    shuffleStates.get(shuffleId) match {
+    Option(shuffleStates.get(shuffleId)) match {
       case Some(state) =>
         for (mapId <- state.completedMapTasks.asScala; reduceId <- 0 until state.numReducers) {
           val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
@@ -131,11 +131,5 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     }
   }
 
-  private def cleanup(cleanupTime: Long) {
-    shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffleBlocks(shuffleId))
-  }
-
-  override def stop() {
-    metadataCleaner.cancel()
-  }
+  override def stop(): Unit = {}
 }
