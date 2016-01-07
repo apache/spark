@@ -395,10 +395,10 @@ class LocalLDAModel private[spark] (
    * to [[topicDistributions(documents: RDD[(Long, Vector)])]] to avoid overhead.
    *
    * @param document document to predict topic mixture distributions for
-   * @return (document ID, topic mixture distribution for document)
+   * @return topic mixture distribution for the document
    */
-  @Since("1.6.0")
-  def topicDistributions(document: Vector): Vector = {
+  @Since("2.0.0")
+  def topicDistribution(document: Vector): Vector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
     if (document.numNonzeros == 0) {
       Vectors.zeros(this.k)
