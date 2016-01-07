@@ -451,13 +451,17 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
-      if (requiredOrdering.nonEmpty) {
+      val needSort = if (requiredOrdering.length > child.outputOrdering.length) {
+        true
+      } else {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
-        if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
-          Sort(requiredOrdering, global = false, child = child)
-        } else {
-          child
+        requiredOrdering.zip(child.outputOrdering).exists {
+          case (order1, order2) => !order1.semanticEquals(order2)
         }
+      }
+
+      if (needSort) {
+        Sort(requiredOrdering, global = false, child = child)
       } else {
         child
       }

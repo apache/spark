@@ -143,19 +143,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           }
         }
 
-        def partColsFromParts: Option[Seq[String]] = {
-          table.properties.get("spark.sql.sources.schema.numPartCols").map { numPartCols =>
-            (0 until numPartCols.toInt).map { index =>
-              val partCol = table.properties.get(s"spark.sql.sources.schema.partCol.$index").orNull
-              if (partCol == null) {
-                throw new AnalysisException(
-                  "Could not read partitioned columns from the metastore because it is corrupted " +
-                    s"(missing part $index of the it, $numPartCols parts are expected).")
-              }
-
-              partCol
-            }
-          }
+        def getColumnNames(propertyName: String): Seq[String] = {
+          table.properties.get(s"spark.sql.sources.schema.$propertyName")
+            .map(_.split(",").toSeq).getOrElse(Nil)
         }
 
         // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
@@ -170,7 +160,11 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         // We only need names at here since userSpecifiedSchema we loaded from the metastore
         // contains partition columns. We can always get datatypes of partitioning columns
         // from userSpecifiedSchema.
-        val partitionColumns = partColsFromParts.getOrElse(Nil)
+        val partitionColumns = getColumnNames("partCols")
+
+        val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
+          BucketSpec(n.toInt, getColumnNames("bucketCols"), getColumnNames("sortCols"))
+        }
 
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
@@ -181,6 +175,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             hive,
             userSpecifiedSchema,
             partitionColumns.toArray,
+            bucketSpec,
             table.properties("spark.sql.sources.provider"),
             options)
 
@@ -235,28 +230,17 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     }
 
     if (userSpecifiedSchema.isDefined && partitionColumns.length > 0) {
-      tableProperties.put("spark.sql.sources.schema.numPartCols", partitionColumns.length.toString)
-      partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
-        tableProperties.put(s"spark.sql.sources.schema.partCol.$index", partCol)
-      }
+      tableProperties.put("spark.sql.sources.schema.partCols", partitionColumns.mkString(","))
     }
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
-      tableProperties.put("spark.sql.sources.schema.numBucketCols",
-        bucketColumnNames.length.toString)
-      bucketColumnNames.zipWithIndex.foreach { case (bucketCol, index) =>
-        tableProperties.put(s"spark.sql.sources.schema.bucketCol.$index", bucketCol)
-      }
+      tableProperties.put("spark.sql.sources.schema.bucketCols", bucketColumnNames.mkString(","))
 
       if (sortColumnNames.nonEmpty) {
-        tableProperties.put("spark.sql.sources.schema.numSortCols",
-          sortColumnNames.length.toString)
-        sortColumnNames.zipWithIndex.foreach { case (sortCol, index) =>
-          tableProperties.put(s"spark.sql.sources.schema.sortCol.$index", sortCol)
-        }
+        tableProperties.put("spark.sql.sources.schema.sortCols", sortColumnNames.mkString(","))
       }
     }
 
@@ -280,7 +264,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
     val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
     val dataSource = ResolvedDataSource(
-      hive, userSpecifiedSchema, partitionColumns, provider, options)
+      hive, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options)
 
     def newSparkSQLSpecificMetastoreTable(): HiveTable = {
       HiveTable(

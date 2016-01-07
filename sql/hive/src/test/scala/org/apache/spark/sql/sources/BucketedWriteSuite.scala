@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
+import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -61,15 +62,6 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[IllegalArgumentException](df.write.bucketBy(2, "i").insertInto("tt"))
   }
 
-  private val testFileName = """.*-(\d+)$""".r
-  private val otherFileName = """.*-(\d+)\..*""".r
-  private def getBucketId(fileName: String): Int = {
-    fileName match {
-      case testFileName(bucketId) => bucketId.toInt
-      case otherFileName(bucketId) => bucketId.toInt
-    }
-  }
-
   private def testBucketing(
       dataDir: File,
       source: String,
@@ -78,7 +70,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     val allBucketFiles = dataDir.listFiles().filterNot(f =>
       f.getName.startsWith(".") || f.getName.startsWith("_")
     )
-    val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+    val groupedBucketFiles = allBucketFiles.groupBy(f => BucketingUtils.getBucketId(f.getName))
     assert(groupedBucketFiles.size <= 8)
 
     for ((bucketId, bucketFiles) <- groupedBucketFiles) {

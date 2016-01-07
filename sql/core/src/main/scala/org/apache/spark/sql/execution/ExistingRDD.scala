@@ -21,7 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericMutableRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
 import org.apache.spark.sql.types.DataType
@@ -98,7 +99,9 @@ private[sql] case class PhysicalRDD(
     rdd: RDD[InternalRow],
     override val nodeName: String,
     override val metadata: Map[String, String] = Map.empty,
-    isUnsafeRow: Boolean = false)
+    isUnsafeRow: Boolean = false,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
+    override val outputOrdering: Seq[SortOrder] = Nil)
   extends LeafNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -130,6 +133,29 @@ private[sql] object PhysicalRDD {
       metadata: Map[String, String] = Map.empty): PhysicalRDD = {
     // All HadoopFsRelations output UnsafeRows
     val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
-    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+
+    val bucketSpec = relation match {
+      case r: HadoopFsRelation => r.bucketSpec
+      case _ => None
+    }
+
+    def toAttribute(colName: String): Attribute = output.find(_.name == colName).get
+
+    val bucketedPhysicalRDD = for {
+      spec <- bucketSpec
+      if relation.sqlContext.conf.bucketingEnabled()
+      numBuckets = spec.numBuckets
+      bucketColumns = spec.bucketColumnNames.map(toAttribute)
+      sortColumns = spec.sortColumnNames.map(toAttribute)
+    } yield {
+      val partitioning = HashPartitioning(bucketColumns, numBuckets)
+      val ordering = sortColumns.map(col => SortOrder(col, Ascending))
+      PhysicalRDD(
+        output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning, ordering)
+    }
+
+    bucketedPhysicalRDD.getOrElse(
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+    )
   }
 }

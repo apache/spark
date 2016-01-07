@@ -324,7 +324,7 @@ private[sql] class DynamicPartitionWriterContainer(
 
   private def bucketIdExpression: Option[Expression] = for {
     BucketSpec(numBuckets, _, _) <- bucketSpec
-  } yield Pmod(new Murmur3Hash(bucketColumns), Literal(numBuckets))
+  } yield BucketingUtils.bucketIdExpression(bucketColumns, numBuckets)
 
   // Expressions that given a partition key build a string like: col1=val/col2=val/...
   private def partitionStringExpression: Seq[Expression] = {

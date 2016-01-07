@@ -28,13 +28,13 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{UnionRDD, RDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, Partition, PartitioningUtils, PartitionSpec}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -667,12 +667,14 @@ abstract class HadoopFsRelation private[sql](
     })
   }
 
+  private def getBucketId(f: FileStatus): Int = BucketingUtils.getBucketId(f.getPath.getName)
+
   final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val inputStatuses = inputPaths.flatMap { input =>
+    val allInputFiles = inputPaths.flatMap { input =>
       val path = new Path(input)
 
       // First assumes `input` is a directory path, and tries to get all files contained in it.
@@ -686,8 +688,27 @@ abstract class HadoopFsRelation private[sql](
       }
     }
 
-    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    if (bucketSpec.isEmpty || !sqlContext.conf.bucketingEnabled()) {
+      buildInternalScan(requiredColumns, filters, allInputFiles, broadcastedConf)
+    } else {
+      val perBucketRows = (0 until bucketSpec.get.numBuckets).map { bucketId =>
+        val inputStatuses = allInputFiles.filter(f => getBucketId(f) == bucketId)
+        if (inputStatuses.isEmpty) {
+          sqlContext.emptyResult
+        } else {
+          BucketingUtils.coalesce(
+            buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf),
+            dataSchema,
+            bucketSpec.get.sortColumnNames,
+            sqlContext)
+        }
+      }
+
+      new UnionRDD(sqlContext.sparkContext, perBucketRows)
+    }
   }
+
+
 
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned
