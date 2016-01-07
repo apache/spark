@@ -844,7 +844,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Resets this map to initialized state. Returns the memory freed.
+   * Resets this map to initialized state. Returns the number of bytes freed.
    */
   public long reset() {
     long memoryFreed = 0L;
