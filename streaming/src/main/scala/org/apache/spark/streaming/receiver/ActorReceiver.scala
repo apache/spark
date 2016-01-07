@@ -47,13 +47,12 @@ object ActorSupervisorStrategy {
 
 /**
  * :: DeveloperApi ::
- * A receiver trait to be mixed in with your Actor to gain access to
- * the API for pushing received data into Spark Streaming for being processed.
+ * A base Actor that provides APIs for pushing received data into Spark Streaming for processing.
  *
  * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
  *
  * @example {{{
- *  class MyActor extends Actor with ActorHelper{
+ *  class MyActor extends ActorReceiver {
  *      def receive {
  *          case anything: String => store(anything)
  *      }
@@ -69,13 +68,10 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-trait ActorHelper extends Logging{
-
-  self: Actor => // to ensure that this can be added to Actor classes only
+abstract class ActorReceiver extends Actor {
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
-    logDebug("Storing iterator")
     context.parent ! IteratorData(iter)
   }
 
@@ -85,7 +81,6 @@ trait ActorHelper extends Logging{
    * that Spark is configured to use.
    */
   def store(bytes: ByteBuffer) {
-    logDebug("Storing Bytes")
     context.parent ! ByteBufferData(bytes)
   }
 
@@ -95,7 +90,56 @@ trait ActorHelper extends Logging{
    * being pushed into Spark's memory.
    */
   def store[T](item: T) {
-    logDebug("Storing item")
+    context.parent ! SingleItemData(item)
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * A Java UntypedActor that provides APIs for pushing received data into Spark Streaming for
+ * processing.
+ *
+ * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+ *
+ * @example {{{
+ *  class MyActor extends JavaActorReceiver {
+ *      def receive {
+ *          case anything: String => store(anything)
+ *      }
+ *  }
+ *
+ *  // Can be used with an actorStream as follows
+ *  ssc.actorStream[String](Props(new MyActor),"MyActorReceiver")
+ *
+ * }}}
+ *
+ * @note Since Actor may exist outside the spark framework, It is thus user's responsibility
+ *       to ensure the type safety, i.e parametrized type of push block and InputDStream
+ *       should be same.
+ */
+@DeveloperApi
+abstract class JavaActorReceiver extends UntypedActor {
+
+  /** Store an iterator of received data as a data block into Spark's memory. */
+  def store[T](iter: Iterator[T]) {
+    context.parent ! IteratorData(iter)
+  }
+
+  /**
+   * Store the bytes of received data as a data block into Spark's memory. Note
+   * that the data in the ByteBuffer must be serialized using the same serializer
+   * that Spark is configured to use.
+   */
+  def store(bytes: ByteBuffer) {
+    context.parent ! ByteBufferData(bytes)
+  }
+
+  /**
+   * Store a single item of received data to Spark's memory.
+   * These single items will be aggregated together into data blocks before
+   * being pushed into Spark's memory.
+   */
+  def store[T](item: T) {
     context.parent ! SingleItemData(item)
   }
 }
@@ -104,7 +148,7 @@ trait ActorHelper extends Logging{
  * :: DeveloperApi ::
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `StreamingContext.actorStream` and
- * [[org.apache.spark.streaming.receiver.ActorHelper]].
+ * [[org.apache.spark.streaming.receiver.ActorReceiver]].
  */
 @DeveloperApi
 case class Statistics(numberOfMsgs: Int,
@@ -137,7 +181,7 @@ private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorRec
  *  context.parent ! Props(new Worker, "Worker")
  * }}}
  */
-private[streaming] class ActorReceiver[T: ClassTag](
+private[streaming] class ActorReceiverSupervisor[T: ClassTag](
     props: Props,
     name: String,
     storageLevel: StorageLevel,
