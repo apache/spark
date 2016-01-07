@@ -130,11 +130,15 @@ private[spark] abstract class Task[T](
   protected var _executorDeserializeTime: Long = 0
 
   /**
-   * Collect the latest values of accumulators used in this task.
+   * Collect the latest values of accumulators used in this task. If the task failed,
+   * filter out the accumulators whose values should not be included on failures.
    */
-  def collectAccumulatorUpdates(): Map[Long, Any] = {
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Map[Long, Any] = {
     if (context != null) {
-      context.collectAccumulatorValues()
+      context.accumulators
+        .filter { a => !taskFailed || a.countFailedValues }
+        .map { a => (a.id, a.localValue) }
+        .toMap
     } else {
       Map[Long, Any]()
     }

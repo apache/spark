@@ -45,14 +45,19 @@ import org.apache.spark.util.Utils
  * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
  *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
  *                 thread safe so that they can be reported correctly.
+ * @param countFailedValues whether to accumulate values from failed tasks. This is set to true
+ *                          for system and time metrics like serialization time or bytes spilled,
+ *                          and false for things with absolute values like number of input rows.
+ *                          This should be used for internal metrics only.
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] private[spark] (
-    initialValue: R,
+    @transient initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    internal: Boolean)
+    internal: Boolean,
+    val countFailedValues: Boolean = false)
   extends Serializable {
 
   private[spark] def this(
@@ -260,14 +265,18 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `T`
+ * @param name human-readable name associated with this accumulator
+ * @param internal whether this accumulator is used internally within Spark only
+ * @param countFailedValues whether to accumulate values from failed tasks
  * @tparam T result type
  */
 class Accumulator[T] private[spark] (
     @transient private[spark] val initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String],
-    internal: Boolean)
-  extends Accumulable[T, T](initialValue, param, name, internal) {
+    internal: Boolean,
+    override val countFailedValues: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(initialValue, param, name, false)

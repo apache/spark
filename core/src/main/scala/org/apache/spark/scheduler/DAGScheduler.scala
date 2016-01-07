@@ -1031,7 +1031,6 @@ class DAGScheduler(
           }
 
         case stage: ResultStage =>
-          val job = stage.activeJob.get
           partitionsToCompute.map { id =>
             val p: Int = stage.partitions(id)
             val part = stage.rdd.partitions(p)
@@ -1111,24 +1110,35 @@ class DAGScheduler(
   /**
    * Reconstruct [[TaskMetrics]] from accumulator updates.
    *
-   * This is needed for posting task end events to listeners. If the task has failed,
-   * `accumUpdates` may be null, in which case we just return null.
+   * This is needed for posting task end events to listeners.
+   * If the task has failed, we may just return null.
    */
   private def reconstructTaskMetrics(task: Task[_], accumUpdates: Map[Long, Any]): TaskMetrics = {
-    if (accumUpdates != null) {
-      task.internalAccumulators.foreach { a =>
-        assert(a.name.isDefined, s"internal accumulator ${a.id} is expected to have a name.")
-        assert(accumUpdates.contains(a.id),
-          s"missing entry in task accumulator updates: ${a.name.get} (${a.id})")
-        val stringValue = accumUpdates(a.id).toString
-        assert(stringValue.forall(_.isDigit),
-          s"existing value for accumulator ${a.name.get} (${a.id}) was not a number: $stringValue ")
-        a.setValue(stringValue.toLong)
-      }
-      new TaskMetrics(task.internalAccumulators)
-    } else {
-      null
+    if (accumUpdates == null) {
+      return null
     }
+    val (matchingAccums, missingAccums) = task.internalAccumulators.partition { a =>
+      assert(a.name.isDefined, s"internal accumulator ${a.id} is expected to have a name.")
+      accumUpdates.contains(a.id)
+    }
+    // We create the internal accumulators on the driver and expect the executor to send back
+    // accumulator values with matching IDs. If the task has failed, then there may be missing
+    // accumulator values, in which case we just return null.
+    if (missingAccums.nonEmpty) {
+      val missingValuesString = missingAccums.map(_.name.get).mkString("[", ",", "]")
+      logWarning(s"Not reconstructing metrics for task ${task.partitionId} because its " +
+        s"accumulator updates had missing values $missingValuesString. This could happen " +
+        s"if the task had failed.")
+      return null
+    }
+    matchingAccums.foreach { a =>
+      accumUpdates(a.id) match {
+        case l: java.lang.Long => a.setValue(l)
+        case x => throw new SparkException(s"existing value for accumulator " +
+          s"${a.name.get} (${a.id}) was of unexpected type: $x (${x.getClass.getName}})")
+      }
+    }
+    new TaskMetrics(task.internalAccumulators)
   }
 
   /**
@@ -1140,8 +1150,9 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
-    // Executors only send accumulator updates back to the driver, not TaskMetrics. However,
-    // we still need TaskMetrics to post task end events to listeners, so reconstruct them here.
+    // Executors only send accumulator updates back to the driver, not TaskMetrics. However, we
+    // still need a TaskMetrics to post "task end" events to listeners, so reconstruct them here.
+    // Note: this may be null if the task failed.
     val taskMetrics = reconstructTaskMetrics(task, event.accumUpdates)
 
     outputCommitCoordinator.taskCompleted(
@@ -1316,7 +1327,11 @@ class DAGScheduler(
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case exceptionFailure: ExceptionFailure =>
-        // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+        // Note: on task failure, the executor only sends back only accumulators whose values
+        // still matter even when a task fails, e.g. number of bytes spilled to disk. This only
+        // applies to internal metrics for now.
+        // TODO: add a test for this
+        updateAccumulators(event)
 
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.

@@ -115,10 +115,6 @@ private[spark] class TaskContextImpl(
     _accumulators(a.id) = a
   }
 
-  private[spark] override def collectAccumulatorValues(): Map[Long, Any] = synchronized {
-    _accumulators.mapValues(_.localValue).toMap
-  }
-
   // For testing only.
   private[spark] def findTestAccum(): Option[Accumulator[Long]] = {
     accumulators

@@ -303,7 +303,7 @@ private[spark] class Executor(
                 m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
                 m.setJvmGCTime(computeTotalGcTime() - startGCTime)
               }
-              task.collectAccumulatorUpdates()
+              task.collectAccumulatorUpdates(taskFailed = true)
             } else {
               Map[Long, Any]()
             }

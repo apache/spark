@@ -164,9 +164,4 @@ abstract class TaskContext extends Serializable {
    */
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
 
-  /**
-   * Return the local values of accumulators that belong to this task. The key of the Map is the
-   * accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectAccumulatorValues(): Map[Long, Any]
 }
