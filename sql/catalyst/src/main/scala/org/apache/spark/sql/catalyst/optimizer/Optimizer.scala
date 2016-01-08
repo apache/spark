@@ -37,6 +37,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     // SubQueries are only needed for analysis and can be removed before execution.
     Batch("Remove SubQueries", FixedPoint(100),
       EliminateSubQueries) ::
+    Batch("Compute Current Time", Once,
+      ComputeCurrentTime) ::
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
@@ -63,9 +65,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions,
-      // Nondeterministic
-      ComputeCurrentTime) ::
+      SimplifyCaseConversionExpressions) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
