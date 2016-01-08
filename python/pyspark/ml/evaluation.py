@@ -123,7 +123,6 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation (areaUnderROC|areaUnderPR)")
 
@@ -262,7 +261,6 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
     .. versionadded:: 1.5.0
     """
-    # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
                        "(f1|precision|recall|weightedPrecision|weightedRecall)")

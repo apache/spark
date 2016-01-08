@@ -72,7 +72,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     .. versionadded:: 1.3.0
     """
 
-    # a placeholder to make it appear in the generated doc
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
                       " If threshold and thresholds are both set, they must match.")
@@ -230,7 +229,6 @@ class TreeClassifierParams(object):
     """
     supportedImpurities = ["entropy", "gini"]
 
-    # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
@@ -478,7 +476,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     lossType = Param(Params._dummy(), "lossType",
                      "Loss function which GBT tries to minimize (case-insensitive). " +
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
@@ -588,7 +585,6 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
                       "default is 1.0")
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
@@ -722,7 +718,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
                    "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
                    "neurons and output layer of 10 neurons, default is [1, 1].")

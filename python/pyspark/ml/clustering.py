@@ -63,7 +63,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     k = Param(Params._dummy(), "k", "number of clusters to create")
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
