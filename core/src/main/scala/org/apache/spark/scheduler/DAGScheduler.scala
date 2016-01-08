@@ -1139,6 +1139,7 @@ class DAGScheduler(
           s"accumulator $id that was not registered on the driver.")
       }
     }.filter(_.isInternal)
+    // TODO: the shuffle metrics and stuff are currently not set. This is failing tests.
     new TaskMetrics(internalAccums.toSeq)
   }
 
@@ -1164,7 +1165,7 @@ class DAGScheduler(
       val stage = stageIdToStage(stageId)
       // We should should update registered accumulators if this task succeeded or failed with
       // an exception. In the latter case executors may still send back some accumulators,
-      // so we should try our best to collect the values.
+      // so we should try our best to collect the values. TODO: write a test.
       val shouldUpdateAccums = event.reason match {
         case Success =>
           task match {

@@ -64,7 +64,7 @@ object TaskContext {
    * An empty task context that does not represent an actual task.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, null, InternalAccumulator.create())
+    new TaskContextImpl(0, 0, 0, 0, null, null)
   }
 
 }
@@ -152,11 +152,6 @@ abstract class TaskContext extends Serializable {
    * Returns the manager for this task's managed memory.
    */
   private[spark] def taskMemoryManager(): TaskMemoryManager
-
-  /**
-   * All accumulators used in this task.
-   */
-  private[spark] def accumulators: Seq[Accumulable[_, _]]
 
   /**
    * Register an accumulator that belongs to this task. Accumulators must call this method when

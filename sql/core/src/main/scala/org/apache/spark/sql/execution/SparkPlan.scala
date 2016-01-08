@@ -74,7 +74,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
    * Return all metrics containing metrics of this SparkPlan.
-   * Key is the internal name used to identify this metric, unique within this [[SparkPlan]].
    */
   private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
 

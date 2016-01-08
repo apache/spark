@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
@@ -33,7 +32,7 @@ private[spark] class TaskContextImpl(
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
     @transient private val metricsSystem: MetricsSystem,
-    internalAccumulators: Seq[Accumulator[Long]],
+    initialAccumulators: Seq[Accumulator[Long]] = InternalAccumulator.create(),
     val runningLocally: Boolean = false)
   extends TaskContext
   with Logging {
@@ -41,16 +40,7 @@ private[spark] class TaskContextImpl(
   /**
    * Metrics associated with this task.
    */
-  override val taskMetrics: TaskMetrics = new TaskMetrics(internalAccumulators)
-
-  /**
-   * All accumulators used in this task indexed by accumulator ID.
-   */
-  @transient private val _accumulators = new mutable.HashMap[Long, Accumulable[_, _]]
-
-  // Register the initial set of internal accumulators.
-  // Future ones will be registered through `registerAccumulator`.
-  internalAccumulators.foreach { a => _accumulators(a.id) = a }
+  override val taskMetrics: TaskMetrics = new TaskMetrics(initialAccumulators)
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -106,19 +96,8 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  private[spark] def accumulators: Seq[Accumulable[_, _]] = _accumulators.values.toSeq
-
-  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = synchronized {
-    if (a.isInternal) {
-      taskMetrics.registerInternalAccum(a)
-    }
-    _accumulators(a.id) = a
+  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = {
+    taskMetrics.registerAccumulator(a)
   }
 
-  // For testing only.
-  private[spark] def findTestAccum(): Option[Accumulator[Long]] = {
-    accumulators
-      .find(_.name == Some(InternalAccumulator.TEST_ACCUM))
-      .map(_.asInstanceOf[Accumulator[Long]])
-  }
 }

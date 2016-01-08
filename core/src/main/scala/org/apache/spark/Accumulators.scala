@@ -417,9 +417,9 @@ private[spark] object InternalAccumulator {
 
   // Names of shuffle write metrics
   object shuffleWrite {
-    val BYTES_WRITTEN = "metrics.shuffle.write.shuffleBytesWritten"
-    val RECORDS_WRITTEN = "metrics.shuffle.write.shuffleRecordsWritten"
-    val WRITE_TIME = "metrics.shuffle.write.shuffleWriteTime"
+    val BYTES_WRITTEN = "metrics.shuffle.write.bytesWritten"
+    val RECORDS_WRITTEN = "metrics.shuffle.write.recordsWritten"
+    val WRITE_TIME = "metrics.shuffle.write.writeTime"
   }
 
   // Names of output metrics

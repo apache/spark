@@ -19,7 +19,6 @@ package org.apache.spark.executor
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator, SparkException}
@@ -42,6 +41,13 @@ import org.apache.spark.util.Utils
  *
  * So, when adding new fields, take into consideration that the whole object can be serialized for
  * shipping off at any time to consumers of the SparkListener interface.
+ *
+ * TODO: update this comment.
+ *
+ * @param initialAccums the initial set of accumulators that this [[TaskMetrics]] depends on.
+ *                      Each accumulator in this initial set must be named and marked as internal.
+ *                      Additional accumulators registered here have no such requirements.
+ * @param hostname where this task is run.
  */
 @DeveloperApi
 class TaskMetrics private[spark] (
@@ -61,11 +67,26 @@ class TaskMetrics private[spark] (
   }
 
   /**
-   * Mapping from metric name to the corresponding internal accumulator.
+   * All accumulators registered with this task.
    */
-  private val accumMap = new mutable.HashMap[String, Accumulable[_, _]]
+  private val accums = new ArrayBuffer[Accumulable[_, _]]
+  accums ++= initialAccums
 
-  initialAccums.foreach(registerInternalAccum)
+  /**
+   * A map for quickly accessing the initial set of accumulators by name.
+   */
+  private val initialAccumsMap: Map[String, Accumulable[_, _]] = {
+    initialAccums.map { a =>
+      assert(a.name.isDefined, "initial accumulators passed to TaskMetrics should be named")
+      val name = a.name.get
+      assert(a.isInternal,
+        s"initial accumulator '$name' passed to TaskMetrics should be marked as internal")
+      (name, a)
+    }.toMap
+  }
+
+  assert(initialAccumsMap.size == initialAccums.size, s"detected duplicate names in initial " +
+    s"accumulators passed to TaskMetrics:\n ${initialAccums.map(_.name.get).mkString("\n")}")
 
   // Each metric is internally represented as an accumulator
   private val _executorDeserializeTime = getLongAccum(EXECUTOR_DESERIALIZE_TIME)
@@ -125,27 +146,41 @@ class TaskMetrics private[spark] (
   private[spark] def setResultSize(v: Long) = _resultSize.setValue(v)
   private[spark] def setJvmGCTime(v: Long) = _jvmGCTime.setValue(v)
   private[spark] def setResultSerializationTime(v: Long) = _resultSerializationTime.setValue(v)
-  private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
-  private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
-  private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
+  private[spark] def incMemoryBytesSpilled(v: Long) = _memoryBytesSpilled.add(v)
+  private[spark] def incDiskBytesSpilled(v: Long) = _diskBytesSpilled.add(v)
+  private[spark] def incPeakExecutionMemory(v: Long) = _peakExecutionMemory.add(v)
 
   /**
-   * Register an internal accumulator as a new metric.
+   * Register an accumulator with this task so we can access its value in [[accumulatorUpdates]].
    */
-  private[spark] def registerInternalAccum(a: Accumulable[_, _]): Unit = {
-    assert(a.name.isDefined, s"internal accumulator (${a.id}) is expected to have a name")
-    val name = a.name.get
-    assert(a.isInternal, s"internal accumulator $name (${a.id}) is not marked as 'internal'")
-    assert(!accumMap.contains(name), s"found duplicate internal accumulator name: $name")
-    accumMap(name) = a
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
+    accums += a
   }
 
   /**
-   * Return a Long accumulator associated with the specified metric, assuming it exists.
+   * Return all the accumulators used on this task. Note: This is not a copy.
    */
-  private def getLongAccum(name: String): Accumulator[Long] = {
-    TaskMetrics.getLongAccum(accumMap, name)
+  private[spark] def accumulators: Seq[Accumulable[_, _]] = accums
+
+  /**
+   * Get a Long accumulator from the given map by name, assuming it exists.
+   * Note: this only searches the initial set passed into the constructor.
+   */
+  private[spark] def getLongAccum(name: String): Accumulator[Long] = {
+    TaskMetrics.getLongAccum(initialAccumsMap, name)
   }
+
+  /**
+   * Return a map from accumulator ID to the accumulator's latest value in this task.
+   */
+  def accumulatorUpdates(): Map[Long, Any] = accums.map { a => (a.id, a.localValue) }.toMap
+
+
+  /**
+   * Storage statuses of any blocks that have been updated as a result of this task.
+   */
+  // TODO: make me an accumulator; right now this doesn't get sent to the driver.
+  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 
 
   /* ============================ *
@@ -165,7 +200,7 @@ class TaskMetrics private[spark] (
    */
   def registerOutputMetrics(writeMethod: DataWriteMethod.Value): OutputMetrics = synchronized {
     _outputMetrics.getOrElse {
-      val metrics = new OutputMetrics(writeMethod, accumMap.toMap)
+      val metrics = new OutputMetrics(writeMethod, initialAccumsMap.toMap)
       _outputMetrics = Some(metrics)
       metrics
     }
@@ -190,7 +225,7 @@ class TaskMetrics private[spark] (
   private[spark] def registerInputMetrics(readMethod: DataReadMethod): InputMetrics = {
     synchronized {
       val metrics = _inputMetrics.getOrElse {
-        val metrics = new InputMetrics(readMethod, accumMap.toMap)
+        val metrics = new InputMetrics(readMethod, initialAccumsMap.toMap)
         _inputMetrics = Some(metrics)
         metrics
       }
@@ -224,7 +259,7 @@ class TaskMetrics private[spark] (
    */
   def registerShuffleWriteMetrics(): ShuffleWriteMetrics = synchronized {
     _shuffleWriteMetrics.getOrElse {
-      val metrics = new ShuffleWriteMetrics(accumMap.toMap)
+      val metrics = new ShuffleWriteMetrics(initialAccumsMap.toMap)
       _shuffleWriteMetrics = Some(metrics)
       metrics
     }
@@ -270,7 +305,7 @@ class TaskMetrics private[spark] (
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
     val agg = _shuffleReadMetrics.getOrElse {
-      val metrics = new ShuffleReadMetrics(accumMap.toMap)
+      val metrics = new ShuffleReadMetrics(initialAccumsMap.toMap)
       _shuffleReadMetrics = Some(metrics)
       metrics
     }
@@ -282,23 +317,6 @@ class TaskMetrics private[spark] (
     agg.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
   }
 
-
-  /* =========================== *
-   |        OTHER THINGS         |
-   * =========================== */
-
-  /**
-   * Return a map from accumulator ID to the accumulator's latest value in this task.
-   */
-  def accumulatorUpdates(): Map[Long, Any] = {
-    accumMap.values.map { a => (a.id, a.localValue) }.toMap
-  }
-
-  /**
-   * Storage statuses of any blocks that have been updated as a result of this task.
-   */
-  // TODO: make me an accumulator
-  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }
 
 
@@ -579,10 +597,10 @@ private[spark] object TaskMetrics {
   }
 
   /**
-   * Return a Long accumulator associated with the specified metric, assuming it exists.
+   * Get a Long accumulator from the given map by name, assuming it exists.
    */
   def getLongAccum(
-      accumMap: scala.collection.Map[String, Accumulable[_, _]],
+      accumMap: Map[String, Accumulable[_, _]],
       name: String): Accumulator[Long] = {
     assert(accumMap.contains(name), s"metric '$name' is missing")
     try {

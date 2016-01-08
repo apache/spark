@@ -161,16 +161,14 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("internal accumulators in TaskContext") {
     sc = new SparkContext("local", "test")
-    val accums = InternalAccumulator.create(sc)
-    val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null, accums)
-    val accumulators = taskContext.accumulators
-    val accumulatorValues = taskContext.accumulators.map { a => (a.id, a.value) }.toMap
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null)
+    val accumulators = taskContext.taskMetrics.accumulators
+    val accumulatorValues = taskContext.taskMetrics.accumulatorUpdates()
     assert(accumulators.size > 0)
     assert(accumulators.forall(_.isInternal))
-    val testAccum = taskContext.findTestAccum()
-    assert(testAccum.isDefined)
+    val testAccum = taskContext.taskMetrics.getLongAccum(TEST_ACCUM)
     assert(accumulatorValues.size === accumulators.size)
-    assert(accumulatorValues.contains(testAccum.get.id))
+    assert(accumulatorValues.contains(testAccum.id))
   }
 
   test("internal accumulators in a stage") {
@@ -180,7 +178,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.addSparkListener(listener)
     // Have each task add 1 to the internal accumulator
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
-      TaskContext.get().asInstanceOf[TaskContextImpl].findTestAccum().get += 1
+      TaskContext.get().taskMetrics().getLongAccum(TEST_ACCUM) += 1
       iter
     }
     // Register asserts in job completion callback to avoid flakiness
@@ -215,17 +213,17 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-        TaskContext.get().asInstanceOf[TaskContextImpl].findTestAccum.get += 1
+        TaskContext.get().taskMetrics().getLongAccum(TEST_ACCUM) += 1
         iter
       }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-        TaskContext.get().asInstanceOf[TaskContextImpl].findTestAccum.get += 10
+        TaskContext.get().taskMetrics().getLongAccum(TEST_ACCUM) += 10
         iter
       }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-        TaskContext.get().asInstanceOf[TaskContextImpl].findTestAccum.get += 100
+        TaskContext.get().taskMetrics().getLongAccum(TEST_ACCUM) += 100
         iter
       }
     // Register asserts in job completion callback to avoid flakiness
@@ -273,7 +271,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.addSparkListener(listener)
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitionsWithIndex { case (i, iter) =>
       val taskContext = TaskContext.get()
-      taskContext.asInstanceOf[TaskContextImpl].findTestAccum().get += 1
+      taskContext.taskMetrics.getLongAccum(TEST_ACCUM) += 1
       // Fail the first attempts of a subset of the tasks
       if (failCondition(i) && taskContext.attemptNumber() == 0) {
         throw new Exception("Failing a task intentionally.")

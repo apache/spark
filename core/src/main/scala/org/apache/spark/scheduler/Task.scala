@@ -135,7 +135,7 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Map[Long, Any] = {
     if (context != null) {
-      context.accumulators
+      context.taskMetrics.accumulators
         .filter { a => !taskFailed || a.countFailedValues }
         .map { a => (a.id, a.localValue) }
         .toMap
