@@ -124,6 +124,9 @@ trait SchemaRelationProvider {
       schema: StructType): BaseRelation
 }
 
+/**
+ * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ */
 trait StreamSourceProvider {
   def createSource(
       sqlContext: SQLContext,
@@ -131,6 +134,9 @@ trait StreamSourceProvider {
       schema: Option[StructType]): Source
 }
 
+/**
+ * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ */
 trait StreamSinkProvider {
   def createSink(
       sqlContext: SQLContext,

@@ -27,6 +27,9 @@ import org.apache.spark.util.collection.OpenHashSet
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * A very simple source that reads text files from the given directory as they appear.
+ */
 class FileStreamSouce(
     val sqlContext: SQLContext,
     val metadataPath: String,
@@ -44,7 +47,7 @@ class FileStreamSouce(
     val newFiles = new ArrayBuffer[String]()
     filesPresent.foreach { file =>
       if (!seenFiles.contains(file)) {
-        logWarning(s"new file: $file")
+        logDebug(s"new file: $file")
         newFiles.append(file)
         seenFiles.add(file)
       } else {
@@ -70,8 +73,8 @@ class FileStreamSouce(
 
     val batchFiles = (startId to endId).filter(_ >= 0).map(i => s"$metadataPath/$i")
     if (!(batchFiles.isEmpty || start == Some(end))) {
-      log.warn(s"Producing files from batches $start:$endId")
-      log.warn(s"Batch files: $batchFiles")
+      logDebug(s"Producing files from batches $start:$endId")
+      logDebug(s"Batch files: $batchFiles")
 
       // Probably does not need to be a spark job...
       val files = sqlContext
@@ -79,7 +82,7 @@ class FileStreamSouce(
           .text(batchFiles: _*)
           .as[String]
           .collect()
-      log.warn(s"Streaming ${files.mkString(", ")}")
+      logDebug(s"Streaming ${files.mkString(", ")}")
       Some(new Batch(end, sqlContext.read.text(files: _*)))
     } else {
       None
@@ -131,6 +134,6 @@ class FileStreamSouce(
       writer.write("\n")
     }
     writer.close()
-    logWarning(s"Wrote batch file $path")
+    logDebug(s"Wrote batch file $path")
   }
 }

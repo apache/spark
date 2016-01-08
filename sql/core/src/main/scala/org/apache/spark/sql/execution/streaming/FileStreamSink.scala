@@ -24,6 +24,10 @@ import org.apache.spark.Logging
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SQLContext
 
+/**
+ * A very simple sink that stores received data on the filesystem as a text file.
+ * This is not atomic.
+ */
 class FileStreamSink(
     val sqlContext: SQLContext,
     val metadataPath: String,
@@ -44,16 +48,15 @@ class FileStreamSink(
       case _: java.io.FileNotFoundException =>
         None
     }
-
-
   }
 
+  // TODO: this is not atomic.
   override def addBatch(batch: Batch): Unit = {
     batch.data.write.mode("append").text(path)
     val offset = serializer.serialize(batch.end)
     val stream = fs.create(new Path(metadataPath), true)
     stream.write(offset.array())
     stream.close()
-    logWarning(s"Committed batch ${batch.end}")
+    logInfo(s"Committed batch ${batch.end}")
   }
 }

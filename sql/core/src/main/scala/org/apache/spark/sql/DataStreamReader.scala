@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
- * An interface to reading streaming data.  Use `sqlContext.stream` to access these methods.
+ * An interface to reading streaming data.  Use `sqlContext.streamFrom` to access these methods.
  */
 @Experimental
 class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {

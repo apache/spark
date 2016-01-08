@@ -40,6 +40,9 @@ class StreamExecution(
   /** An monitor used to wait/notify when batches complete. */
   val awaitBatchLock = new Object
 
+  @volatile
+  var batchRun = false
+
   /** Minimum amount of time in between the start of each batch. */
   val minBatchTime = 10
 
@@ -149,6 +152,8 @@ class StreamExecution(
       }
 
       awaitBatchLock.synchronized {
+        batchRun = true
+
         // Wake up any threads that are waiting for the stream to progress.
         awaitBatchLock.notifyAll()
       }
@@ -183,6 +188,21 @@ class StreamExecution(
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
+  }
+
+  /** Clears the indicator that a batch has completed.  Used for testing. */
+  override def clearBatchMarker(): Unit = {
+    batchRun = false
+  }
+
+  /**
+   * Awaits the completion of at least one streaming batch. Must be called after `clearBatchMarker`
+   * to gurantee that a new batch has been processed.
+   */
+  override def awaitNextBatch(): Unit = {
+    while (!batchRun) {
+      awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
+    }
   }
 }
 

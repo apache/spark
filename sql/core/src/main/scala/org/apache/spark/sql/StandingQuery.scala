@@ -17,6 +17,24 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.annotation.DeveloperApi
+
 trait StandingQuery {
+
+  /**
+   * Stops the execution of the streaming query if it is running.  This method blocks until the
+   * thread performing execution has stopped.
+   */
   def stop(): Unit
+
+  /** Clears the indicator that a batch has completed.  Used for testing. */
+  @DeveloperApi
+  def clearBatchMarker(): Unit
+
+  /**
+   * Awaits the completion of at least one streaming batch. Must be called after `clearBatchMarker`
+   * to gurantee that a new batch has been processed.
+   */
+  @DeveloperApi
+  def awaitNextBatch(): Unit
 }
