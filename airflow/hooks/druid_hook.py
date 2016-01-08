@@ -100,8 +100,8 @@ class DruidHook(BaseHook):
                     },
                     "partitionsSpec" : {
                         "type" : "hashed",
-                        "targetPartitionSize" : -1
-                        "numShards" : num_shards
+                        "targetPartitionSize" : -1,
+                        "numShards" : num_shards,
                     },
                 },
                 "ioConfig": {
