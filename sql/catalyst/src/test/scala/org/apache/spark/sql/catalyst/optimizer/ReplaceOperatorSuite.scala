@@ -39,7 +39,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
-      Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd)).analyze
+      Distinct(Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
 
     comparePlans(optimized, correctAnswer)
   }
