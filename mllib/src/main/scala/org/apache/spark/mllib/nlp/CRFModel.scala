@@ -16,6 +16,10 @@
  */
 package org.apache.spark.mllib.nlp
 
+import java.io.IOException
+
+import org.apache.hadoop.conf.{Configuration, Configurable}
+import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.SparkContext
@@ -57,9 +61,14 @@ object CRFModel extends Loader[CRFModel] {
     val thisClassName = "CRFModel"
 
     def save(sc: SparkContext, model: CRFModel, path: String): Unit = {
-      val p: scala.reflect.io.Path = Path(path)
-      if(p.exists){
-        p.deleteRecursively()
+      val p: scala.reflect.io.Path = scala.reflect.io.Path(path)
+      try {
+        if (p.exists) {
+          p.deleteRecursively()
+        }
+        FileSystem.get(sc.hadoopConfiguration).delete(new org.apache.hadoop.fs.Path(path), true)
+      } catch {
+        case e: IOException => e.getStackTrace
       }
       val sqlContext = new SQLContext(sc)
       val metadata = compact(render(
