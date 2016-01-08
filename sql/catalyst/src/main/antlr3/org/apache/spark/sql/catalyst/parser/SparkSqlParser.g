@@ -2216,6 +2216,8 @@ regularBody[boolean topLevel]
 selectStatement[boolean topLevel]
    :
    (
+   (
+   LPAREN
    s=selectClause
    f=fromClause?
    w=whereClause?
@@ -2227,6 +2229,20 @@ selectStatement[boolean topLevel]
    sort=sortByClause?
    win=window_clause?
    l=limitClause?
+   RPAREN
+   |
+   s=selectClause
+   f=fromClause?
+   w=whereClause?
+   g=groupByClause?
+   h=havingClause?
+   o=orderByClause?
+   c=clusterByClause?
+   d=distributeByClause?
+   sort=sortByClause?
+   win=window_clause?
+   l=limitClause?
+   )
    -> ^(TOK_QUERY $f? ^(TOK_INSERT ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
                      $s $w? $g? $h? $o? $c?
                      $d? $sort? $win? $l?))
@@ -2241,7 +2257,10 @@ selectStatement[boolean topLevel]
 
 setOpSelectStatement[CommonTree t, boolean topLevel]
    :
-   (u=setOperator b=simpleSelectStatement
+   ((
+    u=setOperator LPAREN b=simpleSelectStatement RPAREN
+    |
+    u=setOperator b=simpleSelectStatement)
    -> {$setOpSelectStatement.tree != null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_QUERY
           ^(TOK_FROM

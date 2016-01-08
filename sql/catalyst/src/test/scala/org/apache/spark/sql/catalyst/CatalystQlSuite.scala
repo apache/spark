@@ -28,5 +28,9 @@ class CatalystQlSuite extends PlanTest {
     paresr.createPlan("select * from t1 union select * from t2")
     paresr.createPlan("select * from t1 except select * from t2")
     paresr.createPlan("select * from t1 intersect select * from t2")
+    paresr.createPlan("(select * from t1) union all (select * from t2)")
+    paresr.createPlan("(select * from t1) union distinct (select * from t2)")
+    paresr.createPlan("(select * from t1) union (select * from t2)")
+    paresr.createPlan("select * from ((select * from t1) union (select * from t2)) t")
   }
 }
