@@ -1132,15 +1132,21 @@ class DAGScheduler(
         s"if the task failed.")
       return null
     }
-    // TaskMetrics is not concerned with user accumulators
-    val internalAccums = accumUpdates.map { case (id, _) =>
-      Accumulators.getAccum(id).getOrElse {
-        throw new SparkException(s"task ${task.partitionId} returned " +
-          s"accumulator $id that was not registered on the driver.")
-      }
-    }.filter(_.isInternal)
     // TODO: the shuffle metrics and stuff are currently not set. This is failing tests.
-    new TaskMetrics(internalAccums.toSeq)
+    val metrics = new TaskMetrics(task.initialAccumulators)
+    val registeredAccumIds = task.initialAccumulators.map(_.id).toSet
+    // Register all remaining accumulators separately because these may not be named.
+    accumUpdates
+      .flatMap { case (id, _) =>
+        Accumulators.getAccum(id).orElse {
+          logWarning(s"Task ${task.partitionId} returned accumulator $id that was " +
+            s"not registered on the driver.")
+          None
+        }
+      }
+      .filter { a => !registeredAccumIds.contains(a.id) }
+      .foreach(metrics.registerAccumulator)
+    metrics
   }
 
   /**

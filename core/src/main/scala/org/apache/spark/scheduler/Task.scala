@@ -50,12 +50,6 @@ private[spark] abstract class Task[T](
     val initialAccumulators: Seq[Accumulator[Long]]) extends Serializable {
 
   /**
-   * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
-   * local value.
-   */
-  type AccumulatorUpdates = Map[Long, Any]
-
-  /**
    * Called by [[Executor]] to run this task.
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
@@ -65,8 +59,7 @@ private[spark] abstract class Task[T](
   final def run(
     taskAttemptId: Long,
     attemptNumber: Int,
-    metricsSystem: MetricsSystem)
-  : (T, AccumulatorUpdates) = {
+    metricsSystem: MetricsSystem): T = {
     context = new TaskContextImpl(
       stageId,
       partitionId,
@@ -82,7 +75,7 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
     try {
-      (runTask(context), collectAccumulatorUpdates())
+      runTask(context)
     } finally {
       context.markTaskCompleted()
       try {

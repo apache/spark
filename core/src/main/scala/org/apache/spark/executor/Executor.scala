@@ -210,7 +210,7 @@ private[spark] class Executor(
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
         var threwException = true
-        val (value, accumUpdates) = try {
+        val value = try {
           val res = task.run(
             taskAttemptId = taskId,
             attemptNumber = attemptNumber,
@@ -251,6 +251,9 @@ private[spark] class Executor(
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
 
+        // Note: accumulator updates must be collected after TaskMetrics is updated
+        // TODO: add a test
+        val accumUpdates = task.collectAccumulatorUpdates()
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit

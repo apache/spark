@@ -312,42 +312,20 @@ private[spark] object AccumulatorSuite {
   import InternalAccumulator._
 
   /**
-   * Run one or more Spark jobs and verify that the peak execution memory accumulator
-   * is updated afterwards.
+   * Run one or more Spark jobs and verify that in at least one job the peak execution memory
+   * accumulator is updated afterwards.
    */
   def verifyPeakExecutionMemorySet(
       sc: SparkContext,
       testName: String)(testBody: => Unit): Unit = {
     val listener = new SaveInfoListener
     sc.addSparkListener(listener)
-
-    // Find next job ID
-    var nextJobId = -1
-    listener.registerJobCompletionCallback { jobId => nextJobId = jobId + 1 }
-    sc.parallelize(1 to 10).count()
-    require(nextJobId > 0, "bad test: job ID was not updated even after a count()")
-
-    // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { jobId =>
-      if (jobId == nextJobId) {
-        // The first job is a dummy one to verify that the accumulator does not already exist
-        val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
-        assert(!accums.exists(_.name == PEAK_EXECUTION_MEMORY))
-      } else {
-        // In the subsequent jobs, verify that peak execution memory is updated
-        val accum = listener.getCompletedStageInfos
-          .flatMap(_.accumulables.values)
-          .find(_.name == PEAK_EXECUTION_MEMORY)
-          .getOrElse {
-            throw new TestFailedException(
-              s"peak execution memory accumulator not set in '$testName'", 0)
-          }
-        assert(accum.value.toLong > 0)
-      }
-    }
-    // Run the jobs
-    sc.parallelize(1 to 10).count()
     testBody
+    val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
+    val isSet = accums.exists { a => a.name == PEAK_EXECUTION_MEMORY && a.value.toLong > 0 }
+    if (!isSet) {
+      throw new TestFailedException(s"peak execution memory accumulator not set in '$testName'", 0)
+    }
   }
 }
 
