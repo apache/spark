@@ -83,10 +83,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
 
   /**
    * Partitions the output by the given columns on the file system. If specified, the output is
-   * laid out on the file system similar to Hive's partitioning scheme.
-   *
-   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
-   *
+   * laid out on the file system similar to Hive's partitioning scheme.\
    * @since 2.0.0
    */
   @scala.annotation.varargs
@@ -99,6 +96,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives.  The returned [[StandingQuery]] object can be used to interact with
    * the stream.
+   * @since 2.0.0
    */
   def start(path: String): StandingQuery = {
     this.extraOptions += ("path" -> path)

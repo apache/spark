@@ -36,5 +36,5 @@ trait StandingQuery {
    * to gurantee that a new batch has been processed.
    */
   @DeveloperApi
-  def awaitNextBatch(): Unit
+  def awaitBatchCompletion(): Unit
 }

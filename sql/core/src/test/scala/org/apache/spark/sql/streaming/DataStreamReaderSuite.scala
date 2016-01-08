@@ -50,7 +50,7 @@ class DataStreamReaderSuite extends StreamTest with SharedSQLContext {
     // Add some data
     stringToFile(new File(src, "1"), "drop1\nkeep2\nkeep3")
 
-    runningQuery.awaitNextBatch()
+    runningQuery.awaitBatchCompletion()
 
     val output = sqlContext.read.text(dest.getCanonicalPath).as[String]
     checkAnswer(output, "keep2", "keep3")

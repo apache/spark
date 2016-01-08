@@ -198,7 +198,7 @@ class StreamExecution(
    * Awaits the completion of at least one streaming batch. Must be called after `clearBatchMarker`
    * to gurantee that a new batch has been processed.
    */
-  override def awaitNextBatch(): Unit = {
+  override def awaitBatchCompletion(): Unit = {
     while (!batchRun) {
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
