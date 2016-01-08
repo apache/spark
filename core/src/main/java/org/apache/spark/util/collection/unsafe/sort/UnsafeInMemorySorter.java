@@ -99,7 +99,11 @@ public final class UnsafeInMemorySorter {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
     this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
-    this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
+    if (recordComparator != null) {
+      this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
+    } else {
+      this.sortComparator = null;
+    }
     this.array = array;
   }
 
@@ -223,14 +227,9 @@ public final class UnsafeInMemorySorter {
    * {@code next()} will return the same mutable object.
    */
   public SortedIterator getSortedIterator() {
-    sorter.sort(array, 0, pos / 2, sortComparator);
-    return new SortedIterator(pos / 2);
-  }
-
-  /**
-   * Returns an iterator over record pointers in original order (inserted).
-   */
-  public SortedIterator getIterator() {
+    if (sortComparator != null) {
+      sorter.sort(array, 0, pos / 2, sortComparator);
+    }
     return new SortedIterator(pos / 2);
   }
 }

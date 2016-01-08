@@ -824,13 +824,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
-  <td>
-    Which broadcast implementation to use.
-  </td>
-</tr>
-<tr>
   <td><code>spark.cleaner.ttl</code></td>
   <td>(infinite)</td>
   <td>
@@ -1015,14 +1008,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for all block managers to listen on. These exist on both the driver and the executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP broadcast server to listen on.
-    This is not relevant for torrent broadcast.
   </td>
 </tr>
 <tr>
@@ -1444,8 +1429,8 @@ Apart from these, the following properties are also available, and may be useful
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            either <code>akka</code> for Akka based connections or <code>fs</code> for broadcast and
-            file server.</p>
+            either <code>akka</code> for Akka based connections or <code>fs</code> for file
+            server.</p>
         </td>
     </tr>
     <tr>

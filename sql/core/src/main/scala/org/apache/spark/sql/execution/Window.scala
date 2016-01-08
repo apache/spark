@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.rdd.RDD
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -99,8 +99,6 @@ case class Window(
     Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def canProcessUnsafeRows: Boolean = true
 
   /**
    * Create a bound ordering object for a given frame type and offset. A bound ordering object is
@@ -259,16 +257,16 @@ case class Window(
    * @return the final resulting projection.
    */
   private[this] def createResultProjection(
-      expressions: Seq[Expression]): MutableProjection = {
+      expressions: Seq[Expression]): UnsafeProjection = {
     val references = expressions.zipWithIndex.map{ case (e, i) =>
       // Results of window expressions will be on the right side of child's output
       BoundReference(child.output.size + i, e.dataType, e.nullable)
     }
     val unboundToRefMap = expressions.zip(references).toMap
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
-    newMutableProjection(
+    UnsafeProjection.create(
       projectList ++ patchedWindowExpression,
-      child.output)()
+      child.output)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

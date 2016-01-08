@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList, Map => JMap}
 import java.lang.{Iterable => JIterable}
+import java.util.{Comparator, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions

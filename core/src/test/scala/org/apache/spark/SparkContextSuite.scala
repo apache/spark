@@ -20,17 +20,17 @@ package org.apache.spark
 import java.io.File
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
-
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.apache.spark.util.Utils
-
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 import org.scalatest.Matchers._
+
+import org.apache.spark.util.Utils
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 

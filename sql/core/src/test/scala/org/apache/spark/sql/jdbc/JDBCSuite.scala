@@ -26,10 +26,13 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.ExplainCommand
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends SparkFunSuite
@@ -184,10 +187,29 @@ class JDBCSuite extends SparkFunSuite
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
+      .collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
+      .collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
+      .collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
+      + "AND THEID = 2")).collect().size == 2)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
+    assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
     assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
     assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+
+    // This is a test to reflect discussion in SPARK-12218.
+    // The older versions of spark have this kind of bugs in parquet data source.
+    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2 AND NAME != 'mary')")
+    val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
+    assert(df1.collect.toSet === Set(Row("mary", 2)))
+    assert(df2.collect.toSet === Set(Row("mary", 2)))
   }
 
   test("SELECT * WHERE (quoted strings)") {
@@ -434,10 +456,14 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[String]('compileFilter)
-    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f)
+    val compileFilter = PrivateMethod[Option[String]]('compileFilter)
+    def doCompileFilter(f: Filter): String = JDBCRDD invokePrivate compileFilter(f) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === "col0 = 3")
-    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "col1 != 'abc'")
+    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === "(NOT (col1 = 'abc'))")
+    assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
+      === "(col0 = 0) AND (col1 = 'def')")
+    assert(doCompileFilter(Or(EqualTo("col0", 2), EqualTo("col1", "ghi")))
+      === "(col0 = 2) OR (col1 = 'ghi')")
     assert(doCompileFilter(LessThan("col0", 5)) === "col0 < 5")
     assert(doCompileFilter(LessThan("col3",
       Timestamp.valueOf("1995-11-21 00:00:00.0"))) === "col3 < '1995-11-21 00:00:00.0'")
@@ -445,8 +471,14 @@ class JDBCSuite extends SparkFunSuite
     assert(doCompileFilter(LessThanOrEqual("col0", 5)) === "col0 <= 5")
     assert(doCompileFilter(GreaterThan("col0", 3)) === "col0 > 3")
     assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
+    assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
+    assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
+      === "(NOT (col1 IN ('mno', 'pqr')))")
     assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")
     assert(doCompileFilter(IsNotNull("col1")) === "col1 IS NOT NULL")
+    assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def")))
+      === "((NOT (col0 != 'abc' OR col0 IS NULL OR 'abc' IS NULL) "
+        + "OR (col0 IS NULL AND 'abc' IS NULL))) AND (col1 = 'def')")
   }
 
   test("Dialect unregister") {
@@ -520,5 +552,25 @@ class JDBCSuite extends SparkFunSuite
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(0).getAs[java.sql.Timestamp](2)
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
+  }
+
+  test("test credentials in the properties are not in plan output") {
+    val df = sql("SELECT * FROM parts")
+    val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
+      r => assert(!List("testPass", "testUser").exists(r.toString.contains))
+    }
+    // test the JdbcRelation toString output
+    df.queryExecution.analyzed.collect {
+      case r: LogicalRelation => assert(r.relation.toString == "JDBCRelation(TEST.PEOPLE)")
+    }
+  }
+
+  test("test credentials in the connection url are not in the plan output") {
+    val df = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    val explain = ExplainCommand(df.queryExecution.logical, extended = true)
+    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
+      r => assert(!List("testPass", "testUser").exists(r.toString.contains))
+    }
   }
 }

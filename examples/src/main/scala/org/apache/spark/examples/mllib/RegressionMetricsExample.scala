@@ -18,13 +18,13 @@
 
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.evaluation.RegressionMetrics
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object RegressionMetricsExample {
   def main(args: Array[String]) : Unit = {

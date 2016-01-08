@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.rdd.RDDFunctions._
+import org.apache.spark.rdd.RDD
 
 /**
  * Computes the area under the curve (AUC) using the trapezoidal rule.

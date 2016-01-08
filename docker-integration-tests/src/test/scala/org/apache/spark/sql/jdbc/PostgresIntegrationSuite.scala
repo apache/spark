@@ -21,7 +21,7 @@ import java.sql.Connection
 import java.util.Properties
 
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{Literal, If}
+import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
