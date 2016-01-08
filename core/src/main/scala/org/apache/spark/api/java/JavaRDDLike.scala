@@ -448,7 +448,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
   def countByValue(): java.util.Map[T, jl.Long] =
-    mapAsSerializableJavaMap(rdd.countByValue().mapValues(jl.Long.valueOf))
+    mapAsSerializableJavaMap(rdd.countByValue()).asInstanceOf[java.util.Map[T, jl.Long]]
 
   /**
    * (Experimental) Approximate version of countByValue().
