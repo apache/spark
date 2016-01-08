@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.catalyst.util._
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
@@ -83,6 +85,14 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
+      case e: ExpressionEncoder[_] =>
+        val newEncoder = new ExpressionEncoder(
+          e.schema,
+          e.flat,
+          e.toRowExpressions.map(transformExpressionDown),
+          transformExpressionDown(e.fromRowExpression),
+          e.clsTag)
+        newEncoder
       case e: Expression => transformExpressionDown(e)
       case Some(e: Expression) => Some(transformExpressionDown(e))
       case m: Map[_, _] => m
