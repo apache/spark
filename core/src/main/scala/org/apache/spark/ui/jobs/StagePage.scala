@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.net.URLDecoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
@@ -100,7 +101,19 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
-      val taskSortColumn = Option(parameterTaskSortColumn).getOrElse("Index")
+      val taskSortColumn = Option(parameterTaskSortColumn).map {
+        sortColumn =>
+          // If sortColumn contains "/", `getParameter("task.sort")` will return 
+          // "%252F" when yarn mode. we need additional decode.
+          // See also SPARK-4313, YARN-2844.
+          var column = sortColumn
+          var decodedColumn = URLDecoder.decode(column, "UTF-8")
+          while (column != decodedColumn) {
+            column = decodedColumn
+            decodedColumn = URLDecoder.decode(column, "UTF-8")
+          }
+          column
+      }.getOrElse("Index")
       val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
       val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
       val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
