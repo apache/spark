@@ -94,8 +94,8 @@ class NewHadoopRDD[K, V](
       // issues, this cloning is disabled by default.
       NewHadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
         logDebug("Cloning Hadoop Configuration")
-        // The Configuration passed in is actually a JobConf and possibly contains credentials. To keep
-        // those credentials properly we have to create a new JobConf not a Configuration.
+        // The Configuration passed in is actually a JobConf and possibly contains credentials.
+        // To keep those credentials properly we have to create a new JobConf not a Configuration.
         if (conf.isInstanceOf[JobConf]) {
           new JobConf(conf)
         } else {
