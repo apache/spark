@@ -200,9 +200,7 @@ object HiveTypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    private def widenOutputTypes(
-        planName: String,
-        children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    private def widenOutputTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
       require(children.forall(_.output.length == children.head.output.length))
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
@@ -248,13 +246,13 @@ object HiveTypeCoercion {
 
       case s @ SetOperation(left, right) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = widenOutputTypes(s.nodeName, left :: right :: Nil)
+        val newChildren: Seq[LogicalPlan] = widenOutputTypes(left :: right :: Nil)
         assert(newChildren.length == 2)
         s.makeCopy(Array(newChildren.head, newChildren.last))
 
       case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = widenOutputTypes(s.nodeName, s.children)
+        val newChildren: Seq[LogicalPlan] = widenOutputTypes(s.children)
         s.makeCopy(Array(newChildren))
     }
   }
