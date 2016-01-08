@@ -43,6 +43,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.{Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
+import org.apache.spark.util.collection.ReferenceCounter
 
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
@@ -160,6 +161,8 @@ private[spark] class BlockManager(
    * Executor.updateDependencies. When the BlockManager is initialized, user level jars hasn't been
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
+
+  private val referenceCounts = new ReferenceCounter[BlockId]
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -414,7 +417,11 @@ private[spark] class BlockManager(
    */
   def getLocal(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
-    doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
+    val res = doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
+    if (res.isDefined) {
+      referenceCounts.retain(blockId)
+    }
+    res
   }
 
   /**
@@ -424,7 +431,7 @@ private[spark] class BlockManager(
     logDebug(s"Getting local block $blockId as bytes")
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
-    if (blockId.isShuffle) {
+    val res = if (blockId.isShuffle) {
       val shuffleBlockResolver = shuffleManager.shuffleBlockResolver
       // TODO: This should gracefully handle case where local block is not available. Currently
       // downstream code will throw an exception.
@@ -433,6 +440,10 @@ private[spark] class BlockManager(
     } else {
       doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     }
+    if (res.isDefined) {
+      referenceCounts.retain(blockId)
+    }
+    res
   }
 
   private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
@@ -564,7 +575,11 @@ private[spark] class BlockManager(
    */
   def getRemote(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting remote block $blockId")
-    doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
+    val res = doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
+    if (res.isDefined) {
+      referenceCounts.retain(blockId)
+    }
+    res
   }
 
   /**
@@ -572,7 +587,11 @@ private[spark] class BlockManager(
    */
   def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
     logDebug(s"Getting remote block $blockId as bytes")
-    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+    val res = doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+    if (res.isDefined) {
+      referenceCounts.retain(blockId)
+    }
+    res
   }
 
   /**
@@ -640,6 +659,17 @@ private[spark] class BlockManager(
       return remote
     }
     None
+  }
+
+  /**
+   * Release one reference to the given block.
+   */
+  def release(blockId: BlockId): Unit = {
+    referenceCounts.release(blockId)
+  }
+
+  private[storage] def getReferenceCount(blockId: BlockId): Int = {
+    referenceCounts.getReferenceCount(blockId)
   }
 
   def putIterator(

@@ -213,6 +213,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
+    val referenceCount = blockManager.getReferenceCount(blockId)
+    if (referenceCount != 0) {
+      throw new IllegalStateException(
+        s"Cannot free block $blockId since it is still referenced $referenceCount times")
+    }
     val entry = entries.synchronized { entries.remove(blockId) }
     if (entry != null) {
       memoryManager.releaseStorageMemory(entry.size)
@@ -425,6 +430,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       var freedMemory = 0L
       val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
+      def blockIsEvictable(blockId: BlockId): Boolean = {
+        blockManager.getReferenceCount(blockId) == 0 &&
+          (rddToAdd.isEmpty || rddToAdd != getRddId(blockId))
+      }
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
@@ -433,7 +442,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         while (freedMemory < space && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
-          if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
+          if (blockIsEvictable(blockId)) {
             selectedBlocks += blockId
             freedMemory += pair.getValue.size
           }

@@ -55,15 +55,15 @@ private[spark] class ReferenceCounter[T] {
   /**
    * Increments the given object's reference count for the current task.
    */
-  def retain(obj: T): Unit = {
-    retainForTask(TaskContext.get().taskAttemptId(), obj)
-  }
+  def retain(obj: T): Unit = retainForTask(currentTaskAttemptId, obj)
 
   /**
    * Decrements the given object's reference count for the current task.
    */
-  def release(obj: T): Unit = {
-    releaseForTask(TaskContext.get().taskAttemptId(), obj)
+  def release(obj: T): Unit = releaseForTask(currentTaskAttemptId, obj)
+
+  private def currentTaskAttemptId: TaskAttemptId = {
+    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
 
   /**
