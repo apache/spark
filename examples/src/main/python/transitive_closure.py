@@ -23,14 +23,15 @@ from random import Random
 from pyspark import SparkContext
 
 numEdges = 200
+numVertices = 100
 rand = Random(42)
 
 
 def generateGraph():
     edges = set()
     while len(edges) < numEdges:
-        src = rand.randrange(0, numEdges)
-        dst = rand.randrange(0, numEdges)
+        src = rand.randrange(0, numVertices)
+        dst = rand.randrange(0, numVertices)
         if src != dst:
             edges.add((src, dst))
     return edges
