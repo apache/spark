@@ -170,6 +170,10 @@ class ParamTests(PySparkTestCase):
             testParams.maxIter._copy_new_parent(testParams)
         # Copying a dummy param should succeed
         TestParams.maxIter._copy_new_parent(testParams)
+        maxIter = testParams.maxIter
+        self.assertEqual(maxIter.name, "maxIter")
+        self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
+        self.assertTrue(maxIter.parent == testParams.uid)
 
     def test_param(self):
         testParams = TestParams()
