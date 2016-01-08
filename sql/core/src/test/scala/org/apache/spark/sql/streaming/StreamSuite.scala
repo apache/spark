@@ -53,22 +53,24 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
   }
 
-  test("union two streams") {
-    val inputData1 = MemoryStream[Int]
-    val inputData2 = MemoryStream[Int]
+  (1 to 100).foreach { i =>
+    test(s"union two streams #$i") {
+      val inputData1 = MemoryStream[Int]
+      val inputData2 = MemoryStream[Int]
 
-    val unioned = inputData1.toDS().union(inputData2.toDS())
+      val unioned = inputData1.toDS().union(inputData2.toDS())
 
-    testStream(unioned)(
-      AddData(inputData1, 1, 3, 5),
-      CheckAnswer(1, 3, 5),
-      AddData(inputData2, 2, 4, 6),
-      CheckAnswer(1, 2, 3, 4, 5, 6),
-      StopStream,
-      AddData(inputData1, 7),
-      StartStream,
-      AddData(inputData2, 8),
-      CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8))
+      testStream(unioned)(
+        AddData(inputData1, 1, 3, 5),
+        CheckAnswer(1, 3, 5),
+        AddData(inputData2, 2, 4, 6),
+        CheckAnswer(1, 2, 3, 4, 5, 6),
+        StopStream,
+        AddData(inputData1, 7),
+        StartStream,
+        AddData(inputData2, 8),
+        CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8))
+    }
   }
 
   test("sql queries") {

@@ -629,7 +629,7 @@ class SQLContext private[sql](
    * as new data arrives.
    */
   @Experimental
-  def stream: DataStreamReader = new DataStreamReader(this)
+  def streamFrom: DataStreamReader = new DataStreamReader(this)
 
   /**
    * :: Experimental ::

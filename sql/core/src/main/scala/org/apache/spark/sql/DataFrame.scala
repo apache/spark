@@ -1690,7 +1690,7 @@ class DataFrame private[sql](
    * Interface for starting a streaming query that will continually save data to the specified
    * external sink as new data arrives.
    */
-  def stream: DataStreamWriter = new DataStreamWriter(this)
+  def streamTo: DataStreamWriter = new DataStreamWriter(this)
 
   /**
    * Returns the content of the [[DataFrame]] as a RDD of JSON strings.

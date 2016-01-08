@@ -33,7 +33,7 @@ class DataStreamReaderSuite extends StreamTest with SharedSQLContext {
 
     val df =
       sqlContext
-        .stream
+        .streamFrom
         .format("text")
         .open(src.getCanonicalPath)
 
@@ -41,7 +41,7 @@ class DataStreamReaderSuite extends StreamTest with SharedSQLContext {
 
     val runningQuery =
       filtered
-        .stream
+        .streamTo
         .format("text")
         .start(dest.getCanonicalPath)
 
