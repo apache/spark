@@ -26,7 +26,6 @@ import java.util.Set;
 
 import scala.Tuple2;
 
-import com.google.common.base.Optional;
 import com.google.common.collect.Sets;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
@@ -38,6 +37,7 @@ import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.Function3;
 import org.apache.spark.api.java.function.Function4;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
@@ -139,7 +139,7 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
         new Function3<String, Optional<Integer>, State<Integer>, Integer>() {
           @Override
           public Integer call(String key, Optional<Integer> value, State<Integer> state) {
-            int sum = value.or(0) + (state.exists() ? state.get() : 0);
+            int sum = value.orElse(0) + (state.exists() ? state.get() : 0);
             state.update(sum);
             return sum;
           }
