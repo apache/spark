@@ -38,7 +38,7 @@ class StreamExecution(
     val sink: Sink) extends Logging {
 
   /** Minimum amount of time in between the start of each batch. */
-  val minBatchTime = 10
+  val minBatchTime = 100
 
   /** Tracks how much data we have processed from each input source. */
   private[sql] val currentOffsets = new StreamProgress

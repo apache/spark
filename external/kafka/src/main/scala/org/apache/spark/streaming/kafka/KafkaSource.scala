@@ -20,15 +20,11 @@ package org.apache.spark.streaming.kafka
 import kafka.common.TopicAndPartition
 import kafka.serializer._
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{Batch, StreamingRelation, Offset, Source}
+import org.apache.spark.sql.execution.streaming.{Batch, Offset, Source, StreamingRelation}
 import org.apache.spark.sql.types.StructType
-
-
-
+import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 
 
 private[kafka]
@@ -83,16 +79,18 @@ private[kafka] object KafkaSourceOffset {
 
 
 private[kafka] case class KafkaSource(
-  topics: Set[String], params: Map[String, String])(implicit sqlContext: SQLContext) extends Source {
+    topics: Set[String],
+    params: Map[String, String])(implicit sqlContext: SQLContext) extends Source with Logging {
 
   type OffsetMap = Map[TopicAndPartition, Long]
+
   implicit private val encoder = ExpressionEncoder.tuple(
     ExpressionEncoder[Array[Byte]](), ExpressionEncoder[Array[Byte]]())
 
   @transient private val logicalPlan = StreamingRelation(this)
   @transient private val kc = new KafkaCluster(params)
   @transient private val topicAndPartitions = KafkaCluster.checkErrors(kc.getPartitions(topics))
-  @transient private lazy val initialOffsets = getInitialOffsets()
+  @transient private[kafka] val initialOffsets = getInitialOffsets()
 
   override def schema: StructType = encoder.schema
 
@@ -101,6 +99,8 @@ private[kafka] case class KafkaSource(
     */
   override def getNextBatch(start: Option[Offset]): Option[Batch] = {
     val latestOffset = getLatestOffsets()
+    logDebug(s"Latest offset: ${KafkaSourceOffset(latestOffset)}")
+
     val offsetRanges = getOffsetRanges(
       start.map(KafkaSourceOffset.fromOffset(_).offsets), latestOffset)
 
@@ -108,10 +108,10 @@ private[kafka] case class KafkaSource(
     val encodingFunc = encoder.toRow _
     val sparkContext = sqlContext.sparkContext
 
-    println("Creating DF with offset ranges: " + offsetRanges)
     if (offsetRanges.nonEmpty) {
       val rdd = KafkaUtils.createRDD[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
         sparkContext, kafkaParams, offsetRanges.toArray)
+      logInfo("Creating DF with offset ranges: " + offsetRanges)
       Some(new Batch(KafkaSourceOffset(latestOffset), sqlContext.createDataset(rdd).toDF))
     } else {
       None
@@ -131,7 +131,7 @@ private[kafka] case class KafkaSource(
     val fromOffsets = start.getOrElse { initialOffsets }
 
     // Get the latest offsets
-    val untilOffsets = getLatestOffsets()
+    val untilOffsets = end
 
     // Get all the partitions referenced in both sets of offsets
     val allTopicAndPartitions = (fromOffsets.keySet ++ untilOffsets.keySet).toSeq
@@ -155,14 +155,15 @@ private[kafka] case class KafkaSource(
   private def getLatestOffsets(): OffsetMap = {
     val partitionLeaders = KafkaCluster.checkErrors(kc.findLeaders(topicAndPartitions))
     val leadersAndOffsets = KafkaCluster.checkErrors(kc.getLatestLeaderOffsets(topicAndPartitions))
-    println("Getting offsets " + leadersAndOffsets)
     leadersAndOffsets.map { x => (x._1, x._2.offset) }
   }
 
   private def getInitialOffsets(): OffsetMap = {
     if (params.get("auto.offset.reset").map(_.toLowerCase) == Some("smallest")) {
       KafkaCluster.checkErrors(kc.getEarliestLeaderOffsets(topicAndPartitions)).mapValues(_.offset)
-    } else Map.empty
+    } else {
+      getLatestOffsets()
+    }
   }
 
   override def toString(): String = s"KafkaSource[${topics.mkString(", ")}]"
