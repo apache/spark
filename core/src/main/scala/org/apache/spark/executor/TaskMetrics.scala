@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator, SparkException}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
@@ -44,7 +43,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  *                      Additional accumulators registered here have no such requirements.
  */
 @DeveloperApi
-class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends Serializable {
+class TaskMetrics private[spark](initialAccums: Seq[Accumulable[_, _]]) extends Serializable {
 
   import InternalAccumulator._
 
@@ -76,14 +75,14 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends
     s"accumulators passed to TaskMetrics:\n ${initialAccums.map(_.name.get).mkString("\n")}")
 
   // Each metric is internally represented as an accumulator
-  private val _executorDeserializeTime = getLongAccum(EXECUTOR_DESERIALIZE_TIME)
-  private val _executorRunTime = getLongAccum(EXECUTOR_RUN_TIME)
-  private val _resultSize = getLongAccum(RESULT_SIZE)
-  private val _jvmGCTime = getLongAccum(JVM_GC_TIME)
-  private val _resultSerializationTime = getLongAccum(RESULT_SERIALIZATION_TIME)
-  private val _memoryBytesSpilled = getLongAccum(MEMORY_BYTES_SPILLED)
-  private val _diskBytesSpilled = getLongAccum(DISK_BYTES_SPILLED)
-  private val _peakExecutionMemory = getLongAccum(PEAK_EXECUTION_MEMORY)
+  private val _executorDeserializeTime = getAccum[Long](EXECUTOR_DESERIALIZE_TIME)
+  private val _executorRunTime = getAccum[Long](EXECUTOR_RUN_TIME)
+  private val _resultSize = getAccum[Long](RESULT_SIZE)
+  private val _jvmGCTime = getAccum[Long](JVM_GC_TIME)
+  private val _resultSerializationTime = getAccum[Long](RESULT_SERIALIZATION_TIME)
+  private val _memoryBytesSpilled = getAccum[Long](MEMORY_BYTES_SPILLED)
+  private val _diskBytesSpilled = getAccum[Long](DISK_BYTES_SPILLED)
+  private val _peakExecutionMemory = getAccum[Long](PEAK_EXECUTION_MEMORY)
 
   /**
    * Time taken on the executor to deserialize this task.
@@ -137,38 +136,6 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends
   private[spark] def incDiskBytesSpilled(v: Long) = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long) = _peakExecutionMemory.add(v)
 
-  /**
-   * Register an accumulator with this task so we can access its value in [[accumulatorUpdates]].
-   */
-  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
-    accums += a
-  }
-
-  /**
-   * Return all the accumulators used on this task. Note: This is not a copy.
-   */
-  private[spark] def accumulators: Seq[Accumulable[_, _]] = accums
-
-  /**
-   * Get a Long accumulator from the given map by name, assuming it exists.
-   * Note: this only searches the initial set passed into the constructor.
-   */
-  private[spark] def getLongAccum(name: String): Accumulator[Long] = {
-    TaskMetrics.getLongAccum(initialAccumsMap, name)
-  }
-
-  /**
-   * Return a map from accumulator ID to the accumulator's latest value in this task.
-   */
-  def accumulatorUpdates(): Map[Long, Any] = accums.map { a => (a.id, a.localValue) }.toMap
-
-
-  /**
-   * Storage statuses of any blocks that have been updated as a result of this task.
-   */
-  // TODO: make me an accumulator; right now this doesn't get sent to the driver.
-  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
-
 
   /* ============================ *
    |        OUTPUT METRICS        |
@@ -187,7 +154,8 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends
    */
   def registerOutputMetrics(writeMethod: DataWriteMethod.Value): OutputMetrics = synchronized {
     _outputMetrics.getOrElse {
-      val metrics = new OutputMetrics(writeMethod, initialAccumsMap.toMap)
+      val metrics = new OutputMetrics(initialAccumsMap.toMap)
+      metrics.setWriteMethod(writeMethod)
       _outputMetrics = Some(metrics)
       metrics
     }
@@ -209,10 +177,11 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends
   /**
    * Get or create a new [[InputMetrics]] associated with this task.
    */
-  private[spark] def registerInputMetrics(readMethod: DataReadMethod): InputMetrics = {
+  private[spark] def registerInputMetrics(readMethod: DataReadMethod.Value): InputMetrics = {
     synchronized {
       val metrics = _inputMetrics.getOrElse {
-        val metrics = new InputMetrics(readMethod, initialAccumsMap.toMap)
+        val metrics = new InputMetrics(initialAccumsMap.toMap)
+        metrics.setReadMethod(readMethod)
         _inputMetrics = Some(metrics)
         metrics
       }
@@ -224,7 +193,9 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends
       if (metrics.readMethod == readMethod) {
         metrics
       } else {
-        new InputMetrics(readMethod)
+        val m = new InputMetrics
+        m.setReadMethod(readMethod)
+        m
       }
     }
   }
@@ -304,6 +275,66 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends
     agg.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
   }
 
+
+  /* ========================== *
+   |        OTHER THINGS        |
+   * ========================== */
+
+  /**
+   * Register an accumulator with this task so we can access its value in [[accumulatorUpdates]].
+   */
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
+    accums += a
+  }
+
+  /**
+   * Return all the accumulators used on this task. Note: This is not a copy.
+   */
+  private[spark] def accumulators: Seq[Accumulable[_, _]] = accums
+
+  /**
+   * Get a Long accumulator from the given map by name, assuming it exists.
+   * Note: this only searches the initial set passed into the constructor.
+   */
+  private[spark] def getAccum[Long](name: String): Accumulator[Long] = {
+    TaskMetrics.getAccum[Long](initialAccumsMap, name)
+  }
+
+  /**
+   * Return a map from accumulator ID to the accumulator's latest value in this task.
+   */
+  def accumulatorUpdates(): Map[Long, Any] = accums.map { a => (a.id, a.localValue) }.toMap
+
+
+  /**
+   * Storage statuses of any blocks that have been updated as a result of this task.
+   */
+  // TODO: make me an accumulator; right now this doesn't get sent to the driver.
+  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
+
+  /**
+   * Return whether some accumulators with the given prefix have already been set.
+   * This only considers the initial set passed into the constructor.
+   */
+  private def accumsAlreadySet(prefix: String): Boolean = {
+    initialAccumsMap.filterKeys(_.startsWith(prefix)).values.exists { a => a.localValue != a.zero }
+  }
+
+  // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.
+  // If so, initialize all relevant metrics classes so listeners can access them downstream.
+  if (accumsAlreadySet(SHUFFLE_READ_METRICS_PREFIX)) {
+    _shuffleReadMetrics = Some(new ShuffleReadMetrics(initialAccumsMap))
+  }
+  if (accumsAlreadySet(SHUFFLE_WRITE_METRICS_PREFIX)) {
+    _shuffleWriteMetrics = Some(new ShuffleWriteMetrics(initialAccumsMap))
+  }
+  if (accumsAlreadySet(OUTPUT_METRICS_PREFIX)) {
+    _outputMetrics = Some(new OutputMetrics(initialAccumsMap))
+  }
+  if (accumsAlreadySet(INPUT_METRICS_PREFIX)) {
+    _inputMetrics = Some(new InputMetrics(initialAccumsMap))
+  }
+
 }
 
 
@@ -314,13 +345,13 @@ private[spark] object TaskMetrics {
   /**
    * Get a Long accumulator from the given map by name, assuming it exists.
    */
-  def getLongAccum(
+  def getAccum[T](
       accumMap: Map[String, Accumulable[_, _]],
-      name: String): Accumulator[Long] = {
+      name: String): Accumulator[T] = {
     assert(accumMap.contains(name), s"metric '$name' is missing")
     try {
       // Note: we can't do pattern matching here because types are erased by compile time
-      accumMap(name).asInstanceOf[Accumulator[Long]]
+      accumMap(name).asInstanceOf[Accumulator[T]]
     } catch {
       case _: ClassCastException =>
         throw new SparkException(s"attempted to access invalid accumulator $name as a long metric")

@@ -39,18 +39,16 @@ object DataReadMethod extends Enumeration with Serializable {
  */
 @DeveloperApi
 class InputMetrics private (
-    val readMethod: DataReadMethod.Value,
     _bytesRead: Accumulator[Long],
-    _recordsRead: Accumulator[Long])
+    _recordsRead: Accumulator[Long],
+    _readMethod: Accumulator[String])
   extends Serializable {
 
-  private[executor] def this(
-      readMethod: DataReadMethod.Value,
-      accumMap: Map[String, Accumulable[_, _]]) {
+  private[executor] def this(accumMap: Map[String, Accumulable[_, _]]) {
     this(
-      readMethod,
-      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.input.BYTES_READ),
-      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.input.RECORDS_READ))
+      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.input.BYTES_READ),
+      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.input.RECORDS_READ),
+      TaskMetrics.getAccum[String](accumMap, InternalAccumulator.input.READ_METHOD))
   }
 
   /**
@@ -62,10 +60,8 @@ class InputMetrics private (
    *
    * A better alternative to use is [[TaskMetrics.registerInputMetrics]].
    */
-  private[spark] def this(readMethod: DataReadMethod.Value) {
-    this(
-      readMethod,
-      InternalAccumulator.createInputAccums().map { a => (a.name.get, a) }.toMap)
+  private[executor] def this() {
+    this(InternalAccumulator.createInputAccums().map { a => (a.name.get, a) }.toMap)
   }
 
   /**
@@ -78,6 +74,13 @@ class InputMetrics private (
    */
   def recordsRead: Long = _recordsRead.localValue
 
+  /**
+   * The source from which this task reads its input.
+   */
+  def readMethod: DataReadMethod.Value = DataReadMethod.withName(_readMethod.localValue)
+
   private[spark] def setBytesRead(v: Long): Unit = _bytesRead.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
+  private[spark] def setReadMethod(v: DataReadMethod.Value): Unit =
+    _readMethod.setValue(v.toString)
 }

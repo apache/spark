@@ -44,8 +44,8 @@ private[spark] class ShuffleMapTask(
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
-    internalAccumulators: Seq[Accumulator[Long]])
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, internalAccumulators)
+    override val initialAccumulators: Seq[Accumulator[_]])
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, initialAccumulators)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */

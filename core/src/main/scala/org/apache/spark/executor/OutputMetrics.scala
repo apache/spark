@@ -38,18 +38,16 @@ object DataWriteMethod extends Enumeration with Serializable {
  */
 @DeveloperApi
 class OutputMetrics private (
-    val writeMethod: DataWriteMethod.Value,
     _bytesWritten: Accumulator[Long],
-    _recordsWritten: Accumulator[Long])
+    _recordsWritten: Accumulator[Long],
+    _writeMethod: Accumulator[String])
   extends Serializable {
 
-  private[executor] def this(
-      writeMethod: DataWriteMethod.Value,
-      accumMap: Map[String, Accumulable[_, _]]) {
+  private[executor] def this(accumMap: Map[String, Accumulable[_, _]]) {
     this(
-      writeMethod,
-      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.output.BYTES_WRITTEN),
-      TaskMetrics.getLongAccum(accumMap, InternalAccumulator.output.RECORDS_WRITTEN))
+      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.BYTES_WRITTEN),
+      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.RECORDS_WRITTEN),
+      TaskMetrics.getAccum[String](accumMap, InternalAccumulator.output.WRITE_METHOD))
   }
 
   /**
@@ -62,6 +60,13 @@ class OutputMetrics private (
    */
   def recordsWritten: Long = _recordsWritten.localValue
 
+  /**
+   * The source to which this task writes its input.
+   */
+  def writeMethod: DataWriteMethod.Value = DataWriteMethod.withName(_writeMethod.localValue)
+
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
+  private[spark] def setWriteMethod(v: DataWriteMethod.Value): Unit =
+    _writeMethod.setValue(v.toString)
 }

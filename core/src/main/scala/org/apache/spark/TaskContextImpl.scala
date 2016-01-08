@@ -32,7 +32,7 @@ private[spark] class TaskContextImpl(
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
     @transient private val metricsSystem: MetricsSystem,
-    initialAccumulators: Seq[Accumulator[Long]] = InternalAccumulator.create(),
+    initialAccumulators: Seq[Accumulator[_]] = InternalAccumulator.create(),
     val runningLocally: Boolean = false)
   extends TaskContext
   with Logging {
