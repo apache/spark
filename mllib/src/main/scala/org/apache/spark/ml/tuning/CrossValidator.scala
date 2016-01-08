@@ -27,7 +27,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.OneVsRestParams
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.feature.{RFormula, RFormulaModel}
+import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
