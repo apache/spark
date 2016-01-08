@@ -19,6 +19,7 @@ package org.apache.spark.streaming.kafka.v09
 
 import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
+import org.apache.kafka.common.TopicPartition
 import org.apache.spark._
 import org.scalatest.BeforeAndAfterAll
 
@@ -128,7 +129,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rangeCount === sentCount, "offset range didn't include all sent messages")
     assert(rdd.get.count === sentCount, "didn't get all sent messages")
 
-    val rangesMap = ranges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
+    val rangesMap = ranges.map(o => new TopicPartition(o.topic, o.partition) -> o.untilOffset).toMap
 
     // make sure consumer offsets are committed before the next getRdd call
     kc.setConsumerOffsets(rangesMap)
@@ -164,7 +165,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
     val latestOffsets = kc.getLatestOffsets(topicPartitions)
 
-    val offsetRanges = consumerOffsets.map { case (tp: TopicAndPartition, fromOffset: Long) =>
+    val offsetRanges = consumerOffsets.map { case (tp: TopicPartition, fromOffset: Long) =>
       OffsetRange(tp.topic, tp.partition, fromOffset, latestOffsets(tp))
     }.toArray
 

@@ -19,13 +19,11 @@ package org.apache.spark.streaming.kafka.v09
 
 import java.util.{ Collections, Properties }
 
-import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.{ ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.TopicPartition
 import org.apache.spark.partial.{ BoundedDouble, PartialResult }
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.kafka.v09.KafkaCluster
-import org.apache.spark.streaming.kafka.v09.KafkaCluster.toTopicPart
+import org.apache.spark.streaming.kafka.v09.KafkaCluster.{LeaderOffset}
 import org.apache.spark.util.NextIterator
 import org.apache.spark.{ Logging, Partition, SparkContext, TaskContext }
 
@@ -55,13 +53,9 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
   private val cluster = new KafkaCluster[K, V](kafkaParams)
 
   override def getPartitions: Array[Partition] = {
-    val topics = offsetRanges.map { _.topic }.toSet
-    val tpLeaders = cluster.getPartitionsLeader(topics)
-
     offsetRanges.zipWithIndex.map {
       case (o, i) =>
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset,
-          tpLeaders(new TopicPartition(o.topic, o.partition)))
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, o.leaderHost)
     }.toArray
   }
 
@@ -108,7 +102,12 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     // TODO is additional hostname resolution necessary here
-    Seq(part.host)
+    if (part.host != null ) {
+      Seq(part.host)
+    }
+    else {
+      Seq()
+    }
   }
 
   private def errBeginAfterEnd(part: KafkaRDDPartition): String =
@@ -151,12 +150,12 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
     kafkaParams.foreach(param => props.put(param._1, param._2))
 
     val consumer = new KafkaConsumer[K, V](props)
-    val tp = new TopicAndPartition(part.topic, part.partition)
-    consumer.assign(Collections.singletonList[TopicPartition](toTopicPart(tp)))
+    val tp = new TopicPartition(part.topic, part.partition)
+    consumer.assign(Collections.singletonList[TopicPartition](tp))
 
     var requestOffset = part.fromOffset
     var iter: java.util.Iterator[ConsumerRecord[K, V]] = null
-    consumer.seek(toTopicPart(tp), requestOffset)
+    consumer.seek(tp, requestOffset)
 
     override def close(): Unit = {
       if (consumer != null) {
@@ -205,13 +204,13 @@ object KafkaRDD {
   def apply[K: ClassTag, V: ClassTag, R: ClassTag](
       sc: SparkContext,
       kafkaParams: Map[String, String],
-      fromOffsets: Map[TopicAndPartition, Long],
-      untilOffsets: Map[TopicAndPartition, Long],
+      fromOffsets: Map[TopicPartition, Long],
+      untilOffsets: Map[TopicPartition, LeaderOffset],
       messageHandler: ConsumerRecord[K, V] => R): KafkaRDD[K, V, R] = {
     val offsetRanges = fromOffsets.map {
       case (tp, fo) =>
         val uo = untilOffsets(tp)
-        OffsetRange(tp.topic, tp.partition, fo, uo)
+        OffsetRange(tp.topic, tp.partition, fo, uo.offset, uo.host)
     }.toArray
 
     new KafkaRDD[K, V, R](sc, kafkaParams, offsetRanges, messageHandler)

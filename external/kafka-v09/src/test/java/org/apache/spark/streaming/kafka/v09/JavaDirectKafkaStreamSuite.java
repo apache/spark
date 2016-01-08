@@ -18,9 +18,9 @@
 package org.apache.spark.streaming.kafka.v09;
 
 
-import kafka.common.TopicAndPartition;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -159,9 +159,9 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     return topicSet;
   }
 
-  private static Map<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
-    Map<TopicAndPartition, Long> topicMap = new HashMap<>();
-    topicMap.put(new TopicAndPartition(topic, 0), offsetToStart);
+  private static Map<TopicPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
+    Map<TopicPartition, Long> topicMap = new HashMap<>();
+    topicMap.put(new TopicPartition(topic, 0), offsetToStart);
     return topicMap;
   }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka.v09
 
 import kafka.common.TopicAndPartition
+import org.apache.kafka.common.TopicPartition
 
 /**
  * Represents any object that has a collection of [[OffsetRange]]s. This can be used to access the
@@ -46,11 +47,23 @@ final class OffsetRange private(
     val topic: String,
     val partition: Int,
     val fromOffset: Long,
-    val untilOffset: Long) extends Serializable {
+    val untilOffset: Long,
+    val leaderHost: String) extends Serializable {
   import OffsetRange.OffsetRangeTuple
+
+  def this(
+      topic: String,
+      partition: Int,
+      fromOffset: Long,
+      untilOffset: Long
+    ) = {
+    this(topic, partition, fromOffset, untilOffset, null)
+  }
 
   /** Kafka TopicAndPartition object, for convenience */
   def topicAndPartition(): TopicAndPartition = TopicAndPartition(topic, partition)
+
+  def topicPartition(): TopicPartition = new TopicPartition(topic, partition)
 
   /** Number of messages this OffsetRange refers to */
   def count(): Long = untilOffset - fromOffset
@@ -93,11 +106,20 @@ object OffsetRange {
   def apply(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
     new OffsetRange(topic, partition, fromOffset, untilOffset)
 
+
   def apply(
-      topicAndPartition: TopicAndPartition,
+      topic: String,
+      partition: Int,
+      fromOffset: Long,
+      untilOffset: Long,
+      leaderHost: String): OffsetRange =
+    new OffsetRange(topic, partition, fromOffset, untilOffset, leaderHost)
+
+  def apply(
+      topicPartition: TopicPartition,
       fromOffset: Long,
       untilOffset: Long): OffsetRange =
-    new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[kafka]

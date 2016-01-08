@@ -19,6 +19,7 @@ package org.apache.spark.streaming.kafka.v09
 
 import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkFunSuite
 import org.scalatest.BeforeAndAfterAll
 
@@ -26,7 +27,7 @@ import scala.util.Random
 
 class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
   private val topic = "new_kcsuitetopic" + Random.nextInt(10000)
-  private val topicPartition = TopicAndPartition(topic, 0)
+  private val topicPartition = new TopicPartition(topic, 0)
   private var newKc: KafkaCluster[_, _] = null
 
   private var kafkaTestUtils: KafkaTestUtils = _

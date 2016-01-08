@@ -22,6 +22,7 @@ import java.lang.{Integer => JInt, Long => JLong}
 import java.util.{Map => JMap, Set => JSet}
 
 import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SslConfigs
 
 import scala.reflect.ClassTag
@@ -156,14 +157,14 @@ object KafkaUtils {
 
   /** Make sure offsets are available in kafka, or throw an exception */
   private def checkOffsets(
-                            kc: KafkaCluster[_, _],
-                            offsetRanges: Array[OffsetRange]): Unit = {
-    val topics = offsetRanges.map(_.topicAndPartition).toSet
+      kc: KafkaCluster[_, _],
+      offsetRanges: Array[OffsetRange]): Unit = {
+    val topics = offsetRanges.map(_.topicPartition).toSet
     val low = kc.getEarliestOffsets(topics)
     val high = kc.getLatestOffsets(topics)
     val badRanges = offsetRanges.filterNot { o =>
-      low(o.topicAndPartition()) <= o.fromOffset &&
-        o.untilOffset <= high(o.topicAndPartition())
+      low(o.topicPartition()) <= o.fromOffset &&
+        o.untilOffset <= high(o.topicPartition())
     }
     if (!badRanges.isEmpty) {
       throw new SparkException("Offsets not available on leader: " + badRanges.mkString(","))
@@ -292,7 +293,7 @@ object KafkaUtils {
   def createDirectStream[K: ClassTag, V: ClassTag, R: ClassTag](
       ssc: StreamingContext,
       kafkaParams: Map[String, String],
-      fromOffsets: Map[TopicAndPartition, Long],
+      fromOffsets: Map[TopicPartition, Long],
       messageHandler: ConsumerRecord[K, V] => R
      ): InputDStream[R] = {
     val cleanedHandler = ssc.sc.clean(messageHandler)
@@ -388,7 +389,7 @@ object KafkaUtils {
       valueClass: Class[V],
       recordClass: Class[R],
       kafkaParams: JMap[String, String],
-      fromOffsets: JMap[TopicAndPartition, JLong],
+      fromOffsets: JMap[TopicPartition, JLong],
       messageHandler: JFunction[ConsumerRecord[K, V], R]
      ): JavaInputDStream[R] = {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)

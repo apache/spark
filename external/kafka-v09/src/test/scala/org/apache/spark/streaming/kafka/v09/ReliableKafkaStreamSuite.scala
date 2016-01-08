@@ -22,6 +22,7 @@ import java.io.File
 import kafka.common.TopicAndPartition
 import kafka.utils.ZkUtils
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.common.TopicPartition
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{ Milliseconds, StreamingContext }
 import org.apache.spark.util.Utils
@@ -157,7 +158,7 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
   /** Getting partition offset from Zookeeper. */
   private def getCommitOffset(topic: String, partition: Int): Option[Long] = {
     try {
-      val tp = TopicAndPartition(topic, partition)
+      val tp = new TopicPartition(topic, partition)
       Option(kc.getCommittedOffsets(Set(tp))(tp))
     } catch {
       case e: SparkException => None

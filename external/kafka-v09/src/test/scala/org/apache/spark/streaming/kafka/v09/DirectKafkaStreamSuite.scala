@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.{ ConsumerRecord, ConsumerConfig }
+import org.apache.kafka.common.TopicPartition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
@@ -143,7 +144,7 @@ class DirectKafkaStreamSuite
 
   test("receiving from latest starting offset") {
     val topic = "new_latest"
-    val topicPartition = TopicAndPartition(topic, 0)
+    val topicPartition = new TopicPartition(topic, 0)
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
     val kafkaParams = Map(
@@ -191,7 +192,7 @@ class DirectKafkaStreamSuite
 
   test("creating stream by offset") {
     val topic = "new_offset"
-    val topicPartition = TopicAndPartition(topic, 0)
+    val topicPartition = new TopicPartition(topic, 0)
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
     val kafkaParams = Map(
@@ -371,7 +372,7 @@ class DirectKafkaStreamSuite
 
   test("using rate controller") {
     val topic = "new_backpressure"
-    val topicPartition = TopicAndPartition(topic, 0)
+    val topicPartition = new TopicPartition(topic, 0)
     kafkaTestUtils.createTopic(topic)
     val kafkaParams = Map(
       ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> kafkaTestUtils.brokerAddress,

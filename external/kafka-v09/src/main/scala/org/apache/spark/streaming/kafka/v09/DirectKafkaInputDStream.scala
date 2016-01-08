@@ -19,8 +19,10 @@ package org.apache.spark.streaming.kafka.v09
 
 import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.TopicPartition
 import org.apache.spark.Logging
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.kafka.v09.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -52,7 +54,7 @@ class DirectKafkaInputDStream[
   R: ClassTag](
     @transient ssc_ : StreamingContext,
     val kafkaParams: Map[String, String],
-    val fromOffsets: Map[TopicAndPartition, Long],
+    @transient val fromOffsets: Map[TopicPartition, Long],
     messageHandler: ConsumerRecord[K, V] => R
   ) extends InputDStream[R](ssc_) with Logging {
 
@@ -105,32 +107,39 @@ class DirectKafkaInputDStream[
     }
   }
 
-  protected var currentOffsets = fromOffsets
+  // temp fix for serialization issue of TopicPartition
+  protected var serCurrentOffsets = fromOffsets.map { case(tp, l) =>
+    (tp.topic, tp.partition, l);
+  }
 
-  protected final def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, Long] = {
-    val topicPartition = fromOffsets.map(fo => fo._1).toSet
-    kafkaCluster.getLatestOffsets(topicPartition)
+  @transient
+  protected var currentOffsets: Map[TopicPartition, Long] = null
+
+  protected final def latestLeaderOffsets(): Map[TopicPartition, LeaderOffset] = {
+    kafkaCluster.getLatestOffsetsWithLeaders(currentOffsets.keySet)
   }
 
   // limits the maximum number of messages per partition
-  protected def clamp(leaderOffsets: Map[TopicAndPartition, Long]
-                     ): Map[TopicAndPartition, Long] = {
+  protected def clamp(
+      leaderOffsets: Map[TopicPartition, LeaderOffset]
+    ): Map[TopicPartition, LeaderOffset] = {
     maxMessagesPerPartition.map { mmp =>
       leaderOffsets.map { case (tp, lo) =>
-        tp -> (Math.min(currentOffsets(tp) + mmp, lo))
+        tp -> lo.copy(offset = Math.min(currentOffsets(tp) + mmp, lo.offset))
       }
     }.getOrElse(leaderOffsets)
   }
 
   override def compute(validTime: Time): Option[KafkaRDD[K, V, R]] = {
-    val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
+    currentOffsets = serCurrentOffsets.map { i => new TopicPartition(i._1, i._2) -> i._3 }.toMap
+    val untilOffsets = clamp(latestLeaderOffsets())
     val rdd = KafkaRDD[K, V, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.
     val offsetRanges = currentOffsets.map { case (tp, fo) =>
       val uo = untilOffsets(tp)
-      OffsetRange(tp.topic, tp.partition, fo, uo)
+      OffsetRange(tp.topic, tp.partition, fo, uo.offset)
     }
     val description = offsetRanges.filter { offsetRange =>
       // Don't display empty ranges.
@@ -146,7 +155,7 @@ class DirectKafkaInputDStream[
     val inputInfo = StreamInputInfo(id, rdd.count, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
-    currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2)
+    serCurrentOffsets = untilOffsets.map { kv => (kv._1.topic, kv._1.partition, kv._2.offset) }
     Some(rdd)
   }
 
@@ -178,7 +187,6 @@ class DirectKafkaInputDStream[
 
     override def restore() {
       // this is assuming that the topics don't change during execution, which is true currently
-      val topics = fromOffsets.keySet
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")

@@ -71,10 +71,10 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
    * A HashMap to manage the offset for each topic/partition, this HashMap is called in
    * synchronized block, so mutable HashMap will not meet concurrency issue.
    */
-  private var topicPartitionOffsetMap: mutable.HashMap[TopicAndPartition, Long] = null
+  private var topicPartitionOffsetMap: mutable.HashMap[TopicPartition, Long] = null
 
   /** A concurrent HashMap to store the stream block id and related offset snapshot. */
-  private var blockOffsetMap: ConcurrentHashMap[StreamBlockId, Map[TopicAndPartition, Long]] = null
+  private var blockOffsetMap: ConcurrentHashMap[StreamBlockId, Map[TopicPartition, Long]] = null
 
   /**
    * Manage the BlockGenerator in receiver itself for better managing block store and offset
@@ -86,7 +86,7 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
   private var messageHandlerThreadPool: ThreadPoolExecutor = null
 
   private var topicAndPartitionConsumerMap:
-    mutable.HashMap[TopicAndPartition, KafkaConsumer[K, V]] = null
+    mutable.HashMap[TopicPartition, KafkaConsumer[K, V]] = null
 
   private var consumerAndLockMap:
     mutable.HashMap[KafkaConsumer[K, V], ReentrantLock] = null
@@ -94,13 +94,13 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
   override def onStart(): Unit = {
     logInfo(s"Starting Kafka Consumer Stream with group: $groupId")
     // Initialize the topic-partition / offset hash map.
-    topicPartitionOffsetMap = new mutable.HashMap[TopicAndPartition, Long]
+    topicPartitionOffsetMap = new mutable.HashMap[TopicPartition, Long]
 
-    topicAndPartitionConsumerMap = new mutable.HashMap[TopicAndPartition, KafkaConsumer[K, V]]
+    topicAndPartitionConsumerMap = new mutable.HashMap[TopicPartition, KafkaConsumer[K, V]]
     consumerAndLockMap = new mutable.HashMap[KafkaConsumer[K, V], ReentrantLock]
 
     // Initialize the stream block id / offset snapshot hash map.
-    blockOffsetMap = new ConcurrentHashMap[StreamBlockId, Map[TopicAndPartition, Long]]()
+    blockOffsetMap = new ConcurrentHashMap[StreamBlockId, Map[TopicPartition, Long]]()
 
     // Initialize the block generator for storing Kafka message.
     blockGenerator = supervisor.createBlockGenerator(new GeneratedBlockHandler)
@@ -126,17 +126,17 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
 
     try {
       // Start the messages handler for each partition
-      val topicAndPartitions = kafkaCluster.getPartitions(topics.keys.toSet)
-      val iter = topicAndPartitions.iterator
+      val topicPartitions = kafkaCluster.getPartitions(topics.keys.toSet)
+      val iter = topicPartitions.iterator
       while (iter.hasNext) {
-        val topicAndPartition = iter.next()
+        val topicPartition = iter.next()
         val newConsumer = new KafkaConsumer[K, V](props)
         topicAndPartitionConsumerMap.put(
-          topicAndPartition,
+          topicPartition,
           newConsumer
         )
         consumerAndLockMap.put(newConsumer, new ReentrantLock(true))
-        newConsumer.subscribe(Collections.singletonList[String](topicAndPartition.topic))
+        newConsumer.subscribe(Collections.singletonList[String](topicPartition.topic))
         messageHandlerThreadPool.submit(new MessageHandler(newConsumer))
       }
     } finally {
@@ -182,8 +182,8 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
   }
 
   /** Update stored offset */
-  private def updateOffset(topicAndPartition: TopicAndPartition, offset: Long): Unit = {
-    topicPartitionOffsetMap.put(topicAndPartition, offset)
+  private def updateOffset(topicPartition: TopicPartition, offset: Long): Unit = {
+    topicPartitionOffsetMap.put(topicPartition, offset)
   }
 
   /**
@@ -229,15 +229,14 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
   /**
    * Commit the offset of Kafka's topic/partition
    */
-  private def commitOffset(offsetMap: Map[TopicAndPartition, Long]): Unit = {
+  private def commitOffset(offsetMap: Map[TopicPartition, Long]): Unit = {
     val offsets = new util.HashMap[TopicPartition, OffsetAndMetadata]()
-    for ((topicAndPart, offset) <- offsetMap) {
-      val kafkaConsumer = topicAndPartitionConsumerMap.getOrElse(topicAndPart,
-        throw new RuntimeException(s"Failed to get consumer for $topicAndPart"))
+    for ((topicPart, offset) <- offsetMap) {
+      val kafkaConsumer = topicAndPartitionConsumerMap.getOrElse(topicPart,
+        throw new RuntimeException(s"Failed to get consumer for $topicPart"))
 
-      val topicPartition = new TopicPartition(topicAndPart.topic, topicAndPart.partition)
       val offsetAndMetadata = new OffsetAndMetadata(offset)
-      offsets.put(topicPartition, offsetAndMetadata)
+      offsets.put(topicPart, offsetAndMetadata)
       val lock = consumerAndLockMap(kafkaConsumer)
       lock.lock()
       try {
@@ -285,8 +284,8 @@ class ReliableKafkaReceiver[K: ClassTag, V: ClassTag](
     def onAddData(data: Any, metadata: Any): Unit = {
       // Update the offset of the data that was added to the generator
       if (metadata != null) {
-        val (topicAndPartition, offset) = metadata.asInstanceOf[(TopicAndPartition, Long)]
-        updateOffset(topicAndPartition, offset)
+        val (topicPartition, offset) = metadata.asInstanceOf[(TopicPartition, Long)]
+        updateOffset(topicPartition, offset)
       }
     }
 
