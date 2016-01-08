@@ -249,7 +249,6 @@ class ALS(object):
 		:param seed:
 		  Random seed for initial matrix factorization model.
           (default: None)
-
         """
         model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
                               lambda_, blocks, nonnegative, seed)
@@ -275,7 +274,6 @@ class ALS(object):
 		:param seed:
 		  Random seed for initial matrix factorization model.
           (default: None)
-		 
         """
         model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
                               iterations, lambda_, blocks, alpha, nonnegative, seed)

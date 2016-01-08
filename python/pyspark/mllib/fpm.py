@@ -67,15 +67,14 @@ class FPGrowth(object):
     def train(cls, data, minSupport=0.3, numPartitions=-1):
         """
         Computes an FP-Growth model that contains frequent itemsets.
-         :param data:
-           The input data set, each element contains a transaction.
-         :param minSupport:
-           The minimal support level.
-           (default: 0.3)
-         :param numPartitions:
-		   The number of partitions used by parallel FP-growth.
-           (default: same as input data)
-
+        :param data:
+          The input data set, each element contains a transaction.
+        :param minSupport:
+          The minimal support level.
+          (default: 0.3)
+        :param numPartitions:
+		  The number of partitions used by parallel FP-growth.
+          (default: same as input data)
         """
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
@@ -132,7 +131,6 @@ class PrefixSpan(object):
     def train(cls, data, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000):
         """
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
-
         :param data:
           The input data set, each element contains a sequnce of itemsets.
         :param minSupport:
