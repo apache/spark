@@ -54,9 +54,10 @@ class BisectingKMeansModel(JavaModelWrapper):
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> bskm = BisectingKMeans()
     >>> model = bskm.train(sc.parallelize(data), k=4)
-    >>> model.predict(array([0.0, 0.0])) == model.predict(array([0.0, 0.0]))
+    >>> p = array([0.0, 0.0])
+    >>> model.predict(p) == model.predict(p)
     True
-    >>> model.predict(sc.parallelize([array([0.0, 0.0])])).first() == model.predict(array([0.0, 0.0]))
+    >>> model.predict(sc.parallelize([p])).first() == model.predict(p)
     True
     >>> model.k
     4
