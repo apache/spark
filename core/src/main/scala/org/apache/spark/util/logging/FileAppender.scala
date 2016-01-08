@@ -29,7 +29,6 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
   extends Logging {
   @volatile private var outputStream: FileOutputStream = null
   @volatile private var markedForStop = false     // has the appender been asked to stopped
-  @volatile private var stopped = false           // has the appender stopped
 
   // Thread that reads the input stream and writes to file
   private val writingThread = new Thread("File appending thread for " + file) {
@@ -47,11 +46,7 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
    * or because of any error in appending
    */
   def awaitTermination() {
-    synchronized {
-      if (!stopped) {
-        wait()
-      }
-    }
+    writingThread.join()
   }
 
   /** Stop the appender */
@@ -81,10 +76,6 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
         }
       } {
         closeFile()
-        synchronized {
-          stopped = true
-          notifyAll()
-        }
       }
     } catch {
       case e: Exception =>
