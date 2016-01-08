@@ -82,7 +82,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   def parseTableIdentifier(sql: String): TableIdentifier =
     safeParse(sql, ParseDriver.parseTableName(sql, conf))(extractTableIdent)
 
-  def createDdl(sql: String): Seq[Attribute] = {
+  def parseDdl(sql: String): Seq[Attribute] = {
     safeParse(sql, ParseDriver.parseExpression(sql, conf)) { ast =>
       val Token("TOK_CREATETABLE", children) = ast
       children
@@ -199,7 +199,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     val keyMap = keyASTs.zipWithIndex.toMap
 
     val bitmasks: Seq[Int] = setASTs.map {
-      case Token("TOK_GROUPING_SETS_EXPRESSION", null) => 0
       case Token("TOK_GROUPING_SETS_EXPRESSION", columns) =>
         columns.foldLeft(0)((bitmap, col) => {
           val keyIndex = keyMap.find(_._1.treeEquals(col)).map(_._2)
