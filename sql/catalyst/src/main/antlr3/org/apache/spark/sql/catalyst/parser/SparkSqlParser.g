@@ -88,6 +88,8 @@ TOK_DISTRIBUTEBY;
 TOK_SORTBY;
 TOK_UNIONALL;
 TOK_UNIONDISTINCT;
+TOK_EXCEPT;
+TOK_INTERSECT;
 TOK_JOIN;
 TOK_LEFTOUTERJOIN;
 TOK_RIGHTOUTERJOIN;
@@ -2122,6 +2124,8 @@ setOperator
 @after { popMsg(state); }
     : KW_UNION KW_ALL -> ^(TOK_UNIONALL)
     | KW_UNION KW_DISTINCT? -> ^(TOK_UNIONDISTINCT)
+    | KW_EXCEPT -> ^(TOK_EXCEPT)
+    | KW_INTERSECT -> ^(TOK_INTERSECT)
     ;
 
 queryStatementExpression[boolean topLevel]
@@ -2242,7 +2246,7 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
-              ^(TOK_UNIONALL {$setOpSelectStatement.tree} $b)
+              ^($u {$setOpSelectStatement.tree} $b)
               {adaptor.create(Identifier, generateUnionAlias())}
              )
           )
@@ -2252,12 +2256,12 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
           )
        )
    -> {$setOpSelectStatement.tree != null && $u.tree.getType()!=SparkSqlParser.TOK_UNIONDISTINCT}?
-      ^(TOK_UNIONALL {$setOpSelectStatement.tree} $b)
+      ^($u {$setOpSelectStatement.tree} $b)
    -> {$setOpSelectStatement.tree == null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_QUERY
           ^(TOK_FROM
             ^(TOK_SUBQUERY
-              ^(TOK_UNIONALL {$t} $b)
+              ^($u {$t} $b)
               {adaptor.create(Identifier, generateUnionAlias())}
              )
            )
@@ -2266,7 +2270,7 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
             ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
          )
        )
-   -> ^(TOK_UNIONALL {$t} $b)
+   -> ^($u {$t} $b)
    )+
    o=orderByClause?
    c=clusterByClause?
