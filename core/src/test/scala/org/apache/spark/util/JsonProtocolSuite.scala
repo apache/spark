@@ -543,7 +543,6 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
-    assert(metrics1.hostname === metrics2.hostname)
     assert(metrics1.executorDeserializeTime === metrics2.executorDeserializeTime)
     assert(metrics1.resultSize === metrics2.resultSize)
     assert(metrics1.jvmGCTime === metrics2.jvmGCTime)
@@ -761,7 +760,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
-    val t = new TaskMetrics("localhost")
+    val t = new TaskMetrics
     t.setExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)
@@ -1029,7 +1028,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1118,7 +1116,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1204,7 +1201,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1692,7 +1688,6 @@ class JsonProtocolSuite extends SparkFunSuite {
      |    "Stage ID": 2,
      |    "Stage Attempt ID": 3,
      |    "Task Metrics": {
-     |    "Host Name": "localhost",
      |    "Executor Deserialize Time": 300,
      |    "Executor Run Time": 400,
      |    "Result Size": 500,

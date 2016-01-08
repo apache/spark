@@ -17,15 +17,12 @@
 
 package org.apache.spark.executor
 
-import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -45,23 +42,15 @@ import org.apache.spark.util.Utils
  * @param initialAccums the initial set of accumulators that this [[TaskMetrics]] depends on.
  *                      Each accumulator in this initial set must be named and marked as internal.
  *                      Additional accumulators registered here have no such requirements.
- * @param hostname where this task is run.
  */
 @DeveloperApi
-class TaskMetrics private[spark] (
-    initialAccums: Seq[Accumulable[_, _]],
-    val hostname: String = TaskMetrics.getCachedHostName)
-  extends Serializable {
+class TaskMetrics private[spark] (initialAccums: Seq[Accumulable[_, _]]) extends Serializable {
 
   import InternalAccumulator._
 
-  def this(host: String) {
-    this(InternalAccumulator.create(), host)
-  }
-
   // Needed for Java tests
   def this() {
-    this(TaskMetrics.getCachedHostName)
+    this(InternalAccumulator.create())
   }
 
   /**
@@ -319,19 +308,8 @@ class TaskMetrics private[spark] (
 
 
 private[spark] object TaskMetrics {
-  private val hostNameCache = new ConcurrentHashMap[String, String]()
 
   def empty: TaskMetrics = new TaskMetrics
-
-  /**
-   * Get the hostname from cached data, since hostname is the order of number of nodes in cluster,
-   * so using cached hostname will decrease the object number and alleviate the GC overhead.
-   */
-  def getCachedHostName: String = {
-    val host = Utils.localHostName()
-    val canonicalHost = hostNameCache.putIfAbsent(host, host)
-    if (canonicalHost != null) canonicalHost else host
-  }
 
   /**
    * Get a Long accumulator from the given map by name, assuming it exists.
