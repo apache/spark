@@ -42,7 +42,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
-    Batch("Union", FixedPoint(100),
+    Batch("Union", Once,
       CombineUnions) ::
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,

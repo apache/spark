@@ -194,8 +194,7 @@ trait CheckAnalysis {
               failAnalysis(
                 s"""
                   |Unions can only be performed on tables with the same number of columns,
-                  | but the table '${child.simpleString}' has '${child.output.length}' columns
-                  | and the first table '${s.children.head.simpleString}' has
+                  | but one table has '${child.output.length}' columns and another table has
                   | '${s.children.head.output.length}' columns""".stripMargin)
             }
 
