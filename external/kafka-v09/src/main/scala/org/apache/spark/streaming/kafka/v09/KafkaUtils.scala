@@ -33,7 +33,6 @@ import kafka.serializer.Decoder
 import net.razorvine.pickle.{Opcodes, Pickler, IObjectPickler}
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.{SSLOptions, SparkContext, SparkException}
 
 import scala.collection.JavaConverters._
@@ -71,88 +70,6 @@ object KafkaUtils {
       kafkaParams
     }
 
-  }
-
-  /**
-   * Create an input stream that pulls messages from Kafka Brokers.
-   * @param ssc       StreamingContext object
-   * @param servers   Broker servers (for Kafka 0.9) (hostname:port,hostname:port,..)
-   * @param groupId   The group id for this consumer
-   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                  in its own thread
-   * @param storageLevel  Storage level to use for storing the received objects
-   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
-   */
-  def createStream(
-      ssc: StreamingContext,
-      servers: String,
-      groupId: String,
-      topics: Map[String, Int],
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-     ): ReceiverInputDStream[(String, String)] = {
-    val kafkaParams = Map[String, String](
-      ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> servers,
-      ConsumerConfig.GROUP_ID_CONFIG -> groupId,
-      ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG -> "5000",
-      ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000"
-    )
-    createStream[String, String](
-      ssc, kafkaParams, topics, storageLevel)
-  }
-
-  /**
-   * Create an input stream that pulls messages from Kafka Brokers.
-   * @param ssc         StreamingContext object
-   * @param kafkaParams Map of kafka configuration parameters
-   * @param topics      Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                    in its own thread.
-   * @param storageLevel Storage level to use for storing the received objects
-   */
-  def createStream[K: ClassTag, V: ClassTag](
-      ssc: StreamingContext,
-      kafkaParams: Map[String, String],
-      topics: Map[String, Int],
-      storageLevel: StorageLevel
-    ): ReceiverInputDStream[(K, V)] = {
-    val walEnabled = WriteAheadLogUtils.enableReceiverLog(ssc.conf)
-    new KafkaInputDStream[K, V](
-      ssc,
-      addSSLOptions(kafkaParams, ssc.sparkContext),
-      topics,
-      walEnabled,
-      storageLevel)
-  }
-
-  /**
-   * Create an input stream that pulls messages from Kafka Brokers.
-   * @param jssc      JavaStreamingContext object
-   * @param keyTypeClass Key type of DStream
-   * @param valueTypeClass value type of Dstream
-   * @param kafkaParams Map of kafka configuration parameters
-   * @param topics  Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                in its own thread
-   * @param storageLevel RDD storage level.
-   */
-  def createStream[K, V](
-      jssc: JavaStreamingContext,
-      keyTypeClass: Class[K],
-      valueTypeClass: Class[V],
-      kafkaParams: JMap[String, String],
-      topics: JMap[String, JInt],
-      storageLevel: StorageLevel
-    ): JavaPairReceiverInputDStream[K, V] = {
-    implicit val keyCmt: ClassTag[K] = ClassTag(keyTypeClass)
-    implicit val valueCmt: ClassTag[V] = ClassTag(valueTypeClass)
-
-    createStream[K, V](
-      jssc.ssc,
-      Map(kafkaParams.asScala.toSeq: _*),
-      Map(topics.asScala.mapValues(_.intValue()).toSeq: _*),
-      storageLevel)
   }
 
   /** Make sure offsets are available in kafka, or throw an exception */
