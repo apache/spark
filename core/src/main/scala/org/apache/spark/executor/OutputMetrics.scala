@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator}
+import org.apache.spark.{Accumulator, InternalAccumulator}
 import org.apache.spark.annotation.DeveloperApi
 
 
@@ -43,7 +43,7 @@ class OutputMetrics private (
     _writeMethod: Accumulator[String])
   extends Serializable {
 
-  private[executor] def this(accumMap: Map[String, Accumulable[_, _]]) {
+  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
     this(
       TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.BYTES_WRITTEN),
       TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.RECORDS_WRITTEN),

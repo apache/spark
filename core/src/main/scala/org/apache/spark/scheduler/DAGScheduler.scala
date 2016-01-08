@@ -1116,37 +1116,44 @@ class DAGScheduler(
    *
    * Note: If the task failed, we may return null after attempting to reconstruct the
    * [[TaskMetrics]] in vain.
+   *
+   * TODO: write tests here.
    */
   private def reconstructTaskMetrics(task: Task[_], accumUpdates: Map[Long, Any]): TaskMetrics = {
     if (accumUpdates == null) {
       return null
     }
-    // We created the internal accumulators on the driver and expect the executor to send back
-    // accumulator values with matching IDs. If there are missing values, we cannot reconstruct
-    // the original TaskMetrics, so just return null. This might happen if the task failed.
-    val missingAccums = task.initialAccumulators.filter { a => !accumUpdates.contains(a.id) }
-    if (missingAccums.nonEmpty) {
-      val missingValuesString = missingAccums.map(_.name.get).mkString("[", ",", "]")
-      logWarning(s"Not reconstructing metrics for task ${task.partitionId} because its " +
-        s"accumulator updates had missing values: $missingValuesString. This could happen " +
-        s"if the task failed.")
-      return null
-    }
-    // TODO: the shuffle metrics and stuff are currently not set. This is failing tests.
-    val metrics = new TaskMetrics(task.initialAccumulators)
-    val registeredAccumIds = task.initialAccumulators.map(_.id).toSet
-    // Register all remaining accumulators separately because these may not be named.
-    accumUpdates
-      .flatMap { case (id, _) =>
-        Accumulators.getAccum(id).orElse {
-          logWarning(s"Task ${task.partitionId} returned accumulator $id that was " +
-            s"not registered on the driver.")
+    val taskId = task.partitionId
+    try {
+      // Initial accumulators are passed into the TaskMetrics constructor first because these
+      // are required to be uniquely named. The rest of the accumulators from this task are
+      // registered later because they need not satisfy this requirement.
+      val initialAccumsMap =
+        task.initialAccumulators.map { a => (a.id, a) }.toMap[Long, Accumulator[_]]
+      val (initialAccumUpdates, otherAccumUpdates) =
+        accumUpdates.partition { case (id, _) => initialAccumsMap.contains(id) }
+      // Note: it is important that we copy the accumulators here since they are used across
+      // many tasks and we want to maintain a snapshot of their local task values when we post
+      // them to listeners downstream. Otherwise, when a new task comes in the listener may get
+      // a different value for an old task.
+      val newInitialAccums = initialAccumUpdates.map { case (id, taskValue) =>
+        initialAccumsMap(id).copy(taskValue)
+      }
+      val otherAccums = otherAccumUpdates.flatMap { case (id, taskValue) =>
+        Accumulators.getAccum(id).map(_.copy(taskValue)).orElse {
+          logWarning(s"Task $taskId returned unregistered accumulator $id.")
           None
         }
       }
-      .filter { a => !registeredAccumIds.contains(a.id) }
-      .foreach(metrics.registerAccumulator)
-    metrics
+      val metrics = new TaskMetrics(newInitialAccums.toSeq)
+      otherAccums.foreach(metrics.registerAccumulator)
+      metrics
+    } catch {
+      // Do not crash the scheduler if reconstruction fails
+      case NonFatal(e) =>
+        logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
+        null
+    }
   }
 
   /**

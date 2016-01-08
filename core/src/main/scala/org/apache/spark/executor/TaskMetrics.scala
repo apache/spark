@@ -43,7 +43,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  *                      Additional accumulators registered here have no such requirements.
  */
 @DeveloperApi
-class TaskMetrics private[spark](initialAccums: Seq[Accumulable[_, _]]) extends Serializable {
+class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Serializable {
 
   import InternalAccumulator._
 
@@ -61,7 +61,7 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulable[_, _]]) extends 
   /**
    * A map for quickly accessing the initial set of accumulators by name.
    */
-  private val initialAccumsMap: Map[String, Accumulable[_, _]] = {
+  private val initialAccumsMap: Map[String, Accumulator[_]] = {
     initialAccums.map { a =>
       assert(a.name.isDefined, "initial accumulators passed to TaskMetrics should be named")
       val name = a.name.get
@@ -75,14 +75,14 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulable[_, _]]) extends 
     s"accumulators passed to TaskMetrics:\n ${initialAccums.map(_.name.get).mkString("\n")}")
 
   // Each metric is internally represented as an accumulator
-  private val _executorDeserializeTime = getAccum[Long](EXECUTOR_DESERIALIZE_TIME)
-  private val _executorRunTime = getAccum[Long](EXECUTOR_RUN_TIME)
-  private val _resultSize = getAccum[Long](RESULT_SIZE)
-  private val _jvmGCTime = getAccum[Long](JVM_GC_TIME)
-  private val _resultSerializationTime = getAccum[Long](RESULT_SERIALIZATION_TIME)
-  private val _memoryBytesSpilled = getAccum[Long](MEMORY_BYTES_SPILLED)
-  private val _diskBytesSpilled = getAccum[Long](DISK_BYTES_SPILLED)
-  private val _peakExecutionMemory = getAccum[Long](PEAK_EXECUTION_MEMORY)
+  private val _executorDeserializeTime = getAccum(EXECUTOR_DESERIALIZE_TIME)
+  private val _executorRunTime = getAccum(EXECUTOR_RUN_TIME)
+  private val _resultSize = getAccum(RESULT_SIZE)
+  private val _jvmGCTime = getAccum(JVM_GC_TIME)
+  private val _resultSerializationTime = getAccum(RESULT_SERIALIZATION_TIME)
+  private val _memoryBytesSpilled = getAccum(MEMORY_BYTES_SPILLED)
+  private val _diskBytesSpilled = getAccum(DISK_BYTES_SPILLED)
+  private val _peakExecutionMemory = getAccum(PEAK_EXECUTION_MEMORY)
 
   /**
    * Time taken on the executor to deserialize this task.
@@ -296,7 +296,7 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulable[_, _]]) extends 
    * Get a Long accumulator from the given map by name, assuming it exists.
    * Note: this only searches the initial set passed into the constructor.
    */
-  private[spark] def getAccum[Long](name: String): Accumulator[Long] = {
+  private[spark] def getAccum(name: String): Accumulator[Long] = {
     TaskMetrics.getAccum[Long](initialAccumsMap, name)
   }
 
@@ -343,18 +343,19 @@ private[spark] object TaskMetrics {
   def empty: TaskMetrics = new TaskMetrics
 
   /**
-   * Get a Long accumulator from the given map by name, assuming it exists.
+   * Get an accumulator from the given map by name, assuming it exists.
    */
   def getAccum[T](
-      accumMap: Map[String, Accumulable[_, _]],
+      accumMap: Map[String, Accumulator[_]],
       name: String): Accumulator[T] = {
     assert(accumMap.contains(name), s"metric '$name' is missing")
+    val accum = accumMap(name)
     try {
       // Note: we can't do pattern matching here because types are erased by compile time
-      accumMap(name).asInstanceOf[Accumulator[T]]
+      accum.asInstanceOf[Accumulator[T]]
     } catch {
-      case _: ClassCastException =>
-        throw new SparkException(s"attempted to access invalid accumulator $name as a long metric")
+      case e: ClassCastException =>
+        throw new SparkException(s"accumulator $name was of unexpected type", e)
     }
   }
 

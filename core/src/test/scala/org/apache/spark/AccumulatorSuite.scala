@@ -166,7 +166,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val accumulatorValues = taskContext.taskMetrics.accumulatorUpdates()
     assert(accumulators.size > 0)
     assert(accumulators.forall(_.isInternal))
-    val testAccum = taskContext.taskMetrics.getAccum[Long](TEST_ACCUM)
+    val testAccum = taskContext.taskMetrics.getAccum(TEST_ACCUM)
     assert(accumulatorValues.size === accumulators.size)
     assert(accumulatorValues.contains(testAccum.id))
   }
@@ -178,7 +178,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.addSparkListener(listener)
     // Have each task add 1 to the internal accumulator
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum[Long](TEST_ACCUM) += 1
+      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
       iter
     }
     // Register asserts in job completion callback to avoid flakiness
@@ -213,17 +213,17 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum[Long](TEST_ACCUM) += 1
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
         iter
       }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum[Long](TEST_ACCUM) += 10
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
         iter
       }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum[Long](TEST_ACCUM) += 100
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
         iter
       }
     // Register asserts in job completion callback to avoid flakiness
@@ -271,7 +271,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.addSparkListener(listener)
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitionsWithIndex { case (i, iter) =>
       val taskContext = TaskContext.get()
-      taskContext.taskMetrics.getAccum[Long](TEST_ACCUM) += 1
+      taskContext.taskMetrics.getAccum(TEST_ACCUM) += 1
       // Fail the first attempts of a subset of the tasks
       if (failCondition(i) && taskContext.attemptNumber() == 0) {
         throw new Exception("Failing a task intentionally.")

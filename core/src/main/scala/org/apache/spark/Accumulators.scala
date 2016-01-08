@@ -93,6 +93,15 @@ class Accumulable[R, T] private[spark] (
   private[spark] def isInternal: Boolean = internal
 
   /**
+   * Return a copy of this [[Accumulable]] without its current value.
+   */
+  private[spark] def copy(newValue: Any): Accumulable[R, T] = {
+    val a = new Accumulable[R, T](initialValue, param, name, internal, countFailedValues)
+    a.setValue(newValue.asInstanceOf[R])
+    a
+  }
+
+  /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
@@ -281,6 +290,15 @@ class Accumulator[T] private[spark] (
     override val countFailedValues: Boolean = false)
   extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
+  /**
+   * Return a copy of this [[Accumulator]] without its current value.
+   */
+  private[spark] override def copy(newValue: Any): Accumulator[T] = {
+    val a = new Accumulator[T](initialValue, param, name, internal, countFailedValues)
+    a.setValue(newValue.asInstanceOf[T])
+    a
+  }
+
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(initialValue, param, name, false)
   }
@@ -398,7 +416,7 @@ private[spark] object Accumulators extends Logging {
 private[spark] object InternalAccumulator {
 
   // Prefixes used in names of internal task level metrics
-  val METRICS_PREFIX = "metrics."
+  private val METRICS_PREFIX = "metrics."
   val SHUFFLE_READ_METRICS_PREFIX = METRICS_PREFIX + "shuffle.read."
   val SHUFFLE_WRITE_METRICS_PREFIX = METRICS_PREFIX + "shuffle.write."
   val OUTPUT_METRICS_PREFIX = METRICS_PREFIX + "output."

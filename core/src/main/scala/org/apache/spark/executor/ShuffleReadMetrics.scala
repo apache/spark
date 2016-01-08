@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator}
+import org.apache.spark.{Accumulator, InternalAccumulator}
 import org.apache.spark.annotation.DeveloperApi
 
 
@@ -35,7 +35,7 @@ class ShuffleReadMetrics private (
     _recordsRead: Accumulator[Long])
   extends Serializable {
 
-  private[executor] def this(accumMap: Map[String, Accumulable[_, _]]) {
+  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
     this(
       TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.REMOTE_BLOCKS_FETCHED),
       TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.LOCAL_BLOCKS_FETCHED),
