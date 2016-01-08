@@ -173,7 +173,7 @@ class KMeans(object):
         """Train a k-means clustering model."""
         if runs != 1:
             warnings.warn(
-                "Support for runs is deprecated in 1.6.0. This param will have no effect in 1.7.0.")
+                "Support for runs is deprecated in 1.6.0. This param will have no effect in 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):

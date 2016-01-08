@@ -56,6 +56,7 @@ public class JavaBinaryClassificationMetricsExample {
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
       new Function<LabeledPoint, Tuple2<Object, Object>>() {
+        @Override
         public Tuple2<Object, Object> call(LabeledPoint p) {
           Double prediction = model.predict(p.features());
           return new Tuple2<Object, Object>(prediction, p.label());
@@ -88,6 +89,7 @@ public class JavaBinaryClassificationMetricsExample {
     // Thresholds
     JavaRDD<Double> thresholds = precision.map(
       new Function<Tuple2<Object, Object>, Double>() {
+        @Override
         public Double call(Tuple2<Object, Object> t) {
           return new Double(t._1().toString());
         }
@@ -106,8 +108,7 @@ public class JavaBinaryClassificationMetricsExample {
 
     // Save and load model
     model.save(sc, "target/tmp/LogisticRegressionModel");
-    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc,
-      "target/tmp/LogisticRegressionModel");
+    LogisticRegressionModel.load(sc, "target/tmp/LogisticRegressionModel");
     // $example off$
   }
 }

@@ -57,8 +57,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
+      case (result: Double, expected: Spread[Double @unchecked]) =>
+        expected.asInstanceOf[Spread[Double]].isWithin(result)
       case _ => result == expected
     }
   }
@@ -275,8 +275,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
+      case (result: Double, expected: Spread[Double @unchecked]) =>
+        expected.asInstanceOf[Spread[Double]].isWithin(result)
       case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
         true
       case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>

@@ -74,7 +74,7 @@ object SparkHdfsLR {
     val conf = new Configuration()
     val sc = new SparkContext(sparkConf)
     val lines = sc.textFile(inputPath)
-    val points = lines.map(parsePoint _).cache()
+    val points = lines.map(parsePoint).cache()
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
