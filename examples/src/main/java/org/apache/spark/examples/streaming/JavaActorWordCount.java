@@ -18,6 +18,7 @@
 package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
+import java.util.Iterator;
 
 import scala.Tuple2;
 
@@ -116,8 +117,8 @@ public class JavaActorWordCount {
     // compute wordcount
     lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String s) {
-        return Arrays.asList(s.split("\\s+"));
+      public Iterator<String> call(String s) {
+        return Arrays.asList(s.split("\\s+")).iterator();
       }
     }).mapToPair(new PairFunction<String, String, Integer>() {
       @Override
