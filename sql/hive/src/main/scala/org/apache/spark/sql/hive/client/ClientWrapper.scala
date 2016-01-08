@@ -125,6 +125,10 @@ private[hive] class ClientWrapper(
       SessionState.start(state)
       state.out = new PrintStream(outputBuffer, true, "UTF-8")
       state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      IsolatedClientLoader.userInput.foreach { input =>
+        state.setIsSilent(input.isSilent)
+        state.setIsVerbose(input.isVerbose)
+      }
       state
     } finally {
       Thread.currentThread().setContextClassLoader(original)
@@ -425,7 +429,7 @@ private[hive] class ClientWrapper(
           results
 
         case _ =>
-          if (state.out != null) {
+          if (state.out != null && !state.getIsSilent) {
             // scalastyle:off println
             state.out.println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
