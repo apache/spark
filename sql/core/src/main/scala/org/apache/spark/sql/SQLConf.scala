@@ -26,6 +26,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -112,6 +113,25 @@ private[spark] object SQLConf {
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be long, but was $v")
+        }
+      }, _.toString, doc, isPublic)
+
+    def longMemConf(
+        key: String,
+        defaultValue: Option[Long] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Long] =
+      SQLConfEntry(key, defaultValue, { v =>
+        try {
+          v.toLong
+        } catch {
+          case _: NumberFormatException =>
+            try {
+              Utils.byteStringAsBytes(v)
+            } catch {
+              case _: NumberFormatException =>
+                throw new IllegalArgumentException(s"$key should be long, but was $v")
+            }
         }
       }, _.toString, doc, isPublic)
 
@@ -235,7 +255,7 @@ private[spark] object SQLConf {
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
-    longConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+    longMemConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
       defaultValue = Some(64 * 1024 * 1024),
       doc = "The target post-shuffle input size in bytes of a task.")
 
