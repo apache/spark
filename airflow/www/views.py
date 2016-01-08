@@ -672,7 +672,8 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         dags = [dagbag.dags.get(dag_id)] if dag_id else dagbag.dags.values()
         for dag in dags:
-            d[dag.dag_id] = dag.pickle_info()
+            if not dag.is_subdag:
+                d[dag.dag_id] = dag.pickle_info()
         return wwwutils.json_response(d)
 
     @expose('/login', methods=['GET', 'POST'])
