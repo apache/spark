@@ -66,7 +66,7 @@ private[ml] class IterativelyReweightedLeastSquares(
     while (iter < maxIter && !converged) {
 
       zw = y.zip(mu).map { case (y, mu) =>
-        val eta = family.link.link(mu)
+        val eta = family.predict(mu)
         val z = family.z(y, mu, eta)
         val w = family.weights(mu)
         (z, w)
@@ -80,7 +80,7 @@ private[ml] class IterativelyReweightedLeastSquares(
       eta = newInstances.map { instance =>
         dot(instance.features, model.coefficients) + model.intercept
       }
-      mu = eta.map { mu => family.link.unlink(mu) }
+      mu = eta.map { eta => family.fitted(eta) }
 
       oldDev = dev
       dev = family.deviance(y, mu)

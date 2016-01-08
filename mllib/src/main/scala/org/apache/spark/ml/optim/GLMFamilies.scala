@@ -41,6 +41,12 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
 
   /** The working dependent variable. */
   def z(y: Double, mu: Double, eta: Double): Double
+
+  /** Linear predictors based on given mu. */
+  def predict(mu: Double): Double = this.link.link(mu)
+
+  /** Fitted values based on linear predictors eta. */
+  def fitted(eta: Double): Double = this.link.unlink(eta)
 }
 
 /**
