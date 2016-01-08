@@ -220,4 +220,8 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
       final int ${ev.value} = ${unsafeRow.value}.hashCode($seed);
     """
   }
+
+  override def prettyName: String = "hash"
+
+  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")}, $seed)"
 }

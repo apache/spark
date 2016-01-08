@@ -78,4 +78,8 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
       $countTerm++;
     """
   }
+
+  override def prettyName: String = "monotonically_increasing_id"
+
+  override def sql: String = s"$prettyName()"
 }

@@ -86,8 +86,7 @@ class Analyzer(
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
-      PullOutNondeterministic,
-      ComputeCurrentTime),
+      PullOutNondeterministic),
     Batch("UDF", Once,
       HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
@@ -1226,23 +1225,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
           c.copy(children = c.children.map(trimNonTopLevelAliases))
         case Alias(child, _) if !stop => child
       }
-  }
-}
-
-/**
- * Computes the current date and time to make sure we return the same result in a single query.
- */
-object ComputeCurrentTime extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val dateExpr = CurrentDate()
-    val timeExpr = CurrentTimestamp()
-    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
-    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
-
-    plan transformAllExpressions {
-      case CurrentDate() => currentDate
-      case CurrentTimestamp() => currentTime
-    }
   }
 }
 

@@ -130,6 +130,8 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
       }
     })
   }
+
+  override def sql: String = child.sql + s".`${childSchema(ordinal).name}`"
 }
 
 /**

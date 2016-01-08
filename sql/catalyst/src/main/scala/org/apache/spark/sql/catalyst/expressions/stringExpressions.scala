@@ -23,6 +23,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -61,6 +62,8 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       }
     """
   }
+
+  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 
@@ -153,6 +156,8 @@ case class ConcatWs(children: Seq[Expression])
       """
     }
   }
+
+  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 trait String2StringExpression extends ImplicitCastInputTypes {
@@ -292,24 +297,24 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     val termDict = ctx.freshName("dict")
     val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
 
-    ctx.addMutableState("UTF8String", termLastMatching, s"${termLastMatching} = null;")
-    ctx.addMutableState("UTF8String", termLastReplace, s"${termLastReplace} = null;")
-    ctx.addMutableState(classNameDict, termDict, s"${termDict} = null;")
+    ctx.addMutableState("UTF8String", termLastMatching, s"$termLastMatching = null;")
+    ctx.addMutableState("UTF8String", termLastReplace, s"$termLastReplace = null;")
+    ctx.addMutableState(classNameDict, termDict, s"$termDict = null;")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
       val check = if (matchingExpr.foldable && replaceExpr.foldable) {
-        s"${termDict} == null"
+        s"$termDict == null"
       } else {
-        s"!${matching}.equals(${termLastMatching}) || !${replace}.equals(${termLastReplace})"
+        s"!$matching.equals($termLastMatching) || !$replace.equals($termLastReplace)"
       }
       s"""if ($check) {
         // Not all of them is literal or matching or replace value changed
-        ${termLastMatching} = ${matching}.clone();
-        ${termLastReplace} = ${replace}.clone();
-        ${termDict} = org.apache.spark.sql.catalyst.expressions.StringTranslate
-          .buildDict(${termLastMatching}, ${termLastReplace});
+        $termLastMatching = $matching.clone();
+        $termLastReplace = $replace.clone();
+        $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
+          .buildDict($termLastMatching, $termLastReplace);
       }
-      ${ev.value} = ${src}.translate(${termDict});
+      ${ev.value} = $src.translate($termDict);
       """
     })
   }
@@ -340,6 +345,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   }
 
   override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "find_in_set"
 }
 
 /**
@@ -832,7 +839,6 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
             org.apache.commons.codec.binary.Base64.encodeBase64($child));
        """})
   }
-
 }
 
 /**

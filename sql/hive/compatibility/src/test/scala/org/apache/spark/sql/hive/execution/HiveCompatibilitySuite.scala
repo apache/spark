@@ -41,9 +41,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
 
-  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+  def testCases: Seq[(String, File)] = {
+    hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+  }
 
   override def beforeAll() {
+    super.beforeAll()
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -68,10 +71,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // For debugging dump some statistics about how much time was spent in various optimizer rules.
     logWarning(RuleExecutor.dumpTimeSpent())
+    super.afterAll()
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
-  override def blackList = Seq(
+  override def blackList: Seq[String] = Seq(
     // These tests use hooks that are not on the classpath and thus break all subsequent execution.
     "hook_order",
     "hook_context_cs",
@@ -106,7 +110,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge",
     "alter_concatenate_indexed_table",
     "protectmode2",
-    //"describe_table",
+    // "describe_table",
     "describe_comment_nonascii",
 
     "create_merge_compressed",
@@ -323,7 +327,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
    * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
    * blacklist are implicitly marked as ignored.
    */
-  override def whiteList = Seq(
+  override def whiteList: Seq[String] = Seq(
     "add_part_exist",
     "add_part_multiple",
     "add_partition_no_whitelist",

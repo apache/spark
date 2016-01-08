@@ -104,6 +104,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
     TestHive.reset()
+    super.afterAll()
   }
 
   /////////////////////////////////////////////////////////////////////////////
