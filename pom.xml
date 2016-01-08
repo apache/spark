@@ -2251,17 +2251,6 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>org.spark-project.guava</shadedPattern>
-              <excludes>
-                <!--
-                  These classes cannot be relocated, because the Java API exposes the
-                  "Optional" type; the others are referenced by the Optional class.
-                -->
-                <exclude>com/google/common/base/Absent*</exclude>
-                <exclude>com/google/common/base/Function</exclude>
-                <exclude>com/google/common/base/Optional*</exclude>
-                <exclude>com/google/common/base/Present*</exclude>
-                <exclude>com/google/common/base/Supplier</exclude>
-              </excludes>
             </relocation>
           </relocations>
         </configuration>
