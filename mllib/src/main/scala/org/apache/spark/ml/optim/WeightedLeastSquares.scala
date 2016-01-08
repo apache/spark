@@ -95,8 +95,7 @@ private[ml] class WeightedLeastSquares(
         val intercept = bBar
         val diagInvAtWA = new DenseVector(Array(0D))
         return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
-      }
-      else {
+      } else {
       logWarning(s"The standard deviation of the label is zero. " +
         "Consider setting fitIntercept=true.")
       }
