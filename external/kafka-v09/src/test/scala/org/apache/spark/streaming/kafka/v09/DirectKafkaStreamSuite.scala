@@ -157,7 +157,7 @@ class DirectKafkaStreamSuite
       "spark.kafka.poll.time" -> "100")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
-      kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).get
+      kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).getOrElse(0)
     }
 
     // Send some initial messages before starting context
@@ -205,7 +205,7 @@ class DirectKafkaStreamSuite
       "spark.kafka.poll.time" -> "100")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
-      kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).get
+      kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).getOrElse(0)
     }
 
     // Send some initial messages before starting context
