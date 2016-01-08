@@ -202,20 +202,25 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
-    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2))
+    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2), 2)
     >>> model = GaussianMixture.train(clusterdata_1, 3, convergenceTol=0.0001,
     ...                                 maxIterations=50, seed=10)
     >>> labels = model.predict(clusterdata_1).collect()
     >>> labels[0]==labels[1]
     False
     >>> labels[1]==labels[2]
-    True
+    False
     >>> labels[4]==labels[5]
     True
     >>> model.predict([-0.1,-0.05])
     0
-    >>> model.predictSoft([-0.1,-0.05])
-    array([ 0.985...,  0.005...,  0.009...])
+    >>> softPredicted = model.predictSoft([-0.1,-0.05])
+    >>> abs(softPredicted[0] - 1.0) < 0.001
+    True
+    >>> abs(softPredicted[1] - 0.0) < 0.001
+    True
+    >>> abs(softPredicted[2] - 0.0) < 0.001
+    True
 
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
