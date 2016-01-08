@@ -24,6 +24,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
@@ -438,6 +439,20 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.toString == "[_1: int, _2: int]")
   }
 
+  test("showString: Kryo encoder") {
+    implicit val kryoEncoder = Encoders.kryo[KryoData]
+    val ds = Seq(KryoData(1), KryoData(2)).toDS()
+
+    val expectedAnswer = """+-----------+
+                           ||      value|
+                           |+-----------+
+                           ||KryoData(1)|
+                           ||KryoData(2)|
+                           |+-----------+
+                           |""".stripMargin
+    assert(ds.showString(10) === expectedAnswer)
+  }
+
   test("Kryo encoder") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
@@ -493,11 +508,62 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(2 -> 2.toByte, 3 -> 3.toByte).toDF("a", "b").as[ClassData]
     assert(ds.collect().toSeq == Seq(ClassData("2", 2), ClassData("3", 3)))
   }
+
+  test("verify mismatching field names fail with a good error") {
+    val ds = Seq(ClassData("a", 1)).toDS()
+    val e = intercept[AnalysisException] {
+      ds.as[ClassData2].collect()
+    }
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
+  }
+
+  test("runtime nullability check") {
+    val schema = StructType(Seq(
+      StructField("f", StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", IntegerType, nullable = false)
+      )), nullable = true)
+    ))
+
+    def buildDataset(rows: Row*): Dataset[NestedStruct] = {
+      val rowRDD = sqlContext.sparkContext.parallelize(rows)
+      sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct]
+    }
+
+    checkAnswer(
+      buildDataset(Row(Row("hello", 1))),
+      NestedStruct(ClassData("hello", 1))
+    )
+
+    // Shouldn't throw runtime exception when parent object (`ClassData`) is null
+    assert(buildDataset(Row(null)).collect() === Array(NestedStruct(null)))
+
+    val message = intercept[RuntimeException] {
+      buildDataset(Row(Row("hello", null))).collect()
+    }.getMessage
+
+    assert(message.contains(
+      "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
+    ))
+  }
+
+  test("SPARK-12478: top level null field") {
+    val ds0 = Seq(NestedStruct(null)).toDS()
+    checkAnswer(ds0, NestedStruct(null))
+    checkAnswer(ds0.toDF(), Row(null))
+
+    val ds1 = Seq(DeepNestedStruct(NestedStruct(null))).toDS()
+    checkAnswer(ds1, DeepNestedStruct(NestedStruct(null)))
+    checkAnswer(ds1.toDF(), Row(Row(null)))
+  }
 }
 
-
 case class ClassData(a: String, b: Int)
+case class ClassData2(c: String, d: Int)
 case class ClassNullableData(a: String, b: Integer)
+
+case class NestedStruct(f: ClassData)
+case class DeepNestedStruct(f: NestedStruct)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

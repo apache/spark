@@ -578,6 +578,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10) === expectedAnswer)
   }
 
+  test("showString: binary") {
+    val df = Seq(
+      ("12".getBytes, "ABC.".getBytes),
+      ("34".getBytes, "12346".getBytes)
+    ).toDF()
+    val expectedAnswer = """+-------+----------------+
+                           ||     _1|              _2|
+                           |+-------+----------------+
+                           ||[31 32]|   [41 42 43 2E]|
+                           ||[33 34]|[31 32 33 34 36]|
+                           |+-------+----------------+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
   test("showString: minimum column width") {
     val df = Seq(
       (1, 1),

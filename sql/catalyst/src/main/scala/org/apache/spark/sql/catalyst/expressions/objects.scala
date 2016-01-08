@@ -23,11 +23,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 /**
@@ -167,7 +165,7 @@ case class Invoke(
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
 
-      boolean ${ev.isNull} = ${obj.value} == null;
+      boolean ${ev.isNull} = ${obj.isNull};
       $javaType ${ev.value} =
         ${ev.isNull} ?
         ${ctx.defaultValue(dataType)} : ($javaType) $value;
@@ -180,8 +178,8 @@ object NewInstance {
   def apply(
       cls: Class[_],
       arguments: Seq[Expression],
-      propagateNull: Boolean = false,
-      dataType: DataType): NewInstance =
+      dataType: DataType,
+      propagateNull: Boolean = true): NewInstance =
     new NewInstance(cls, arguments, propagateNull, dataType, None)
 }
 
@@ -233,7 +231,7 @@ case class NewInstance(
       s"new $className($argString)"
     }
 
-    if (propagateNull) {
+    if (propagateNull && argGen.nonEmpty) {
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
       s"""
@@ -250,8 +248,8 @@ case class NewInstance(
       s"""
         $setup
 
-        $javaType ${ev.value} = $constructorCall;
-        final boolean ${ev.isNull} = ${ev.value} == null;
+        final $javaType ${ev.value} = $constructorCall;
+        final boolean ${ev.isNull} = false;
       """
     }
   }
@@ -293,15 +291,16 @@ case class UnwrapOption(
  * Converts the result of evaluating `child` into an option, checking both the isNull bit and
  * (in the case of reference types) equality with null.
  * @param child The expression to evaluate and wrap.
+ * @param optType The type of this option.
  */
-case class WrapOption(child: Expression)
+case class WrapOption(child: Expression, optType: DataType)
   extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
   override def nullable: Boolean = true
 
-  override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = optType :: Nil
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
@@ -324,19 +323,28 @@ case class WrapOption(child: Expression)
  * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
  * manually, but will instead be passed into the provided lambda function.
  */
-case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends Expression {
+case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends LeafExpression
+  with Unevaluable {
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
-    throw new UnsupportedOperationException("Only calling gen() is supported.")
+  override def nullable: Boolean = true
 
-  override def children: Seq[Expression] = Nil
-  override def gen(ctx: CodeGenContext): GeneratedExpressionCode =
+  override def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
     GeneratedExpressionCode(code = "", value = value, isNull = isNull)
+  }
+}
 
-  override def nullable: Boolean = false
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+object MapObjects {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
+  def apply(
+      function: Expression => Expression,
+      inputData: Expression,
+      elementType: DataType): MapObjects = {
+    val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
+    val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
+    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
+    MapObjects(loopVar, function(loopVar), inputData)
+  }
 }
 
 /**
@@ -347,20 +355,16 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType) ext
  * The following collection ObjectTypes are currently supported:
  *   Seq, Array, ArrayData, java.util.List
  *
- * @param function A function that returns an expression, given an attribute that can be used
- *                 to access the current value.  This is does as a lambda function so that
- *                 a unique attribute reference can be provided for each expression (thus allowing
- *                 us to nest multiple MapObject calls).
+ * @param loopVar A place holder that used as the loop variable when iterate the collection, and
+ *                used as input for the `lambdaFunction`. It also carries the element type info.
+ * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
+ *                       to handle collection elements.
  * @param inputData An expression that when evaluted returns a collection object.
- * @param elementType The type of element in the collection, expressed as a DataType.
  */
 case class MapObjects(
-    function: AttributeReference => Expression,
-    inputData: Expression,
-    elementType: DataType) extends Expression {
-
-  private lazy val loopAttribute = AttributeReference("loopVar", elementType)()
-  private lazy val completeFunction = function(loopAttribute)
+    loopVar: LambdaVariable,
+    lambdaFunction: Expression,
+    inputData: Expression) extends Expression {
 
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
     case NullType =>
@@ -400,37 +404,23 @@ case class MapObjects(
 
   override def nullable: Boolean = true
 
-  override def children: Seq[Expression] = completeFunction :: inputData :: Nil
+  override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def dataType: DataType = ArrayType(completeFunction.dataType)
+  override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val javaType = ctx.javaType(dataType)
-    val elementJavaType = ctx.javaType(elementType)
+    val elementJavaType = ctx.javaType(loopVar.dataType)
     val genInputData = inputData.gen(ctx)
-
-    // Variables to hold the element that is currently being processed.
-    val loopValue = ctx.freshName("loopValue")
-    val loopIsNull = ctx.freshName("loopIsNull")
-
-    val loopVariable = LambdaVariable(loopValue, loopIsNull, elementType)
-    val substitutedFunction = completeFunction transform {
-      case a: AttributeReference if a == loopAttribute => loopVariable
-    }
-    // A hack to run this through the analyzer (to bind extractions).
-    val boundFunction =
-      SimpleAnalyzer.execute(Project(Alias(substitutedFunction, "")() :: Nil, LocalRelation(Nil)))
-        .expressions.head.children.head
-
-    val genFunction = boundFunction.gen(ctx)
+    val genFunction = lambdaFunction.gen(ctx)
     val dataLength = ctx.freshName("dataLength")
     val convertedArray = ctx.freshName("convertedArray")
     val loopIndex = ctx.freshName("loopIndex")
 
-    val convertedType = ctx.boxedType(boundFunction.dataType)
+    val convertedType = ctx.boxedType(lambdaFunction.dataType)
 
     // Because of the way Java defines nested arrays, we have to handle the syntax specially.
     // Specifically, we have to insert the [$dataLength] in between the type and any extra nested
@@ -444,9 +434,9 @@ case class MapObjects(
     }
 
     val loopNullCheck = if (primitiveElement) {
-      s"boolean $loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
+      s"boolean ${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
     } else {
-      s"boolean $loopIsNull = ${genInputData.isNull} || $loopValue == null;"
+      s"boolean ${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
     }
 
     s"""
@@ -462,14 +452,14 @@ case class MapObjects(
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
-          $elementJavaType $loopValue =
+          $elementJavaType ${loopVar.value} =
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
           $loopNullCheck
 
-          if ($loopIsNull) {
+          ${genFunction.code}
+          if (${genFunction.isNull}) {
             $convertedArray[$loopIndex] = null;
           } else {
-            ${genFunction.code}
             $convertedArray[$loopIndex] = ${genFunction.value};
           }
 
@@ -630,6 +620,46 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
       ${instanceGen.code}
       if (!${instanceGen.isNull}) {
         ${initialize.mkString("\n")}
+      }
+     """
+  }
+}
+
+/**
+ * Asserts that input values of a non-nullable child expression are not null.
+ *
+ * Note that there are cases where `child.nullable == true`, while we still needs to add this
+ * assertion.  Consider a nullable column `s` whose data type is a struct containing a non-nullable
+ * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
+ * non-null `s`, `s.i` can't be null.
+ */
+case class AssertNotNull(
+    child: Expression, parentType: String, fieldName: String, fieldType: String)
+  extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val childGen = child.gen(ctx)
+
+    ev.isNull = "false"
+    ev.value = childGen.value
+
+    s"""
+      ${childGen.code}
+
+      if (${childGen.isNull}) {
+        throw new RuntimeException(
+          "Null value appeared in non-nullable field $parentType.$fieldName of type $fieldType. " +
+          "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
+          "please try to use scala.Option[_] or other nullable types " +
+          "(e.g. java.lang.Integer instead of int/scala.Int)."
+        );
       }
      """
   }

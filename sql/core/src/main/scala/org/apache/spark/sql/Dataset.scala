@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
 import org.apache.spark.rdd.RDD
@@ -64,7 +65,7 @@ import org.apache.spark.util.Utils
 class Dataset[T] private[sql](
     @transient override val sqlContext: SQLContext,
     @transient override val queryExecution: QueryExecution,
-    tEncoder: Encoder[T]) extends Queryable with Serializable {
+    tEncoder: Encoder[T]) extends Queryable with Serializable with Logging {
 
   /**
    * An unresolved version of the internal encoder for the type of this [[Dataset]].  This one is
@@ -79,7 +80,7 @@ class Dataset[T] private[sql](
 
   /**
    * The encoder where the expressions used to construct an object from an input row have been
-   * bound to the ordinals of the given schema.
+   * bound to the ordinals of this [[Dataset]]'s output schema.
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
@@ -225,7 +226,42 @@ class Dataset[T] private[sql](
    *
    * @since 1.6.0
    */
-  def show(numRows: Int, truncate: Boolean): Unit = toDF().show(numRows, truncate)
+  // scalastyle:off println
+  def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  // scalastyle:on println
+
+  /**
+   * Compose the string representing rows for output
+   * @param _numRows Number of rows to show
+   * @param truncate Whether truncate long strings and align cells right
+   */
+  override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+    val numRows = _numRows.max(0)
+    val takeResult = take(numRows + 1)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
+
+    // For array values, replace Seq and Array with square brackets
+    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: (data.map {
+      case r: Row => r
+      case tuple: Product => Row.fromTuple(tuple)
+      case o => Row(o)
+    } map { row =>
+      row.toSeq.map { cell =>
+        val str = cell match {
+          case null => "null"
+          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
+          case array: Array[_] => array.mkString("[", ", ", "]")
+          case seq: Seq[_] => seq.mkString("[", ", ", "]")
+          case _ => cell.toString
+        }
+        if (truncate && str.length > 20) str.substring(0, 17) + "..." else str
+      }: Seq[String]
+    })
+
+    formatString ( rows, numRows, hasMoreData, truncate )
+  }
 
   /**
     * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.

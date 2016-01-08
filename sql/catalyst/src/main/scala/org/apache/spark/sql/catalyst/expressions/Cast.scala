@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -80,6 +81,9 @@ object Cast {
                 fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
                 toField.nullable)
         }
+
+    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt1.userClass == udt2.userClass =>
+      true
 
     case _ => false
   }
@@ -428,6 +432,11 @@ case class Cast(child: Expression, dataType: DataType)
     case array: ArrayType => castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
     case map: MapType => castMap(from.asInstanceOf[MapType], map)
     case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
+    case udt: UserDefinedType[_]
+      if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
+      identity[Any]
+    case _: UserDefinedType[_] =>
+      throw new SparkException(s"Cannot cast $from to $to.")
   }
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
@@ -470,6 +479,11 @@ case class Cast(child: Expression, dataType: DataType)
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
+    case udt: UserDefinedType[_]
+      if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
+      (c, evPrim, evNull) => s"$evPrim = $c;"
+    case _: UserDefinedType[_] =>
+      throw new SparkException(s"Cannot cast $from to $to.")
   }
 
   // Since we need to cast child expressions recursively inside ComplexTypes, such as Map's
