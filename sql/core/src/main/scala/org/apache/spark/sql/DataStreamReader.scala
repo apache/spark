@@ -38,7 +38,7 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
   /**
    * Specifies the input data source format.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def format(source: String): DataStreamReader = {
     this.source = source
@@ -46,11 +46,11 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
-   * automatically from data. By specifying the schema here, the underlying data source can
+   * Specifies the input schema. Some data streams (e.g. JSON) can infer the input schema
+   * automatically from data. By specifying the schema here, the underlying data stream can
    * skip the schema inference step, and thus speed up data reading.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def schema(schema: StructType): DataStreamReader = {
     this.userSpecifiedSchema = Option(schema)
@@ -58,9 +58,9 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Adds an input option for the underlying data source.
+   * Adds an input option for the underlying data stream.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def option(key: String, value: String): DataStreamReader = {
     this.extraOptions += (key -> value)
@@ -68,9 +68,9 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * (Scala-specific) Adds input options for the underlying data source.
+   * (Scala-specific) Adds input options for the underlying data stream.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def options(options: scala.collection.Map[String, String]): DataStreamReader = {
     this.extraOptions ++= options
@@ -78,9 +78,9 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Adds input options for the underlying data source.
+   * Adds input options for the underlying data stream.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def options(options: java.util.Map[String, String]): DataStreamReader = {
     this.options(options.asScala)
@@ -88,21 +88,10 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Loads input in as a [[DataFrame]], for data sources that require a path (e.g. data backed by
-   * a local or distributed file system).
+   * Loads streaming input in as a [[DataFrame]], for data streams that don't require a path (e.g.
+   * external key-value stores).
    *
-   * @since 1.4.0
-   */
-  // TODO: Remove this one in Spark 2.0.
-  def open(path: String): DataFrame = {
-    option("path", path).open()
-  }
-
-  /**
-   * Loads input in as a [[DataFrame]], for data sources that don't require a path (e.g. external
-   * key-value stores).
-   *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def open(): DataFrame = {
     val resolved = ResolvedDataSource.createSource(
@@ -114,14 +103,12 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Loads input in as a [[DataFrame]], for data sources that support multiple paths.
-   * Only works if the source is a HadoopFsRelationProvider.
+   * Loads input in as a [[DataFrame]], for data streams that read from some path.
    *
-   * @since 1.6.0
+   * @since 2.0.0
    */
-  @scala.annotation.varargs
-  def open(paths: String*): DataFrame = {
-    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).open()
+  def open(path: String): DataFrame = {
+    option("path", path).open()
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

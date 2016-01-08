@@ -44,7 +44,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
   /**
    * Specifies the underlying output data source. Built-in options include "parquet", "json", etc.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def format(source: String): DataStreamWriter = {
     this.source = source
@@ -54,7 +54,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
   /**
    * Adds an output option for the underlying data source.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def option(key: String, value: String): DataStreamWriter = {
     this.extraOptions += (key -> value)
@@ -64,7 +64,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def options(options: scala.collection.Map[String, String]): DataStreamWriter = {
     this.extraOptions ++= options
@@ -74,7 +74,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
   /**
    * Adds output options for the underlying data source.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def options(options: java.util.Map[String, String]): DataStreamWriter = {
     this.options(options.asScala)
@@ -87,7 +87,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
    *
    * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
   def partitionBy(colNames: String*): DataStreamWriter = {
@@ -96,9 +96,9 @@ final class DataStreamWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] at the specified path.
-   *
-   * @since 1.4.0
+   * Starts the execution of the streaming query, which will continually output results to the given
+   * path as new data arrives.  The returned [[StandingQuery]] object can be used to interact with
+   * the stream.
    */
   def start(path: String): StandingQuery = {
     this.extraOptions += ("path" -> path)
@@ -106,25 +106,17 @@ final class DataStreamWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] as the specified table.
+   * Starts the execution of the streaming query, which will continually output results to the given
+   * path as new data arrives.  The returned [[StandingQuery]] object can be used to interact with
+   * the stream.
    *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   def start(): StandingQuery = {
     val sink = ResolvedDataSource.createSink(
       df.sqlContext,
       source,
       extraOptions.toMap)
-
-    new StreamExecution(df.sqlContext, df.logicalPlan, sink)
-  }
-
-  def foreach(f: Batch => Unit): StandingQuery = {
-    val checkpoint = extraOptions.get("checkpoint")
-    val sink = new Sink {
-      override def currentOffset: Option[Offset] = None
-      override def addBatch(batch: Batch): Unit = f(batch)
-    }
 
     new StreamExecution(df.sqlContext, df.logicalPlan, sink)
   }
@@ -138,7 +130,6 @@ final class DataStreamWriter private[sql](df: DataFrame) {
               s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
     }
   }
-
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
