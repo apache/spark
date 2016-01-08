@@ -160,7 +160,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
+  test("SPARK-11390 explain should print HandledFilters of PhysicalRDD") {
     withTempPath { file =>
       val path = file.getCanonicalPath
       testData.write.parquet(path)
@@ -169,7 +169,7 @@ class PlannerSuite extends SharedSQLContext {
 
       withTempTable("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
-        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
+        assert(exp.toString.contains("HandledFilters: [EqualTo(key,15)]"))
       }
     }
   }

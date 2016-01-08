@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
-import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
+import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, HANDLED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -307,8 +307,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
     // them from requested columns.
+    val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
     val handledSet = {
-      val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
       val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
       AttributeSet(handledPredicates.flatMap(_.references)) --
         (projectSet ++ unhandledSet).map(relation.attributeMap)
@@ -321,8 +321,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
 
-      if (pushedFilters.nonEmpty) {
-        pairs += (PUSHED_FILTERS -> pushedFilters.mkString("[", ", ", "]"))
+      if (handledPredicates.nonEmpty) {
+        pairs += (HANDLED_FILTERS -> handledPredicates.mkString("[", ", ", "]"))
       }
 
       relation.relation match {

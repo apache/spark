@@ -114,6 +114,7 @@ private[sql] object PhysicalRDD {
   // Metadata keys
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
+  val HANDLED_FILTERS = "HandledFilters"
 
   def createFromDataSource(
       output: Seq[Attribute],
