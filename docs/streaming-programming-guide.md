@@ -1985,7 +1985,11 @@ To run a Spark Streaming applications, you need to have the following.
   to increase aggregate throughput. Additionally, it is recommended that the replication of the
   received data within Spark be disabled when the write ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
-  input stream to `StorageLevel.MEMORY_AND_DISK_SER`.
+  input stream to `StorageLevel.MEMORY_AND_DISK_SER`. While using S3 (or any file system that
+  does not support flushing) for _write ahead logs_, please remember to enable
+  `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
+  `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
+  [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
 
 - *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
   application to process data as fast as it is being received, the receivers can be rate limited
@@ -2022,12 +2026,6 @@ information of pre-upgrade code cannot be done. The checkpoint information essen
 contains serialized Scala/Java/Python objects and trying to deserialize objects with new,
 modified classes may lead to errors. In this case, either start the upgraded app with a different
 checkpoint directory, or delete the previous checkpoint directory.
-
-### Other Considerations
-{:.no_toc}
-If the data is being received by the receivers faster than what can be processed,
-you can limit the rate by setting the [configuration parameter](configuration.html#spark-streaming)
-`spark.streaming.receiver.maxRate`.
 
 ***
 
