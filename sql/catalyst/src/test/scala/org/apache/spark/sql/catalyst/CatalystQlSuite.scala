@@ -15,23 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection.unsafe.sort;
+package org.apache.spark.sql.catalyst
 
-import java.io.IOException;
+import org.apache.spark.sql.catalyst.plans.PlanTest
 
-public abstract class UnsafeSorterIterator {
+class CatalystQlSuite extends PlanTest {
 
-  public abstract boolean hasNext();
-
-  public abstract void loadNext() throws IOException;
-
-  public abstract Object getBaseObject();
-
-  public abstract long getBaseOffset();
-
-  public abstract int getRecordLength();
-
-  public abstract long getKeyPrefix();
-
-  public abstract int getNumRecords();
+  test("parse union/except/intersect") {
+    val paresr = new CatalystQl()
+    paresr.createPlan("select * from t1 union all select * from t2")
+    paresr.createPlan("select * from t1 union distinct select * from t2")
+    paresr.createPlan("select * from t1 union select * from t2")
+    paresr.createPlan("select * from t1 except select * from t2")
+    paresr.createPlan("select * from t1 intersect select * from t2")
+  }
 }
