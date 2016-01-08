@@ -151,9 +151,8 @@ class StreamExecution(
         sink.addBatch(nextBatch)
       }
 
+      batchRun = true
       awaitBatchLock.synchronized {
-        batchRun = true
-
         // Wake up any threads that are waiting for the stream to progress.
         awaitBatchLock.notifyAll()
       }
