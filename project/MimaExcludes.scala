@@ -120,6 +120,10 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$")
       ) ++ Seq(
+        // SPARK-12591 Register OpenHashMapBasedStateMap for Kryo
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoInputDataInputBridge"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoOutputDataOutputBridge")
+      ) ++ Seq(
         // SPARK-12510 Refactor ActorReceiver to support Java
         ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.streaming.receiver.ActorReceiver")
       )
