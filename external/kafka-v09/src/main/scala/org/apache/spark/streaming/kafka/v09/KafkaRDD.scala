@@ -29,6 +29,7 @@ import org.apache.spark.{ Logging, Partition, SparkContext, TaskContext }
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.collection.JavaConverters._
 
 /**
  * A batch-oriented interface for consuming from Kafka.
@@ -154,7 +155,7 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
     consumer.assign(Collections.singletonList[TopicPartition](tp))
 
     var requestOffset = part.fromOffset
-    var iter: java.util.Iterator[ConsumerRecord[K, V]] = null
+    var iter: Iterator[ConsumerRecord[K, V]] = null
     consumer.seek(tp, requestOffset)
 
     override def close(): Unit = {
@@ -163,12 +164,26 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
       }
     }
 
+    private def fetchBatch: Iterator[ConsumerRecord[K, V]] = {
+      consumer.seek(new TopicPartition(part.topic, part.partition), requestOffset)
+      val recs = consumer.poll(pollTime)
+      recs.records(new TopicPartition(part.topic, part.partition)).iterator().asScala
+    }
+
     override def getNext(): R = {
+      if ( requestOffset == part.untilOffset ) {
+        finished = true
+        null.asInstanceOf[R]
+      }
+
       if (iter == null || !iter.hasNext) {
-        iter = consumer.poll(pollTime).iterator()
+        iter = fetchBatch
       }
 
       if (!iter.hasNext) {
+        if ( requestOffset < part.untilOffset ) {
+          return getNext()
+        }
         assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part))
         finished = true
         null.asInstanceOf[R]
