@@ -65,47 +65,6 @@ object KafkaWordCount {
   }
 }
 
-/**
- * Consumes messages from one or more topics in Kafka and does wordcount.
- * Usage: v09KafkaWordCount <brokers> <group> <topics> <numThreads>
- *   <brokers> is a list of one or more brokers servers
- *   <group> is the name of kafka consumer group
- *   <topics> is a list of one or more kafka topics to consume from
- *   <numThreads> is the number of threads the kafka consumer should use
- *
- * Example:
- *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.v09KafkaWordCount broker01,broker02,broker03 \
- *      my-consumer-group topic1,topic2 1`
- */
-object v09KafkaWordCount {
-  def main(args: Array[String]) {
-    import org.apache.spark.streaming.kafka.v09._
-
-    if (args.length < 4) {
-      System.err.println("Usage: v09KafkaWordCount <brokers> <group> <topics> <numThreads>")
-      System.exit(1)
-    }
-
-    StreamingExamples.setStreamingLogLevels()
-
-    val Array(brokers, group, topics, numThreads) = args
-    val sparkConf = new SparkConf().setAppName("v09KafkaWordCount")
-    val ssc = new StreamingContext(sparkConf, Seconds(2))
-    ssc.checkpoint("checkpoint")
-
-    val topicMap = topics.split(",").map((_, numThreads.toInt)).toMap
-    val lines = KafkaUtils.createStream(ssc, brokers, group, topicMap).map(_._2)
-    val words = lines.flatMap(_.split(" "))
-    val wordCounts = words.map(x => (x, 1L))
-      .reduceByKeyAndWindow(_ + _, _ - _, Minutes(10), Seconds(2), 2)
-    wordCounts.print()
-
-    ssc.start()
-    ssc.awaitTermination()
-  }
-}
-
 // Produces some random words between 1 and 100.
 object KafkaWordCountProducer {
 
