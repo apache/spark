@@ -25,6 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 class MemorySourceStressSuite extends StreamTest with SharedSQLContext {
+  import testImplicits._
+
   test("memory stress test") {
     val input = MemoryStream[Int]
     val mapped = input.toDS().map(_ + 1)

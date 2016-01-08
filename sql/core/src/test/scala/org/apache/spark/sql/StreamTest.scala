@@ -19,15 +19,13 @@ package org.apache.spark.sql
 
 import java.lang.Thread.UncaughtExceptionHandler
 
-import org.apache.spark.sql.test.SQLTestUtils.testImplicits
-
 import scala.collection.mutable
 
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.encoders.{RowEncoder, encoderFor}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 
@@ -300,6 +298,7 @@ trait StreamTest extends QueryTest with Timeouts {
    *                as needed
    */
   def createStressTest(ds: Dataset[Int], addData: Seq[Int] => StreamAction): Unit = {
+    implicit val intEncoder = ExpressionEncoder[Int]
     var dataPos = 0
     var running = true
     val actions = new ArrayBuffer[StreamAction]()
