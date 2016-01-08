@@ -98,7 +98,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
       leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
     }
 
-  final override lazy val resolved: Boolean =
+  override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
@@ -116,7 +116,18 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
   }
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
+  // Intersect is only resolved if they don't introduce ambiguous expression ids,
+  // since it will be converted to semi Join by optimizer.
+  override lazy val resolved: Boolean = {
+    childrenResolved &&
+      left.output.length == right.output.length &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      duplicateResolved
+  }
+}
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
