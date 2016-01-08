@@ -296,7 +296,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /** Count the number of elements for each key, and return the result to the master as a Map. */
   def countByKey(): java.util.Map[K, jl.Long] =
-    mapAsSerializableJavaMap(rdd.countByKey().mapValues(jl.Long.valueOf))
+    mapAsSerializableJavaMap(rdd.countByKey()).asInstanceOf[java.util.Map[K, jl.Long]]
 
   /**
    * Approximate version of countByKey that can return a partial result if it does
