@@ -101,11 +101,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
-      val taskSortColumn = Option(parameterTaskSortColumn).map {
-        sortColumn =>
-          // If sortColumn contains "/", `getParameter("task.sort")` will return 
-          // "%252F" when yarn mode. we need additional decode.
-          // See also SPARK-4313, YARN-2844.
+      val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
+          // SPARK-12708
+          // Due to YARN-2844, "/" in the url will be encoded to "%252F" when
+          // running in yarn mode. `request.getParameter("task.sort")` will return
+          // "%252F". Therefore we need to decode it until we get the real column name.
+          // SPARK-4313 is similar to this issue.
           var column = sortColumn
           var decodedColumn = URLDecoder.decode(column, "UTF-8")
           while (column != decodedColumn) {
