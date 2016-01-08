@@ -74,7 +74,7 @@ private[ml] class Binomial(link: Link = new Logit) extends Family(link) {
  * The default link for the Poisson family is the log link.
  * @param link a link function instance
  */
-private[ml] class Poisson(link: Link = new Logit) extends Family(link) {
+private[ml] class Poisson(link: Link = new Log) extends Family(link) {
 
   override def deviance(y: RDD[Double], mu: RDD[Double]): Double = {
     mu.zip(y).map { case (mu, y) =>

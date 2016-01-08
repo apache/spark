@@ -51,7 +51,7 @@ private[ml] class IterativelyReweightedLeastSquares(
     val y = instances.map(_.label).persist(StorageLevel.MEMORY_AND_DISK)
     val yMean = y.reduce(_ + _) / y.count()
     var mu = y.map { yi => family.startingMu(yi, yMean) }
-    var eta = mu.map { mu => family.link.link(mu) }
+    var eta: RDD[Double] = null
     var dev = family.deviance(y, mu)
 
     var converged = false
