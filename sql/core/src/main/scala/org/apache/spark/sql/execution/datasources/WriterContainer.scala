@@ -349,21 +349,6 @@ private[sql] class DynamicPartitionWriterContainer(
     }
   }
 
-  private def sameBucket(key1: UnsafeRow, key2: UnsafeRow): Boolean = {
-    val bucketIdIndex = partitionColumns.length
-    if (key1.getInt(bucketIdIndex) != key2.getInt(bucketIdIndex)) {
-      false
-    } else {
-      var i = partitionColumns.length - 1
-      while (i >= 0) {
-        val dt = partitionColumns(i).dataType
-        if (key1.get(i, dt) != key2.get(i, dt)) return false
-        i -= 1
-      }
-      true
-    }
-  }
-
   /**
    * Open and returns a new OutputWriter given a partition key and optional bucket id.
    * If bucket id is specified, we will append it to the end of the file name, but before the
@@ -426,10 +411,12 @@ private[sql] class DynamicPartitionWriterContainer(
 
       logInfo(s"Sorting complete. Writing out partition files one at a time.")
 
-      val needNewWriter: (UnsafeRow, UnsafeRow) => Boolean = if (sortColumns.isEmpty) {
-        (key1, key2) => key1 != key2
+      val getBucketingKey: InternalRow => InternalRow = if (sortColumns.isEmpty) {
+        identity
       } else {
-        (key1, key2) => key1 == null || !sameBucket(key1, key2)
+        UnsafeProjection.create(sortingExpressions.dropRight(sortColumns.length).zipWithIndex.map {
+          case (expr, ordinal) => BoundReference(ordinal, expr.dataType, expr.nullable)
+        })
       }
 
       val sortedIterator = sorter.sortedIterator()
@@ -437,11 +424,12 @@ private[sql] class DynamicPartitionWriterContainer(
       var currentWriter: OutputWriter = null
       try {
         while (sortedIterator.next()) {
-          if (needNewWriter(currentKey, sortedIterator.getKey)) {
+          val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
+          if (currentKey != nextKey) {
             if (currentWriter != null) {
               currentWriter.close()
             }
-            currentKey = sortedIterator.getKey.copy()
+            currentKey = nextKey.copy()
             logDebug(s"Writing partition: $currentKey")
 
             currentWriter = newOutputWriter(currentKey, getPartitionString)
