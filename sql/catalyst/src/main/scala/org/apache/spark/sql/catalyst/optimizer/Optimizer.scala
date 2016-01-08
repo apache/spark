@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
@@ -40,6 +42,9 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
+    // run only once, and before other condition push-down optimizations
+    Batch("Join Skew optimization", FixedPoint(1),
+      JoinSkewOptimizer) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -974,5 +979,31 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) =>
       val newGrouping = grouping.filter(!_.foldable)
       a.copy(groupingExpressions = newGrouping)
+  }
+}
+
+/**
+ * For an inner join - remove rows with null keys on both sides
+ */
+object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
+  private def hasNullableKeys(leftKeys: Seq[Expression], rightKeys: Seq[Expression]) = {
+    leftKeys.exists(_.nullable) || rightKeys.exists(_.nullable)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case join @ Join(left, right, joinType, originalJoinCondition) =>
+      join match {
+        // add a non-null join-key filter on both sides of Inner or LeftSemi join
+        case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _)
+          if Seq(Inner, LeftSemi).contains(joinType) && hasNullableKeys(leftKeys, rightKeys) =>
+            val nullFilters = (leftKeys ++ rightKeys)
+              .filter(_.nullable)
+              .map(IsNotNull)
+            val newJoinCondition = (originalJoinCondition ++ nullFilters).reduceLeftOption(And)
+
+            Join(left, right, joinType, newJoinCondition)
+
+        case _ => join
+      }
   }
 }
