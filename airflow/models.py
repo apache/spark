@@ -377,7 +377,7 @@ class Connection(Base):
     host = Column(String(500))
     schema = Column(String(500))
     login = Column(String(500))
-    _password = Column('password', String(500))
+    _password = Column('password', String(5000))
     port = Column(Integer())
     is_encrypted = Column(Boolean, unique=False, default=False)
     extra = Column(String(5000))
