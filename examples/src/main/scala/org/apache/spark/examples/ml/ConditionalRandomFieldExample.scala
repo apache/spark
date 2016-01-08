@@ -36,7 +36,7 @@ import org.apache.spark.{SparkContext, SparkConf}
 
 object ConditionalRandomFieldExample {
   def main(args: Array[String]): Unit = {
-    if (args.length != 2) {
+    if (args.length != 3) {
       // scalastyle:off println
       System.err.println("Usage: ml.CRFExample <modelFile> <featureFile> <testFile>")
       // scalastyle:on println
@@ -79,22 +79,20 @@ object ConditionalRandomFieldExample {
     val modelPath = "/home/hujiayin/git/CRFConfig/CRFOutput"
     model.save(sc, modelPath)
 
-    if (args(2) != "") {
-      val rowRddT = sc.textFile(test).filter(_.nonEmpty).map(_.split("\t"))
-      val modelRDD = sc.parallelize(model.load(sc, modelPath).CRFSeries)
-      val newResult = CRF.verifyCRF(rowRddT, modelRDD)
-      var idx: Int = 0
-      var temp: String = ""
-      while (idx < newResult.CRFSeries(0).length) {
-        temp += newResult.CRFSeries(0)(idx)
-        if ((idx + 1) % 2 == 0) {
-          // scalastyle:off println
-          println(temp)
-          // scalastyle:on println
-          temp = ""
-        }
-        idx += 1
+    val rowRddT = sc.textFile(test).filter(_.nonEmpty).map(_.split("\t"))
+    val modelRDD = sc.parallelize(model.load(sc, modelPath).CRFSeries)
+    val newResult = CRF.verifyCRF(rowRddT, modelRDD)
+    var idx: Int = 0
+    var temp: String = ""
+    while (idx < newResult.CRFSeries(0).length) {
+      temp += newResult.CRFSeries(0)(idx)
+      if ((idx + 1) % 3 == 0) {
+        // scalastyle:off println
+        println(temp)
+        // scalastyle:on println
+        temp = ""
       }
+      idx += 1
     }
 
     sc.stop()
