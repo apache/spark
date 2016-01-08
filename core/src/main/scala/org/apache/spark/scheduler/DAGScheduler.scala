@@ -1110,35 +1110,36 @@ class DAGScheduler(
   /**
    * Reconstruct [[TaskMetrics]] from accumulator updates.
    *
-   * This is needed for posting task end events to listeners.
-   * If the task has failed, we may just return null.
+   * Executors only send accumulator updates back to the driver, not [[TaskMetrics]].
+   * However, we need the latter to post task end events to listeners, so we need to
+   * reconstruct the metrics here on the driver.
+   *
+   * Note: If the task failed, we may return null after attempting to reconstruct the
+   * [[TaskMetrics]] in vain.
    */
   private def reconstructTaskMetrics(task: Task[_], accumUpdates: Map[Long, Any]): TaskMetrics = {
     if (accumUpdates == null) {
       return null
     }
-    val (matchingAccums, missingAccums) = task.internalAccumulators.partition { a =>
-      assert(a.name.isDefined, s"internal accumulator ${a.id} is expected to have a name.")
-      accumUpdates.contains(a.id)
-    }
-    // We create the internal accumulators on the driver and expect the executor to send back
-    // accumulator values with matching IDs. If the task has failed, then there may be missing
-    // accumulator values, in which case we just return null.
+    // We created the internal accumulators on the driver and expect the executor to send back
+    // accumulator values with matching IDs. If there are missing values, we cannot reconstruct
+    // the original TaskMetrics, so just return null. This might happen if the task failed.
+    val missingAccums = task.initialAccumulators.filter { a => !accumUpdates.contains(a.id) }
     if (missingAccums.nonEmpty) {
       val missingValuesString = missingAccums.map(_.name.get).mkString("[", ",", "]")
       logWarning(s"Not reconstructing metrics for task ${task.partitionId} because its " +
-        s"accumulator updates had missing values $missingValuesString. This could happen " +
-        s"if the task had failed.")
+        s"accumulator updates had missing values: $missingValuesString. This could happen " +
+        s"if the task failed.")
       return null
     }
-    matchingAccums.foreach { a =>
-      accumUpdates(a.id) match {
-        case l: java.lang.Long => a.setValue(l)
-        case x => throw new SparkException(s"existing value for accumulator " +
-          s"${a.name.get} (${a.id}) was of unexpected type: $x (${x.getClass.getName}})")
+    // TaskMetrics is not concerned with user accumulators
+    val internalAccums = accumUpdates.map { case (id, _) =>
+      Accumulators.getAccum(id).getOrElse {
+        throw new SparkException(s"task ${task.partitionId} returned " +
+          s"accumulator $id that was not registered on the driver.")
       }
-    }
-    new TaskMetrics(task.internalAccumulators)
+    }.filter(_.isInternal)
+    new TaskMetrics(internalAccums.toSeq)
   }
 
   /**
@@ -1150,9 +1151,37 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
-    // Executors only send accumulator updates back to the driver, not TaskMetrics. However, we
-    // still need a TaskMetrics to post "task end" events to listeners, so reconstruct them here.
-    // Note: this may be null if the task failed.
+    // Note: the following events must occur in this order:
+    //   (1) Update accumulator values based on updates from this task
+    //   (2) Reconstruct TaskMetrics
+    //   (3) Post SparkListenerTaskEnd event
+    //   (4) Post SparkListenerStageCompleted / SparkListenerJobEnd event
+
+    // Update accumulator values based on updates from this task.
+    // Note: we must do this before reconstructing TaskMetrics, otherwise the TaskMetrics
+    // will not have updated accumulator values. This is needed for the SQL UI, for instance.
+    if (stageIdToStage.contains(stageId)) {
+      val stage = stageIdToStage(stageId)
+      // We should should update registered accumulators if this task succeeded or failed with
+      // an exception. In the latter case executors may still send back some accumulators,
+      // so we should try our best to collect the values.
+      val shouldUpdateAccums = event.reason match {
+        case Success =>
+          task match {
+            case rt: ResultTask[_, _] =>
+              // This being true means the job has not finished yet
+              stage.asInstanceOf[ResultStage].activeJob.isDefined
+            case smt: ShuffleMapTask => true
+          }
+        case _: ExceptionFailure => true
+        case _ => false
+      }
+      if (shouldUpdateAccums) {
+        updateAccumulators(event)
+      }
+    }
+
+    // Reconstruct task metrics. Note: this may be null if the task failed.
     val taskMetrics = reconstructTaskMetrics(task, event.accumUpdates)
 
     outputCommitCoordinator.taskCompleted(
@@ -1161,13 +1190,9 @@ class DAGScheduler(
       event.taskInfo.attemptNumber, // this is a task attempt number
       event.reason)
 
-    // The success case is dealt with separately below, since we need to compute accumulator
-    // updates before posting.
-    if (event.reason != Success) {
-      val attemptId = task.stageAttemptId
-      listenerBus.post(SparkListenerTaskEnd(stageId, attemptId, taskType, event.reason,
-        event.taskInfo, taskMetrics))
-    }
+    // Post task end event
+    listenerBus.post(SparkListenerTaskEnd(
+      stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
@@ -1177,8 +1202,6 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
-        listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
-          event.reason, event.taskInfo, taskMetrics))
         stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>
@@ -1188,7 +1211,6 @@ class DAGScheduler(
             resultStage.activeJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
-                  updateAccumulators(event)
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it
@@ -1215,7 +1237,6 @@ class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-            updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
@@ -1327,11 +1348,7 @@ class DAGScheduler(
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case exceptionFailure: ExceptionFailure =>
-        // Note: on task failure, the executor only sends back only accumulators whose values
-        // still matter even when a task fails, e.g. number of bytes spilled to disk. This only
-        // applies to internal metrics for now.
-        // TODO: add a test for this
-        updateAccumulators(event)
+        // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.

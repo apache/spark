@@ -654,7 +654,7 @@ private[spark] class TaskSetManager(
     val index = taskInfos(tid).index
     val task = tasks(index)
     val accumName = InternalAccumulator.RESULT_SIZE
-    val resultSizeAccum = task.internalAccumulators.find { a => a.name == Some(accumName) }
+    val resultSizeAccum = task.initialAccumulators.find { a => a.name == Some(accumName) }
     assert(resultSizeAccum.isDefined, s"did not find accumulator called '$accumName' in task")
     val resultSizeAccumId = resultSizeAccum.get.id
     assert(result.accumUpdates.contains(resultSizeAccumId),

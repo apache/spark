@@ -17,18 +17,30 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.util.concurrent.atomic.AtomicLong
+
 import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
 import org.apache.spark.util.Utils
+
 
 /**
  * Create a layer for specialized metric. We cannot add `@specialized` to
  * `Accumulable/AccumulableParam` because it will break Java source compatibility.
  *
- * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
+ * An implementation of [[SQLMetric]] should override `+=` and `add` to avoid boxing
+ *
+ * Note: each [[SQLMetric]] must have a unique name because
+ * [[org.apache.spark.executor.TaskMetrics]] accesses internal accumulators by name and
+ * there may be multiple [[SQLMetric]]s per task. Since we never display the names of the
+ * underlying accumulators on the UI, it is OK to append a GUID to each one.
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String, val param: SQLMetricParam[R, T])
-  extends Accumulable[R, T](param.zero, param, Some(name), true) {
+  extends Accumulable[R, T](
+    param.zero, param, Some(name + SQLMetrics.nextId.getAndIncrement.toString), internal = true) {
+
+  /** Name of metric to display on the UI. */
+  def displayName: String = name
 
   def reset(): Unit = {
     this.value = param.zero
@@ -125,6 +137,11 @@ private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
   }, -1L)
 
 private[sql] object SQLMetrics {
+
+  /**
+   * A unique ID used in each [[SQLMetrics]] for the underlying accumulator's name.
+   */
+  private[metric] val nextId = new AtomicLong(0)
 
   private def createLongMetric(
       sc: SparkContext,

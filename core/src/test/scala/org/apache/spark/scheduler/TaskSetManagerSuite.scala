@@ -165,7 +165,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
-    val accumUpdates = taskSet.tasks.head.internalAccumulators.map { a => (a.id, 0L) }.toMap
+    val accumUpdates = taskSet.tasks.head.initialAccumulators.map { a => (a.id, 0L) }.toMap
 
     // Offer a host with NO_PREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
@@ -184,7 +184,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(3)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
     val accumUpdatesByTask: Array[Map[Long, Long]] =
-      taskSet.tasks.map { _.internalAccumulators.map { a => (a.id, 0L) }.toMap }
+      taskSet.tasks.map { _.initialAccumulators.map { a => (a.id, 0L) }.toMap }
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {

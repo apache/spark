@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 class TaskMetrics private[spark] (
-    initialAccums: Seq[Accumulator[Long]],
+    initialAccums: Seq[Accumulable[_, _]],
     val hostname: String = TaskMetrics.getCachedHostName)
   extends Serializable {
 

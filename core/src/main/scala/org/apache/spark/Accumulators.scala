@@ -39,6 +39,9 @@ import org.apache.spark.util.Utils
  *
  * Operations are not thread-safe.
  *
+ * Note: all internal accumulators used within a task must have unique names because we access
+ * them by name in [[org.apache.spark.executor.TaskMetrics]].
+ *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
@@ -362,15 +365,23 @@ private[spark] object Accumulators extends Logging {
   def add(values: Map[Long, Any]): Unit = synchronized {
     for ((id, value) <- values) {
       if (originals.contains(id)) {
-        // Since we are now storing weak references, we must check whether the underlying data
-        // is valid.
-        originals(id).get match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
-          case None =>
-            throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
-        }
+        getAccum(id).foreach { _.asInstanceOf[Accumulable[Any, Any]] ++= value }
       } else {
         logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
+      }
+    }
+  }
+
+  /**
+   * Return the accumulator registered with the given ID, if any.
+   */
+  def getAccum(id: Long): Option[Accumulable[_, _]] = {
+    originals.get(id).map { weakRef =>
+      // Since we are storing weak references, we must check whether the underlying data is valid.
+      weakRef.get match {
+        case Some(accum) => accum
+        case None =>
+          throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
       }
     }
   }
