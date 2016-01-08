@@ -48,7 +48,7 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
  * The default link for the Binomial family is the logit link.
  * @param link a link function instance
  */
-private[ml] class Binomial(link: Link = new Logit) extends Family(link) {
+private[ml] class Binomial(link: Link = Logit) extends Family(link) {
 
   override def startingMu(y: Double, yMean: Double): Double = (y + 0.5) / 2.0
 
@@ -74,7 +74,7 @@ private[ml] class Binomial(link: Link = new Logit) extends Family(link) {
  * The default link for the Poisson family is the log link.
  * @param link a link function instance
  */
-private[ml] class Poisson(link: Link = new Log) extends Family(link) {
+private[ml] class Poisson(link: Link = Log) extends Family(link) {
 
   override def deviance(y: RDD[Double], mu: RDD[Double]): Double = {
     mu.zip(y).map { case (mu, y) =>
@@ -92,7 +92,7 @@ private[ml] class Poisson(link: Link = new Log) extends Family(link) {
 /**
  * A description of the link function to be used in the model.
  */
-private[ml] abstract class Link extends Serializable {
+private[ml] trait Link extends Serializable {
 
   /** The link function. */
   def link(mu: Double): Double
@@ -104,7 +104,7 @@ private[ml] abstract class Link extends Serializable {
   def unlink(eta: Double): Double
 }
 
-private[ml] class Logit extends Link {
+private[ml] object Logit extends Link {
 
   override def link(mu: Double): Double = math.log(mu / (1.0 - mu))
 
@@ -113,7 +113,7 @@ private[ml] class Logit extends Link {
   override def unlink(eta: Double): Double = 1.0 / (1.0 + math.exp(-1.0 * eta))
 }
 
-private[ml] class Log extends Link {
+private[ml] object Log extends Link {
 
   override def link(mu: Double): Double = math.log(mu)
 
