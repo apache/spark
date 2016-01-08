@@ -154,6 +154,11 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("self intersect should resolve duplicate expression IDs") {
+    val plan = testRelation.intersect(testRelation)
+    assertAnalysisSuccess(plan)
+  }
+
   test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
       LocalRelation()
