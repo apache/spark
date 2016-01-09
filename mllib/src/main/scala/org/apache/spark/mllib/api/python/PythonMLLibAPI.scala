@@ -123,11 +123,11 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Java stub for Python mllib BisectingKMeans.run()
    */
   def trainBisectingKMeans(
-    data: JavaRDD[Vector],
-    k: Int,
-    maxIterations: Int,
-    minDivisibleClusterSize: Double,
-    seed: Long): BisectingKMeansModel = {
+      data: JavaRDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      minDivisibleClusterSize: Double,
+      seed: Long): BisectingKMeansModel = {
     new BisectingKMeans()
       .setK(k)
       .setMaxIterations(maxIterations)

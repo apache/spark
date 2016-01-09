@@ -53,32 +53,27 @@ class BisectingKMeansModel(JavaModelWrapper):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> bskm = BisectingKMeans()
-    >>> model = bskm.train(sc.parallelize(data), k=4)
+    >>> model = bskm.train(sc.parallelize(data, 2), k=4)
     >>> p = array([0.0, 0.0])
-    >>> model.predict(p) == model.predict(p)
-    True
-    >>> model.predict(sc.parallelize([p])).first() == model.predict(p)
-    True
+    >>> model.predict(p)
+    0
     >>> model.k
     4
-    >>> model.computeCost(array([0.0, 0.0]))
+    >>> model.computeCost(p)
     0.0
-    >>> model.k == len(model.clusterCenters)
-    True
-    >>> model = bskm.train(sc.parallelize(data), k=2)
-    >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
-    True
-    >>> model.k
-    2
 
     .. versionadded:: 2.0.0
     """
+
+    def __init__(self, java_model):
+        super(BisectingKMeansModel, self).__init__(java_model)
+        self.centers = [c.toArray() for c in self.call("clusterCenters")]
 
     @property
     @since('2.0.0')
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
-        return [c.toArray() for c in self.call("clusterCenters")]
+        return self.centers
 
     @property
     @since('2.0.0')
@@ -89,10 +84,11 @@ class BisectingKMeansModel(JavaModelWrapper):
     @since('2.0.0')
     def predict(self, x):
         """
-        Find the cluster to which x belongs in this model.
+        Find the cluster that each of the points belongs to in this
+        model.
 
-        :param x: Either the point to determine the cluster for or an RDD of points to determine
-        the clusters for.
+        :param x: the point (or RDD of points) to determine
+          compute the cluseters for.
         """
         if isinstance(x, RDD):
             vecs = x.map(_convert_to_vector)
@@ -102,17 +98,22 @@ class BisectingKMeansModel(JavaModelWrapper):
         return self.call("predict", x)
 
     @since('2.0.0')
-    def computeCost(self, point):
+    def computeCost(self, x):
         """
-        Return the Bisecting K-means cost (sum of squared distances of points to
-        their nearest center) for this model on the given data.
+        Return the Bisecting K-means cost (sum of squared distances of
+        points to their nearest center) for this model on the given
+        data.
 
-        :param point: the point to compute the cost to
+        :param point: the point or RDD of points to compute the cost(s).
         """
-        return self.call("computeCost", _convert_to_vector(point))
+        if isinstance(x, RDD):
+            vecs = x.map(_convert_to_vector)
+            return self.call("computeCost", vecs)
+
+        return self.call("computeCost", _convert_to_vector(x))
 
 
-class BisectingKMeans:
+class BisectingKMeans(object):
     """
     .. note:: Experimental
 
@@ -225,7 +226,13 @@ class KMeansModel(Saveable, Loader):
 
     @since('0.9.0')
     def predict(self, x):
-        """Find the cluster to which x belongs in this model."""
+        """
+        Find the cluster that each of the points belongs to in this
+        model.
+
+        :param x: the point (or RDD of points) to determine
+          compute the cluseters for.
+        """
         best = 0
         best_distance = float("inf")
         if isinstance(x, RDD):
@@ -243,7 +250,10 @@ class KMeansModel(Saveable, Loader):
     def computeCost(self, rdd):
         """
         Return the K-means cost (sum of squared distances of points to
-        their nearest center) for this model on the given data.
+        their nearest center) for this model on the given
+        data.
+
+        :param point: the point or RDD of points to compute the cost(s).
         """
         cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
                              [_convert_to_vector(c) for c in self.centers])
