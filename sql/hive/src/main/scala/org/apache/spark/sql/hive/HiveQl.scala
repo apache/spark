@@ -668,7 +668,8 @@ private[hive] object HiveQl extends SparkQl with Logging {
         Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
           sys.error(s"Couldn't find function $functionName"))
       val functionClassName = functionInfo.getFunctionClass.getName
-      HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children.map(nodeToExpr))
+      HiveGenericUDTF(
+        functionName, new HiveFunctionWrapper(functionClassName), children.map(nodeToExpr))
     case other => super.nodeToGenerator(node)
   }
 

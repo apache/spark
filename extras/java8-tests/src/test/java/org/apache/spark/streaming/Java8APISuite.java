@@ -22,7 +22,6 @@ import java.util.*;
 
 import scala.Tuple2;
 
-import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.junit.Assert;

@@ -151,8 +151,8 @@ fromSource
 @after { gParent.popMsg(state); }
     :
     (LPAREN KW_VALUES) => fromSource0
-    | (LPAREN) => LPAREN joinSource RPAREN -> joinSource
     | fromSource0
+    | (LPAREN joinSource) => LPAREN joinSource RPAREN -> joinSource
     ;
 
 
