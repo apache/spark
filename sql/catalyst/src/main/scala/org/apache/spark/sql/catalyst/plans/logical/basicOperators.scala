@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -101,7 +102,8 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
   override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      duplicateResolved
 }
 
 private[sql] object SetOperation {
@@ -116,18 +118,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
   }
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
-
-  // Intersect is only resolved if they don't introduce ambiguous expression ids,
-  // since it will be converted to semi Join by optimizer.
-  override lazy val resolved: Boolean = {
-    childrenResolved &&
-      left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
-      duplicateResolved
-  }
-}
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
@@ -155,13 +146,11 @@ case class Join(
     }
   }
 
-  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
-
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
     childrenResolved &&
       expressions.forall(_.resolved) &&
-      selfJoinResolved &&
+      duplicateResolved &&
       condition.forall(_.dataType == BooleanType)
   }
 }
@@ -235,7 +224,7 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode {
+    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
   require(step != 0, "step cannot be 0")
   val numElements: BigInt = {
     val safeStart = BigInt(start)
@@ -247,6 +236,9 @@ case class Range(
       (safeEnd - safeStart) / step + 1
     }
   }
+
+  override def newInstance(): Range =
+    Range(start, end, step, numSlices, output.map(_.newInstance()))
 
   override def statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements

@@ -343,7 +343,11 @@ class Analyzer(
       }
     }
 
-    def buildRightChild4Deduplication (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
+    /**
+     * Generate a new logical plan for the right child with different expression IDs
+     * for all conflicting attributes.
+     */
+    private def dedupRight (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
       val conflictingAttributes = left.outputSet.intersect(right.outputSet)
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
@@ -440,14 +444,22 @@ class Analyzer(
             .map(_.asInstanceOf[NamedExpression])
         a.copy(aggregateExpressions = expanded)
 
-      // Special handling for cases when self-join introduces duplicate expression IDs.
-      case j @ Join(left, right, _, _) if !j.selfJoinResolved =>
-        j.copy(right = buildRightChild4Deduplication(left, right))
-
-      // Special handling for cases when self-intersect introduces duplicate expression IDs.
-      // In Optimizer, Intersect will be converted to semi join.
-      case i @ Intersect(left, right) if !i.duplicateResolved =>
-        i.copy(right = buildRightChild4Deduplication(left, right))
+      // To resolve duplicate expression IDs for all the BinaryNode
+      case b: BinaryNode
+        if !b.duplicateResolved => b match {
+        case j @ Join(left, right, _, _) =>
+          j.copy(right = dedupRight(left, right))
+        case i @ Intersect(left, right) =>
+          i.copy(right = dedupRight(left, right))
+        case e @ Except(left, right) =>
+          e.copy(right = dedupRight(left, right))
+        case u @ Union(left, right) =>
+          u.copy(right = dedupRight(left, right))
+        case cg @ CoGroup(_, _, _, _, _, _, _, _, left, right) =>
+          cg.copy(right = dedupRight(left, right))
+        case other =>
+          other
+      }
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on grandchild
