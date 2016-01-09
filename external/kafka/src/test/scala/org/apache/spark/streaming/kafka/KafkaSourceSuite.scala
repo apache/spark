@@ -17,31 +17,49 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.util.Try
+
 import kafka.common.TopicAndPartition
+import org.apache.kafka.clients.producer.RecordMetadata
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
+import org.apache.spark.sql.streaming.OffsetSuite
 import org.apache.spark.sql.test.SharedSQLContext
 
 
-class KafkaSourceSuite extends StreamTest with SharedSQLContext {
+class KafkaSourceSuite extends StreamTest with SharedSQLContext with OffsetSuite {
 
   import testImplicits._
 
   private var testUtils: KafkaTestUtils = _
   private var kafkaParams: Map[String, String] = _
 
-  override val streamingTimout = 30.seconds
+  override val streamingTimout = 10.seconds
 
-  case class AddKafkaData(kafkaSource: KafkaSource, topic: String, data: Int*) extends AddData {
+  case class AddKafkaData(
+      kafkaSource: KafkaSource,
+      topic: String, data: Int*)(implicit multiPartitionCheck: Boolean = true) extends AddData {
+
     override def addData(): Offset = {
       val sentMetadata = testUtils.sendMessages(topic, data.map{ _.toString}.toArray)
-      val lastMetadata = sentMetadata.maxBy(_.offset)
+      val latestOffsetMap = sentMetadata
+        .groupBy { _._2.partition }
+        .map { case (partition, msgAndMetadata) =>
+          val maxOffsetInPartition = msgAndMetadata.map(_._2).maxBy(_.offset).offset()
+          (TopicAndPartition(topic, partition), maxOffsetInPartition + 1)
+        }
+
+      def metadataToStr(m: (String, RecordMetadata)): String = {
+        s"Sent ${m._1} to partition ${m._2.partition()}, offset ${m._2.offset()}"
+      }
+
+      assert(latestOffsetMap.size > 1,
+        s"Added data does not test multiple partitions: " + sentMetadata.map(metadataToStr))
 
       // Expected offset to ensure this data is read is last offset of this data + 1
-      val offset = KafkaSourceOffset(
-        Map(TopicAndPartition(topic, lastMetadata.partition) -> (lastMetadata.offset + 1)))
+      val offset = KafkaSourceOffset(latestOffsetMap)
       logInfo(s"Added data, expected offset $offset")
       offset
     }
@@ -64,10 +82,9 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  test("basic receiving from latest offset with 1 topic and 1 partition") {
+  test("basic receiving from latest offset with 1 topic and 2 partitions") {
     val topic = "topic1"
-    testUtils.createTopic(topic)
-
+    testUtils.createTopic(topic, partitions = 2)
 
     // Add data in multiple rounds to the same topic and test whether
     for (i <- 0 until 5) {
@@ -94,13 +111,39 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
         AddKafkaData(kafkaSource, topic, 4, 5, 6),    // Add data when stream is stopped
         StartStream,
         CheckAnswer(2, 3, 4, 5, 6, 7),                // Should get the added data
-        AddKafkaData(kafkaSource, topic, 7),
-        CheckAnswer(2, 3, 4, 5, 6, 7, 8)
+        AddKafkaData(kafkaSource, topic, 7, 8),
+        CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9)
       )
     }
   }
 
-  test("KafkaSourceOffset comparison") {
+  compare(
+    one = KafkaSourceOffset(("t", 0, 1L)),
+    two = KafkaSourceOffset(("t", 0, 2L))
+  )
 
-  }
+  compare(
+    one = KafkaSourceOffset(("t", 0, 1L), ("t", 1, 0L)),
+    two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L))
+  )
+
+  compare(
+    one = KafkaSourceOffset(("t", 0, 1L), ("T", 0, 0L)),
+    two = KafkaSourceOffset(("t", 0, 2L), ("T", 0, 1L))
+  )
+
+  compare(
+    one = KafkaSourceOffset(("t", 0, 1L)),
+    two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L))
+  )
+
+  compareInvalid(
+    one = KafkaSourceOffset(("t", 1, 1L)),
+    two = KafkaSourceOffset(("t", 0, 2L))
+  )
+
+  compareInvalid(
+    one = KafkaSourceOffset(("t", 0, 1L)),
+    two = KafkaSourceOffset(("T", 0, 2L))
+  )
 }

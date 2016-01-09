@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.util.Try
+
 /**
  * A offset is a monotonically increasing metric used to track progress in the computation of a
  * stream. An [[Offset]] must be comparable.

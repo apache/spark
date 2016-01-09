@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.util.Try
+
 import kafka.common.TopicAndPartition
 import kafka.serializer._
 
@@ -27,6 +29,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 
 
+/** An [[Offset]] for the [[KafkaSource]]. */
 private[kafka]
 case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offset {
   /**
@@ -39,7 +42,6 @@ case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offs
 
       val comparisons = allTopicAndPartitions.map { tp =>
         (this.offsets.get(tp), otherOffsets.get(tp)) match {
-
           case (Some(a), Some(b)) =>
             if (a < b) {
               -1
@@ -48,36 +50,77 @@ case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offs
             } else {
               0
             }
-          case (None, None) => 0
-          case (None, _) => -1
-          case (_, None) => 1
+          case (None, _) =>
+            -1
+          case (_, None) =>
+            1
+          case _ =>
+            throw new IllegalArgumentException(
+              s"Invalid comparison between two sets of Kafka offsets: $this <=> $other")
         }
       }
-      val signs = comparisons.distinct
-      if (signs.size != 1) {
-        throw new IllegalArgumentException(
-          s"Invalid comparison between to sets of Kafka offets: $this <=> $other")
+      val nonZeroSigns = comparisons.filter { _ != 0 }.toSet
+      nonZeroSigns.size match {
+        case 0 => 0 // if both empty or only 0s
+        case 1 => nonZeroSigns.head // if there are only (0s and 1s) or (0s and -1s)
+        case _ => // there are both 1s and -1s
+          throw new IllegalArgumentException(
+            s"Invalid comparison between non-linear histories: $this <=> $other")
       }
-      signs.head
+
     case _ =>
       throw new IllegalArgumentException(s"Cannot compare $this <=> $other")
   }
 
-  override def toString(): String = offsets.toSeq.mkString("[", ", ", "]")
-}
+  override def ==(other: Offset): Boolean = Try(compareTo(other) == 0).getOrElse(false)
 
-private[kafka] object KafkaSourceOffset {
-  def fromOffset(offset: Offset): KafkaSourceOffset = {
-    offset match {
-      case o: KafkaSourceOffset => o
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Invalid conversion from offset of ${offset.getClass} to $getClass")
+  /** Returns a set of offset ranges between `this` and `other` */
+  def to(other: KafkaSourceOffset): Seq[OffsetRange] = {
+    // Get all the partitions referenced in both sets of offsets
+    val allTopicAndPartitions = (this.offsets.keySet ++ other.offsets.keySet).toSeq
+
+    // For each partition, figure out the non-empty ranges of offsets
+    allTopicAndPartitions.flatMap { tp =>
+      (this.offsets.get(tp), other.offsets.get(tp)) match {
+
+        // Data was read till fromOffset and needs to be read till untilOffset
+        case (Some(fromOffset), Some(untilOffset)) =>
+          if (untilOffset > fromOffset) {
+            Some(OffsetRange(tp, fromOffset, untilOffset))
+          } else None
+
+        case _ =>
+          None
+      }
     }
+  }
+
+  override def toString(): String = {
+    offsets.toSeq.sortBy(_._1.topic).mkString("[", ", ", "]")
   }
 }
 
+/** Companion object of the [[KafkaSourceOffset]] */
+private[kafka] object KafkaSourceOffset {
+  def from(offsetOption: Option[Offset]): Option[KafkaSourceOffset] = {
+    offsetOption.map { offset =>
+      offset match {
+        case o: KafkaSourceOffset => o
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Invalid conversion from offset of ${offset.getClass} to $getClass")
+      }
+    }
+  }
 
+  def apply(data: (String, Int, Long)*): KafkaSourceOffset = {
+    val map = data.map { case (topic, partition, offset) =>
+        TopicAndPartition(topic, partition) -> offset }.toMap
+    KafkaSourceOffset(map)
+  }
+}
+
+/** A [[Source]] that reads data from Kafka */
 private[kafka] case class KafkaSource(
     topics: Set[String],
     params: Map[String, String])(implicit sqlContext: SQLContext) extends Source with Logging {
@@ -98,12 +141,11 @@ private[kafka] case class KafkaSource(
     * Returns the next batch of data that is available after `start`, if any is available.
     */
   override def getNextBatch(start: Option[Offset]): Option[Batch] = {
+    val beginOffset: KafkaSourceOffset = KafkaSourceOffset.from(start).getOrElse(initialOffsets)
     val latestOffset = getLatestOffsets()
-    logDebug(s"Latest offset: ${KafkaSourceOffset(latestOffset)}")
+    logDebug(s"Latest offset: $latestOffset")
 
-    val offsetRanges = getOffsetRanges(
-      start.map(KafkaSourceOffset.fromOffset(_).offsets), latestOffset)
-
+    val offsetRanges = beginOffset to latestOffset
     val kafkaParams = params
     val encodingFunc = encoder.toRow _
     val sparkContext = sqlContext.sparkContext
@@ -112,7 +154,7 @@ private[kafka] case class KafkaSource(
       val rdd = KafkaUtils.createRDD[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
         sparkContext, kafkaParams, offsetRanges.toArray)
       logInfo("Creating DF with offset ranges: " + offsetRanges)
-      Some(new Batch(KafkaSourceOffset(latestOffset), sqlContext.createDataset(rdd).toDF))
+      Some(new Batch(latestOffset, sqlContext.createDataset(rdd).toDF))
     } else {
       None
     }
@@ -126,41 +168,19 @@ private[kafka] case class KafkaSource(
     new DataFrame(sqlContext, logicalPlan)
   }
 
-  private def getOffsetRanges(start: Option[OffsetMap], end: OffsetMap): Seq[OffsetRange] = {
-    // Get the offsets from which to start reading. If its none, find initial offsets to start from.
-    val fromOffsets = start.getOrElse { initialOffsets }
-
-    // Get the latest offsets
-    val untilOffsets = end
-
-    // Get all the partitions referenced in both sets of offsets
-    val allTopicAndPartitions = (fromOffsets.keySet ++ untilOffsets.keySet).toSeq
-
-    // For each partition, figure out the non-empty ranges of offsets
-    allTopicAndPartitions.flatMap { tp =>
-      (fromOffsets.get(tp), untilOffsets.get(tp)) match {
-
-        // Data was read till fromOffset and needs to be read till untilOffset
-        case (Some(fromOffset), Some(untilOffset)) =>
-          if (untilOffset > fromOffset) {
-            Some(OffsetRange(tp, fromOffset, untilOffset))
-          } else None
-
-        case _ =>
-          None
-      }
-    }
-  }
-
-  private def getLatestOffsets(): OffsetMap = {
+  /** Get latest offsets from Kafka. */
+  private def getLatestOffsets(): KafkaSourceOffset = {
     val partitionLeaders = KafkaCluster.checkErrors(kc.findLeaders(topicAndPartitions))
     val leadersAndOffsets = KafkaCluster.checkErrors(kc.getLatestLeaderOffsets(topicAndPartitions))
-    leadersAndOffsets.map { x => (x._1, x._2.offset) }
+    KafkaSourceOffset(leadersAndOffsets.map { x => (x._1, x._2.offset) })
   }
 
-  private def getInitialOffsets(): OffsetMap = {
+  /** Get the initial offsets from Kafka for the source to start from. */
+  private def getInitialOffsets(): KafkaSourceOffset = {
     if (params.get("auto.offset.reset").map(_.toLowerCase) == Some("smallest")) {
-      KafkaCluster.checkErrors(kc.getEarliestLeaderOffsets(topicAndPartitions)).mapValues(_.offset)
+      val offsetMap = KafkaCluster.checkErrors(
+        kc.getEarliestLeaderOffsets(topicAndPartitions)).mapValues(_.offset)
+      KafkaSourceOffset(offsetMap)
     } else {
       getLatestOffsets()
     }

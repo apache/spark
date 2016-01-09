@@ -153,9 +153,15 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
-    AdminUtils.createTopic(zkClient, topic, 1, 1)
+    createTopic(topic, 1)
+  }
+
+  def createTopic(topic: String, partitions: Int): Unit = {
+    AdminUtils.createTopic(zkClient, topic, partitions, 1)
     // wait until metadata is propagated
-    waitUntilMetadataIsPropagated(topic, 0)
+    for (p <- 0 until partitions) {
+      waitUntilMetadataIsPropagated(topic, p)
+    }
   }
 
   /** Java-friendly function for sending messages to the Kafka broker */
@@ -170,11 +176,13 @@ private[kafka] class KafkaTestUtils extends Logging {
   }
 
   /** Send the array of messages to the Kafka broker */
-  def sendMessages(topic: String, messages: Array[String]): Seq[RecordMetadata] = {
+  def sendMessages(topic: String, messages: Array[String]): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
       messages.map { m =>
-        producer.send(new ProducerRecord[String, String](topic, m)).get(10, TimeUnit.SECONDS)
+        val metadata =
+          producer.send(new ProducerRecord[String, String](topic, m)).get(10, TimeUnit.SECONDS)
+        (m, metadata)
       }
     } finally {
       if (producer != null) {
