@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.types._
 
 class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
@@ -70,7 +71,7 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
       Union(Project(Seq(Alias(left, "l")()), relation),
         Project(Seq(Alias(right, "r")()), relation))
     val (l, r) = analyzer.execute(plan).collect {
-      case Union(left, right) => (left.output.head, right.output.head)
+      case Union(Seq(child1, child2)) => (child1.output.head, child2.output.head)
     }.head
     assert(l.dataType === expectedType)
     assert(r.dataType === expectedType)

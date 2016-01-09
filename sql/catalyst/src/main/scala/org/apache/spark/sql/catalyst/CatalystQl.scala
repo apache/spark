@@ -393,8 +393,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             overwrite)
       }
 
-      // If there are multiple INSERTS just UNION them together into on query.
-      val query = queries.reduceLeft(Union)
+      // If there are multiple INSERTS just UNION them together into one query.
+      val query = if (queries.length == 1) queries.head else Union(queries)
 
       // return With plan if there is CTE
       cteRelations.map(With(query, _)).getOrElse(query)

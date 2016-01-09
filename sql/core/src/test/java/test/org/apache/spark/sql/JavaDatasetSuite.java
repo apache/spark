@@ -300,9 +300,9 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> intersected = ds.intersect(ds2);
     Assert.assertEquals(Arrays.asList("xyz"), intersected.collectAsList());
 
-    Dataset<String> unioned = ds.union(ds2);
+    Dataset<String> unioned = ds.union(ds2).union(ds);
     Assert.assertEquals(
-      Arrays.asList("abc", "abc", "foo", "foo", "xyz", "xyz"),
+      Arrays.asList("abc", "abc", "abc", "abc", "foo", "foo", "xyz", "xyz", "xyz"),
       sort(unioned.collectAsList().toArray(new String[0])));
 
     Dataset<String> subtracted = ds.subtract(ds2);
