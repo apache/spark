@@ -157,7 +157,6 @@ class DagBag(LoggingMixin):
 
         # If the dag is absent or expired
         orm_dag = DagModel.get_current(dag_id)
-        found_dags = []
         if orm_dag and (
                 dag_id not in self.dags or (
                     dag.last_loaded < (
@@ -168,10 +167,11 @@ class DagBag(LoggingMixin):
             found_dags = self.process_file(
                 filepath=orm_dag.fileloc, only_if_updated=False)
 
-        if dag_id in [dag.dag_id for dag in found_dags]:
-            return self.dags[dag_id]
-        elif dag_id in self.dags:
-            del self.dags[dag_id]
+            if dag_id in [dag.dag_id for dag in found_dags]:
+                return self.dags[dag_id]
+            elif dag_id in self.dags:
+                del self.dags[dag_id]
+        return self.dags.get(dag_id)
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
