@@ -1024,6 +1024,10 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
@@ -1045,6 +1049,10 @@
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
@@ -1077,6 +1085,10 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
           </exclusion>
@@ -1105,6 +1117,10 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
           </exclusion>
@@ -1130,6 +1146,10 @@
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
