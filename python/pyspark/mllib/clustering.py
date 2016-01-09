@@ -72,7 +72,8 @@ class BisectingKMeansModel(JavaModelWrapper):
     @property
     @since('2.0.0')
     def clusterCenters(self):
-        """Get the cluster centers, represented as a list of NumPy arrays."""
+        """Get the cluster centers, represented as a list of NumPy
+        arrays."""
         return self.centers
 
     @property
@@ -88,7 +89,7 @@ class BisectingKMeansModel(JavaModelWrapper):
         model.
 
         :param x: the point (or RDD of points) to determine
-          compute the cluseters for.
+          compute the clusters for.
         """
         if isinstance(x, RDD):
             vecs = x.map(_convert_to_vector)
@@ -117,18 +118,21 @@ class BisectingKMeans(object):
     """
     .. note:: Experimental
 
-    A bisecting k-means algorithm based on the paper "A comparison of document clustering
-    techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
+    A bisecting k-means algorithm based on the paper "A comparison of
+    document clustering techniques" by Steinbach, Karypis, and Kumar,
+    with modification to fit Spark.
     The algorithm starts from a single cluster that contains all points.
-    Iteratively it finds divisible clusters on the bottom level and bisects each of them using
-    k-means, until there are `k` leaf clusters in total or no leaf clusters are divisible.
-    The bisecting steps of clusters on the same level are grouped together to increase parallelism.
-    If bisecting all divisible clusters on the bottom level would result more than `k` leaf
+    Iteratively it finds divisible clusters on the bottom level and
+    bisects each of them using k-means, until there are `k` leaf
+    clusters in total or no leaf clusters are divisible.
+    The bisecting steps of clusters on the same level are grouped
+    together to increase parallelism. If bisecting all divisible
+    clusters on the bottom level would result more than `k` leaf
     clusters, larger clusters get higher priority.
 
-    Based on [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
-    Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
-    KDD Workshop on Text Mining, 2000.]]
+    Based on U{http://bit.ly/1OTnFP1} Steinbach, Karypis, and Kumar, A
+    comparison of document clustering techniques, KDD Workshop on Text
+    Mining, 2000.
 
     .. versionadded:: 2.0.0
     """
@@ -139,12 +143,16 @@ class BisectingKMeans(object):
         Runs the bisecting k-means algorithm return the model.
 
         :param rdd: input RDD to be trained on
-        :param k: The desired number of leaf clusters (default: 4). The actual number could be
-            smaller if there are no divisible leaf clusters.
-        :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
-        :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum
-            proportion of points (if < 1.0) of a divisible cluster (default: 1)
-        :param seed: a random seed (default: -1888008604 from classOf[BisectingKMeans].getName.##)
+        :param k: The desired number of leaf clusters (default: 4).
+            The actual number could be smaller if there are no divisible
+            leaf clusters.
+        :param maxIterations: the max number of k-means iterations to
+            split clusters (default: 20)
+        :param minDivisibleClusterSize: the minimum number of points
+            (if >= 1.0) or the minimum proportion of points (if < 1.0)
+            of a divisible cluster (default: 1)
+        :param seed: a random seed (default: -1888008604 from
+            classOf[BisectingKMeans].getName.##)
         """
         java_model = callMLlibFunc(
             "trainBisectingKMeans", rdd.map(_convert_to_vector),
@@ -231,7 +239,7 @@ class KMeansModel(Saveable, Loader):
         model.
 
         :param x: the point (or RDD of points) to determine
-          compute the cluseters for.
+            compute the clusters for.
         """
         best = 0
         best_distance = float("inf")
