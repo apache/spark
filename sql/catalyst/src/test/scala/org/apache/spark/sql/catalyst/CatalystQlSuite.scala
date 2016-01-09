@@ -20,17 +20,33 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 class CatalystQlSuite extends PlanTest {
+  val parser = new CatalystQl()
 
   test("parse union/except/intersect") {
-    val paresr = new CatalystQl()
-    paresr.createPlan("select * from t1 union all select * from t2")
-    paresr.createPlan("select * from t1 union distinct select * from t2")
-    paresr.createPlan("select * from t1 union select * from t2")
-    paresr.createPlan("select * from t1 except select * from t2")
-    paresr.createPlan("select * from t1 intersect select * from t2")
-    paresr.createPlan("(select * from t1) union all (select * from t2)")
-    paresr.createPlan("(select * from t1) union distinct (select * from t2)")
-    paresr.createPlan("(select * from t1) union (select * from t2)")
-    paresr.createPlan("select * from ((select * from t1) union (select * from t2)) t")
+    parser.createPlan("select * from t1 union all select * from t2")
+    parser.createPlan("select * from t1 union distinct select * from t2")
+    parser.createPlan("select * from t1 union select * from t2")
+    parser.createPlan("select * from t1 except select * from t2")
+    parser.createPlan("select * from t1 intersect select * from t2")
+    parser.createPlan("(select * from t1) union all (select * from t2)")
+    parser.createPlan("(select * from t1) union distinct (select * from t2)")
+    parser.createPlan("(select * from t1) union (select * from t2)")
+    parser.createPlan("select * from ((select * from t1) union (select * from t2)) t")
+  }
+
+  test("window function: better support of parentheses") {
+    parser.createPlan("select sum(product + 1) over (partition by ((1) + (product / 2)) " +
+      "order by 2) from windowData")
+    parser.createPlan("select sum(product + 1) over (partition by (1 + (product / 2)) " +
+      "order by 2) from windowData")
+    parser.createPlan("select sum(product + 1) over (partition by ((product / 2) + 1) " +
+      "order by 2) from windowData")
+
+    parser.createPlan("select sum(product + 1) over (partition by ((product) + (1)) order by 2) " +
+      "from windowData")
+    parser.createPlan("select sum(product + 1) over (partition by ((product) + 1) order by 2) " +
+      "from windowData")
+    parser.createPlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
+      "from windowData")
   }
 }
