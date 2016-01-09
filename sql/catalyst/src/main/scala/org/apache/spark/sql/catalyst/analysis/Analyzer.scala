@@ -445,8 +445,7 @@ class Analyzer(
         a.copy(aggregateExpressions = expanded)
 
       // To resolve duplicate expression IDs for all the BinaryNode
-      case b: BinaryNode
-        if !b.duplicateResolved => b match {
+      case b: BinaryNode if !b.duplicateResolved => b match {
         case j @ Join(left, right, _, _) =>
           j.copy(right = dedupRight(left, right))
         case i @ Intersect(left, right) =>
@@ -457,8 +456,7 @@ class Analyzer(
           u.copy(right = dedupRight(left, right))
         case cg @ CoGroup(_, _, _, _, _, _, _, _, left, right) =>
           cg.copy(right = dedupRight(left, right))
-        case other =>
-          other
+        case other => other
       }
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
