@@ -287,7 +287,7 @@ private[sql] object Expand {
 
     var bit = exprs.length - 1
     while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 1) set += exprs(exprs.length - bit - 1)
+      if (((bitmask >> bit) & 1) == 0) set += exprs(bit)
       bit -= 1
     }
 

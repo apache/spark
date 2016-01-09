@@ -124,3 +124,47 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
 
   protected override def nullSafeEval(input: Any): Any = not(input)
 }
+
+/**
+  * A function that reverse the lowest N bits of a integer.
+  *
+  * Note: this is only used for grouping_id()
+  */
+case class BitwiseReverse(child: Expression, width: Int)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
+
+  override def dataType: DataType = IntegerType
+
+  override def toString: String = s"^$child"
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val v = ctx.freshName("v")
+      val i = ctx.freshName("i")
+      s"""
+         | int $v = $c;
+         | ${ev.value} = 0;
+         | for (int $i = 0; $i < $width; $i ++) {
+         |   ${ev.value} <<= 1;
+         |   ${ev.value} |= $v & 1;
+         |   $v >>>= 1;
+         | }
+       """.stripMargin
+    })
+  }
+
+  protected override def nullSafeEval(input: Any): Any = {
+    var v = input.asInstanceOf[Int]
+    var r = 0
+    var i = 0
+    while (i < width) {
+      r <<= 1
+      r |= v & 1
+      v >>>= 1
+      i += 1
+    }
+    r
+  }
+}

@@ -250,7 +250,9 @@ class Analyzer(
             case e if isPartOfAggregation(e) => e
             case e: GroupingID =>
               if (e.groupByExprs == x.groupByExprs) {
-                gid
+                // the bitmask is following Hive, which is wrong, we need to reverse it here
+                // TODO: don't not follow Hive
+                BitwiseReverse(BitwiseNot(gid), e.groupByExprs.length)
               } else {
                 throw new AnalysisException(
                   s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
@@ -259,8 +261,7 @@ class Analyzer(
             case Grouping(col: Expression) =>
               val idx = x.groupByExprs.indexOf(col)
               if (idx >= 0) {
-                Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
-                  Literal(1)), ByteType)
+                Cast(BitwiseAnd(ShiftRight(BitwiseNot(gid), Literal(idx)), Literal(1)), ByteType)
               } else {
                 throw new AnalysisException(s"Column of grouping ($col) can't be found " +
                   s"in grouping columns ${x.groupByExprs.mkString(",")}")

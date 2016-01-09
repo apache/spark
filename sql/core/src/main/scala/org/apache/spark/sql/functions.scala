@@ -365,8 +365,8 @@ object functions extends LegacyFunctions {
     * @group agg_funcs
     * @since 2.0.0
     */
-  def grouping_id(colName:String, colNames: String*): Column = {
-    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
+  def grouping_id(colName: String, colNames: String*): Column = {
+    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)): _*)
   }
 
   /**
