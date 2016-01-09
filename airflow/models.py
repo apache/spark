@@ -150,15 +150,16 @@ class DagBag(LoggingMixin):
         Gets the DAG out of the dictionary, and refreshes it if expired
         """
         # If asking for a known subdag, we want to refresh the parent
+        root_dag_id = dag_id
         if dag_id in self.dags:
             dag = self.dags[dag_id]
             if dag.is_subdag:
-                dag_id = dag.parent_dag.dag_id
+                root_dag_id = dag.parent_dag.dag_id
 
-        # If the dag is absent or expired
-        orm_dag = DagModel.get_current(dag_id)
+        # If the root_dag_id is absent or expired
+        orm_dag = DagModel.get_current(root_dag_id)
         if orm_dag and (
-                dag_id not in self.dags or (
+                root_dag_id not in self.dags or (
                     dag.last_loaded < (
                     orm_dag.last_expired or datetime(2100, 1, 1)
                 )
