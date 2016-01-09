@@ -21,12 +21,13 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd._
+import org.apache.spark.storage.StorageLevel
+
 import org.apache.spark.graphx.impl.RoutingTablePartition
 import org.apache.spark.graphx.impl.ShippableVertexPartition
 import org.apache.spark.graphx.impl.VertexAttributeBlock
 import org.apache.spark.graphx.impl.VertexRDDImpl
-import org.apache.spark.rdd._
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Extends `RDD[(VertexId, VD)]` by ensuring that there is only one entry for each vertex and by
@@ -54,8 +55,8 @@ import org.apache.spark.storage.StorageLevel
  * @tparam VD the vertex attribute associated with each vertex in the set.
  */
 abstract class VertexRDD[VD](
-    sc: SparkContext,
-    deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
+    @transient sc: SparkContext,
+    @transient deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
 
   implicit protected def vdTag: ClassTag[VD]
 
@@ -255,7 +256,8 @@ abstract class VertexRDD[VD](
       shipSrc: Boolean, shipDst: Boolean): RDD[(PartitionID, VertexAttributeBlock[VD])]
 
   /** Generates an RDD of vertex IDs suitable for shipping to the edge partitions. */
-  private[graphx] def shipVertexIds(): RDD[(PartitionID, Array[VertexId])]
+  private[graphx] def shipVertexIds(
+      shipSrc: Boolean, shipDst: Boolean): RDD[(PartitionID, Array[VertexId])]
 
 } // end of VertexRDD
 

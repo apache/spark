@@ -19,9 +19,10 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
+
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
-import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 
 /** Stores vertex attributes to ship to an edge partition. */
 private[graphx]
@@ -134,11 +135,12 @@ class ShippableVertexPartition[VD: ClassTag](
    * contains the visible vertex ids from the current partition that are referenced in the edge
    * partition.
    */
-  def shipVertexIds(): Iterator[(PartitionID, Array[VertexId])] = {
+  def shipVertexIds(shipSrc: Boolean, shipDst: Boolean):
+   Iterator[(PartitionID, Array[VertexId])] = {
     Iterator.tabulate(routingTable.numEdgePartitions) { pid =>
       val vids = new PrimitiveVector[VertexId](routingTable.partitionSize(pid))
       var i = 0
-      routingTable.foreachWithinEdgePartition(pid, true, true) { vid =>
+      routingTable.foreachWithinEdgePartition(pid, shipSrc, shipDst) { vid =>
         if (isDefined(vid)) {
           vids += vid
         }
