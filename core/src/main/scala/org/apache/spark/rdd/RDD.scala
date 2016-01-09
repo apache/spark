@@ -1190,7 +1190,7 @@ abstract class RDD[T: ClassTag](
     } else {
       val buf = new ArrayBuffer[T]
       val totalParts = this.partitions.length
-      var partsScanned = 0L
+      var partsScanned = 0
       while (buf.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
@@ -1209,7 +1209,7 @@ abstract class RDD[T: ClassTag](
         }
 
         val left = num - buf.size
-        val p = partsScanned.toInt until math.min(partsScanned + numPartsToTry, totalParts).toInt
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))
