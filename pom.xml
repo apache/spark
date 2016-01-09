@@ -606,6 +606,12 @@
         <groupId>${akka.group}</groupId>
         <artifactId>akka-remote_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
@@ -1858,7 +1864,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>1.4</version>
+          <version>1.4.1</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -1873,6 +1879,13 @@
                   <requireJavaVersion>
                     <version>${java.version}</version>
                   </requireJavaVersion>
+                  <bannedDependencies>
+                    <excludes>
+                      <exclude>io.netty:netty</exclude>
+                      <exclude>org.jboss.netty</exclude>
+                    </excludes>
+                    <!-- <searchTransitive>true</searchTransitive> -->
+                  </bannedDependencies>
                 </rules>
               </configuration>
             </execution>
