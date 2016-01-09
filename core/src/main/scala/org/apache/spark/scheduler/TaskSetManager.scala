@@ -615,7 +615,7 @@ private[spark] class TaskSetManager(
     info.markSuccessful()
     removeRunningTask(tid)
 
-    // Update result size metric in `result`, which is not yet set.
+    // Update result size metric in `result`
     updateResultSize(tid, result, resultSize)
 
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
@@ -645,10 +645,11 @@ private[spark] class TaskSetManager(
   /**
    * Set the task result size in the accumulator updates received from the executors.
    *
-   * Note: If we did this on the executors we would have to serialize the result again after
-   * updating the size, which is potentially expensive. Also, we would have to do something
-   * extra for indirect task results. It's better to just do all of this in one place on the
-   * driver.
+   * If we did this on the executors we would have to serialize the result again after updating
+   * the size, which is potentially expensive. Also, we would have to do something extra for
+   * indirect task results. It's better to just do all of this in one place on the driver.
+   *
+   * TODO: write a test.
    */
   private def updateResultSize(tid: Long, result: DirectTaskResult[_], resultSize: Long): Unit = {
     val index = taskInfos(tid).index
@@ -692,12 +693,8 @@ private[spark] class TaskSetManager(
         None
 
       case ef: ExceptionFailure =>
-
         // ExceptionFailure's might have accumulator updates
-        if (ef.accumulatorUpdates != null) {
-          accumUpdates = ef.accumulatorUpdates
-        }
-
+        accumUpdates = ef.accumulatorUpdates
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
           logError("Task %s in stage %s (TID %d) had a not serializable result: %s; not retrying"

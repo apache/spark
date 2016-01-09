@@ -39,9 +39,6 @@ import org.apache.spark.util.Utils
  *
  * Operations are not thread-safe.
  *
- * Note: all internal accumulators used within a task must have unique names because we access
- * them by name in [[org.apache.spark.executor.TaskMetrics]].
- *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
@@ -80,7 +77,9 @@ class Accumulable[R, T] private[spark] (
   val zero = param.zero(initialValue)  // Zero value to be passed to executors
   private var deserialized = false
 
-  // Avoid leaking accumulators on executors
+  // In certain places we create accumulators on the executors. If we register them here then
+  // we will never clean them up because there's no context cleaner on the executors. E.g. we
+  // manually create ShuffleWriteMetrics, which is a collection of accumulators, in some places.
   if (isDriver) {
     Accumulators.register(this)
   }
@@ -93,7 +92,7 @@ class Accumulable[R, T] private[spark] (
   private[spark] def isInternal: Boolean = internal
 
   /**
-   * Return a copy of this [[Accumulable]] without its current value.
+   * Return a copy of this [[Accumulable]] with a new value.
    */
   private[spark] def copy(newValue: Any): Accumulable[R, T] = {
     val a = new Accumulable[R, T](initialValue, param, name, internal, countFailedValues)
@@ -168,8 +167,8 @@ class Accumulable[R, T] private[spark] (
   private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
 
   /**
-   * Whether we are on the driver or the executors.
-   * Note: in local mode, this will inevitably return true even if we're on the executor.
+   * Whether we are on the driver or on the executors.
+   * Note: in local mode, this will inevitably return true even when we're on the executors.
    */
   private def isDriver: Boolean = {
     Option(SparkEnv.get).map(_.isDriver).getOrElse(true)
@@ -291,7 +290,7 @@ class Accumulator[T] private[spark] (
   extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
   /**
-   * Return a copy of this [[Accumulator]] without its current value.
+   * Return a copy of this [[Accumulator]] with a new value.
    */
   private[spark] override def copy(newValue: Any): Accumulator[T] = {
     val a = new Accumulator[T](initialValue, param, name, internal, countFailedValues)
@@ -404,6 +403,9 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
+  /**
+   * Clear all registered accumulators; for testing only.
+   */
   def clear(): Unit = synchronized {
     originals.clear()
   }

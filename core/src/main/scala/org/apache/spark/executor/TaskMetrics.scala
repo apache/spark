@@ -24,19 +24,19 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
+// TODO: make this and related classes private
+
 /**
  * :: DeveloperApi ::
  * Metrics tracked during the execution of a task.
  *
- * This class is used to house metrics both for in-progress and completed tasks. In executors,
- * both the task thread and the heartbeat thread write to the TaskMetrics. The heartbeat thread
- * reads it to send in-progress metrics, and the task thread reads it to send metrics along with
- * the completed task.
+ * This class is wrapper around a collection of internal accumulators that represent metrics
+ * associated with a task. The local values of these accumulators are sent from the executor
+ * to the driver when the task completes. These values are then merged into the corresponding
+ * accumulator previously registered on the driver.
  *
- * So, when adding new fields, take into consideration that the whole object can be serialized for
- * shipping off at any time to consumers of the SparkListener interface.
- *
- * TODO: update this comment.
+ * These accumulator updates are also sent to the driver periodically (on executor heartbeat)
+ * or when the task failed with an exception.
  *
  * @param initialAccums the initial set of accumulators that this [[TaskMetrics]] depends on.
  *                      Each accumulator in this initial set must be named and marked as internal.
@@ -303,7 +303,7 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
 
   /**
    * Get a Long accumulator from the given map by name, assuming it exists.
-   * Note: this only searches the initial set passed into the constructor.
+   * Note: this only searches the initial set of accumulators passed into the constructor.
    */
   private[spark] def getAccum(name: String): Accumulator[Long] = {
     TaskMetrics.getAccum[Long](initialAccumsMap, name)
@@ -316,7 +316,7 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
 
   /**
    * Return whether some accumulators with the given prefix have already been set.
-   * This only considers the initial set passed into the constructor.
+   * This only considers the initial set of accumulators passed into the constructor.
    */
   private def accumsAlreadySet(prefix: String): Boolean = {
     initialAccumsMap.filterKeys(_.startsWith(prefix)).values.exists { a => a.localValue != a.zero }

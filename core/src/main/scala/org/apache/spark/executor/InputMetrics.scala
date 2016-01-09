@@ -58,7 +58,7 @@ class InputMetrics private (
    * because we want to ignore metrics from a second read method. In the future, we should revisit
    * whether this is needed.
    *
-   * A better alternative to use is [[TaskMetrics.registerInputMetrics]].
+   * A better alternative is [[TaskMetrics.registerInputMetrics]].
    */
   private[executor] def this() {
     this(InternalAccumulator.createInputAccums().map { a => (a.name.get, a) }.toMap)
@@ -83,4 +83,5 @@ class InputMetrics private (
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
   private[spark] def setReadMethod(v: DataReadMethod.Value): Unit =
     _readMethod.setValue(v.toString)
+
 }

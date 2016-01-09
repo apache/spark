@@ -69,4 +69,5 @@ class OutputMetrics private (
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
   private[spark] def setWriteMethod(v: DataWriteMethod.Value): Unit =
     _writeMethod.setValue(v.toString)
+
 }

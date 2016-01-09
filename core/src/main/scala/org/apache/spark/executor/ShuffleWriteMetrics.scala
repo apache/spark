@@ -46,7 +46,7 @@ class ShuffleWriteMetrics private (
    * many places only to merge their values together later. In the future, we should revisit
    * whether this is needed.
    *
-   * A better alternative to use is [[TaskMetrics.registerShuffleWriteMetrics]].
+   * A better alternative is [[TaskMetrics.registerShuffleWriteMetrics]].
    */
   private[spark] def this() {
     this(InternalAccumulator.createShuffleWriteAccums().map { a => (a.name.get, a) }.toMap)
@@ -76,4 +76,5 @@ class ShuffleWriteMetrics private (
   private[spark] def decRecordsWritten(v: Long): Unit = {
     _recordsWritten.setValue(recordsWritten - v)
   }
+
 }

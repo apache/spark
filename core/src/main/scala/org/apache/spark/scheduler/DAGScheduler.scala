@@ -1072,7 +1072,8 @@ class DAGScheduler(
   }
 
   /**
-   * Update accumulators
+   * Merge local values from a task into the corresponding accumulator previously
+   * registered here on the driver.
    */
   private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
@@ -1107,9 +1108,9 @@ class DAGScheduler(
   /**
    * Reconstruct [[TaskMetrics]] from accumulator updates.
    *
-   * Executors only send accumulator updates back to the driver, not [[TaskMetrics]].
-   * However, we need the latter to post task end events to listeners, so we need to
-   * reconstruct the metrics here on the driver.
+   * Executors only send accumulator updates back to the driver, not [[TaskMetrics]]. However,
+   * we need the latter to post task end events to listeners, so we need to reconstruct the
+   * metrics here on the driver.
    *
    * Note: If the task failed, we may return null after attempting to reconstruct the
    * [[TaskMetrics]] in vain.
@@ -1168,9 +1169,9 @@ class DAGScheduler(
     //   (3) Post SparkListenerTaskEnd event
     //   (4) Post SparkListenerStageCompleted / SparkListenerJobEnd event
 
-    // Update accumulator values based on updates from this task.
-    // Note: we must do this before reconstructing TaskMetrics, otherwise the TaskMetrics
-    // will not have updated accumulator values. This is needed for the SQL UI, for instance.
+    // Update accumulator values based on updates from this task. Note: we must do this before
+    // reconstructing TaskMetrics, otherwise the TaskMetrics will not have the updated metrics.
+    // This is needed for the SQL UI, for instance.
     if (stageIdToStage.contains(stageId)) {
       val stage = stageIdToStage(stageId)
       // We should should update registered accumulators if this task succeeded or failed with
@@ -1201,7 +1202,6 @@ class DAGScheduler(
       event.taskInfo.attemptNumber, // this is a task attempt number
       event.reason)
 
-    // Post task end event
     listenerBus.post(SparkListenerTaskEnd(
       stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 

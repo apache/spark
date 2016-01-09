@@ -417,8 +417,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
    * Upon receiving new metrics for a task, updates the per-stage and per-executor-per-stage
    * aggregate metrics by calculating deltas between the currently recorded metrics and the new
    * metrics.
+   *
+   * TODO: no need to do this! Just use accumulators. :)
    */
-  def updateAggregateMetrics(
+  private def updateAggregateMetrics(
       stageData: StageUIData,
       execId: String,
       taskMetrics: TaskMetrics,

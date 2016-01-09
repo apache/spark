@@ -52,7 +52,7 @@ class ShuffleReadMetrics private (
    * many places only to merge their values together later. In the future, we should revisit
    * whether this is needed.
    *
-   * A better alternative to use is [[TaskMetrics.registerTempShuffleReadMetrics]].
+   * A better alternative is [[TaskMetrics.registerTempShuffleReadMetrics]].
    */
   private[spark] def this() {
     this(InternalAccumulator.createShuffleReadAccums().map { a => (a.name.get, a) }.toMap)
@@ -113,4 +113,5 @@ class ShuffleReadMetrics private (
   private[spark] def setLocalBytesRead(v: Long): Unit = _localBytesRead.setValue(v)
   private[spark] def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.setValue(v)
   private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
+
 }

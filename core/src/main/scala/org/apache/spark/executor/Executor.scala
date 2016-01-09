@@ -448,6 +448,7 @@ private[spark] class Executor(
       }
     }
 
+    // TODO: don't send TaskMetrics here; send accumulator updates.
     val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
