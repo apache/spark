@@ -1922,7 +1922,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       result: Any,
       extraAccumUpdates: Map[Long, Any] = Map[Long, Any](),
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
-    val accumUpdates = task.initialAccumulators.map { a => (a.id, 0L) }.toMap ++ extraAccumUpdates
+    val accumUpdates =
+      task.initialAccumulators.map { a => (a.id, a.zero) }.toMap ++ extraAccumUpdates
     CompletionEvent(task, reason, result, accumUpdates, taskInfo)
   }
 
