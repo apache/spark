@@ -382,27 +382,16 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
-  // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        getAccum(id).foreach { _.asInstanceOf[Accumulable[Any, Any]] ++= value }
-      } else {
-        logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
-      }
-    }
-  }
-
   /**
    * Return the accumulator registered with the given ID, if any.
    */
-  def getAccum(id: Long): Option[Accumulable[_, _]] = {
+  def get(id: Long): Option[Accumulable[_, _]] = {
     originals.get(id).map { weakRef =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       weakRef.get match {
         case Some(accum) => accum
         case None =>
-          throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
+          throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
       }
     }
   }

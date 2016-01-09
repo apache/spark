@@ -1071,23 +1071,22 @@ class DAGScheduler(
     }
   }
 
-  /** Merge updates from a task to our local accumulator values */
+  /**
+   * Update accumulators
+   */
   private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
     val stage = stageIdToStage(task.stageId)
     if (event.accumUpdates != null) {
       try {
-        Accumulators.add(event.accumUpdates)
-
         event.accumUpdates.foreach { case (id, partialValue) =>
-          // In this instance, although the reference in Accumulators.originals is a WeakRef,
-          // it's guaranteed to exist since the event.accumUpdates Map exists
-
-          val acc = Accumulators.originals(id).get match {
+          // Find the previously registered accumulator and update it
+          val acc: Accumulable[Any, Any] = Accumulators.get(id) match {
             case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
-            case None => throw new NullPointerException("Non-existent reference to Accumulator")
+            case None =>
+              throw new SparkException(s"attempted to access non-existent accumulator $id")
           }
-
+          acc ++= partialValue
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get
@@ -1099,10 +1098,8 @@ class DAGScheduler(
           }
         }
       } catch {
-        // If we see an exception during accumulator update, just log the
-        // error and move on.
-        case e: Exception =>
-          logError(s"Failed to update accumulators for $task", e)
+        case NonFatal(e) =>
+          logError(s"Failed to update accumulators for ${task.partitionId}", e)
       }
     }
   }
@@ -1140,7 +1137,7 @@ class DAGScheduler(
         initialAccumsMap(id).copy(taskValue)
       }
       val otherAccums = otherAccumUpdates.flatMap { case (id, taskValue) =>
-        Accumulators.getAccum(id).map(_.copy(taskValue)).orElse {
+        Accumulators.get(id).map(_.copy(taskValue)).orElse {
           logWarning(s"Task $taskId returned unregistered accumulator $id.")
           None
         }
