@@ -20,12 +20,12 @@ package org.apache.spark
 import java.io.{ObjectInputStream, Serializable}
 
 import scala.collection.generic.Growable
-import scala.collection.Map
 import scala.collection.mutable
 import scala.ref.WeakReference
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.storage.{BlockStatus, BlockId}
 import org.apache.spark.util.Utils
 
 /**
@@ -352,6 +352,14 @@ object AccumulatorParam {
     def addInPlace(t1: String, t2: String): String = t1 + t2
     def zero(initialValue: String): String = ""
   }
+
+  // Note: this is expensive as it makes a copy of the list every time the caller adds an item.
+  // A better way to use this is to first accumulate the values yourself then them all at once.
+  private[spark] class ListAccumulatorParam[T] extends AccumulatorParam[Seq[T]] {
+    def addInPlace(t1: Seq[T], t2: Seq[T]): Seq[T] = t1 ++ t2
+    def zero(initialValue: Seq[T]): Seq[T] = Seq.empty[T]
+  }
+
 }
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
@@ -404,6 +412,8 @@ private[spark] object Accumulators extends Logging {
 
 private[spark] object InternalAccumulator {
 
+  import AccumulatorParam._
+
   // Prefixes used in names of internal task level metrics
   private val METRICS_PREFIX = "metrics."
   val SHUFFLE_READ_METRICS_PREFIX = METRICS_PREFIX + "shuffle.read."
@@ -420,6 +430,7 @@ private[spark] object InternalAccumulator {
   val MEMORY_BYTES_SPILLED = METRICS_PREFIX + "memoryBytesSpilled"
   val DISK_BYTES_SPILLED = METRICS_PREFIX + "diskBytesSpilled"
   val PEAK_EXECUTION_MEMORY = METRICS_PREFIX + "peakExecutionMemory"
+  val UPDATED_BLOCK_STATUSES = METRICS_PREFIX + "updatedBlockStatuses"
   val TEST_ACCUM = METRICS_PREFIX + "testAccumulator"
 
   // Names of shuffle read metrics
@@ -458,7 +469,6 @@ private[spark] object InternalAccumulator {
    * Note: this method does not register accumulators for cleanup.
    */
   def create(): Seq[Accumulator[_]] = {
-    val maybeTestAccum = sys.props.get("spark.testing").map(_ => newLongMetric(TEST_ACCUM)).toSeq
     Seq[Accumulator[_]](
       newLongMetric(EXECUTOR_DESERIALIZE_TIME),
       newLongMetric(EXECUTOR_RUN_TIME),
@@ -467,12 +477,16 @@ private[spark] object InternalAccumulator {
       newLongMetric(RESULT_SERIALIZATION_TIME),
       newLongMetric(MEMORY_BYTES_SPILLED),
       newLongMetric(DISK_BYTES_SPILLED),
-      newLongMetric(PEAK_EXECUTION_MEMORY)) ++
+      newLongMetric(PEAK_EXECUTION_MEMORY),
+      newMetric(
+        Seq.empty[(BlockId, BlockStatus)],
+        UPDATED_BLOCK_STATUSES,
+        new ListAccumulatorParam[(BlockId, BlockStatus)])) ++
     createShuffleReadAccums() ++
     createShuffleWriteAccums() ++
     createInputAccums() ++
     createOutputAccums() ++
-    maybeTestAccum
+    sys.props.get("spark.testing").map(_ => newLongMetric(TEST_ACCUM)).toSeq
   }
 
   /**
@@ -537,20 +551,25 @@ private[spark] object InternalAccumulator {
     accums
   }
 
-
   /**
-   * Create a new internal Long accumulator with the specified name.
+   * Create a new accumulator representing an internal task metric.
    */
-  private def newLongMetric(name: String): Accumulator[Long] = {
-    new Accumulator[Long](0L, AccumulatorParam.LongAccumulatorParam, Some(name), internal = true)
+  private def newMetric[T](initialValue: T, name: String, param: AccumulatorParam[T]) = {
+    new Accumulator[T](initialValue, param, Some(name), internal = true, countFailedValues = true)
   }
 
   /**
-   * Create a new internal String accumulator with the specified name.
+   * Create a new Long accumulator representing an internal task metric.
+   */
+  private def newLongMetric(name: String): Accumulator[Long] = {
+    newMetric[Long](0L, name, LongAccumulatorParam)
+  }
+
+  /**
+   * Create a new String accumulator representing an internal task metric.
    */
   private def newStringMetric(name: String): Accumulator[String] = {
-    new Accumulator[String](
-      "", AccumulatorParam.StringAccumulatorParam, Some(name), internal = true)
+    newMetric[String]("", name, StringAccumulatorParam)
   }
 
 }

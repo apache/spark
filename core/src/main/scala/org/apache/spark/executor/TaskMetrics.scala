@@ -83,6 +83,8 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   private val _memoryBytesSpilled = getAccum(MEMORY_BYTES_SPILLED)
   private val _diskBytesSpilled = getAccum(DISK_BYTES_SPILLED)
   private val _peakExecutionMemory = getAccum(PEAK_EXECUTION_MEMORY)
+  private val _updatedBlocks =
+    TaskMetrics.getAccum[Seq[(BlockId, BlockStatus)]](initialAccumsMap, UPDATED_BLOCK_STATUSES)
 
   /**
    * Time taken on the executor to deserialize this task.
@@ -127,6 +129,11 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
    */
   def peakExecutionMemory: Long = _peakExecutionMemory.localValue
 
+  /**
+   * Storage statuses of any blocks that have been updated as a result of this task.
+   */
+  def updatedBlocks: Seq[(BlockId, BlockStatus)] = _updatedBlocks.localValue
+
   private[spark] def setExecutorDeserializeTime(v: Long) = _executorDeserializeTime.setValue(v)
   private[spark] def setExecutorRunTime(v: Long) = _executorRunTime.setValue(v)
   private[spark] def setResultSize(v: Long) = _resultSize.setValue(v)
@@ -135,6 +142,8 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   private[spark] def incMemoryBytesSpilled(v: Long) = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long) = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long) = _peakExecutionMemory.add(v)
+  private[spark] def incUpdatedBlocks(v: Seq[(BlockId, BlockStatus)]) = _updatedBlocks.add(v)
+  private[spark] def setUpdatedBlocks(v: Seq[(BlockId, BlockStatus)]) = _updatedBlocks.setValue(v)
 
 
   /* ============================ *
@@ -304,13 +313,6 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
    * Return a map from accumulator ID to the accumulator's latest value in this task.
    */
   def accumulatorUpdates(): Map[Long, Any] = accums.map { a => (a.id, a.localValue) }.toMap
-
-
-  /**
-   * Storage statuses of any blocks that have been updated as a result of this task.
-   */
-  // TODO: make me an accumulator; right now this doesn't get sent to the driver.
-  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 
   /**
    * Return whether some accumulators with the given prefix have already been set.
