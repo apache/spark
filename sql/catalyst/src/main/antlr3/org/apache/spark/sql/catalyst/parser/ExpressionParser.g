@@ -223,7 +223,12 @@ precedenceUnaryPrefixExpression
     ;
 
 precedenceUnarySuffixExpression
-    : precedenceUnaryPrefixExpression (a=KW_IS nullCondition)?
+    :
+    (
+    (LPAREN precedenceUnaryPrefixExpression RPAREN) => LPAREN precedenceUnaryPrefixExpression (a=KW_IS nullCondition)? RPAREN
+    |
+    precedenceUnaryPrefixExpression (a=KW_IS nullCondition)?
+    )
     -> {$a != null}? ^(TOK_FUNCTION nullCondition precedenceUnaryPrefixExpression)
     -> precedenceUnaryPrefixExpression
     ;
