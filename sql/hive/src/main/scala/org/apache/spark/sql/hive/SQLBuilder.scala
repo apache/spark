@@ -129,11 +129,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         conditionSQL = condition.sql
       } yield s"$childSQL $whereOrHaving $conditionSQL"
 
-    case Union(left, right) =>
-      for {
-        leftSQL <- toSQL(left)
-        rightSQL <- toSQL(right)
-      } yield s"$leftSQL UNION ALL $rightSQL"
+    case Union(children) if children.length > 1 =>
+      val unionStmt: StringBuffer = new StringBuffer(s"${toSQL(children.head).getOrElse("")}")
+      children.tail.map{ case child =>
+          unionStmt.append(s" UNION ALL ${toSQL(child).getOrElse("")}")
+      }
+      Some(s"${unionStmt.toString}")
 
     // ParquetRelation converted from Hive metastore table
     case Subquery(alias, LogicalRelation(r: ParquetRelation, _)) =>
