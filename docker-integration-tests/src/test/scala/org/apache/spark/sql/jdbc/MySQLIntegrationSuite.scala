@@ -59,6 +59,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
       "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
+    
+    conn.prepareStatement("CREATE TABLE `escaped names` (`key` BIGINT, `long description` TEXT)").executeUpdate()
+    conn.prepareStatement("INSERT INTO `escaped names` VALUES (123456789012345,'fred')").executeUpdate()
   }
 
   test("Basic test") {
@@ -149,6 +152,27 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
+  }
+  
+  test("Basic test with table escaped names") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "`escaped names`", new Properties)
+    val rows = df.collect()
+    assert(rows.length == 2)
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types.length == 2)
+    assert(types(0).equals("class java.lang.Long"))
+    assert(types(1).equals("class java.lang.String"))
+    
+    df.write.mode("overwrite")
+    df.write.jdbc(jdbcUrl, "`escaped names`", new Properties)
+    
+    val df1 = sqlContext.read.jdbc(jdbcUrl, "`escaped names`", new Properties)
+    val rows1 = df1.collect()
+    assert(rows1.length == 2)
+    val types1 = rows1(0).toSeq.map(x => x.getClass.toString)
+    assert(types1.length == 2)
+    assert(types1(0).equals("class java.lang.Long"))
+    assert(types1(1).equals("class java.lang.String"))
   }
   
   test("Write test with SaveMode set to overwrite") {
