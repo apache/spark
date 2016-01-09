@@ -139,16 +139,18 @@ private[ui] class ExecutorsPage(
     val diskUsed = info.diskUsed
     <tr>
       {
-        if (totalRow)
+        if (totalRow) {
           <td sorttable_customkey="-1"></td>
-        else
+        } else {
           <td>{info.id}</td>
+        }
       }
       {
-        if (totalRow)
-          <td sorttable_customkey="-1" style="font-weight: bold;">"TOTALS"</td>
-        else
+        if (totalRow) {
+          <td sorttable_customkey="-1" style="font-weight: bold;">TOTALS</td>
+        } else {
           <td>{info.hostPort}</td>
+        }
       }
       <td>{info.rddBlocks}</td>
       <td sorttable_customkey={memoryUsed.toString}>
