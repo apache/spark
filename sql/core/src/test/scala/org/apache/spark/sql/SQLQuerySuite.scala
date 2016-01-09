@@ -2057,6 +2057,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("grouping and grouping_id") {
+    checkAnswer(
+      sql("select course, year, grouping(course), grouping(year), grouping_id(course, year)" +
+        " from courseSales group by cube(course, year)"),
+      Row("Java", 2012, 0, 0, 0) ::
+        Row("Java", 2013, 0, 0, 0) ::
+        Row("Java", null, 0, 1, 1) ::
+        Row("dotNET", 2012, 0, 0, 0) ::
+        Row("dotNET", 2013, 0, 0, 0) ::
+        Row("dotNET", null, 0, 1, 1) ::
+        Row(null, 2012, 1, 0, 2) ::
+        Row(null, 2013, 1, 0, 2) ::
+        Row(null, null, 1, 1, 3) :: Nil
+    )
+  }
+
   test("hash function") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
     withTempTable("tbl") {
