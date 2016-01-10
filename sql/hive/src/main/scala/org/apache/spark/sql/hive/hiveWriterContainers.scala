@@ -33,18 +33,16 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
-import org.apache.spark.{Logging, SerializableWritable}
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark._
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableJobConf
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -171,7 +169,7 @@ private[hive] class SparkHiveWriterContainer(
         ObjectInspectorCopyOption.JAVA)
       .asInstanceOf[StructObjectInspector]
 
-    val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+    val fieldOIs = standardOI.getAllStructFieldRefs.asScala.map(_.getFieldObjectInspector).toArray
     val dataTypes = inputSchema.map(_.dataType)
     val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt) }
     val outputData = new Array[Any](fieldOIs.length)
@@ -213,8 +211,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     fileSinkConf: FileSinkDesc,
     dynamicPartColNames: Array[String],
     inputSchema: Seq[Attribute],
-    table: MetastoreRelation,
-    maxOpenFiles: Int)
+    table: MetastoreRelation)
   extends SparkHiveWriterContainer(jobConf, fileSinkConf, inputSchema, table) {
 
   import SparkHiveDynamicPartitionWriterContainer._
@@ -246,8 +243,6 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
   // this function is executed on executor side
   override def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
-    val outputWriters = new java.util.HashMap[InternalRow, FileSinkOperator.RecordWriter]
-
     val serializer = newSerializer(fileSinkConf.getTableInfo)
     val standardOI = ObjectInspectorUtils
       .getStandardObjectInspector(
@@ -255,7 +250,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         ObjectInspectorCopyOption.JAVA)
       .asInstanceOf[StructObjectInspector]
 
-    val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+    val fieldOIs = standardOI.getAllStructFieldRefs.asScala.map(_.getFieldObjectInspector).toArray
     val dataTypes = inputSchema.map(_.dataType)
     val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt) }
     val outputData = new Array[Any](fieldOIs.length)
@@ -284,97 +279,49 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
     // If anything below fails, we should abort the task.
     try {
-      // This will be filled in if we have to fall back on sorting.
-      var sorter: UnsafeKVExternalSorter = null
-      while (iterator.hasNext && sorter == null) {
+      val sorter: UnsafeKVExternalSorter = new UnsafeKVExternalSorter(
+        StructType.fromAttributes(partitionOutput),
+        StructType.fromAttributes(dataOutput),
+        SparkEnv.get.blockManager,
+        TaskContext.get().taskMemoryManager().pageSizeBytes)
+
+      while (iterator.hasNext) {
         val inputRow = iterator.next()
         val currentKey = getPartitionKey(inputRow)
-        var currentWriter = outputWriters.get(currentKey)
+        sorter.insertKV(currentKey, getOutputRow(inputRow))
+      }
 
-        if (currentWriter == null) {
-          if (outputWriters.size < maxOpenFiles) {
-            currentWriter = newOutputWriter(currentKey)
-            outputWriters.put(currentKey.copy(), currentWriter)
-            var i = 0
-            while (i < fieldOIs.length) {
-              outputData(i) = if (inputRow.isNullAt(i)) {
-                null
-              } else {
-                wrappers(i)(inputRow.get(i, dataTypes(i)))
-              }
-              i += 1
+      logInfo(s"Sorting complete. Writing out partition files one at a time.")
+      val sortedIterator = sorter.sortedIterator()
+      var currentKey: InternalRow = null
+      var currentWriter: FileSinkOperator.RecordWriter = null
+      try {
+        while (sortedIterator.next()) {
+          if (currentKey != sortedIterator.getKey) {
+            if (currentWriter != null) {
+              currentWriter.close(false)
             }
-            currentWriter.write(serializer.serialize(outputData, standardOI))
-          } else {
-            logInfo(s"Maximum partitions reached, falling back on sorting.")
-            sorter = new UnsafeKVExternalSorter(
-              StructType.fromAttributes(partitionOutput),
-              StructType.fromAttributes(dataOutput),
-              SparkEnv.get.blockManager,
-              TaskContext.get().taskMemoryManager().pageSizeBytes)
-            sorter.insertKV(currentKey, getOutputRow(inputRow))
+            currentKey = sortedIterator.getKey.copy()
+            logDebug(s"Writing partition: $currentKey")
+            currentWriter = newOutputWriter(currentKey)
           }
-        } else {
+
           var i = 0
           while (i < fieldOIs.length) {
-            outputData(i) = if (inputRow.isNullAt(i)) {
+            outputData(i) = if (sortedIterator.getValue.isNullAt(i)) {
               null
             } else {
-              wrappers(i)(inputRow.get(i, dataTypes(i)))
+              wrappers(i)(sortedIterator.getValue.get(i, dataTypes(i)))
             }
             i += 1
           }
           currentWriter.write(serializer.serialize(outputData, standardOI))
         }
-      }
-
-      // If the sorter is not null that means that we reached the maxFiles above and need to finish
-      // using external sort.
-      if (sorter != null) {
-        while (iterator.hasNext) {
-          val currentRow = iterator.next()
-          sorter.insertKV(getPartitionKey(currentRow), getOutputRow(currentRow))
-        }
-
-        logInfo(s"Sorting complete. Writing out partition files one at a time.")
-
-        val sortedIterator = sorter.sortedIterator()
-        var currentKey: InternalRow = null
-        var currentWriter: FileSinkOperator.RecordWriter = null
-        try {
-          while (sortedIterator.next()) {
-            if (currentKey != sortedIterator.getKey) {
-              if (currentWriter != null) {
-                currentWriter.close(false)
-              }
-              currentKey = sortedIterator.getKey.copy()
-              logDebug(s"Writing partition: $currentKey")
-
-              // Either use an existing file from before, or open a new one.
-              currentWriter = outputWriters.remove(currentKey)
-              if (currentWriter == null) {
-                currentWriter = newOutputWriter(currentKey)
-              }
-            }
-
-            var i = 0
-            while (i < fieldOIs.length) {
-              outputData(i) = if (sortedIterator.getValue.isNullAt(i)) {
-                null
-              } else {
-                wrappers(i)(sortedIterator.getValue.get(i, dataTypes(i)))
-              }
-              i += 1
-            }
-            currentWriter.write(serializer.serialize(outputData, standardOI))
-          }
-        } finally {
-          if (currentWriter != null) {
-            currentWriter.close(false)
-          }
+      } finally {
+        if (currentWriter != null) {
+          currentWriter.close(false)
         }
       }
-      clearOutputWriters
       commit()
     } catch {
       case cause: Throwable =>
@@ -405,19 +352,6 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         newFileSinkDesc,
         path,
         Reporter.NULL)
-    }
-
-    def clearOutputWriters(): Unit = {
-      outputWriters.values.foreach(_.close(false))
-      outputWriters.clear()
-    }
-
-    def abortTask(): Unit = {
-      try {
-        clearOutputWriters()
-      } finally {
-        super.abortTask()
-      }
     }
   }
 }
