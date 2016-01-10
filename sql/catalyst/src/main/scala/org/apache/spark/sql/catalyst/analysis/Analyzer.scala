@@ -74,6 +74,7 @@ class Analyzer(
       ResolvePivot ::
       ResolveUpCast ::
       ResolveSortReferences ::
+      ResolveSubquery ::
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
@@ -585,6 +586,26 @@ class Analyzer(
                 // This function is not an aggregate function, just return the resolved one.
                 case other => other
               }
+            }
+        }
+    }
+  }
+
+  object ResolveSubquery extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case q: LogicalPlan =>
+        q transformExpressions {
+          case e: SubQueryExpression if e.query.resolved =>
+            val afterRule = execute(e.query)
+            if (afterRule.resolved) {
+              e match {
+                case InSubQuery(value, _) => InSubQuery(value, afterRule)
+                case ScalarSubQuery(_) => ScalarSubQuery(afterRule)
+                case Exists(_) => Exists(afterRule)
+              }
+            } else {
+              // TODO: rewrite as join
+              e
             }
         }
     }

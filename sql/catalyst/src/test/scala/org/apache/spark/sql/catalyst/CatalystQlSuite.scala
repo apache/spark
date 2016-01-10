@@ -49,4 +49,24 @@ class CatalystQlSuite extends PlanTest {
     parser.createPlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
   }
+
+  test("subquery") {
+    parser.createPlan("select (select max(b) from s) ss from t")
+
+    parser.createPlan("select * from t where a = (select b from s)")
+    parser.createPlan("select * from t where a > (select b from s)")
+    parser.createPlan("select * from t where a in (select b from s)")
+    parser.createPlan("select * from t where a not in (select b from s)")
+    parser.createPlan("select * from t where a and exists (select b from s)")
+    parser.createPlan("select * from t where not exists (select b from s)")
+    parser.createPlan("select * from t where exists (select b from s)")
+
+    parser.createPlan("select * from t group by g having a = (select b from s)")
+    parser.createPlan("select * from t group by g having a > (select b from s)")
+    parser.createPlan("select * from t group by g having a in (select b from s)")
+    parser.createPlan("select * from t group by g having a not in (select b from s)")
+    parser.createPlan("select * from t group by g having exists (select b from s)")
+    parser.createPlan("select * from t group by g having not exists (select b from s)")
+    parser.createPlan("select * from t group by g having exists (select b from s)")
+  }
 }

@@ -619,6 +619,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
+  val EXISTS = "(?i)EXISTS".r
 
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
@@ -630,6 +631,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           UnresolvedAttribute(nameParts :+ cleanIdentifier(attr))
         case other => UnresolvedExtractValue(other, Literal(attr))
       }
+    case Token("TOK_SUBQUERY_EXPR", Token("TOK_SUBQUERY_OP", Nil) :: subquery :: Nil) =>
+      ScalarSubQuery(nodeToPlan(subquery))
 
     /* Stars (*) */
     case Token("TOK_ALLCOLREF", Nil) => UnresolvedStar(None)
@@ -712,6 +715,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       IsNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
+    case Token("TOK_SUBQUERY_EXPR",
+    Token("TOK_SUBQUERY_OP", Token(IN(), Nil) :: Nil) :: subquery :: value :: Nil) =>
+      InSubQuery(nodeToExpr(value), nodeToPlan(subquery))
     case Token("TOK_FUNCTION",
     Token(BETWEEN(), Nil) ::
       kw ::
@@ -734,6 +740,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
     case Token("!", child :: Nil) => Not(nodeToExpr(child))
+    case Token("TOK_SUBQUERY_EXPR",
+    Token("TOK_SUBQUERY_OP", Token(EXISTS(), Nil) :: Nil) :: subquery :: Nil) =>
+      Exists(nodeToPlan(subquery))
 
     /* Case statements */
     case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
