@@ -175,7 +175,7 @@ object LinearDataGenerator {
       nfeatures: Int,
       eps: Double,
       nparts: Int = 2,
-      intercept: Double = 0.0) : RDD[LabeledPoint] = {
+      intercept: Double = 0.0): RDD[LabeledPoint] = {
     val random = new Random(42)
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = Array.fill(nfeatures)(random.nextDouble() - 0.5)

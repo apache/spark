@@ -134,7 +134,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       loadImpl(freqItemsets, sample)
     }
 
-    def loadImpl[Item : ClassTag](freqItemsets: DataFrame, sample: Item): FPGrowthModel[Item] = {
+    def loadImpl[Item: ClassTag](freqItemsets: DataFrame, sample: Item): FPGrowthModel[Item] = {
       val freqItemsetsRDD = freqItemsets.select("items", "freq").map { x =>
         val items = x.getAs[Seq[Item]](0).toArray
         val freq = x.getLong(1)

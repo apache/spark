@@ -25,7 +25,7 @@ import org.apache.spark.mllib.regression.{IsotonicRegression, IsotonicRegression
 
 object IsotonicRegressionExample {
 
-  def main(args: Array[String]) : Unit = {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("IsotonicRegressionExample")
     val sc = new SparkContext(conf)

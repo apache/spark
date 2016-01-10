@@ -474,7 +474,7 @@ private[ml] object RandomForest extends Logging {
     val nodeToFeatures = getNodeToFeatures(treeToNodeToIndexInfo)
     val nodeToFeaturesBc = input.sparkContext.broadcast(nodeToFeatures)
 
-    val partitionAggregates : RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
+    val partitionAggregates: RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
       input.zip(nodeIdCache.get.nodeIdsForInstances).mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
@@ -825,7 +825,7 @@ private[ml] object RandomForest extends Logging {
   protected[tree] def findSplits(
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata,
-      seed : Long): Array[Array[Split]] = {
+      seed: Long): Array[Array[Split]] = {
 
     logDebug("isMulticlass = " + metadata.isMulticlass)
 

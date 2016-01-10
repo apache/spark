@@ -27,7 +27,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
 
-  override def maxWaitTimeMillis : Int = 30000
+  override def maxWaitTimeMillis: Int = 30000
 
   test("accuracy for null hypothesis using welch t-test") {
     // set parameters

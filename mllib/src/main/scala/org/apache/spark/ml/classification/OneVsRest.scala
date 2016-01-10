@@ -113,13 +113,13 @@ final class OneVsRestModel private[ml] (
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
-        val transformedDataset = model.transform(df).select(columns : _*)
+        val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
           .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
         val newColumns = origCols ++ List(col(tmpColName))
 
         // switch out the intermediate column with the accumulator column
-        updatedDataset.select(newColumns : _*).withColumnRenamed(tmpColName, accColName)
+        updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
     }
 
     if (handlePersistence) {

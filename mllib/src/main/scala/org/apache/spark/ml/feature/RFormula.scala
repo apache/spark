@@ -238,7 +238,7 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
 
   override def transform(dataset: DataFrame): DataFrame = {
     val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
-    dataset.select(columnsToKeep.map(dataset.col) : _*)
+    dataset.select(columnsToKeep.map(dataset.col): _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
