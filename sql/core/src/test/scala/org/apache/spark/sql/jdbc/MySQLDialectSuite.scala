@@ -1,0 +1,36 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.jdbc
+
+import java.sql.Types
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.SharedSQLContext
+
+
+class MySQLDialectSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+  
+  val testMySQLDialect = JdbcDialects.get("jdbc:mysql://localhost:3306/mysql?user=root&password=rootpass");
+  
+  test("testing schemaQualifiedTableName") {
+    assert( testMySQLDialect.schemaQualifiedTableName("some shcema.some table").equals("`some shcema`.`some table`"))
+    assert( testMySQLDialect.schemaQualifiedTableName("some shcema.some table space.some table").equals("`some shcema`.`some table space`.`some table`"))
+    assert( testMySQLDialect.schemaQualifiedTableName("some table").equals("`some shcema`"))
+  }  
+}
