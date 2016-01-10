@@ -230,9 +230,9 @@ object JdbcUtils extends Logging {
   /**
    * Parse the table name string for this RDD.
    */
-  def parseTableName(table: String, url: String): String = {
+  def schemaQualifiedTableName(table: String, url: String): String = {
     val dialect = JdbcDialects.get(url)
-    dialect.parseTableName(table)
+    dialect.schemaQualifiedTableName(table)
   }
 
   /**

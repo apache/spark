@@ -276,7 +276,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
     val conn = JdbcUtils.createConnection(url, props)
-    var tableName = JdbcUtils.parseTableName(table, url)
+    var tableName = JdbcUtils.schemaQualifiedTableName(table, url)
 
     try {
       var tableExists = JdbcUtils.tableExists(conn, url, tableName)

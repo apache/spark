@@ -42,10 +42,18 @@ private case object MySQLDialect extends JdbcDialect {
     s"`$colName`"
   }
   
-  override def parseTableName(tableName: String): String = {
-    val tableName1 = tableName.replace("\"", "").replace("\'", "")
-    if (tableName1.contains(".")) {
-      val tableNameList = tableName1.split('.')
+  /**
+   * Process table name in case of containing special characters like dot seperating database name
+   * followed by table name (eg "some database"."some-table-name") or 
+   * in case it contains characters that require quotes (e.g. space).
+   */
+  override def schemaQualifiedTableName(tableName: String): String = {
+    //Removing quotes so that we can add them correctly.
+    val tableNameWithoutQuotes = tableName.replace("\"", "").replace("\'", "")
+    
+    //If block for addressing the case of . (eg "some database"."some-table-name")
+    if (tableNameWithoutQuotes.contains(".")) {
+      val tableNameList = tableNameWithoutQuotes.split('.')
       tableNameList.foldLeft("") { (leftStr, rightStr) =>
         if (!"".equals(rightStr.trim())) {
           if ("".equals(leftStr.trim())) {
@@ -58,7 +66,7 @@ private case object MySQLDialect extends JdbcDialect {
         }
       }
     } else {
-      s"`$tableName1`"
+      s"`$tableNameWithoutQuotes`"
     }
   }
 

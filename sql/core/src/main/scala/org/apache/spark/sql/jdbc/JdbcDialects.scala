@@ -90,12 +90,10 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
-   * Parses a table name in case of containing special characters like . seperating database name
-   * followed by table name (eg "some database"."some-table-name") or 
-   * in case it contains characters that require quotes (e.g. space).
+   * Returns table name
    */
-  def parseTableName(tableName: String): String = {
-    s""""$tableName""""
+  def schemaQualifiedTableName(tableName: String): String = {
+    s"$tableName"
   }
   
   /**
