@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.ServiceLoader
 
+import com.sun.jersey.core.impl.provider.entity.DataSourceProvider
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
+
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Success, Failure, Try}
@@ -91,6 +94,36 @@ object ResolvedDataSource extends Logging {
           "please specify the fully qualified class name.")
     }
   }
+
+  def createSource(
+      sqlContext: SQLContext,
+      userSpecifiedSchema: Option[StructType],
+      providerName: String,
+      options: Map[String, String]): Source = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSourceProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed reading")
+    }
+
+    provider.createSource(sqlContext, options, userSpecifiedSchema)
+  }
+
+  def createSink(
+      sqlContext: SQLContext,
+      providerName: String,
+      options: Map[String, String]): Sink = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSinkProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed writing")
+    }
+
+    provider.createSink(sqlContext, options)
+  }
+
 
   /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(

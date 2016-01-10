@@ -1686,6 +1686,13 @@ class DataFrame private[sql](
   def write: DataFrameWriter = new DataFrameWriter(this)
 
   /**
+   * :: Experimental ::
+   * Interface for starting a streaming query that will continually save data to the specified
+   * external sink as new data arrives.
+   */
+  def streamTo: DataStreamWriter = new DataStreamWriter(this)
+
+  /**
    * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
    * @group rdd
    * @since 1.3.0
