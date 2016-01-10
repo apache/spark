@@ -527,7 +527,7 @@ class Analyzer(
           child match {
             case Project(
                 projectListAboveWindow,
-                w @ Window(
+                Window(
                     projectListInWindow,
                     windowExpressions,
                     partitionSpec,
