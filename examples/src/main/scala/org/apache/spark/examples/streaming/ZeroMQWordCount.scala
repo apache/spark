@@ -18,17 +18,17 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
+import scala.language.implicitConversions
+
 import akka.actor.ActorSystem
 import akka.actor.actorRef2Scala
+import akka.util.ByteString
 import akka.zeromq._
 import akka.zeromq.Subscribe
-import akka.util.ByteString
 
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.zeromq._
-
-import scala.language.implicitConversions
-import org.apache.spark.SparkConf
 
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages

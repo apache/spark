@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.json4s.JsonAST._
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.json4s.JsonAST._
+
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
@@ -212,6 +213,41 @@ case class Literal protected (value: Any, dataType: DataType)
           super.genCode(ctx, ev)
       }
     }
+  }
+
+  override def sql: String = (value, dataType) match {
+    case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null =>
+      "NULL"
+
+    case _ if value == null =>
+      s"CAST(NULL AS ${dataType.sql})"
+
+    case (v: UTF8String, StringType) =>
+      // Escapes all backslashes and double quotes.
+      "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+    case (v: Byte, ByteType) =>
+      s"CAST($v AS ${ByteType.simpleString.toUpperCase})"
+
+    case (v: Short, ShortType) =>
+      s"CAST($v AS ${ShortType.simpleString.toUpperCase})"
+
+    case (v: Long, LongType) =>
+      s"CAST($v AS ${LongType.simpleString.toUpperCase})"
+
+    case (v: Float, FloatType) =>
+      s"CAST($v AS ${FloatType.simpleString.toUpperCase})"
+
+    case (v: Decimal, DecimalType.Fixed(precision, scale)) =>
+      s"CAST($v AS ${DecimalType.simpleString.toUpperCase}($precision, $scale))"
+
+    case (v: Int, DateType) =>
+      s"DATE '${DateTimeUtils.toJavaDate(v)}'"
+
+    case (v: Long, TimestampType) =>
+      s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+
+    case _ => value.toString
   }
 }
 

@@ -43,15 +43,15 @@ import org.slf4j.bridge.SLF4JBridgeHandler
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
+import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
+import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 
-
-private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "parquet"
 
@@ -60,13 +60,17 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
       paths: Array[String],
       schema: Option[StructType],
       partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
-    new ParquetRelation(paths, schema, None, partitionColumns, parameters)(sqlContext)
+    new ParquetRelation(paths, schema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
+private[sql] class ParquetOutputWriter(
+    path: String,
+    bucketId: Option[Int],
+    context: TaskAttemptContext)
   extends OutputWriter {
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
@@ -86,7 +90,8 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
           val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
-          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+          val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
         }
       }
     }
@@ -107,6 +112,7 @@ private[sql] class ParquetRelation(
     // This is for metastore conversion.
     private val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    override val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters)
@@ -123,6 +129,7 @@ private[sql] class ParquetRelation(
       maybeDataSchema,
       maybePartitionSpec,
       maybePartitionSpec.map(_.partitionColumns),
+      None,
       parameters)(sqlContext)
   }
 
@@ -139,6 +146,12 @@ private[sql] class ParquetRelation(
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
+
+  // If this relation is converted from a Hive metastore table, this method returns the name of the
+  // original Hive metastore table.
+  private[sql] def metastoreTableName: Option[TableIdentifier] = {
+    parameters.get(ParquetRelation.METASTORE_TABLE_NAME).map(SqlParser.parseTableIdentifier)
+  }
 
   private lazy val metadataCache: MetadataCache = {
     val meta = new MetadataCache
@@ -216,7 +229,7 @@ private[sql] class ParquetRelation(
 
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
@@ -276,10 +289,13 @@ private[sql] class ParquetRelation(
           sqlContext.conf.parquetCompressionCodec.toUpperCase,
           CompressionCodecName.UNCOMPRESSED).name())
 
-    new OutputWriterFactory {
+    new BucketedOutputWriterFactory {
       override def newInstance(
-          path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, context)
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new ParquetOutputWriter(path, bucketId, context)
       }
     }
   }
@@ -638,7 +654,7 @@ private[sql] object ParquetRelation extends Logging {
             logInfo(
               s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
                 "falling back to the deprecated DataType.fromCaseClassString parser.")
-            DataType.fromCaseClassString(serializedSchema.get)
+            LegacyTypeStringParser.parse(serializedSchema.get)
           }
           .recover { case cause: Throwable =>
             logWarning(
@@ -821,7 +837,7 @@ private[sql] object ParquetRelation extends Logging {
         logInfo(
           s"Serialized Spark schema in Parquet key-value metadata is not in JSON format, " +
             "falling back to the deprecated DataType.fromCaseClassString parser.")
-        DataType.fromCaseClassString(schemaString).asInstanceOf[StructType]
+        LegacyTypeStringParser.parse(schemaString).asInstanceOf[StructType]
     }.recoverWith {
       case cause: Throwable =>
         logWarning(

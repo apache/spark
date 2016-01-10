@@ -107,7 +107,7 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    DataFrame df = sqlContext.applySchema(rowRDD, schema);
+    DataFrame df = sqlContext.createDataFrame(rowRDD, schema);
     df.registerTempTable("people");
     Row[] actual = sqlContext.sql("SELECT * FROM people").collect();
 
@@ -143,7 +143,7 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    DataFrame df = sqlContext.applySchema(rowRDD, schema);
+    DataFrame df = sqlContext.createDataFrame(rowRDD, schema);
     df.registerTempTable("people");
     List<String> actual = sqlContext.sql("SELECT * FROM people").toJavaRDD().map(new Function<Row, String>() {
       @Override

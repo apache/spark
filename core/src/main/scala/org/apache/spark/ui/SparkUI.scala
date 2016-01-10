@@ -21,18 +21,18 @@ import java.util.{Date, ServiceLoader}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
-  UIRoot}
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
+  UIRoot}
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
 import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
-import org.apache.spark.ui.jobs.{JobsTab, JobProgressListener, StagesTab}
-import org.apache.spark.ui.storage.{StorageListener, StorageTab}
+import org.apache.spark.ui.jobs.{JobProgressListener, JobsTab, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
+import org.apache.spark.ui.storage.{StorageListener, StorageTab}
+import org.apache.spark.util.Utils
 
 /**
  * Top level user interface for a Spark application.

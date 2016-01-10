@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.{util => ju, lang => jl}
+import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 

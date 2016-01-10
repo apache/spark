@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.util.Properties
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.{BaseRelation, RelationProvider, DataSourceRegister}
+import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationProvider}
 
 class DefaultSource extends RelationProvider with DataSourceRegister {
 

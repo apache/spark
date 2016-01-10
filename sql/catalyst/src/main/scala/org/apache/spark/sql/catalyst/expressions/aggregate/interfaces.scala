@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -93,11 +94,13 @@ private[sql] case class AggregateExpression(
 
   override def prettyString: String = aggregateFunction.prettyString
 
-  override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
+  override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
+
+  override def sql: String = aggregateFunction.sql(isDistinct)
 }
 
 /**
- * AggregateFunction2 is the superclass of two aggregation function interfaces:
+ * AggregateFunction is the superclass of two aggregation function interfaces:
  *
  *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
  *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
@@ -162,6 +165,11 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
    */
   def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
     AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
+  }
+
+  def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else " "
+    s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
   }
 }
 

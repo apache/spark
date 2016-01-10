@@ -406,15 +406,6 @@ build = Module(
     should_run_build_tests=True
 )
 
-ec2 = Module(
-    name="ec2",
-    dependencies=[],
-    source_file_regexes=[
-        "ec2/",
-    ]
-)
-
-
 yarn = Module(
     name="yarn",
     dependencies=[],

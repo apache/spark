@@ -24,14 +24,14 @@ import org.apache.spark.sql.execution.streaming.{Sink, Source}
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{DataFrame, SaveMode, AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
@@ -243,6 +243,7 @@ object ResolvedDataSource extends Logging {
       sqlContext: SQLContext,
       provider: String,
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
@@ -277,6 +278,7 @@ object ResolvedDataSource extends Logging {
           Array(outputPath.toString),
           Some(dataSchema.asNullable),
           Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+          bucketSpec,
           caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column
