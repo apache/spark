@@ -773,7 +773,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         """.stripMargin), (2 to 6).map(i => Row(i)))
   }
 
-  test("window function: udaf with aggregate expressin") {
+  test("window function: udaf with aggregate expression") {
     val data = Seq(
       WindowData(1, "a", 5),
       WindowData(2, "a", 6),
@@ -962,6 +962,44 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         (5, "c", 1, 5),
         (6, "c", 0, 6)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("window function: Sorting columns are not in Project") {
+    val data = Seq(
+      WindowData(1, "d", 10),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    checkAnswer(
+      sql("select month, product, sum(product + 1) over() from windowData order by area"),
+      Seq(
+        (2, 6, 56),
+        (3, 7, 56),
+        (4, 8, 56),
+        (5, 9, 56),
+        (6, 10, 56),
+        (1, 10, 56)
+      ).map(i => Row(i._1, i._2, i._3)))
+
+    checkAnswer(
+      sql(
+        """
+          |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
+          |from (select month, area, product as p, 1 as tmp1 from windowData) tmp order by p
+        """.stripMargin),
+      Seq(
+        ("a", 2),
+        ("b", 2),
+        ("b", 3),
+        ("c", 2),
+        ("d", 2),
+        ("c", 3)
+      ).map(i => Row(i._1, i._2)))
   }
 
   test("window function: multiple window expressions in a single expression") {

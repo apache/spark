@@ -523,14 +523,37 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
-        val (newOrdering, missing) = resolveAndFindMissing(ordering, p, child)
+        val (newOrdering, missing, newChild): (Seq[SortOrder], Seq[Attribute], LogicalPlan) =
+          child match {
+            case Project(
+                projectListAboveWindow,
+                w @ Window(
+                    projectListInWindow,
+                    windowExpressions,
+                    partitionSpec,
+                    orderSpec,
+                    pW @ Project(
+                        projectListBelowWindow,
+                        childBelowWindow))) =>
+              val (newOrdering, missingAttrs) =
+                resolveAndFindMissing(ordering, pW, childBelowWindow)
+              (newOrdering, missingAttrs,
+                Project(projectListAboveWindow ++ missingAttrs,
+                  Window(
+                      projectListInWindow ++ missingAttrs,
+                      windowExpressions, partitionSpec, orderSpec,
+                      Project(projectListBelowWindow ++ missingAttrs, childBelowWindow))))
+            case _ =>
+              val (newOrdering, missingAttrs) = resolveAndFindMissing(ordering, p, child)
+              (newOrdering, missingAttrs, child)
+        }
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
           Project(p.output,
             Sort(newOrdering, global,
-              Project(projectList ++ missing, child)))
+              Project(projectList ++ missing, newChild)))
         } else {
           logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
