@@ -55,6 +55,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <scope>compile</scope>
     </dependency>
 
     <!-- Test dependencies -->
