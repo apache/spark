@@ -83,3 +83,4 @@ gen-java.*
 .*avpr
 org.apache.spark.sql.sources.DataSourceRegister
 .*parquet
+spark-deps-.*
