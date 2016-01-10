@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.beans.{BeanInfo, BeanProperty}
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.util.{MapData, ArrayBasedMapData, GenericArrayData, ArrayData}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Sum}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-
-import scala.beans.{BeanProperty, BeanInfo}
 
 @BeanInfo
 private[sql] case class GroupableData(@BeanProperty data: Int)
@@ -133,17 +134,37 @@ class AnalysisErrorSuite extends AnalysisTest {
     "requires int type" :: "'null' is of date type" :: Nil)
 
   errorTest(
-    "unresolved window function",
+    "invalid window function",
     testRelation2.select(
       WindowExpression(
-        UnresolvedWindowFunction(
-          "lead",
-          UnresolvedAttribute("c") :: Nil),
+        Literal(0),
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as('window)),
-    "lead" :: "window functions currently requires a HiveContext" :: Nil)
+    "not supported within a window function" :: Nil)
+
+  errorTest(
+    "distinct window function",
+    testRelation2.select(
+      WindowExpression(
+        AggregateExpression(Count(UnresolvedAttribute("b")), Complete, isDistinct = true),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as('window)),
+    "Distinct window functions are not supported" :: Nil)
+
+  errorTest(
+    "offset window function",
+    testRelation2.select(
+      WindowExpression(
+        new Lead(UnresolvedAttribute("b")),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          SpecifiedWindowFrame(RangeFrame, ValueFollowing(1), ValueFollowing(2)))).as('window)),
+    "window frame" :: "must match the required frame" :: Nil)
 
   errorTest(
     "too many generators",

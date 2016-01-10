@@ -23,8 +23,8 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import scala.io.Source
 import scala.concurrent.duration._
+import scala.io.Source
 import scala.language.postfixOps
 
 import com.google.common.base.Charsets

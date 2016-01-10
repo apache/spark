@@ -24,14 +24,13 @@ import java.util.Date
 import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
   ExecutorState, SparkHadoopUtil}
@@ -42,10 +41,11 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[deploy] class Master(
     override val rpcEnv: RpcEnv,
@@ -979,7 +979,11 @@ private[deploy] class Master(
 
     futureUI.onSuccess { case Some(ui) =>
       appIdToUI.put(app.id, ui)
-      self.send(AttachCompletedRebuildUI(app.id))
+      // `self` can be null if we are already in the process of shutting down
+      // This happens frequently in tests where `local-cluster` is used
+      if (self != null) {
+        self.send(AttachCompletedRebuildUI(app.id))
+      }
       // Application UI is successfully rebuilt, so link the Master UI to it
       // NOTE - app.appUIUrlAtHistoryServer is volatile
       app.appUIUrlAtHistoryServer = Some(ui.basePath)
@@ -1083,7 +1087,7 @@ private[deploy] object Master extends Logging {
   val ENDPOINT_NAME = "Master"
 
   def main(argStrings: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
     val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)

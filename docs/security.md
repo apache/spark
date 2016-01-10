@@ -23,7 +23,7 @@ If your applications are using event logging, the directory where the event logs
 
 ## Encryption
 
-Spark supports SSL for Akka and HTTP (for broadcast and file server) protocols. SASL encryption is
+Spark supports SSL for Akka and HTTP (for file server) protocols. SASL encryption is
 supported for the block transfer service. Encryption is not yet supported for the WebUI.
 
 Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
@@ -32,7 +32,7 @@ to configure your cluster manager to store application data on encrypted disks.
 
 ### SSL Configuration
 
-Configuration for SSL is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
+Configuration for SSL is organized hierarchically. The user can configure the default SSL settings which will be used for all the supported communication protocols unless they are overwritten by protocol-specific settings. This way the user can easily provide the common settings for all the protocols without disabling the ability to configure each one individually. The common SSL settings are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at `spark.ssl.akka` and HTTP for file server SSL configuration is at `spark.ssl.fs`. The full breakdown can be found on the [configuration page](configuration.html).
 
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
 
@@ -159,15 +159,6 @@ configure those ports.
     <td>File server for files and jars</td>
     <td><code>spark.fileserver.port</code></td>
     <td>Jetty-based. Only used if Akka RPC backend is configured.</td>
-  </tr>
-  <tr>
-    <td>Executor</td>
-    <td>Driver</td>
-    <td>(random)</td>
-    <td>HTTP Broadcast</td>
-    <td><code>spark.broadcast.port</code></td>
-    <td>Jetty-based. Not used by TorrentBroadcast, which sends data through the block manager
-    instead.</td>
   </tr>
   <tr>
     <td>Executor / Driver</td>

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 
 
 /**
@@ -29,15 +29,20 @@ private[sql] case class LocalTableScan(
     output: Seq[Attribute],
     rows: Seq[InternalRow]) extends LeafNode {
 
-  private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
+  private val unsafeRows: Array[InternalRow] = {
+    val proj = UnsafeProjection.create(output, output)
+    rows.map(r => proj(r).copy()).toArray
+  }
+
+  private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows)
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
   override def executeCollect(): Array[InternalRow] = {
-    rows.toArray
+    unsafeRows
   }
 
   override def executeTake(limit: Int): Array[InternalRow] = {
-    rows.take(limit).toArray
+    unsafeRows.take(limit)
   }
 }

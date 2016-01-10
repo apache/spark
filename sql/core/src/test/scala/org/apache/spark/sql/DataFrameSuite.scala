@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
@@ -176,6 +176,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.select("key").collect().toSeq)
   }
 
+  test("selectExpr with udtf") {
+    val df = Seq((Map("1" -> 1), 1)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("explode(a)"),
+      Row("1", 1) :: Nil)
+  }
+
   test("filterExpr") {
     val res = testData.collect().filter(_.getInt(0) > 90).toSeq
     checkAnswer(testData.filter("key > 90"), res)
@@ -301,6 +308,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       mapData.toDF().limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+
+    // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
+    checkAnswer(
+      sqlContext.range(2).limit(2147483638),
+      Row(0) :: Row(1) :: Nil
+    )
   }
 
   test("except") {
@@ -332,15 +345,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
-  }
-
-  test("deprecated callUdf in SQLContext") {
-    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-    val sqlctx = df.sqlContext
-    sqlctx.udf.register("simpleUdf", (v: Int) => v * v)
-    checkAnswer(
-      df.select($"id", callUdf("simpleUdf", $"value")),
-      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
   test("callUDF in SQLContext") {
@@ -762,6 +766,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     val res11 = sqlContext.range(-1).select("id")
     assert(res11.count == 0)
+
+    // using the default slice number
+    val res12 = sqlContext.range(3, 15, 3).select("id")
+    assert(res12.count == 4)
+    assert(res12.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
   }
 
   test("SPARK-8621: support empty string column name") {
@@ -1169,5 +1178,51 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     val primitiveUDF = udf((i: Int) => i * 2)
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-12398 truncated toString") {
+    val df1 = Seq((1L, "row1")).toDF("id", "name")
+    assert(df1.toString() === "[id: bigint, name: string]")
+
+    val df2 = Seq((1L, "c2", false)).toDF("c1", "c2", "c3")
+    assert(df2.toString === "[c1: bigint, c2: string ... 1 more field]")
+
+    val df3 = Seq((1L, "c2", false, 10)).toDF("c1", "c2", "c3", "c4")
+    assert(df3.toString === "[c1: bigint, c2: string ... 2 more fields]")
+
+    val df4 = Seq((1L, Tuple2(1L, "val"))).toDF("c1", "c2")
+    assert(df4.toString === "[c1: bigint, c2: struct<_1: bigint, _2: string>]")
+
+    val df5 = Seq((1L, Tuple2(1L, "val"), 20.0)).toDF("c1", "c2", "c3")
+    assert(df5.toString === "[c1: bigint, c2: struct<_1: bigint, _2: string> ... 1 more field]")
+
+    val df6 = Seq((1L, Tuple2(1L, "val"), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
+    assert(df6.toString === "[c1: bigint, c2: struct<_1: bigint, _2: string> ... 2 more fields]")
+
+    val df7 = Seq((1L, Tuple3(1L, "val", 2), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
+    assert(
+      df7.toString ===
+        "[c1: bigint, c2: struct<_1: bigint, _2: string ... 1 more field> ... 2 more fields]")
+
+    val df8 = Seq((1L, Tuple7(1L, "val", 2, 3, 4, 5, 6), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
+    assert(
+      df8.toString ===
+        "[c1: bigint, c2: struct<_1: bigint, _2: string ... 5 more fields> ... 2 more fields]")
+
+    val df9 =
+      Seq((1L, Tuple4(1L, Tuple4(1L, 2L, 3L, 4L), 2L, 3L), 20.0, 1)).toDF("c1", "c2", "c3", "c4")
+    assert(
+      df9.toString ===
+        "[c1: bigint, c2: struct<_1: bigint," +
+          " _2: struct<_1: bigint," +
+          " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
+
+  }
+
+  test("SPARK-12512: support `.` in column name for withColumn()") {
+    val df = Seq("a" -> "b").toDF("col.a", "col.b")
+    checkAnswer(df.select(df("*")), Row("a", "b"))
+    checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
+    checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
   }
 }

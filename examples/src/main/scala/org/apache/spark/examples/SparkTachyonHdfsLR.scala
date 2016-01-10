@@ -22,13 +22,11 @@ import java.util.Random
 
 import scala.math.exp
 
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
-import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * Logistic regression based classification.
@@ -71,12 +69,9 @@ object SparkTachyonHdfsLR {
     val inputPath = args(0)
     val sparkConf = new SparkConf().setAppName("SparkTachyonHdfsLR")
     val conf = new Configuration()
-    val sc = new SparkContext(sparkConf,
-      InputFormatInfo.computePreferredLocations(
-        Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
-      ))
+    val sc = new SparkContext(sparkConf)
     val lines = sc.textFile(inputPath)
-    val points = lines.map(parsePoint _).persist(StorageLevel.OFF_HEAP)
+    val points = lines.map(parsePoint).persist(StorageLevel.OFF_HEAP)
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value

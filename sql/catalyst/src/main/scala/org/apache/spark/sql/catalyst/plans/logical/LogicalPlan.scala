@@ -295,6 +295,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
  */
 abstract class LeafNode extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Nil
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 /**
