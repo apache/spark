@@ -649,13 +649,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("approximate count distinct") {
     checkAnswer(
-      sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
+      sql("SELECT APPROX_COUNT_DISTINCT(a) FROM testData2"),
       Row(3))
   }
 
   test("approximate count distinct with user provided standard deviation") {
     checkAnswer(
-      sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
+      sql("SELECT APPROX_COUNT_DISTINCT(a, 0.04) FROM testData2"),
       Row(3))
   }
 
