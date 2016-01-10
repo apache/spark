@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.SqlParser._
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
-
 
 private[sql] object Column {
 
@@ -130,7 +129,10 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case explode: Explode => MultiAlias(explode, Nil)
+
     case jt: JsonTuple => MultiAlias(jt, Nil)
+
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(func.prettyString))
 
     case expr: Expression => Alias(expr, expr.prettyString)()
   }
@@ -705,18 +707,6 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def mod(other: Any): Column = this % other
-
-  /**
-   * A boolean expression that is evaluated to true if the value of this expression is contained
-   * by the evaluated values of the arguments.
-   *
-   * @group expr_ops
-   * @since 1.3.0
-   * @deprecated As of 1.5.0. Use isin. This will be removed in Spark 2.0.
-   */
-  @deprecated("use isin. This will be removed in Spark 2.0.", "1.5.0")
-  @scala.annotation.varargs
-  def in(list: Any*): Column = isin(list : _*)
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained

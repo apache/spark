@@ -164,6 +164,12 @@ case class Alias(child: Expression, name: String)(
         explicitMetadata == a.explicitMetadata
     case _ => false
   }
+
+  override def sql: String = {
+    val qualifiersString =
+      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+    s"${child.sql} AS $qualifiersString`$name`"
+  }
 }
 
 /**
@@ -262,11 +268,21 @@ case class AttributeReference(
     }
   }
 
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
+    exprId :: qualifiers :: Nil
+  }
+
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
   override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
+
+  override def sql: String = {
+    val qualifiersString =
+      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+    s"$qualifiersString`$name`"
+  }
 }
 
 /**

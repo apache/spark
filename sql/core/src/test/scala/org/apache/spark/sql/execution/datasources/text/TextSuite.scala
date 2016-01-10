@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.util.Utils
-
 
 class TextSuite extends QueryTest with SharedSQLContext {
 
@@ -33,8 +32,8 @@ class TextSuite extends QueryTest with SharedSQLContext {
     verifyFrame(sqlContext.read.text(testFile))
   }
 
-  test("writing") {
-    val df = sqlContext.read.text(testFile)
+  test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
+    val df = sqlContext.read.text(testFile).withColumnRenamed("value", "adwrasdf")
 
     val tempFile = Utils.createTempDir()
     tempFile.delete()

@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
-import java.io.{ObjectOutputStream, ObjectInputStream, IOException}
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.FileSystem
+
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.Logging
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils

@@ -17,13 +17,12 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataOutput, DataInput}
 import java.{util => ju}
+import java.io.{DataInput, DataOutput}
 
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Charsets.UTF_8
-
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 

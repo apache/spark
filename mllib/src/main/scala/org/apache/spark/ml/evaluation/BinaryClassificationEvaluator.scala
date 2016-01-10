@@ -39,8 +39,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   def this() = this(Identifiable.randomUID("binEval"))
 
   /**
-   * param for metric name in evaluation
-   * Default: areaUnderROC
+   * param for metric name in evaluation (supports `"areaUnderROC"` (default), `"areaUnderPR"`)
    * @group param
    */
   @Since("1.2.0")

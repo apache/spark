@@ -21,21 +21,21 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
-import org.apache.hadoop.mapred.{JobConf, FileInputFormat}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
-import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, Partition, PartitioningUtils, PartitionSpec}
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -161,6 +161,20 @@ trait HadoopFsRelationProvider {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
+
+  // TODO: expose bucket API to users.
+  private[sql] def createRelation(
+      sqlContext: SQLContext,
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
+      parameters: Map[String, String]): HadoopFsRelation = {
+    if (bucketSpec.isDefined) {
+      throw new AnalysisException("Currently we don't support bucketing for this data source.")
+    }
+    createRelation(sqlContext, paths, dataSchema, partitionColumns, parameters)
+  }
 }
 
 /**
@@ -351,7 +365,18 @@ abstract class OutputWriterFactory extends Serializable {
    *
    * @since 1.4.0
    */
-  def newInstance(path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter
+  def newInstance(
+      path: String,
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter
+
+  // TODO: expose bucket API to users.
+  private[sql] def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter =
+    newInstance(path, dataSchema, context)
 }
 
 /**
@@ -435,6 +460,9 @@ abstract class HadoopFsRelation private[sql](
 
   private var _partitionSpec: PartitionSpec = _
 
+  // TODO: expose bucket API to users.
+  private[sql] def bucketSpec: Option[BucketSpec] = None
+
   private class FileStatusCache {
     var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
 
@@ -462,7 +490,7 @@ abstract class HadoopFsRelation private[sql](
           name.toLowerCase == "_temporary" || name.startsWith(".")
         }
 
-        val (dirs, files) = statuses.partition(_.isDir)
+        val (dirs, files) = statuses.partition(_.isDirectory)
 
         // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
         if (dirs.isEmpty) {
@@ -858,10 +886,10 @@ private[sql] object HadoopFsRelation extends Logging {
       val jobConf = new JobConf(fs.getConf, this.getClass())
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       if (pathFilter != null) {
-        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
+        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
         files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
       } else {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
         files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
       }
     }
@@ -896,7 +924,7 @@ private[sql] object HadoopFsRelation extends Logging {
       FakeFileStatus(
         status.getPath.toString,
         status.getLen,
-        status.isDir,
+        status.isDirectory,
         status.getReplication,
         status.getBlockSize,
         status.getModificationTime,

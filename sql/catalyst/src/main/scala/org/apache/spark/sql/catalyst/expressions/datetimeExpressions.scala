@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import scala.util.Try
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback,
+  GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-
-import scala.util.Try
 
 /**
  * Returns the current date at the start of query evaluation.
@@ -44,6 +44,8 @@ case class CurrentDate() extends LeafExpression with CodegenFallback {
   override def eval(input: InternalRow): Any = {
     DateTimeUtils.millisToDays(System.currentTimeMillis())
   }
+
+  override def prettyName: String = "current_date"
 }
 
 /**
@@ -61,6 +63,8 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def eval(input: InternalRow): Any = {
     System.currentTimeMillis() * 1000L
   }
+
+  override def prettyName: String = "current_timestamp"
 }
 
 /**
@@ -85,6 +89,8 @@ case class DateAdd(startDate: Expression, days: Expression)
       s"""${ev.value} = $sd + $d;"""
     })
   }
+
+  override def prettyName: String = "date_add"
 }
 
 /**
@@ -108,6 +114,8 @@ case class DateSub(startDate: Expression, days: Expression)
       s"""${ev.value} = $sd - $d;"""
     })
   }
+
+  override def prettyName: String = "date_sub"
 }
 
 case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
@@ -309,6 +317,8 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
   }
+
+  override def prettyName: String = "to_unix_timestamp"
 }
 
 /**
@@ -332,6 +342,8 @@ case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTi
   def this() = {
     this(CurrentTimestamp())
   }
+
+  override def prettyName: String = "unix_timestamp"
 }
 
 abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
@@ -340,6 +352,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
 
   override def dataType: DataType = LongType
+  override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
 
@@ -436,6 +449,8 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         """
     }
   }
+
+  override def prettyName: String = "unix_time"
 }
 
 /**
@@ -450,11 +465,14 @@ case class FromUnixTime(sec: Expression, format: Expression)
   override def left: Expression = sec
   override def right: Expression = format
 
+  override def prettyName: String = "from_unixtime"
+
   def this(unix: Expression) = {
     this(unix, Literal("yyyy-MM-dd HH:mm:ss"))
   }
 
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
@@ -561,6 +579,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
 
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
 
   override def nullSafeEval(start: Any, dayOfW: Any): Any = {
     val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
@@ -730,6 +749,8 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
       s"""$dtu.dateAddMonths($sd, $m)"""
     })
   }
+
+  override def prettyName: String = "add_months"
 }
 
 /**
@@ -755,6 +776,8 @@ case class MonthsBetween(date1: Expression, date2: Expression)
       s"""$dtu.monthsBetween($l, $r)"""
     })
   }
+
+  override def prettyName: String = "months_between"
 }
 
 /**
@@ -820,6 +843,8 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, d => d)
   }
+
+  override def prettyName: String = "to_date"
 }
 
 /**
@@ -832,6 +857,7 @@ case class TruncDate(date: Expression, format: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
   override def prettyName: String = "trunc"
 
   private lazy val truncLevel: Int =
