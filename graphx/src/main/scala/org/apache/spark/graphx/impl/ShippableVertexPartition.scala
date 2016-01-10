@@ -102,8 +102,8 @@ class ShippableVertexPartition[VD: ClassTag](
   extends VertexPartitionBase[VD] {
 
   /** Return a new ShippableVertexPartition with the specified routing table. */
-  def withRoutingTable(routingTable_ : RoutingTablePartition): ShippableVertexPartition[VD] = {
-    new ShippableVertexPartition(index, values, mask, routingTable_)
+  def withRoutingTable(_routingTable: RoutingTablePartition): ShippableVertexPartition[VD] = {
+    new ShippableVertexPartition(index, values, mask, _routingTable)
   }
 
   /**
