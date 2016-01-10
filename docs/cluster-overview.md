@@ -53,8 +53,6 @@ The system currently supports three cluster managers:
   and service applications.
 * [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
 
-In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
-cluster on Amazon EC2.
 
 # Submitting Applications
 

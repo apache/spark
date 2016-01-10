@@ -60,7 +60,6 @@ dev/create-release/*final
 spark-*-bin-*.tgz
 unit-tests.log
 /lib/
-ec2/lib/
 rat-results.txt
 scalastyle.txt
 scalastyle-output.xml
