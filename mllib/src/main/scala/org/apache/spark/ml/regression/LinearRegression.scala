@@ -219,33 +219,41 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val yMean = ySummarizer.mean(0)
-    val yStd = math.sqrt(ySummarizer.variance(0))
+    var yStd = math.sqrt(ySummarizer.variance(0))
 
     // If the yStd is zero, then the intercept is yMean with zero coefficient;
     // as a result, training is not needed.
     if (yStd == 0.0) {
-      logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
-        s"zeros and the intercept will be the mean of the label; as a result, " +
-        s"training is not needed.")
-      if (handlePersistence) instances.unpersist()
-      val coefficients = Vectors.sparse(numFeatures, Seq())
-      val intercept = yMean
+      if ($(fitIntercept)) {
+        logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
+          s"zeros and the intercept will be the mean of the label; as a result, " +
+          s"training is not needed.")
+        if (handlePersistence) instances.unpersist()
+        val coefficients = Vectors.sparse(numFeatures, Seq())
+        val intercept = yMean
 
-      val model = new LinearRegressionModel(uid, coefficients, intercept)
-      // Handle possible missing or invalid prediction columns
-      val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+        val model = new LinearRegressionModel(uid, coefficients, intercept)
+        // Handle possible missing or invalid prediction columns
+        val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
 
-      val trainingSummary = new LinearRegressionTrainingSummary(
-        summaryModel.transform(dataset),
-        predictionColName,
-        $(labelCol),
-        model,
-        Array(0D),
-        $(featuresCol),
-        Array(0D))
-      return copyValues(model.setSummary(trainingSummary))
+        val trainingSummary = new LinearRegressionTrainingSummary(
+          summaryModel.transform(dataset),
+          predictionColName,
+          $(labelCol),
+          model,
+          Array(0D),
+          $(featuresCol),
+          Array(0D))
+        return copyValues(model.setSummary(trainingSummary))
+      } else {
+        logWarning(s"The standard deviation of the label is zero. " +
+          "Consider setting fitIntercept=true.")
+        // In this case, the training cannot be done in scaled space.
+        // So setting yStd=1 means that the label will not be scaled anymore and
+        // the training will continue.
+        yStd = 1.0
+      }
     }
-
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
 

@@ -37,6 +37,7 @@ class LinearRegressionSuite
   @transient var datasetWithDenseFeatureWithoutIntercept: DataFrame = _
   @transient var datasetWithSparseFeature: DataFrame = _
   @transient var datasetWithWeight: DataFrame = _
+  @transient var datasetWithWeightConstantLabel: DataFrame = _
 
   /*
      In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
@@ -91,6 +92,22 @@ class LinearRegressionSuite
         Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
         Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
         Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+      ), 2))
+
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b <- c(17, 17, 17, 17)
+       w <- c(1, 2, 3, 4)
+       df <- as.data.frame(cbind(A, b))
+     */
+    datasetWithWeightConstantLabel = sqlContext.createDataFrame(
+      sc.parallelize(Seq(
+        Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+        Instance(17.0, 2.0, Vectors.dense(1.0, 7.0)),
+        Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
+        Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
       ), 2))
   }
 
@@ -555,6 +572,32 @@ class LinearRegressionSuite
             assert(prediction1 ~== prediction2 relTol 1E-5)
         }
       }
+    }
+  }
+
+  test("linear regression model with constant label") {
+    /*
+       R code:
+       # here b is constant
+       df <- as.data.frame(cbind(A, b))
+       for (formula in c(b ~ . -1, b ~ .)) {
+         model <- lm(formula, data=df, weights=w)
+         print(as.vector(coef(model)))
+       }
+      [1] -9.221298  3.394343
+      [1] 17  0  0
+    */
+    val expected = Seq(
+      Vectors.dense(0.0, -9.221298, 3.394343),
+      Vectors.dense(17.0, 0.0, 0.0))
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      val model = new LinearRegression().setFitIntercept(fitIntercept).setSolver("l-bfgs")
+        .fit(datasetWithWeightConstantLabel)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~== expected(idx) absTol 1e-4)
+      idx += 1
     }
   }
 
