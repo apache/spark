@@ -521,39 +521,31 @@ class Analyzer(
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s @ Sort(ordering, global, p @ Project(projectList, child))
-          if !s.resolved && p.resolved =>
+      case s @ Sort(_, _, p @ Project(_, _)) if !s.resolved && p.resolved =>
         val (newOrdering, missing, newChild): (Seq[SortOrder], Seq[Attribute], LogicalPlan) =
-          child match {
-            case Project(
-                projectListAboveWindow,
-                Window(
-                    projectListInWindow,
-                    windowExpressions,
-                    partitionSpec,
-                    orderSpec,
-                    pW @ Project(
-                        projectListBelowWindow,
-                        childBelowWindow))) =>
-              val (newOrdering, missingAttrs) =
-                resolveAndFindMissing(ordering, pW, childBelowWindow)
+          p.child match {
+            // Case 1: when WINDOW functions are used in the SELECT clause.
+            //   Example: SELECT sum(col1) OVER() FROM table1 ORDER BY col2
+            case p1 @ Project(_, w @ Window(_, _, _, _, p2: Project)) =>
+              val (newOrdering, missingAttrs) = resolveAndFindMissing(s.order, p2, p2.child)
               (newOrdering, missingAttrs,
-                Project(projectListAboveWindow ++ missingAttrs,
-                  Window(
-                      projectListInWindow ++ missingAttrs,
-                      windowExpressions, partitionSpec, orderSpec,
-                      Project(projectListBelowWindow ++ missingAttrs, childBelowWindow))))
+                Project(p1.projectList ++ missingAttrs,
+                  Window(w.projectList ++ missingAttrs,
+                    w.windowExpressions, w.partitionSpec, w.orderSpec,
+                    Project(p2.projectList ++ missingAttrs, p2.child))))
+            // Case 2: the other cases
+            //   Example: SELECT col1 FROM table1 ORDER BY col2
             case _ =>
-              val (newOrdering, missingAttrs) = resolveAndFindMissing(ordering, p, child)
-              (newOrdering, missingAttrs, child)
+              val (newOrdering, missingAttrs) = resolveAndFindMissing(s.order, p, p.child)
+              (newOrdering, missingAttrs, p.child)
         }
 
         // If this rule was not a no-op, return the transformed plan, otherwise return the original.
         if (missing.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
           Project(p.output,
-            Sort(newOrdering, global,
-              Project(projectList ++ missing, newChild)))
+            Sort(newOrdering, s.global,
+              Project(p.projectList ++ missing, newChild)))
         } else {
           logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
