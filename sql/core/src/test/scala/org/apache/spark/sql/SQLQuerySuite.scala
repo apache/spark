@@ -586,7 +586,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Allow only a single WITH clause per query") {
-    intercept[RuntimeException] {
+    intercept[AnalysisException] {
       sql(
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }

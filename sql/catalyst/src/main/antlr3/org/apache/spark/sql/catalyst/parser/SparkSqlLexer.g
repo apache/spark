@@ -325,6 +325,14 @@ KW_LEVEL: 'LEVEL';
 KW_SNAPSHOT: 'SNAPSHOT';
 KW_AUTOCOMMIT: 'AUTOCOMMIT';
 
+KW_CLEAR: 'CLEAR';
+KW_CACHE: 'CACHE';
+KW_UNCACHE: 'UNCACHE';
+KW_LAZY: 'LAZY';
+KW_DFS: 'DFS';
+KW_REFRESH: 'REFRESH';
+KW_OPTIONS: 'OPTIONS';
+
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.
 

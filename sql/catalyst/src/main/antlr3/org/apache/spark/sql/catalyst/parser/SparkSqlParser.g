@@ -368,6 +368,13 @@ TOK_TXN_READ_WRITE;
 TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
+TOK_CACHETABLE;
+TOK_UNCACHETABLE;
+TOK_CLEARCACHE;
+TOK_ADDRESOURCE;
+TOK_DFS;
+TOK_REFRESHTABLE;
+TOK_OPTIONS;
 }
 
 
@@ -509,7 +516,14 @@ import java.util.HashMap;
     xlateMap.put("KW_UPDATE", "UPDATE");
     xlateMap.put("KW_VALUES", "VALUES");
     xlateMap.put("KW_PURGE", "PURGE");
-
+    xlateMap.put("KW_CLEAR", "CLEAR");
+    xlateMap.put("KW_CACHE", "CACHE");
+    xlateMap.put("KW_UNCACHE", "UNCACHE");
+    xlateMap.put("KW_LAZY", "LAZY");
+    xlateMap.put("KW_DFS", "DFS");
+    xlateMap.put("KW_REFRESH", "REFRESH");
+    xlateMap.put("KW_COMMENT", "COMMENT");
+    xlateMap.put("KW_OPTIONS", "OPTIONS");
 
     // Operators
     xlateMap.put("DOT", ".");
@@ -712,6 +726,9 @@ execStatement
     | deleteStatement
     | updateStatement
     | sqlTransactionStatement
+    | cacheStatement
+    | addResource
+    | dfs
     ;
 
 loadStatement
@@ -2464,3 +2481,44 @@ setAutoCommitStatement
 /*
 END user defined transaction boundaries
 */
+
+/*
+Table Caching statements.
+ */
+cacheStatement
+@init { pushMsg("cache statement", state); }
+@after { popMsg(state); }
+  :
+  cacheTableStatement
+  | uncacheTableStatement
+  | clearCacheStatement
+  ;
+
+cacheTableStatement
+  :
+  KW_CACHE (lazy=KW_LAZY)? KW_TABLE tableName (KW_AS selectStatement[true])? -> ^(TOK_CACHETABLE tableName $lazy? selectStatement?)
+  ;
+
+uncacheTableStatement
+  :
+  KW_UNCACHE KW_TABLE tableName -> ^(TOK_UNCACHETABLE tableName)
+  ;
+
+clearCacheStatement
+  :
+  KW_CLEAR KW_CACHE -> ^(TOK_CLEARCACHE)
+  ;
+
+addResource
+@init { pushMsg("add resource statement", state); }
+@after { popMsg(state); }
+  :
+  KW_ADD resource -> ^(TOK_ADDRESOURCE resource)
+  ;
+
+dfs
+@init { pushMsg("dfs statement", state); }
+@after { popMsg(state); }
+  :
+  KW_DFS command=StringLiteral -> ^(TOK_DFS $command)
+  ;

@@ -539,6 +539,7 @@ nonReserved
     | KW_SNAPSHOT
     | KW_AUTOCOMMIT
     | KW_ANTI
+    | KW_OPTIONS
 ;
 
 //The following SQL2011 reserved keywords are used as cast function name only, but not as identifiers.

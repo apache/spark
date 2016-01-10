@@ -61,9 +61,9 @@ abstract class ParserDialect {
  */
 private[spark] class DefaultParserDialect extends ParserDialect {
   @transient
-  protected val sqlParser = SqlParser
+  protected val sqlParser = CatalystQl.parser
 
   override def parse(sqlText: String): LogicalPlan = {
-    sqlParser.parse(sqlText)
+    sqlParser.parsePlan(sqlText)
   }
 }

@@ -43,7 +43,7 @@ object ParseDriver extends Logging {
     parser.tableName().getTree
   }
 
-  private def parse(
+  /* private */ def parse(
       command: String,
       conf: ParserConf)(
       toTree: SparkSqlParser => CommonTree): ASTNode = {
@@ -117,7 +117,7 @@ object ParseDriver extends Logging {
  * have the ANTLRNoCaseStringStream implementation.
  */
 
-private[parser] class ANTLRNoCaseStringStream(input: String) extends ANTLRStringStream(input) {
+/* private[parser] */ class ANTLRNoCaseStringStream(input: String) extends ANTLRStringStream(input) {
   override def LA(i: Int): Int = {
     val la = super.LA(i)
     if (la == 0 || la == CharStream.EOF) la
