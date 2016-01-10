@@ -24,6 +24,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
+    sql("DROP TABLE IF EXISTS t0")
+    sql("DROP TABLE IF EXISTS t1")
+    sql("DROP TABLE IF EXISTS t2")
     sqlContext.range(10).write.saveAsTable("t0")
 
     sqlContext
