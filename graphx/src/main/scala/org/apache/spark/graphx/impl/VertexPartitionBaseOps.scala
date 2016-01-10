@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.BitSet
  * example, [[VertexPartition.VertexPartitionOpsConstructor]]).
  */
 private[graphx] abstract class VertexPartitionBaseOps
-    [VD: ClassTag, Self[X] <: VertexPartitionBase[X] : VertexPartitionBaseOpsConstructor]
+    [VD: ClassTag, Self[X] <: VertexPartitionBase[X]: VertexPartitionBaseOpsConstructor]
     (self: Self[VD])
   extends Serializable with Logging {
 
