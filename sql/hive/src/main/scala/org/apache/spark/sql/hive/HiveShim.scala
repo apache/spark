@@ -26,11 +26,14 @@ import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
+import com.google.common.base.Objects
+
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
@@ -123,9 +126,21 @@ private[hive] object HiveShim {
     // for Serialization
     def this() = this(null)
 
+    override def hashCode(): Int = {
+        if (instance != null && instance.isInstanceOf[GenericUDFMacro]) {
+          Objects.hashCode(functionClassName, instance)
+        } else {
+          functionClassName.hashCode()
+        }
+    }
+
     override def equals(other: Any): Boolean = other match {
       case a: HiveFunctionWrapper =>
-        functionClassName == a.functionClassName
+        if (a.instance != null && a.instance.isInstanceOf[GenericUDFMacro]) {
+          functionClassName == a.functionClassName && instance == a.instance
+        } else {
+          functionClassName == a.functionClassName
+        }
       case _ => false
     }
 
