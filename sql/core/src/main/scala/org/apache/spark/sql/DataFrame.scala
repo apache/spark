@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
-import java.util.Properties
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -30,16 +29,15 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, SqlParser}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
-import org.apache.spark.sql.sources.HadoopFsRelation
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -466,7 +464,7 @@ class DataFrame private[sql](
 
     // Project only one of the join columns.
     val joinedCols = JoinType(joinType) match {
-      case Inner | LeftOuter | LeftSemi =>
+      case Inner | LeftOuter | LeftSemi | LeftAnti =>
         usingColumns.map(col => withPlan(joined.left).resolve(col))
       case RightOuter =>
         usingColumns.map(col => withPlan(joined.right).resolve(col))

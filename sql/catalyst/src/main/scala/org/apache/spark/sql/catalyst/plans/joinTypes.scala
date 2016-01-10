@@ -24,6 +24,7 @@ object JoinType {
     case "leftouter" | "left" => LeftOuter
     case "rightouter" | "right" => RightOuter
     case "leftsemi" => LeftSemi
+    case "leftanti" => LeftAnti
     case _ =>
       val supported = Seq(
         "inner",
@@ -59,4 +60,8 @@ case object FullOuter extends JoinType {
 
 case object LeftSemi extends JoinType {
   override def sql: String = "LEFT SEMI"
+}
+
+case object LeftAnti extends JoinType {
+  override def sql: String = "LEFT ANTI"
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,7 +29,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * Build the right table's join keys into a HashSet, and iteratively go through the left
  * table, to find the if join keys are in the Hash set.
  */
-case class BroadcastLeftSemiJoinHash(
+case class BroadcastSemiJoin(
+    joinType: JoinType,
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
