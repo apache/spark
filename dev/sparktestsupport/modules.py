@@ -31,8 +31,6 @@ class Module(object):
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
                  sbt_test_goals=(), python_test_goals=(), blacklisted_python_implementations=(),
-                 test_tags=(), should_run_r_tests=False):
-                 should_run_r_tests=False):
                  should_run_r_tests=False, should_run_build_tests=False):
         """
         Define a new module.
