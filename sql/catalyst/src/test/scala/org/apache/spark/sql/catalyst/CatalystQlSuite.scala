@@ -149,5 +149,25 @@ class CatalystQlSuite extends PlanTest {
     parser.parsePlan("select * from t1 union select * from t2")
     parser.parsePlan("select * from t1 except select * from t2")
     parser.parsePlan("select * from t1 intersect select * from t2")
+    parser.parsePlan("(select * from t1) union all (select * from t2)")
+    parser.parsePlan("(select * from t1) union distinct (select * from t2)")
+    parser.parsePlan("(select * from t1) union (select * from t2)")
+    parser.parsePlan("select * from ((select * from t1) union (select * from t2)) t")
+  }
+
+  test("window function: better support of parentheses") {
+    parser.parsePlan("select sum(product + 1) over (partition by ((1) + (product / 2)) " +
+      "order by 2) from windowData")
+    parser.parsePlan("select sum(product + 1) over (partition by (1 + (product / 2)) " +
+      "order by 2) from windowData")
+    parser.parsePlan("select sum(product + 1) over (partition by ((product / 2) + 1) " +
+      "order by 2) from windowData")
+
+    parser.parsePlan("select sum(product + 1) over (partition by ((product) + (1)) order by 2) " +
+      "from windowData")
+    parser.parsePlan("select sum(product + 1) over (partition by ((product) + 1) order by 2) " +
+      "from windowData")
+    parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
+      "from windowData")
   }
 }
