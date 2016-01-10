@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -591,21 +592,66 @@ class Analyzer(
     }
   }
 
-  object ResolveSubquery extends Rule[LogicalPlan] {
+  object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
+
+    def hasSubquery(e: Expression): Boolean = {
+      e.find(_.isInstanceOf[SubQueryExpression]).isDefined
+    }
+
+    def hasSubquery(q: LogicalPlan): Boolean = {
+      q.expressions.exists(hasSubquery)
+    }
+
+    def removeUnresolvedFilter(q: LogicalPlan): (LogicalPlan, Option[Expression]) = {
+      val unresolvedConditions = ArrayBuffer[Expression]()
+      val removed = q transformUp {
+        case f @ Filter(cond, child) =>
+          val (resolved, unresolved) = splitConjunctivePredicates(cond).partition(_.resolved)
+          unresolvedConditions ++= unresolved
+          if (resolved.nonEmpty) {
+            Filter(resolved.reduceLeft(And), child)
+          } else {
+            child
+          }
+      }
+      (removed, unresolvedConditions.reduceLeftOption(And))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan =>
-        q transformExpressions {
-          case e: SubQueryExpression if e.query.resolved =>
-            val afterRule = execute(e.query)
+      case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
+
+        var afterResolve = q transformExpressions {
+          case e @ ScalarSubQuery(subquery) if !subquery.resolved =>
+            val afterRule = execute(subquery)
             if (afterRule.resolved) {
-              e match {
-                case InSubQuery(value, _) => InSubQuery(value, afterRule)
-                case ScalarSubQuery(_) => ScalarSubQuery(afterRule)
-                case Exists(_) => Exists(afterRule)
-              }
+              ScalarSubQuery(afterRule)
             } else {
-              // TODO: rewrite as join
               e
+            }
+        }
+
+        afterResolve match {
+          case f @ Filter(condition, child) =>
+            val (withSubquery, withoutSubquery) =
+              splitConjunctivePredicates(condition).partition(hasSubquery)
+            var newChild: LogicalPlan = child
+            withSubquery.foreach {
+              case Exists(sub) =>
+                // use all the conditions as join condition
+                val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
+                newChild = Join(newChild, removed, LeftSemi, joinCondition)
+              case Not(Exists(sub)) =>
+                val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
+                newChild = Join(newChild, removed, LeftAnti, joinCondition)
+              // TODO: support Or(Exists(), Exists())
+              case InSubQuery(value, sub) =>
+              case Not(InSubQuery(value, sub)) =>
+              case _ =>
+            }
+            if (withoutSubquery.nonEmpty) {
+              Filter(withoutSubquery.reduceLeft(And), newChild)
+            } else {
+              newChild
             }
         }
     }

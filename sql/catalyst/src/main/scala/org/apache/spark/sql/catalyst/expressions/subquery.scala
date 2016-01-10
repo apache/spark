@@ -49,12 +49,13 @@ case class ScalarSubQuery(query: LogicalPlan) extends SubQueryExpression with Co
 
 case class InSubQuery(value: Expression, query: LogicalPlan)
   extends SubQueryExpression with Unevaluable  {
+  override lazy val resolved: Boolean = false  // can't be resolved
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = false
 }
 
 case class Exists(query: LogicalPlan) extends SubQueryExpression with Unevaluable {
+  override lazy val resolved: Boolean = false  // can't be resolved
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = false
-
 }
