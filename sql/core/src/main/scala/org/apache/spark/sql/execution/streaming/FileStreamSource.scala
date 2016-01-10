@@ -30,7 +30,7 @@ import scala.collection.mutable.ArrayBuffer
 /**
  * A very simple source that reads text files from the given directory as they appear.
  */
-class FileStreamSouce(
+class FileStreamSource(
     val sqlContext: SQLContext,
     val metadataPath: String,
     val path: String) extends Source with Logging {
@@ -89,8 +89,8 @@ class FileStreamSouce(
     }
   }
 
-  def restart(): FileStreamSouce = {
-    new FileStreamSouce(sqlContext, metadataPath, path)
+  def restart(): FileStreamSource = {
+    new FileStreamSource(sqlContext, metadataPath, path)
   }
 
   private def sparkContext = sqlContext.sparkContext

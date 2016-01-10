@@ -135,8 +135,6 @@ final class DataStreamWriter private[sql](df: DataFrame) {
 
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 
-  private var mode: SaveMode = SaveMode.ErrorIfExists
-
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var partitioningColumns: Option[Seq[String]] = None

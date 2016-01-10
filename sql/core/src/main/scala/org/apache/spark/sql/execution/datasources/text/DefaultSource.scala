@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
-import org.apache.spark.sql.execution.streaming.{FileStreamSink, Sink, FileStreamSouce, Source}
+import org.apache.spark.sql.execution.streaming.{FileStreamSink, Sink, FileStreamSource, Source}
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
@@ -77,7 +77,7 @@ class DefaultSource
     val path = parameters("path")
     val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
 
-    new FileStreamSouce(sqlContext, metadataPath, path)
+    new FileStreamSource(sqlContext, metadataPath, path)
   }
 
   override def createSink(sqlContext: SQLContext, parameters: Map[String, String]): Sink = {
