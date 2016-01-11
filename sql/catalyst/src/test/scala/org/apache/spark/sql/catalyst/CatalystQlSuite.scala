@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Union, Subquery, Project, Limit}
+import org.apache.spark.sql.catalyst.plans.logical.{Limit, Project, Subquery, Union}
 
 class CatalystQlSuite extends PlanTest {
   val parser = new CatalystQl()
