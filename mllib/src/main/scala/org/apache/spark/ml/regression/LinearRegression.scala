@@ -248,8 +248,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       } else {
         logWarning(s"The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
-        // In this case, the training cannot be done in scaled space.
-        // So setting yStd=1 means that the label will not be scaled anymore and
+        // In this case, the target variable cannot be standardized.
+        // So setting yStd=1 means that the target variable will not be scaled anymore and
         // the training will continue.
         yStd = 1.0
       }

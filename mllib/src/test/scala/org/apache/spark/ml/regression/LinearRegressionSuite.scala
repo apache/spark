@@ -100,7 +100,7 @@ class LinearRegressionSuite
        A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
        b <- c(17, 17, 17, 17)
        w <- c(1, 2, 3, 4)
-       df <- as.data.frame(cbind(A, b))
+       df.const.label <- as.data.frame(cbind(A, b))
      */
     datasetWithWeightConstantLabel = sqlContext.createDataFrame(
       sc.parallelize(Seq(
@@ -578,10 +578,8 @@ class LinearRegressionSuite
   test("linear regression model with constant label") {
     /*
        R code:
-       # here b is constant
-       df <- as.data.frame(cbind(A, b))
        for (formula in c(b ~ . -1, b ~ .)) {
-         model <- lm(formula, data=df, weights=w)
+         model <- lm(formula, data=df.const.label, weights=w)
          print(as.vector(coef(model)))
        }
       [1] -9.221298  3.394343
@@ -593,7 +591,10 @@ class LinearRegressionSuite
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val model = new LinearRegression().setFitIntercept(fitIntercept).setSolver("l-bfgs")
+      val model = new LinearRegression()
+        .setFitIntercept(fitIntercept)
+        .setWeightCol("weight")
+        .setSolver("l-bfgs")
         .fit(datasetWithWeightConstantLabel)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
       assert(actual ~== expected(idx) absTol 1e-4)
