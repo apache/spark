@@ -39,8 +39,10 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
   /** Weights for IRLS steps. */
   def weights(mu: Double): Double
 
-  /** The working dependent variable. */
-  def z(y: Double, mu: Double, eta: Double): Double
+  /** The adjusted response variable. */
+  def adjusted(y: Double, mu: Double, eta: Double): Double = {
+    eta + (y - mu) * link.deriv(mu)
+  }
 
   /** Linear predictors based on given mu. */
   def predict(mu: Double): Double = this.link.link(mu)
@@ -69,10 +71,6 @@ private[ml] class Binomial(link: Link = Logit) extends Family(link) {
   override def weights(mu: Double): Double = {
     mu * (1 - mu)
   }
-
-  override def z(y: Double, mu: Double, eta: Double): Double = {
-    eta + (y - mu) * link.deriv(mu)
-  }
 }
 
 /**
@@ -89,10 +87,6 @@ private[ml] class Poisson(link: Link = Log) extends Family(link) {
   }
 
   override def weights(mu: Double): Double = mu
-
-  override def z(y: Double, mu: Double, eta: Double): Double = {
-    eta + (y - mu) / mu
-  }
 }
 
 /**

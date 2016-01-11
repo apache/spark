@@ -67,7 +67,7 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       zw = y.zip(mu).map { case (y, mu) =>
         val eta = family.predict(mu)
-        val z = family.z(y, mu, eta)
+        val z = family.adjusted(y, mu, eta)
         val w = family.weights(mu)
         (z, w)
       }
