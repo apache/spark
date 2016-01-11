@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
@@ -26,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
  * A builder class used to convert a resolved logical plan into a SQL query string.  Note that this

@@ -21,8 +21,8 @@ import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.catalyst.parser.ParseDriver
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.parser.ParseDriver
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 

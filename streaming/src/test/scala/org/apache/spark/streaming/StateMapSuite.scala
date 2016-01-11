@@ -17,17 +17,16 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.rdd.MapWithStateRDDRecord
-
 import scala.collection.{immutable, mutable, Map}
 import scala.reflect.ClassTag
 import scala.util.Random
 
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
-import com.esotericsoftware.kryo.io.{Output, Input}
+import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer._
+import org.apache.spark.streaming.rdd.MapWithStateRDDRecord
 import org.apache.spark.streaming.util.{EmptyStateMap, OpenHashMapBasedStateMap, StateMap}
 
 class StateMapSuite extends SparkFunSuite {

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.{DataFrame, QueryTest}
 
 abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
   protected def checkSQL(e: Expression, expectedSQL: String): Unit = {

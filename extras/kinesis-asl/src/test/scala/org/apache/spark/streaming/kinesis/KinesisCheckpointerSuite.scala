@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kinesis
 
-import java.util.concurrent.{TimeoutException, ExecutorService}
+import java.util.concurrent.{ExecutorService, TimeoutException}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -28,7 +28,7 @@ import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.{PrivateMethodTester, BeforeAndAfterEach}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.mock.MockitoSugar
