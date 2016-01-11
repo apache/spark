@@ -24,9 +24,9 @@ import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
@@ -46,6 +46,7 @@ private[ml] trait PredictorParams extends Params
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
+    validateParams()
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {

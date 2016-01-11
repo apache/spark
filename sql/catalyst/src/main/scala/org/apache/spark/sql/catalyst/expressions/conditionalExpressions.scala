@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{sequenceOption, TypeUtils}
 import org.apache.spark.sql.types._
 
 
@@ -74,6 +74,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
+
+  override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
 }
 
 trait CaseWhenLike extends Expression {
@@ -91,7 +93,9 @@ trait CaseWhenLike extends Expression {
 
   // both then and else expressions should be considered.
   def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
-  def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
+  def valueTypesEqual: Boolean = valueTypes.size <= 1 || valueTypes.sliding(2, 1).forall {
+    case Seq(dt1, dt2) => dt1.sameType(dt2)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (valueTypesEqual) {
@@ -108,7 +112,7 @@ trait CaseWhenLike extends Expression {
 
   override def nullable: Boolean = {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
-    thenList.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
+    thenList.exists(_.nullable) || elseValue.map(_.nullable).getOrElse(true)
   }
 }
 
@@ -203,6 +207,23 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
       case Seq(cond, value) => s" WHEN $cond THEN $value"
       case Seq(elseValue) => s" ELSE $elseValue"
     }.mkString
+  }
+
+  override def sql: String = {
+    val branchesSQL = branches.map(_.sql)
+    val (cases, maybeElse) = if (branches.length % 2 == 0) {
+      (branchesSQL, None)
+    } else {
+      (branchesSQL.init, Some(branchesSQL.last))
+    }
+
+    val head = s"CASE "
+    val tail = maybeElse.map(e => s" ELSE $e").getOrElse("") + " END"
+    val body = cases.grouped(2).map {
+      case Seq(whenExpr, thenExpr) => s"WHEN $whenExpr THEN $thenExpr"
+    }.mkString(" ")
+
+    head + body + tail
   }
 }
 
@@ -307,6 +328,24 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       case Seq(cond, value) => s" WHEN $cond THEN $value"
       case Seq(elseValue) => s" ELSE $elseValue"
     }.mkString
+  }
+
+  override def sql: String = {
+    val keySQL = key.sql
+    val branchesSQL = branches.map(_.sql)
+    val (cases, maybeElse) = if (branches.length % 2 == 0) {
+      (branchesSQL, None)
+    } else {
+      (branchesSQL.init, Some(branchesSQL.last))
+    }
+
+    val head = s"CASE $keySQL "
+    val tail = maybeElse.map(e => s" ELSE $e").getOrElse("") + " END"
+    val body = cases.grouped(2).map {
+      case Seq(whenExpr, thenExpr) => s"WHEN $whenExpr THEN $thenExpr"
+    }.mkString(" ")
+
+    head + body + tail
   }
 }
 
@@ -426,30 +465,3 @@ case class Greatest(children: Seq[Expression]) extends Expression {
   }
 }
 
-/** Operator that drops a row when it contains any nulls. */
-case class DropAnyNull(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def nullable: Boolean = true
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
-
-  protected override def nullSafeEval(input: Any): InternalRow = {
-    val row = input.asInstanceOf[InternalRow]
-    if (row.anyNull) {
-      null
-    } else {
-      row
-    }
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval.anyNull()) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = $eval;
-        }
-      """
-    })
-  }
-}

@@ -19,9 +19,8 @@ import sbt._
 import sbt.Keys._
 
 /**
- * This plugin project is there to define new scala style rules for spark. This is
- * a plugin project so that this gets compiled first and is put on the classpath and
- * becomes available for scalastyle sbt plugin.
+ * This plugin project is there because we use our custom fork of sbt-pom-reader plugin. This is
+ * a plugin project so that this gets compiled first and is available on the classpath for SBT build.
  */
 object SparkPluginDef extends Build {
   lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)

@@ -59,6 +59,8 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
   }
+
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase} ${right.sql}"
 }
 
 
@@ -66,7 +68,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 case class Like(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression with CodegenFallback {
+  extends BinaryExpression with StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
@@ -117,7 +119,7 @@ case class Like(left: Expression, right: Expression)
 
 
 case class RLike(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression with CodegenFallback {
+  extends BinaryExpression with StringRegexExpression {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)

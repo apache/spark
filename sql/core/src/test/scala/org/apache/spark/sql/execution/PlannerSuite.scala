@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.joins.{SortMergeJoin, BroadcastHashJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -44,10 +44,10 @@ class PlannerSuite extends SharedSQLContext {
         fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
-    // For the new aggregation code path, there will be three aggregate operator for
+    // For the new aggregation code path, there will be four aggregate operator for
     // distinct aggregations.
     assert(
-      aggregations.size == 2 || aggregations.size == 3,
+      aggregations.size == 2 || aggregations.size == 4,
       s"The plan of query $query does not have partial aggregations.")
   }
 
@@ -169,7 +169,7 @@ class PlannerSuite extends SharedSQLContext {
 
       withTempTable("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
-        assert(exp.toString.contains("PushedFilter: [EqualTo(key,15)]"))
+        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
       }
     }
   }
@@ -414,6 +414,45 @@ class PlannerSuite extends SharedSQLContext {
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case s: Sort => true }.isEmpty) {
       fail(s"Sort should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements eliminates Exchange if child has Exchange with same partitioning") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
+    assert(!childPartitioning.satisfies(distribution))
+    val inputPlan = Exchange(finalPartitioning,
+      DummySparkPlan(
+        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
+        requiredChildDistribution = Seq(distribution),
+        requiredChildOrdering = Seq(Seq.empty)),
+        None)
+
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case e: Exchange => true }.size == 2) {
+      fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements does not eliminate Exchange with different partitioning") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    // Number of partitions differ
+    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 8)
+    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
+    assert(!childPartitioning.satisfies(distribution))
+    val inputPlan = Exchange(finalPartitioning,
+      DummySparkPlan(
+        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
+        requiredChildDistribution = Seq(distribution),
+        requiredChildOrdering = Seq(Seq.empty)),
+      None)
+
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case e: Exchange => true }.size == 1) {
+      fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
     }
   }
 

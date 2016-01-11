@@ -20,17 +20,17 @@ package org.apache.spark
 import java.io.File
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
-
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.apache.spark.util.Utils
-
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 import org.scalatest.Matchers._
+
+import org.apache.spark.util.Utils
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -272,6 +272,31 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     } finally {
       sc.stop()
     }
+  }
+
+  test("Default path for file based RDDs is properly set (SPARK-12517)") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+    // Test filetextFile, wholeTextFiles, binaryFiles, hadoopFile and
+    // newAPIHadoopFile for setting the default path as the RDD name
+    val mockPath = "default/path/for/"
+
+    var targetPath = mockPath + "textFile"
+    assert(sc.textFile(targetPath).name === targetPath)
+
+    targetPath = mockPath + "wholeTextFiles"
+    assert(sc.wholeTextFiles(targetPath).name === targetPath)
+
+    targetPath = mockPath + "binaryFiles"
+    assert(sc.binaryFiles(targetPath).name === targetPath)
+
+    targetPath = mockPath + "hadoopFile"
+    assert(sc.hadoopFile(targetPath).name === targetPath)
+
+    targetPath = mockPath + "newAPIHadoopFile"
+    assert(sc.newAPIHadoopFile(targetPath).name === targetPath)
+
+    sc.stop()
   }
 
   test("calling multiple sc.stop() must not throw any exception") {

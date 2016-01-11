@@ -79,17 +79,20 @@ private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTra
  *               The i-th model is produced by testing the i-th class (taking label 1) vs the rest
  *               (taking label 0).
  */
+@Since("1.4.0")
 @Experimental
 final class OneVsRestModel private[ml] (
-    override val uid: String,
-    val labelMetadata: Metadata,
-    val models: Array[_ <: ClassificationModel[_, _]])
+    @Since("1.4.0") override val uid: String,
+    @Since("1.4.0") val labelMetadata: Metadata,
+    @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
   }
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     // Check schema
     transformSchema(dataset.schema, logging = true)
@@ -119,13 +122,13 @@ final class OneVsRestModel private[ml] (
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
-        val transformedDataset = model.transform(df).select(columns : _*)
+        val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
           .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
         val newColumns = origCols ++ List(col(tmpColName))
 
         // switch out the intermediate column with the accumulator column
-        updatedDataset.select(newColumns : _*).withColumnRenamed(tmpColName, accColName)
+        updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
     }
 
     if (handlePersistence) {
@@ -143,6 +146,7 @@ final class OneVsRestModel private[ml] (
       .drop(accColName)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): OneVsRestModel = {
     val copied = new OneVsRestModel(
       uid, labelMetadata, models.map(_.copy(extra).asInstanceOf[ClassificationModel[_, _]]))
@@ -210,30 +214,39 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
  * Each example is scored against all k models and the model with highest score
  * is picked to label the example.
  */
+@Since("1.4.0")
 @Experimental
-final class OneVsRest(override val uid: String)
+final class OneVsRest @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
   extends Estimator[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setClassifier(value: Classifier[_, _, _]): this.type = {
     set(classifier, value.asInstanceOf[ClassifierType])
   }
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): OneVsRestModel = {
     // determine number of classes either from metadata if provided, or via computation.
     val labelSchema = dataset.schema($(labelCol))
@@ -282,6 +295,7 @@ final class OneVsRest(override val uid: String)
     copyValues(model)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): OneVsRest = {
     val copied = defaultCopy(extra).asInstanceOf[OneVsRest]
     if (isDefined(classifier)) {

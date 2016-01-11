@@ -28,7 +28,7 @@ class MQTTUtils(object):
 
     @staticmethod
     def createStream(ssc, brokerUrl, topic,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
+                     storageLevel=StorageLevel.MEMORY_AND_DISK_2):
         """
         Create an input stream that pulls messages from a Mqtt Broker.
 

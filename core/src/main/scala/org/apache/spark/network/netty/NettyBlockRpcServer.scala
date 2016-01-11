@@ -47,9 +47,9 @@ class NettyBlockRpcServer(
 
   override def receive(
       client: TransportClient,
-      messageBytes: Array[Byte],
+      rpcMessage: ByteBuffer,
       responseContext: RpcResponseCallback): Unit = {
-    val message = BlockTransferMessage.Decoder.fromByteArray(messageBytes)
+    val message = BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
     logTrace(s"Received request: $message")
 
     message match {
@@ -58,7 +58,7 @@ class NettyBlockRpcServer(
           openBlocks.blockIds.map(BlockId.apply).map(blockManager.getBlockData)
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
         logTrace(s"Registered streamId $streamId with ${blocks.size} buffers")
-        responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteArray)
+        responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
         // StorageLevel is serialized as bytes using our JavaSerializer.
@@ -66,7 +66,7 @@ class NettyBlockRpcServer(
           serializer.newInstance().deserialize(ByteBuffer.wrap(uploadBlock.metadata))
         val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
         blockManager.putBlockData(BlockId(uploadBlock.blockId), data, level)
-        responseContext.onSuccess(new Array[Byte](0))
+        responseContext.onSuccess(ByteBuffer.allocate(0))
     }
   }
 

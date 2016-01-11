@@ -54,6 +54,7 @@ public abstract class StreamManager {
    * {@link #getChunk(long, int)} method.
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
+   * @return A managed buffer for the stream, or null if the stream was not found.
    */
   public ManagedBuffer openStream(String streamId) {
     throw new UnsupportedOperationException();

@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-
 import scala.language.postfixOps
 
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
 class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {
@@ -131,9 +130,9 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.groupBy(_._1).agg(
         sum(_._2),
-        expr("sum(_2)").as[Int],
+        expr("sum(_2)").as[Long],
         count("*")),
-      ("a", 30, 30, 2L), ("b", 3, 3, 2L), ("c", 1, 1, 1L))
+      ("a", 30, 30L, 2L), ("b", 3, 3L, 2L), ("c", 1, 1L, 1L))
   }
 
   test("typed aggregation: complex case") {

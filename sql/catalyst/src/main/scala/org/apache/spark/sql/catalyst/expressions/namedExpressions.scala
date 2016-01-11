@@ -164,6 +164,12 @@ case class Alias(child: Expression, name: String)(
         explicitMetadata == a.explicitMetadata
     case _ => false
   }
+
+  override def sql: String = {
+    val qualifiersString =
+      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+    s"${child.sql} AS $qualifiersString`$name`"
+  }
 }
 
 /**
@@ -262,18 +268,29 @@ case class AttributeReference(
     }
   }
 
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
+    exprId :: qualifiers :: Nil
+  }
+
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
   override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
+
+  override def sql: String = {
+    val qualifiersString =
+      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+    s"$qualifiersString`$name`"
+  }
 }
 
 /**
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
+case class PrettyAttribute(name: String, dataType: DataType = NullType)
+  extends Attribute with Unevaluable {
 
   override def toString: String = name
 
@@ -286,7 +303,6 @@ case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
-  override def dataType: DataType = NullType
 }
 
 object VirtualColumn {

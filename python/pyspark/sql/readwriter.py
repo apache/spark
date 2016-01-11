@@ -109,7 +109,7 @@ class DataFrameReader(object):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads data from a data source and returns it as a :class`DataFrame`.
 
-        :param path: optional string for file-system backed data sources.
+        :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
@@ -118,6 +118,7 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+
         >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
         ...     'python/test_support/sql/people1.json'])
         >>> df.dtypes
@@ -129,13 +130,9 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            if type(path) == list:
-                paths = path
-                gateway = self._sqlContext._sc._gateway
-                jpaths = utils.toJArray(gateway, gateway.jvm.java.lang.String, paths)
-                return self._df(self._jreader.load(jpaths))
-            else:
-                return self._df(self._jreader.load(path))
+            if type(path) != list:
+                path = [path]
+            return self._df(self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         else:
             return self._df(self._jreader.load())
 
@@ -161,6 +158,8 @@ class DataFrameReader(object):
                 quotes
             * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
                 (e.g. 00012)
+            * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
+                of all character using backslash quoting mechanism
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -175,8 +174,20 @@ class DataFrameReader(object):
             self.schema(schema)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
+        elif type(path) == list:
+            return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
-            return self._df(self._jreader.json(path._jrdd))
+            def func(iterator):
+                for x in iterator:
+                    if not isinstance(x, basestring):
+                        x = unicode(x)
+                    if isinstance(x, unicode):
+                        x = x.encode("utf-8")
+                    yield x
+            keyed = path.mapPartitions(func)
+            keyed._bypass_serializer = True
+            jrdd = keyed._jrdd.map(self._sqlContext._jvm.BytesToString())
+            return self._df(self._jreader.json(jrdd))
         else:
             raise TypeError("path can be only string or RDD")
 
@@ -205,16 +216,20 @@ class DataFrameReader(object):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, path):
-        """Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+    def text(self, paths):
+        """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
 
         Each line in the text file is a new row in the resulting DataFrame.
+
+        :param paths: string, or list of strings, for input path(s).
 
         >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        return self._df(self._jreader.text(path))
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(1.5)
     def orc(self, path):

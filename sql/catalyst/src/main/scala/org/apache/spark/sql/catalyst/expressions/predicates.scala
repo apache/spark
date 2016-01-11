@@ -65,6 +65,15 @@ trait PredicateHelper {
     }
   }
 
+  // Substitute any known alias from a map.
+  protected def replaceAlias(
+      condition: Expression,
+      aliases: AttributeMap[Expression]): Expression = {
+    condition.transform {
+      case a: Attribute => aliases.getOrElse(a, a)
+    }
+  }
+
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
    * can be used to determine when it is acceptable to move expression evaluation within a query
@@ -92,6 +101,8 @@ case class Not(child: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"!($c)")
   }
+
+  override def sql: String = s"(NOT ${child.sql})"
 }
 
 
@@ -167,6 +178,13 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
       }
     """
   }
+
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql)
+    val valueSQL = childrenSQL.head
+    val listSQL = childrenSQL.tail.mkString(", ")
+    s"($valueSQL IN ($listSQL))"
+  }
 }
 
 /**
@@ -217,6 +235,12 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       }
      """
   }
+
+  override def sql: String = {
+    val valueSQL = child.sql
+    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    s"($valueSQL IN ($listSQL))"
+  }
 }
 
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
@@ -265,6 +289,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
       }
      """
   }
+
+  override def sql: String = s"(${left.sql} AND ${right.sql})"
 }
 
 
@@ -314,6 +340,8 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
       }
      """
   }
+
+  override def sql: String = s"(${left.sql} OR ${right.sql})"
 }
 
 

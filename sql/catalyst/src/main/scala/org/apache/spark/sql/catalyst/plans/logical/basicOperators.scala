@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
-import scala.collection.mutable.ArrayBuffer
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -210,6 +211,38 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
 }
 
+/** Factory for constructing new `Range` nodes. */
+object Range {
+  def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
+    val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+    new Range(start, end, step, numSlices, output)
+  }
+}
+
+case class Range(
+    start: Long,
+    end: Long,
+    step: Long,
+    numSlices: Int,
+    output: Seq[Attribute]) extends LeafNode {
+  require(step != 0, "step cannot be 0")
+  val numElements: BigInt = {
+    val safeStart = BigInt(start)
+    val safeEnd = BigInt(end)
+    if ((safeEnd - safeStart) % step == 0 || (safeEnd > safeStart) != (step > 0)) {
+      (safeEnd - safeStart) / step
+    } else {
+      // the remainder has the same sign with range, could add 1 more
+      (safeEnd - safeStart) / step + 1
+    }
+  }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = LongType.defaultSize * numElements
+    Statistics( sizeInBytes = sizeInBytes )
+  }
+}
+
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
@@ -293,7 +326,14 @@ private[sql] object Expand {
           Literal.create(bitmask, IntegerType)
       })
     }
-    Expand(projections, child.output :+ gid, child)
+    val output = child.output.map { attr =>
+      if (groupByExprs.exists(_.semanticEquals(attr))) {
+        attr.withNullability(true)
+      } else {
+        attr
+      }
+    }
+    Expand(projections, output :+ gid, child)
   }
 }
 
@@ -358,43 +398,6 @@ case class GroupingSets(
     this.copy(aggregations = aggs)
 }
 
-/**
- * Cube is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
- * and eventually will be transformed to Aggregate(.., Expand) in Analyzer
- *
- * @param groupByExprs The Group By expressions candidates.
- * @param child        Child operator
- * @param aggregations The Aggregation expressions, those non selected group by expressions
- *                     will be considered as constant null if it appears in the expressions
- */
-case class Cube(
-    groupByExprs: Seq[Expression],
-    child: LogicalPlan,
-    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
-
-  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
-    this.copy(aggregations = aggs)
-}
-
-/**
- * Rollup is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
- * and eventually will be transformed to Aggregate(.., Expand) in Analyzer
- *
- * @param groupByExprs The Group By expressions candidates, take effective only if the
- *                     associated bit in the bitmask set to 1.
- * @param child        Child operator
- * @param aggregations The Aggregation expressions, those non selected group by expressions
- *                     will be considered as constant null if it appears in the expressions
- */
-case class Rollup(
-    groupByExprs: Seq[Expression],
-    child: LogicalPlan,
-    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
-
-  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
-    this.copy(aggregations = aggs)
-}
-
 case class Pivot(
     groupByExprs: Seq[NamedExpression],
     pivotColumn: Expression,
@@ -420,6 +423,7 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
+
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
 }
 
@@ -487,7 +491,7 @@ case class MapPartitions[T, U](
     uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 /** Factory for constructing new `AppendColumn` nodes. */
@@ -513,7 +517,7 @@ case class AppendColumns[T, U](
     newColumns: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output ++ newColumns
-  override def missingInput: AttributeSet = super.missingInput -- newColumns
+  override def producedAttributes: AttributeSet = AttributeSet(newColumns)
 }
 
 /** Factory for constructing new `MapGroups` nodes. */
@@ -548,24 +552,27 @@ case class MapGroups[K, T, U](
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 }
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
-  def apply[K : Encoder, Left : Encoder, Right : Encoder, R : Encoder](
-      func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
+  def apply[Key, Left, Right, Result : Encoder](
+      func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+      keyEnc: ExpressionEncoder[Key],
+      leftEnc: ExpressionEncoder[Left],
+      rightEnc: ExpressionEncoder[Right],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],
       left: LogicalPlan,
-      right: LogicalPlan): CoGroup[K, Left, Right, R] = {
+      right: LogicalPlan): CoGroup[Key, Left, Right, Result] = {
     CoGroup(
       func,
-      encoderFor[K],
-      encoderFor[Left],
-      encoderFor[Right],
-      encoderFor[R],
-      encoderFor[R].schema.toAttributes,
+      keyEnc,
+      leftEnc,
+      rightEnc,
+      encoderFor[Result],
+      encoderFor[Result].schema.toAttributes,
       leftGroup,
       rightGroup,
       left,
@@ -577,16 +584,16 @@ object CoGroup {
  * A relation produced by applying `func` to each grouping key and associated values from left and
  * right children.
  */
-case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
-    kEncoder: ExpressionEncoder[K],
+case class CoGroup[Key, Left, Right, Result](
+    func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+    keyEnc: ExpressionEncoder[Key],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
-    rEncoder: ExpressionEncoder[R],
+    resultEnc: ExpressionEncoder[Result],
     output: Seq[Attribute],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode {
-  override def missingInput: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 }
