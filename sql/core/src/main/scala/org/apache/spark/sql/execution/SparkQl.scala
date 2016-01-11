@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
   /** Check if a command should not be explained. */

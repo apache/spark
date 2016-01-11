@@ -485,7 +485,7 @@ class ListTests(MLlibTestCase):
                                      maxIterations=10, seed=63)
         gmm2 = GaussianMixture.train(data, 2, convergenceTol=0.001,
                                      maxIterations=10, seed=63, initialModel=gmm1)
-        self.assertAlmostEqual((gmm1.weights - gmm2.weights).sum(), 0.0)      
+        self.assertAlmostEqual((gmm1.weights - gmm2.weights).sum(), 0.0)
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
