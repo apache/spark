@@ -103,7 +103,7 @@ class BisectingKMeansModel(JavaModelWrapper):
         """
         Return the Bisecting K-means cost (sum of squared distances of
         points to their nearest center) for this model on the given
-        data.
+        data. If provided with an RDD of points return the sum.
 
         :param point: the point or RDD of points to compute the cost(s).
         """

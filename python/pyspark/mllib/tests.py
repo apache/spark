@@ -427,7 +427,7 @@ class ListTests(MLlibTestCase):
         p = array([0.0, 0.0])
         rdd_p = self.sc.parallelize([p])
         self.assertEqual(model.predict(p), model.predict(rdd_p).first())
-        self.assertEqual(model.computeCost(p), model.computeCost(rdd_p).first())
+        self.assertEqual(model.computeCost(p), model.computeCost(rdd_p))
         self.assertEqual(model.k, len(model.clusterCenters))
 
     def test_kmeans(self):
