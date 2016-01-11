@@ -30,14 +30,11 @@ import org.apache.spark.sql.types._
  */
 abstract class Covariance(
     left: Expression,
-    right: Expression,
-    mutableAggBufferOffset: Int,
-    inputAggBufferOffset: Int)
+    right: Expression)
   extends ImperativeAggregate with Serializable {
-
   override def children: Seq[Expression] = Seq(left, right)
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
   override def dataType: DataType = DoubleType
 
@@ -66,20 +63,22 @@ abstract class Covariance(
     AttributeReference("count", LongType)())
 
   // Local cache of mutableAggBufferOffset(s) that will be used in update and merge
-  val mutableAggBufferOffsetPlus1 = mutableAggBufferOffset + 1
-  val mutableAggBufferOffsetPlus2 = mutableAggBufferOffset + 2
-  val mutableAggBufferOffsetPlus3 = mutableAggBufferOffset + 3
+  val xAvgOffset = mutableAggBufferOffset
+  val yAvgOffset = mutableAggBufferOffset + 1
+  val CkOffset = mutableAggBufferOffset + 2
+  val countOffset = mutableAggBufferOffset + 3
 
   // Local cache of inputAggBufferOffset(s) that will be used in update and merge
-  val inputAggBufferOffsetPlus1 = inputAggBufferOffset + 1
-  val inputAggBufferOffsetPlus2 = inputAggBufferOffset + 2
-  val inputAggBufferOffsetPlus3 = inputAggBufferOffset + 3
+  val inputXAvgOffset = inputAggBufferOffset
+  val inputYAvgOffset = inputAggBufferOffset + 1
+  val inputCkOffset = inputAggBufferOffset + 2
+  val inputCountOffset = inputAggBufferOffset + 3
 
   override def initialize(buffer: MutableRow): Unit = {
-    buffer.setDouble(mutableAggBufferOffset, 0.0)
-    buffer.setDouble(mutableAggBufferOffsetPlus1, 0.0)
-    buffer.setDouble(mutableAggBufferOffsetPlus2, 0.0)
-    buffer.setLong(mutableAggBufferOffsetPlus3, 0L)
+    buffer.setDouble(xAvgOffset, 0.0)
+    buffer.setDouble(yAvgOffset, 0.0)
+    buffer.setDouble(CkOffset, 0.0)
+    buffer.setLong(countOffset, 0L)
   }
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
@@ -90,10 +89,10 @@ abstract class Covariance(
       val x = leftEval.asInstanceOf[Double]
       val y = rightEval.asInstanceOf[Double]
 
-      var xAvg = buffer.getDouble(mutableAggBufferOffset)
-      var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
-      var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
-      var count = buffer.getLong(mutableAggBufferOffsetPlus3)
+      var xAvg = buffer.getDouble(xAvgOffset)
+      var yAvg = buffer.getDouble(yAvgOffset)
+      var Ck = buffer.getDouble(CkOffset)
+      var count = buffer.getLong(countOffset)
 
       val deltaX = x - xAvg
       val deltaY = y - yAvg
@@ -102,30 +101,30 @@ abstract class Covariance(
       yAvg += deltaY / count
       Ck += deltaX * (y - yAvg)
 
-      buffer.setDouble(mutableAggBufferOffset, xAvg)
-      buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
-      buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
-      buffer.setLong(mutableAggBufferOffsetPlus3, count)
+      buffer.setDouble(xAvgOffset, xAvg)
+      buffer.setDouble(yAvgOffset, yAvg)
+      buffer.setDouble(CkOffset, Ck)
+      buffer.setLong(countOffset, count)
     }
   }
 
   // Merge counters from other partitions. Formula can be found at:
   // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val count2 = buffer2.getLong(inputAggBufferOffsetPlus3)
+    val count2 = buffer2.getLong(inputCountOffset)
 
     // We only go to merge two buffers if there is at least one record aggregated in buffer2.
     // We don't need to check count in buffer1 because if count2 is more than zero, totalCount
     // is more than zero too, then we won't get a divide by zero exception.
     if (count2 > 0) {
-      var xAvg = buffer1.getDouble(mutableAggBufferOffset)
-      var yAvg = buffer1.getDouble(mutableAggBufferOffsetPlus1)
-      var Ck = buffer1.getDouble(mutableAggBufferOffsetPlus2)
-      var count = buffer1.getLong(mutableAggBufferOffsetPlus3)
+      var xAvg = buffer1.getDouble(xAvgOffset)
+      var yAvg = buffer1.getDouble(yAvgOffset)
+      var Ck = buffer1.getDouble(CkOffset)
+      var count = buffer1.getLong(countOffset)
 
-      val xAvg2 = buffer2.getDouble(inputAggBufferOffset)
-      val yAvg2 = buffer2.getDouble(inputAggBufferOffsetPlus1)
-      val Ck2 = buffer2.getDouble(inputAggBufferOffsetPlus2)
+      val xAvg2 = buffer2.getDouble(inputXAvgOffset)
+      val yAvg2 = buffer2.getDouble(inputYAvgOffset)
+      val Ck2 = buffer2.getDouble(inputCkOffset)
 
       val totalCount = count + count2
       val deltaX = xAvg - xAvg2
@@ -135,10 +134,10 @@ abstract class Covariance(
       yAvg = (yAvg * count + yAvg2 * count2) / totalCount
       count = totalCount
 
-      buffer1.setDouble(mutableAggBufferOffset, xAvg)
-      buffer1.setDouble(mutableAggBufferOffsetPlus1, yAvg)
-      buffer1.setDouble(mutableAggBufferOffsetPlus2, Ck)
-      buffer1.setLong(mutableAggBufferOffsetPlus3, count)
+      buffer1.setDouble(xAvgOffset, xAvg)
+      buffer1.setDouble(yAvgOffset, yAvg)
+      buffer1.setDouble(CkOffset, Ck)
+      buffer1.setLong(countOffset, count)
     }
   }
 }
@@ -148,10 +147,7 @@ case class CovSample(
     right: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends Covariance(left, right, mutableAggBufferOffset, inputAggBufferOffset) {
-
-  def this(left: Expression, right: Expression) =
-    this(left, right, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+  extends Covariance(left, right) {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -160,10 +156,10 @@ case class CovSample(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def eval(buffer: InternalRow): Any = {
-    val count = buffer.getLong(mutableAggBufferOffsetPlus3)
+    val count = buffer.getLong(countOffset)
     if (count > 0) {
       if (count > 1) {
-        val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+        val Ck = buffer.getDouble(CkOffset)
         val cov = Ck / (count - 1)
         if (cov.isNaN) {
           null
@@ -184,10 +180,7 @@ case class CovPopulation(
     right: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends Covariance(left, right, mutableAggBufferOffset, inputAggBufferOffset) {
-
-  def this(left: Expression, right: Expression) =
-    this(left, right, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+  extends Covariance(left, right) {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -196,9 +189,9 @@ case class CovPopulation(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def eval(buffer: InternalRow): Any = {
-    val count = buffer.getLong(mutableAggBufferOffsetPlus3)
+    val count = buffer.getLong(countOffset)
     if (count > 0) {
-      val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      val Ck = buffer.getDouble(CkOffset)
       val cov = Ck / count
       if (cov.isNaN) {
         null
