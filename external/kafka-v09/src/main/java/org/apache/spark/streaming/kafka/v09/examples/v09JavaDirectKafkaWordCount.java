@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka.v09.examples;
 
 import com.google.common.collect.Lists;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
@@ -41,9 +42,11 @@ import java.util.regex.Pattern;
  * Usage: v09JavaDirectKafkaWordCount <brokers> <topics>
  *   <brokers> is a list of one or more Kafka brokers
  *   <topics> is a list of one or more kafka topics to consume from
+ *   <poll time> time, in milliseconds, spent waiting in Kafka consumer poll if data is not available
  *
  * Example:
- *    $ bin/run-example streaming.v09JavaDirectKafkaWordCount broker1-host:port,broker2-host:port topic1,topic2
+ *    $ bin/run-example streaming.v09JavaDirectKafkaWordCount broker1-host:port,broker2-host:port
+ *    topic1,topic2 pollTime
  */
 
 public final class v09JavaDirectKafkaWordCount {
@@ -53,7 +56,8 @@ public final class v09JavaDirectKafkaWordCount {
     if (args.length < 2) {
       System.err.println("Usage: v09JavaDirectKafkaWordCount <brokers> <topics>\n" +
           "  <brokers> is a list of one or more Kafka brokers\n" +
-          "  <topics> is a list of one or more kafka topics to consume from\n\n");
+          "  <topics> is a list of one or more kafka topics to consume from\n" +
+          "  <poll time> time, in milliseconds, spent waiting in Kafka consumer poll if data is not available\n\n");
       System.exit(1);
     }
 
@@ -61,6 +65,7 @@ public final class v09JavaDirectKafkaWordCount {
 
     String brokers = args[0];
     String topics = args[1];
+    String pollTime = args[2];
 
     // Create context with a 2 seconds batch interval
     SparkConf sparkConf = new SparkConf().setAppName("v09JavaDirectKafkaWordCount");
@@ -68,7 +73,11 @@ public final class v09JavaDirectKafkaWordCount {
 
     HashSet<String> topicsSet = new HashSet<String>(Arrays.asList(topics.split(",")));
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("metadata.broker.list", brokers);
+    kafkaParams.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
+    kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, "testGroup");
+    kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
+    kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
+    kafkaParams.put("spark.kafka.poll.time", pollTime);
 
     // Create direct kafka stream with brokers and topics
     JavaPairInputDStream<String, String> messages = KafkaUtils.createDirectStream(
