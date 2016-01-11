@@ -81,7 +81,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getString(9) == "192.168.0.0/16")
     assert(rows(0).getSeq(10) == Seq(1, 2))
     assert(rows(0).getSeq(11) == Seq("a", null, "b"))
-    assert(rows(0).getSeq(12) == Seq(0.11, 0.22))
+    assert(rows(0).getSeq(12) == Array(0.11, 0.22))
   }
 
   test("Basic write test") {
