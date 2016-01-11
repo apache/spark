@@ -31,7 +31,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rpc.RpcTimeout
-import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task}
+import org.apache.spark.scheduler.{AccumulableInfo, DirectTaskResult, IndirectTaskResult, Task}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
@@ -300,7 +300,7 @@ private[spark] class Executor(
           logError(s"Exception in $taskName (TID $taskId)", t)
 
           // Collect latest accumulator values to report back to the driver
-          val accumulatorUpdates: Map[Long, Any] =
+          val accumulatorUpdates: Seq[AccumulableInfo] =
             if (task != null) {
               task.metrics.foreach { m =>
                 m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
@@ -308,7 +308,7 @@ private[spark] class Executor(
               }
               task.collectAccumulatorUpdates(taskFailed = true)
             } else {
-              Map[Long, Any]()
+              Seq.empty[AccumulableInfo]
             }
 
           val serializedTaskEndReason = {

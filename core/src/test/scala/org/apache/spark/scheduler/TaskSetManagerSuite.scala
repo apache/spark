@@ -37,7 +37,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any],
+      accumUpdates: Seq[AccumulableInfo],
       taskInfo: TaskInfo) {
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
@@ -165,7 +165,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
-    val accumUpdates = taskSet.tasks.head.initialAccumulators.map { a => (a.id, 0L) }.toMap
+    val accumUpdates = taskSet.tasks.head.initialAccumulators.map { a =>
+      new AccumulableInfo(a.id, a.name.get, Some(0L), None, a.isInternal)
+    }
 
     // Offer a host with NO_PREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
@@ -173,7 +175,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(taskOption.isDefined)
 
     // Tell it the task has finished
-    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates), 1L)
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
     assert(sched.endedTasks(0) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -183,8 +185,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(3)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
-    val accumUpdatesByTask: Array[Map[Long, Long]] =
-      taskSet.tasks.map { _.initialAccumulators.map { a => (a.id, 0L) }.toMap }
+    val accumUpdatesByTask: Array[Seq[AccumulableInfo]] =
+      taskSet.tasks.map { _.initialAccumulators.map { a =>
+        new AccumulableInfo(a.id, a.name.get, Some(0L), None, a.isInternal)
+      }}
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
@@ -199,14 +203,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", NO_PREF) === None)
 
     // Finish the first two tasks
-    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdatesByTask(0)), 1L)
-    manager.handleSuccessfulTask(1, createTaskResult(1, accumUpdatesByTask(1)), 1L)
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdatesByTask(0)))
+    manager.handleSuccessfulTask(1, createTaskResult(1, accumUpdatesByTask(1)))
     assert(sched.endedTasks(0) === Success)
     assert(sched.endedTasks(1) === Success)
     assert(!sched.finishedManagers.contains(manager))
 
     // Finish the last task
-    manager.handleSuccessfulTask(2, createTaskResult(2, accumUpdatesByTask(2)), 1L)
+    manager.handleSuccessfulTask(2, createTaskResult(2, accumUpdatesByTask(2)))
     assert(sched.endedTasks(2) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -789,7 +793,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   private def createTaskResult(
       id: Int,
-      accumUpdates: Map[Long, Any] = Map[Long, Any]()): DirectTaskResult[Int] = {
+      accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo]): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
     new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
   }

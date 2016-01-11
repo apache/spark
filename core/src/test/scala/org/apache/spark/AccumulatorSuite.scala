@@ -162,13 +162,11 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("internal accumulators in TaskContext") {
     sc = new SparkContext("local", "test")
     val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null)
-    val accumulators = taskContext.taskMetrics.accumulators
-    val accumulatorValues = taskContext.taskMetrics.accumulatorUpdates()
-    assert(accumulators.size > 0)
-    assert(accumulators.forall(_.isInternal))
+    val accumUpdates = taskContext.taskMetrics.accumulatorUpdates()
+    assert(accumUpdates.size > 0)
+    assert(accumUpdates.forall(_.internal))
     val testAccum = taskContext.taskMetrics.getAccum(TEST_ACCUM)
-    assert(accumulatorValues.size === accumulators.size)
-    assert(accumulatorValues.contains(testAccum.id))
+    assert(accumUpdates.exists(_.id == testAccum.id))
   }
 
   test("internal accumulators in a stage") {
@@ -189,13 +187,13 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       assert(taskInfos.size === numPartitions)
       // The accumulator values should be merged in the stage
       val stageAccum = findTestAccum(stageInfos.head.accumulables.values)
-      assert(stageAccum.value.toLong === numPartitions)
+      assert(stageAccum.value.get.toString.toLong === numPartitions)
       // The accumulator should be updated locally on each task
       val taskAccumValues = taskInfos.map { taskInfo =>
         val taskAccum = findTestAccum(taskInfo.accumulables)
         assert(taskAccum.update.isDefined)
-        assert(taskAccum.update.get.toLong === 1)
-        taskAccum.value.toLong
+        assert(taskAccum.update.get.toString.toLong === 1L)
+        taskAccum.value.get.toString.toLong
       }
       // Each task should keep track of the partial value on the way, i.e. 1, 2, ... numPartitions
       assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
@@ -235,9 +233,9 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
         (findTestAccum(stageInfos(0).accumulables.values),
         findTestAccum(stageInfos(1).accumulables.values),
         findTestAccum(stageInfos(2).accumulables.values))
-      assert(firstStageAccum.value.toLong === numPartitions)
-      assert(secondStageAccum.value.toLong === numPartitions * 10)
-      assert(thirdStageAccum.value.toLong === numPartitions * 2 * 100)
+      assert(firstStageAccum.value.get.toString.toLong === numPartitions)
+      assert(secondStageAccum.value.get.toString.toLong === numPartitions * 10)
+      assert(thirdStageAccum.value.get.toString.toLong === numPartitions * 2 * 100)
     }
     rdd.count()
   }
@@ -286,14 +284,14 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       assert(taskInfos.size === numPartitions + numFailedPartitions)
       val stageAccum = findTestAccum(stageInfos.head.accumulables.values)
       // We should not double count values in the merged accumulator
-      assert(stageAccum.value.toLong === numPartitions)
+      assert(stageAccum.value.get.toString.toLong === numPartitions)
       val taskAccumValues = taskInfos.flatMap { taskInfo =>
         if (!taskInfo.failed) {
           // If a task succeeded, its update value should always be 1
           val taskAccum = findTestAccum(taskInfo.accumulables)
           assert(taskAccum.update.isDefined)
-          assert(taskAccum.update.get.toLong === 1)
-          Some(taskAccum.value.toLong)
+          assert(taskAccum.update.get.toString.toLong === 1L)
+          Some(taskAccum.value.get.toString.toLong)
         } else {
           // If a task failed, we should not get its accumulator values
           assert(taskInfo.accumulables.isEmpty)
@@ -322,7 +320,9 @@ private[spark] object AccumulatorSuite {
     sc.addSparkListener(listener)
     testBody
     val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
-    val isSet = accums.exists { a => a.name == PEAK_EXECUTION_MEMORY && a.value.toLong > 0 }
+    val isSet = accums.exists { a =>
+      a.name == PEAK_EXECUTION_MEMORY && a.value.get.toString.toLong > 0
+    }
     if (!isSet) {
       throw new TestFailedException(s"peak execution memory accumulator not set in '$testName'", 0)
     }

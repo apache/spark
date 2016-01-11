@@ -81,7 +81,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY, false)
         val peakExecutionMemory = 10
         taskInfo.accumulables += new AccumulableInfo(0, InternalAccumulator.PEAK_EXECUTION_MEMORY,
-          Some(peakExecutionMemory.toString), (peakExecutionMemory * taskId).toString, true)
+          Some(peakExecutionMemory.toString), Some((peakExecutionMemory * taskId).toString), true)
         jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
         taskInfo.markSuccessful()

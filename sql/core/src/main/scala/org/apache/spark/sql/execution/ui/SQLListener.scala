@@ -177,7 +177,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
       taskId: Long,
       stageId: Int,
       stageAttemptID: Int,
-      accumulatorUpdates: Map[Long, Any],
+      accumulatorUpdates: Seq[AccumulableInfo],
       finishTask: Boolean): Unit = {
 
     _stageIdToStageMetrics.get(stageId) match {
@@ -289,8 +289,10 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
           for (stageId <- executionUIData.stages;
                stageMetrics <- _stageIdToStageMetrics.get(stageId).toIterable;
                taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
-               accumulatorUpdate <- taskMetrics.accumulatorUpdates.toSeq) yield {
-            accumulatorUpdate
+               accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
+            assert(accumulatorUpdate.update.isDefined, s"accumulator update from " +
+              s"task did not have a partial value: ${accumulatorUpdate.name}")
+            (accumulatorUpdate.id, accumulatorUpdate.update.get)
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
@@ -329,8 +331,9 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.stageId,
       taskEnd.stageAttemptId,
       taskEnd.taskInfo.accumulables.map { acc =>
-        (acc.id, new LongSQLMetricValue(acc.update.getOrElse("0").toLong))
-      }.toMap,
+        val newValue = new LongSQLMetricValue(acc.update.map(_.toString).getOrElse("0").toLong)
+        acc.copy(update = Some(newValue))
+      },
       finishTask = true)
   }
 
@@ -406,4 +409,4 @@ private[ui] class SQLStageMetrics(
 private[ui] class SQLTaskMetrics(
     val attemptId: Long, // TODO not used yet
     var finished: Boolean,
-    var accumulatorUpdates: Map[Long, Any])
+    var accumulatorUpdates: Seq[AccumulableInfo])

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
@@ -126,14 +126,11 @@ private[spark] abstract class Task[T](
    * Collect the latest values of accumulators used in this task. If the task failed,
    * filter out the accumulators whose values should not be included on failures.
    */
-  def collectAccumulatorUpdates(taskFailed: Boolean = false): Map[Long, Any] = {
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
     if (context != null) {
-      context.taskMetrics.accumulators
-        .filter { a => !taskFailed || a.countFailedValues }
-        .map { a => (a.id, a.localValue) }
-        .toMap
+      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
     } else {
-      Map[Long, Any]()
+      Seq.empty[AccumulableInfo]
     }
   }
 

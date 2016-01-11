@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulable, Accumulator, InternalAccumulator, SparkException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
@@ -297,11 +298,6 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   }
 
   /**
-   * Return all the accumulators used on this task. Note: This is not a copy.
-   */
-  private[spark] def accumulators: Seq[Accumulable[_, _]] = accums
-
-  /**
    * Get a Long accumulator from the given map by name, assuming it exists.
    * Note: this only searches the initial set of accumulators passed into the constructor.
    */
@@ -312,7 +308,9 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   /**
    * Return a map from accumulator ID to the accumulator's latest value in this task.
    */
-  def accumulatorUpdates(): Map[Long, Any] = accums.map { a => (a.id, a.localValue) }.toMap
+  def accumulatorUpdates(): Seq[AccumulableInfo] = accums.map { a =>
+    new AccumulableInfo(a.id, a.name.orNull, Some(a.localValue), None, a.isInternal)
+  }
 
   /**
    * Return whether some accumulators with the given prefix have already been set.

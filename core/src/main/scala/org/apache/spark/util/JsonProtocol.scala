@@ -286,8 +286,8 @@ private[spark] object JsonProtocol {
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
     ("ID" -> accumulableInfo.id) ~
     ("Name" -> accumulableInfo.name) ~
-    ("Update" -> accumulableInfo.update.map(new JString(_)).getOrElse(JNothing)) ~
-    ("Value" -> accumulableInfo.value) ~
+    ("Update" -> accumulableInfo.update.map(_.toString)) ~
+    ("Value" -> accumulableInfo.value.map(_.toString)) ~
     ("Internal" -> accumulableInfo.internal)
   }
 
@@ -350,12 +350,13 @@ private[spark] object JsonProtocol {
         ("Reduce ID" -> fetchFailed.reduceId) ~
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
-        // TODO: serialize accumulator updates as well?
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
+        val accumUpdates = JArray(exceptionFailure.accumUpdates.map(accumulableInfoToJson).toList)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
-        ("Full Stack Trace" -> exceptionFailure.fullStackTrace)
+        ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
+        ("Accumulator Updates" -> accumUpdates)
       case taskCommitDenied: TaskCommitDenied =>
         ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
@@ -676,7 +677,7 @@ private[spark] object JsonProtocol {
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
     val accumulables = (json \ "Accumulables").extractOpt[Seq[JValue]] match {
-      case Some(values) => values.map(accumulableInfoFromJson(_))
+      case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
     }
 
@@ -692,10 +693,10 @@ private[spark] object JsonProtocol {
   def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
     val id = (json \ "ID").extract[Long]
     val name = (json \ "Name").extract[String]
-    val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
-    val value = (json \ "Value").extract[String]
+    val update = (json \ "Update").extractOpt[String]
+    val value = (json \ "Value").extractOpt[String]
     val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
-    AccumulableInfo(id, name, update, value, internal)
+    new AccumulableInfo(id, name, update, value, internal)
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {

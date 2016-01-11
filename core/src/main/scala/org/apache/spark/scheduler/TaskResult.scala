@@ -20,8 +20,7 @@ package org.apache.spark.scheduler
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.collection.Map
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.storage.BlockId
@@ -37,7 +36,7 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark] class DirectTaskResult[T](
     var valueBytes: ByteBuffer,
-    var accumUpdates: Map[Long, Any])
+    var accumUpdates: Seq[AccumulableInfo])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
@@ -48,12 +47,8 @@ private[spark] class DirectTaskResult[T](
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeInt(valueBytes.remaining)
     Utils.writeByteBuffer(valueBytes, out)
-
     out.writeInt(accumUpdates.size)
-    for ((key, value) <- accumUpdates) {
-      out.writeLong(key)
-      out.writeObject(value)
-    }
+    accumUpdates.foreach(out.writeObject)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -66,9 +61,9 @@ private[spark] class DirectTaskResult[T](
     if (numUpdates == 0) {
       accumUpdates = null
     } else {
-      val _accumUpdates = mutable.Map[Long, Any]()
+      val _accumUpdates = new ArrayBuffer[AccumulableInfo]
       for (i <- 0 until numUpdates) {
-        _accumUpdates(in.readLong()) = in.readObject()
+        _accumUpdates += in.readObject.asInstanceOf[AccumulableInfo]
       }
       accumUpdates = _accumUpdates
     }

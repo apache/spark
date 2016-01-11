@@ -21,6 +21,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -116,7 +117,7 @@ case class ExceptionFailure(
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
     exceptionWrapper: Option[ThrowableSerializationWrapper],
-    accumulatorUpdates: Map[Long, Any] = Map[Long, Any](),
+    accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo],
     // always None, kept here for backward compatibility
     metrics: Option[TaskMetrics] = None)
   extends TaskFailedReason {
@@ -128,14 +129,14 @@ case class ExceptionFailure(
    */
   private[spark] def this(
       e: Throwable,
-      accumulatorUpdates: Map[Long, Any],
+      accumUpdates: Seq[AccumulableInfo],
       preserveCause: Boolean) {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
-      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumulatorUpdates)
+      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
   }
 
-  private[spark] def this(e: Throwable, accumulatorUpdates: Map[Long, Any]) {
-    this(e, accumulatorUpdates, preserveCause = true)
+  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
+    this(e, accumUpdates, preserveCause = true)
   }
 
   def exception: Option[Throwable] = exceptionWrapper.flatMap {

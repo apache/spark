@@ -237,7 +237,11 @@ private[v1] object AllStagesResource {
   }
 
   def convertAccumulableInfo(acc: InternalAccumulableInfo): AccumulableInfo = {
-    new AccumulableInfo(acc.id, acc.name, acc.update, acc.value)
+    new AccumulableInfo(
+      acc.id,
+      acc.name,
+      acc.update.map(_.toString),
+      acc.value.map(_.toString).orNull)
   }
 
   def convertUiTaskMetrics(internal: InternalTaskMetrics): TaskMetrics = {

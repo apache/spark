@@ -208,7 +208,7 @@ class DAGScheduler(
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any],
+      accumUpdates: Seq[AccumulableInfo],
       taskInfo: TaskInfo): Unit = {
     eventProcessLoop.post(CompletionEvent(task, reason, result, accumUpdates, taskInfo))
   }
@@ -1078,9 +1078,14 @@ class DAGScheduler(
   private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
     val stage = stageIdToStage(task.stageId)
+    var failedDuringThisOne: AccumulableInfo = null
     if (event.accumUpdates != null) {
       try {
-        event.accumUpdates.foreach { case (id, partialValue) =>
+        event.accumUpdates.foreach { ainfo =>
+          failedDuringThisOne = ainfo
+          val id = ainfo.id
+          assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
+          val partialValue = ainfo.update.get
           // Find the previously registered accumulator and update it
           val acc: Accumulable[Any, Any] = Accumulators.get(id) match {
             case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
@@ -1091,16 +1096,15 @@ class DAGScheduler(
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get
-            val value = s"${acc.value}"
             stage.latestInfo.accumulables(id) =
-              new AccumulableInfo(id, name, None, value, acc.isInternal)
+              new AccumulableInfo(id, name, None, Some(acc.value), acc.isInternal)
             event.taskInfo.accumulables +=
-              new AccumulableInfo(id, name, Some(s"$partialValue"), value, acc.isInternal)
+              new AccumulableInfo(id, name, Some(partialValue), Some(acc.value), acc.isInternal)
           }
         }
       } catch {
         case NonFatal(e) =>
-          logError(s"Failed to update accumulators for ${task.partitionId}", e)
+          logError(s"Failed to update accumulators for task ${task.partitionId}", e)
       }
     }
   }
@@ -1117,7 +1121,9 @@ class DAGScheduler(
    *
    * TODO: write tests here.
    */
-  private def reconstructTaskMetrics(task: Task[_], accumUpdates: Map[Long, Any]): TaskMetrics = {
+  private def reconstructTaskMetrics(
+      task: Task[_],
+      accumUpdates: Seq[AccumulableInfo]): TaskMetrics = {
     if (accumUpdates == null) {
       return null
     }
@@ -1128,17 +1134,20 @@ class DAGScheduler(
       // registered later because they need not satisfy this requirement.
       val initialAccumsMap =
         task.initialAccumulators.map { a => (a.id, a) }.toMap[Long, Accumulator[_]]
-      val (initialAccumUpdates, otherAccumUpdates) =
-        accumUpdates.partition { case (id, _) => initialAccumsMap.contains(id) }
+      val (initialAccumUpdates, otherAccumUpdates) = accumUpdates.partition { a =>
+        assert(a.update.isDefined, "accumulator update from task should have a partial value")
+        initialAccumsMap.contains(a.id)
+      }
       // Note: it is important that we copy the accumulators here since they are used across
       // many tasks and we want to maintain a snapshot of their local task values when we post
       // them to listeners downstream. Otherwise, when a new task comes in the listener may get
       // a different value for an old task.
-      val newInitialAccums = initialAccumUpdates.map { case (id, taskValue) =>
-        initialAccumsMap(id).copy(taskValue)
+      val newInitialAccums = initialAccumUpdates.map { a =>
+        initialAccumsMap(a.id).copy(a.update.get)
       }
-      val otherAccums = otherAccumUpdates.flatMap { case (id, taskValue) =>
-        Accumulators.get(id).map(_.copy(taskValue)).orElse {
+      val otherAccums = otherAccumUpdates.flatMap { a =>
+        val id = a.id
+        Accumulators.get(id).map(_.copy(a.update.get)).orElse {
           logWarning(s"Task $taskId returned unregistered accumulator $id.")
           None
         }

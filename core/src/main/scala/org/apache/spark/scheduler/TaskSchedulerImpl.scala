@@ -400,9 +400,8 @@ private[spark] class TaskSchedulerImpl(
   def handleSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,
-      taskResult: DirectTaskResult[_],
-      resultSize: Long): Unit = synchronized {
-    taskSetManager.handleSuccessfulTask(tid, taskResult, resultSize)
+      taskResult: DirectTaskResult[_]): Unit = synchronized {
+    taskSetManager.handleSuccessfulTask(tid, taskResult)
   }
 
   def handleFailedTask(

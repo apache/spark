@@ -265,7 +265,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     for ((result, i) <- results.zipWithIndex) {
       if (i < taskSet.tasks.size) {
         runEvent(makeCompletionEvent(
-          taskSet.tasks(i), result._1, result._2, Map[Long, Any](accumId -> 1)))
+          taskSet.tasks(i),
+          result._1,
+          result._2,
+          Seq(new AccumulableInfo(accumId, "", Some(1), None, internal = false))))
       }
     }
   }
@@ -342,9 +345,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("equals and hashCode AccumulableInfo") {
-    val accInfo1 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, true)
-    val accInfo2 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, false)
-    val accInfo3 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, false)
+    val accInfo1 = new AccumulableInfo(1, "Accumulable1", Some("delta1"), Some("val1"), true)
+    val accInfo2 = new AccumulableInfo(1, "Accumulable1", Some("delta1"), Some("val1"), false)
+    val accInfo3 = new AccumulableInfo(1, "Accumulable1", Some("delta1"), Some("val1"), false)
     assert(accInfo1 !== accInfo2)
     assert(accInfo2 === accInfo3)
     assert(accInfo2.hashCode() === accInfo3.hashCode())
@@ -1551,7 +1554,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("accumulator not calculated for resubmitted result stage") {
     // just for register
-    val accum = new Accumulator[Int](0, AccumulatorParam.IntAccumulatorParam)
+    val accum = new Accumulator[Int](0, AccumulatorParam.IntAccumulatorParam, Some("namanama"), internal = false)
     val finalRdd = new MyRDD(sc, 1, Nil)
     submit(finalRdd, Array(0))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
@@ -1920,10 +1923,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      extraAccumUpdates: Map[Long, Any] = Map[Long, Any](),
+      extraAccumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo],
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
-    val accumUpdates =
-      task.initialAccumulators.map { a => (a.id, a.zero) }.toMap ++ extraAccumUpdates
+    val accumUpdates = task.initialAccumulators.map {
+      a => new AccumulableInfo(a.id, a.name.get, Some(a.zero), None, a.isInternal)
+    } ++ extraAccumUpdates
     CompletionEvent(task, reason, result, accumUpdates, taskInfo)
   }
 

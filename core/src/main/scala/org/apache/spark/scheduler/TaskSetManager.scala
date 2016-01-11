@@ -609,14 +609,11 @@ private[spark] class TaskSetManager(
   /**
    * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
-  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_], resultSize: Long): Unit = {
+  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
     info.markSuccessful()
     removeRunningTask(tid)
-
-    // Update result size metric in `result`
-    updateResultSize(tid, result, resultSize)
 
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -643,29 +640,6 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Set the task result size in the accumulator updates received from the executors.
-   *
-   * If we did this on the executors we would have to serialize the result again after updating
-   * the size, which is potentially expensive. Also, we would have to do something extra for
-   * indirect task results. It's better to just do all of this in one place on the driver.
-   *
-   * TODO: write a test.
-   */
-  private def updateResultSize(tid: Long, result: DirectTaskResult[_], resultSize: Long): Unit = {
-    val index = taskInfos(tid).index
-    val task = tasks(index)
-    val accumName = InternalAccumulator.RESULT_SIZE
-    val resultSizeAccum = task.initialAccumulators.find { a => a.name == Some(accumName) }
-    assert(resultSizeAccum.isDefined, s"did not find accumulator called '$accumName' in task")
-    val resultSizeAccumId = resultSizeAccum.get.id
-    assert(result.accumUpdates.contains(resultSizeAccumId),
-      s"did not find accumulator called '$accumName' in task result")
-    assert(result.accumUpdates(resultSizeAccumId) == 0L,
-      s"task result size '$accumName' should not have been set on the executors")
-    result.accumUpdates = result.accumUpdates + ((resultSizeAccumId, resultSize))
-  }
-
-  /**
    * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the
    * DAG Scheduler.
    */
@@ -678,7 +652,7 @@ private[spark] class TaskSetManager(
     info.markFailed()
     val index = info.index
     copiesRunning(index) -= 1
-    var accumUpdates: Map[Long, Any] = Map[Long, Any]()
+    var accumUpdates: Seq[AccumulableInfo] = null
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
       reason.asInstanceOf[TaskFailedReason].toErrorString
     val failureException: Option[Throwable] = reason match {
@@ -694,7 +668,7 @@ private[spark] class TaskSetManager(
 
       case ef: ExceptionFailure =>
         // ExceptionFailure's might have accumulator updates
-        accumUpdates = ef.accumulatorUpdates
+        accumUpdates = ef.accumUpdates
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
           logError("Task %s in stage %s (TID %d) had a not serializable result: %s; not retrying"

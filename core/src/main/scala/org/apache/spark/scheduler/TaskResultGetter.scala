@@ -45,7 +45,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   }
 
   def enqueueSuccessfulTask(
-    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
+      taskSetManager: TaskSetManager,
+      tid: Long,
+      serializedData: ByteBuffer) {
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
@@ -82,7 +84,20 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               (deserializedResult, size)
           }
 
-          scheduler.handleSuccessfulTask(taskSetManager, tid, result, size.toLong)
+          // Set the task result size in the accumulator updates received from the executors.
+          // If we did this on the executors we would have to serialize the result again after
+          // updating the size, which is potentially expensive. TODO: write a test.
+          result.accumUpdates = result.accumUpdates.map { ainfo =>
+            if (ainfo.name == InternalAccumulator.RESULT_SIZE) {
+              assert(ainfo.update.getOrElse(0L) == 0L,
+                "task result size should not have been set on the executors")
+              ainfo.copy(update = Some(size.toLong))
+            } else {
+              ainfo
+            }
+          }
+
+          scheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
