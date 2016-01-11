@@ -60,6 +60,7 @@ object ColumnarTestUtils {
       case MAP(_) =>
         ArrayBasedMapData(
           Map(Random.nextInt() -> UTF8String.fromString(Random.nextString(Random.nextInt(32)))))
+      case _ => throw new IllegalArgumentException(s"Unknown column type $columnType")
     }).asInstanceOf[JvmType]
   }
 

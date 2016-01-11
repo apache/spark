@@ -75,8 +75,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select('a)
-        .groupBy('a)('a)
-        .select('a).analyze
+        .groupBy('a)('a).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -91,8 +90,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select('a)
-        .groupBy('a)('a as 'c)
-        .select('c).analyze
+        .groupBy('a)('a as 'c).analyze
 
     comparePlans(optimized, correctAnswer)
   }
