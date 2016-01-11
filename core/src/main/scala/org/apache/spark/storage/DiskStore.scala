@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{IOException, File, FileOutputStream, RandomAccessFile}
+import java.io.{File, FileOutputStream, IOException, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 

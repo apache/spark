@@ -37,7 +37,8 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, Utils}
+import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties,
+  Utils}
 
 /**
  * A input stream that records the times of restore() invoked
@@ -196,7 +197,8 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
  * the checkpointing of a DStream's RDDs as well as the checkpointing of
  * the whole DStream graph.
  */
-class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
+class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
+  with ResetSystemProperties {
 
   var ssc: StreamingContext = null
 
@@ -208,9 +210,12 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
   }
 
   override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) { ssc.stop() }
-    Utils.deleteRecursively(new File(checkpointDir))
+    try {
+      if (ssc != null) { ssc.stop() }
+      Utils.deleteRecursively(new File(checkpointDir))
+    } finally {
+      super.afterFunction()
+    }
   }
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {

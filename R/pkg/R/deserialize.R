@@ -17,6 +17,7 @@
 
 # Utility functions to deserialize objects from Java.
 
+# nolint start
 # Type mapping from Java to R
 #
 # void -> NULL
@@ -32,6 +33,8 @@
 #
 # Array[T] -> list()
 # Object -> jobj
+#
+# nolint end
 
 readObject <- function(con) {
   # Read type first

@@ -30,14 +30,14 @@ import scala.language.implicitConversions
 import scala.language.postfixOps
 
 import com.google.common.io.Files
+import org.mockito.Matchers.anyString
+import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Interruptor
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.mock.MockitoSugar
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
-import org.mockito.Matchers.anyString
-import org.mockito.Mockito._
 
 import org.apache.spark._
 import org.apache.spark.rpc.RpcEnv
@@ -72,13 +72,16 @@ class ExecutorClassLoaderSuite
   }
 
   override def afterAll() {
-    super.afterAll()
-    if (classServer != null) {
-      classServer.stop()
+    try {
+      if (classServer != null) {
+        classServer.stop()
+      }
+      Utils.deleteRecursively(tempDir1)
+      Utils.deleteRecursively(tempDir2)
+      SparkEnv.set(null)
+    } finally {
+      super.afterAll()
     }
-    Utils.deleteRecursively(tempDir1)
-    Utils.deleteRecursively(tempDir2)
-    SparkEnv.set(null)
   }
 
   test("child first") {

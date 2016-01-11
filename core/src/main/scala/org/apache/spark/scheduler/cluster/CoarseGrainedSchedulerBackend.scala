@@ -22,15 +22,15 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.spark.rpc._
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
+import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
-import org.apache.spark.util.{ThreadUtils, SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, SerializableBuffer, ThreadUtils, Utils}
 
 /**
- * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
+ * A scheduler backend that waits for coarse-grained executors to connect.
  * This backend holds onto each executor for the duration of the Spark job rather than relinquishing
  * executors whenever a task is done and asking the scheduler to launch a new executor for
  * each new task. Executors may be launched in a variety of ways, such as Mesos tasks for the

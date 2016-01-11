@@ -71,15 +71,18 @@ class StandaloneDynamicAllocationSuite
   }
 
   override def afterAll(): Unit = {
-    masterRpcEnv.shutdown()
-    workerRpcEnvs.foreach(_.shutdown())
-    master.stop()
-    workers.foreach(_.stop())
-    masterRpcEnv = null
-    workerRpcEnvs = null
-    master = null
-    workers = null
-    super.afterAll()
+    try {
+      masterRpcEnv.shutdown()
+      workerRpcEnvs.foreach(_.shutdown())
+      master.stop()
+      workers.foreach(_.stop())
+      masterRpcEnv = null
+      workerRpcEnvs = null
+      master = null
+      workers = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("dynamic allocation default behavior") {
@@ -471,7 +474,7 @@ class StandaloneDynamicAllocationSuite
     (0 until numWorkers).map { i =>
       val rpcEnv = workerRpcEnvs(i)
       val worker = new Worker(rpcEnv, 0, cores, memory, Array(masterRpcEnv.address),
-        Worker.SYSTEM_NAME + i, Worker.ENDPOINT_NAME, null, conf, securityManager)
+        Worker.ENDPOINT_NAME, null, conf, securityManager)
       rpcEnv.setupEndpoint(Worker.ENDPOINT_NAME, worker)
       worker
     }

@@ -17,20 +17,19 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.beans.{PropertyDescriptor, Introspector}
+import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
-import java.util.{Iterator => JIterator, Map => JMap, List => JList}
+import java.util.{Iterator => JIterator, List => JList, Map => JMap}
 
 import scala.language.existentials
 
 import com.google.common.reflect.TypeToken
 
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -178,19 +177,19 @@ object JavaTypeInference {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath
 
       case c if c == classOf[java.lang.Short] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Integer] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Long] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Double] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Byte] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Float] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
       case c if c == classOf[java.lang.Boolean] =>
-        NewInstance(c, getPath :: Nil, propagateNull = true, ObjectType(c))
+        NewInstance(c, getPath :: Nil, ObjectType(c))
 
       case c if c == classOf[java.sql.Date] =>
         StaticInvoke(
@@ -288,10 +287,17 @@ object JavaTypeInference {
         val setters = properties.map { p =>
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
-          p.getWriteMethod.getName -> constructorFor(fieldType, Some(addToPath(fieldName)))
+          val (_, nullable) = inferDataType(fieldType)
+          val constructor = constructorFor(fieldType, Some(addToPath(fieldName)))
+          val setter = if (nullable) {
+            constructor
+          } else {
+            AssertNotNull(constructor, other.getName, fieldName, fieldType.toString)
+          }
+          p.getWriteMethod.getName -> setter
         }.toMap
 
-        val newInstance = NewInstance(other, Nil, propagateNull = false, ObjectType(other))
+        val newInstance = NewInstance(other, Nil, ObjectType(other), propagateNull = false)
         val result = InitializeJavaBean(newInstance, setters)
 
         if (path.nonEmpty) {

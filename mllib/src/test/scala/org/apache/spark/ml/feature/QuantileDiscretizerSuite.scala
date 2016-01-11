@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{SparkContext, SparkFunSuite}
 
 class QuantileDiscretizerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {

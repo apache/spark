@@ -18,16 +18,16 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 // $example off$
-import org.apache.spark.{SparkConf, SparkContext}
 
 object NaiveBayesExample {
 
-  def main(args: Array[String]) : Unit = {
+  def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("NaiveBayesExample")
     val sc = new SparkContext(conf)
     // $example on$

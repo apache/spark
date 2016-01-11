@@ -595,7 +595,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>snappy</td>
+  <td>lz4</td>
   <td>
     The codec used to compress internal data such as RDD partitions, broadcast variables and
     shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
@@ -750,7 +750,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.memory.offHeap.enabled</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
   </td>
@@ -821,24 +821,6 @@ Apart from these, the following properties are also available, and may be useful
     Size of each piece of a block for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
     too small, <code>BlockManager</code> might take a performance hit.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
-  <td>
-    Which broadcast implementation to use.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.cleaner.ttl</code></td>
-  <td>(infinite)</td>
-  <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
-    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
-    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
-    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
-    this duration will be cleared as well.
   </td>
 </tr>
 <tr>
@@ -1015,14 +997,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for all block managers to listen on. These exist on both the driver and the executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP broadcast server to listen on.
-    This is not relevant for torrent broadcast.
   </td>
 </tr>
 <tr>
@@ -1444,8 +1418,8 @@ Apart from these, the following properties are also available, and may be useful
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            either <code>akka</code> for Akka based connections or <code>fs</code> for broadcast and
-            file server.</p>
+            either <code>akka</code> for Akka based connections or <code>fs</code> for file
+            server.</p>
         </td>
     </tr>
     <tr>
@@ -1598,6 +1572,24 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record on the driver. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
+    on the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record on the receivers. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the data WAL
+    on the receivers.
   </td>
 </tr>
 </table>

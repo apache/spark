@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveDataFrameJoinSuite extends QueryTest with TestHiveSingleton {

@@ -17,30 +17,30 @@
 
 package org.apache.spark.streaming
 
-import java.io.{File, BufferedWriter, OutputStreamWriter}
-import java.net.{Socket, SocketException, ServerSocket}
+import java.io.{BufferedWriter, File, OutputStreamWriter}
+import java.net.{ServerSocket, Socket, SocketException}
 import java.nio.charset.Charset
-import java.util.concurrent.{CountDownLatch, Executors, TimeUnit, ArrayBlockingQueue}
+import java.util.concurrent.{ArrayBlockingQueue, CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQueue}
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer, SynchronizedQueue}
 import scala.language.postfixOps
 
 import com.google.common.io.Files
-import org.apache.hadoop.io.{Text, LongWritable}
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.scheduler.{StreamingListenerBatchCompleted, StreamingListener}
-import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerBatchCompleted}
+import org.apache.spark.util.{ManualClock, Utils}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 

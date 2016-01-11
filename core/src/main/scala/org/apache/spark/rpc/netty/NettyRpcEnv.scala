@@ -257,9 +257,6 @@ private[netty] class NettyRpcEnv(
     dispatcher.getRpcEndpointRef(endpoint)
   }
 
-  override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String =
-    new RpcEndpointAddress(address, endpointName).toString
-
   override def shutdown(): Unit = {
     cleanup()
   }
@@ -427,7 +424,7 @@ private[netty] object NettyRpcEnv extends Logging {
 
 }
 
-private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
+private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
