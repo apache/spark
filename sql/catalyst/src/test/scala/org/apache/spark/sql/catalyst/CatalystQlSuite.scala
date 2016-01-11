@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.Limit
 
 class CatalystQlSuite extends PlanTest {
   val parser = new CatalystQl()
@@ -51,9 +52,14 @@ class CatalystQlSuite extends PlanTest {
   }
 
   test("limit clause: a support in set operation") {
-    parser.createPlan("select key from (select * from t1) x limit 1")
-    parser.createPlan("select key from (select * from t1 limit 2) x limit 1")
-    parser.createPlan("select key from ((select * from testData limit 1) " +
+    val plan1 = parser.createPlan("select key from (select * from t1) x limit 1")
+    assert(plan1.collect{ case w: Limit => w }.size === 1)
+
+    val plan2 = parser.createPlan("select key from (select * from t1 limit 2) x limit 1")
+    assert(plan2.collect{ case w: Limit => w }.size === 2)
+
+    val plan3 = parser.createPlan("select key from ((select * from testData limit 1) " +
       "union all (select * from testData limit 1)) x limit 1")
+    assert(plan3.collect{ case w: Limit => w }.size === 3)
   }
 }
