@@ -76,6 +76,7 @@ case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offs
 
   /** Returns a set of offset ranges between `this` and `other` */
   def to(other: KafkaSourceOffset): Seq[OffsetRange] = {
+
     // Get all the partitions referenced in both sets of offsets
     val allTopicAndPartitions = (this.offsets.keySet ++ other.offsets.keySet).toSeq
 
@@ -88,6 +89,9 @@ case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offs
           if (untilOffset > fromOffset) {
             Some(OffsetRange(tp, fromOffset, untilOffset))
           } else None
+
+        // TODO: Support cases where topic+partitions are missing from one. Can happen in case of
+        // repartitioning.
 
         case _ =>
           None
@@ -102,6 +106,8 @@ case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offs
 
 /** Companion object of the [[KafkaSourceOffset]] */
 private[kafka] object KafkaSourceOffset {
+
+  /** Returns [[KafkaSourceOffset]] from a Option[Offset]. */
   def from(offsetOption: Option[Offset]): Option[KafkaSourceOffset] = {
     offsetOption.map { offset =>
       offset match {
@@ -113,12 +119,17 @@ private[kafka] object KafkaSourceOffset {
     }
   }
 
+  /**
+   * Returns [[KafkaSourceOffset]] from a variable sequence of (topic, partitionId, offset)
+   * tuples.
+   */
   def apply(data: (String, Int, Long)*): KafkaSourceOffset = {
     val map = data.map { case (topic, partition, offset) =>
         TopicAndPartition(topic, partition) -> offset }.toMap
     KafkaSourceOffset(map)
   }
 }
+
 
 /** A [[Source]] that reads data from Kafka */
 private[kafka] case class KafkaSource(
@@ -137,9 +148,7 @@ private[kafka] case class KafkaSource(
 
   override def schema: StructType = encoder.schema
 
-  /**
-    * Returns the next batch of data that is available after `start`, if any is available.
-    */
+  /** Returns the next batch of data that is available after `start`, if any is available. */
   override def getNextBatch(start: Option[Offset]): Option[Batch] = {
     val beginOffset: KafkaSourceOffset = KafkaSourceOffset.from(start).getOrElse(initialOffsets)
     val latestOffset = getLatestOffsets()
