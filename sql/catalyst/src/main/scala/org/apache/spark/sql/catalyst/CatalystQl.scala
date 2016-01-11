@@ -47,7 +47,11 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
     }
   }
 
-  protected  def safeParse[T](sql: String, ast: ASTNode)(toResult: ASTNode => T): T = {
+  /**
+   * The safeParse method allows a user to focus on the parsing/AST transformation logic. This
+   * method will take care of possible errors during the parsing process.
+   */
+  protected def safeParse[T](sql: String, ast: ASTNode)(toResult: ASTNode => T): T = {
     try {
       toResult(ast)
     } catch {
