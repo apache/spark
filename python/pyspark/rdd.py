@@ -1926,6 +1926,36 @@ class RDD(object):
         """
         return python_cogroup((self, other), numPartitions)
 
+    def disjunction(self, other, numPartitions=None):
+      """
+      For each key-value pair in C{self} and C{other}, return a resulting RDD that
+      contains the values which are not both in C{self} and C{other}.
+
+      >>> x = sc.parallelize([("a", 1), ("b", 4)])
+      >>> y = sc.parallelize([("a", 2), ("d", 5)])
+      >>> x.disjunction(y).collect()
+      [('b', 4), ('d', 5)]
+      """
+      return self.map(lambda v: (v, None)) \
+          .cogroup(other.map(lambda v: (v, None))) \
+          .filter(lambda k_vs: not all(k_vs[1])) \
+          .keys()
+
+    def difference(self, other, numPartitions=None):
+      """
+      For each key-value pair in C{self}, return a resulting RDD that
+      contains all key-value pairs for which the key does not exist in C{other}.
+
+      >>> x = sc.parallelize([("a", 1), ("b", 4)])
+      >>> y = sc.parallelize([("a", 2)])
+      >>> x.difference(y).collect()
+      [('a', 1)]
+      """
+      return self.map(lambda v: (v, None)) \
+          .cogroup(other.map(lambda v: (v, None))) \
+          .filter(lambda k_vs: not len(k_vs[1][1])) \
+          .keys()
+
     def sampleByKey(self, withReplacement, fractions, seed=None):
         """
         Return a subset of this RDD sampled by key (via stratified sampling).

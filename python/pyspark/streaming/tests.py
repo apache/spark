@@ -348,6 +348,26 @@ class BasicOperationTests(PySparkStreamingTestCase):
                     [("a", ([1, 1], [1, 1])), ("b", ([1], [1])), ("", ([1, 1], [1, 2]))]]
         self._test_func(input, func, expected, sort=True, input2=input2)
 
+    def test_disjunction(self):
+        input = [[(1, 1), (2, 1), (3, 1)]]
+        input2 = [[(1, 1), (3, 1), (4, 1)]]
+
+        def func(d1, d2):
+            return d1.disjunction(d2)
+
+        expected = [[(2, 1), (4, 1)]]
+        self._test_func(input, func, expected, True, input2)
+
+    def test_difference(self):
+        input = [[(1, 1), (2, 1), (3, 1)]]
+        input2 = [[(1, 1), (3, 1), (4, 1)]]
+
+        def func(d1, d2):
+            return d1.difference(d2)
+
+        expected = [[(2, 1)]]
+        self._test_func(input, func, expected, True, input2)
+
     def test_join(self):
         input = [[('a', 1), ('b', 2)]]
         input2 = [[('b', 3), ('c', 4)]]
