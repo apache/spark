@@ -59,7 +59,7 @@ private[mesos] class MesosClusterDispatcher(
     case _ => throw new IllegalArgumentException("Unsupported recovery mode: " + recoveryMode)
   }
 
-  private val scheduler = new MesosClusterScheduler(engineFactory, conf)
+  private val scheduler = new MesosClusterScheduler(engineFactory, conf, args.driverFailOver)
 
   private val server = new MesosRestServer(args.host, args.port, conf, scheduler)
   private val webUi = new MesosClusterUI(

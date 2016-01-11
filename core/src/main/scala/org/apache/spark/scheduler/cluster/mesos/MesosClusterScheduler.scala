@@ -114,7 +114,8 @@ private[spark] class MesosDriverState(
  */
 private[spark] class MesosClusterScheduler(
     engineFactory: MesosClusterPersistenceEngineFactory,
-    conf: SparkConf)
+    conf: SparkConf,
+    driverFailOver: Boolean = true)
   extends Scheduler with MesosSchedulerUtils {
   var frameworkUrl: String = _
   private val metricsSystem =
@@ -318,7 +319,7 @@ private[spark] class MesosClusterScheduler(
     ready = false
     metricsSystem.report()
     metricsSystem.stop()
-    mesosDriver.stop(true)
+    mesosDriver.stop(driverFailOver)
   }
 
   override def registered(
