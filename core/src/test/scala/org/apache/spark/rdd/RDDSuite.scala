@@ -482,6 +482,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(nums.take(501) === (1 to 501).toArray)
     assert(nums.take(999) === (1 to 999).toArray)
     assert(nums.take(1000) === (1 to 999).toArray)
+
+    nums = sc.parallelize(1 to 2, 2)
+    assert(nums.take(2147483638).size === 2)
+    assert(nums.takeAsync(2147483638).get.size === 2)
   }
 
   test("top with predefined ordering") {

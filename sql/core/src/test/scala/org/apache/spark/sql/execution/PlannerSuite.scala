@@ -417,6 +417,45 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("EnsureRequirements eliminates Exchange if child has Exchange with same partitioning") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
+    assert(!childPartitioning.satisfies(distribution))
+    val inputPlan = Exchange(finalPartitioning,
+      DummySparkPlan(
+        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
+        requiredChildDistribution = Seq(distribution),
+        requiredChildOrdering = Seq(Seq.empty)),
+        None)
+
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case e: Exchange => true }.size == 2) {
+      fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements does not eliminate Exchange with different partitioning") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    // Number of partitions differ
+    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 8)
+    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
+    assert(!childPartitioning.satisfies(distribution))
+    val inputPlan = Exchange(finalPartitioning,
+      DummySparkPlan(
+        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
+        requiredChildDistribution = Seq(distribution),
+        requiredChildOrdering = Seq(Seq.empty)),
+      None)
+
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case e: Exchange => true }.size == 1) {
+      fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
+    }
+  }
+
   // ---------------------------------------------------------------------------------------------
 }
 

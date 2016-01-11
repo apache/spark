@@ -17,21 +17,21 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Iterable => JIterable, Long => JLong}
+import java.{lang => jl}
+import java.lang.{Iterable => JIterable}
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.Partitioner
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils}
+import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
@@ -847,7 +847,7 @@ object JavaPairDStream {
   }
 
   def scalaToJavaLong[K: ClassTag](dstream: JavaPairDStream[K, Long])
-  : JavaPairDStream[K, JLong] = {
-    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
+  : JavaPairDStream[K, jl.Long] = {
+    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(jl.Long.valueOf)
   }
 }
