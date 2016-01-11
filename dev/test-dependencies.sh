@@ -76,7 +76,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
     HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
   fi
   echo "Performing Maven install for $HADOOP_PROFILE"
-  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install -q
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install clean -q
 
   echo "Performing Maven validate for $HADOOP_PROFILE"
   $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE validate -q

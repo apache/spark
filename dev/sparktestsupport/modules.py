@@ -413,7 +413,7 @@ ec2 = Module(
 # No other modules should directly depend on this module.
 root = Module(
     name="root",
-    dependencies=[],
+    dependencies=[build],  # Changes to build should trigger all tests.
     source_file_regexes=[],
     # In order to run all of the tests, enable every test profile:
     build_profile_flags=list(set(
