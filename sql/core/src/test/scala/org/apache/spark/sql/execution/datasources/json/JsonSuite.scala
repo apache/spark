@@ -83,9 +83,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val doubleNumber: Double = 1.7976931348623157E308d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
 
-    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber)),
+    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber * 1000L)),
         enforceCorrectType(intNumber, TimestampType))
-    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong)),
+    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong * 1000L)),
         enforceCorrectType(intNumber.toLong, TimestampType))
     val strTime = "2014-09-30 12:34:56"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(strTime)),
@@ -1465,4 +1465,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  test("Casting long as timestamp") {
+    withTempTable("jsonTable") {
+      val schema = (new StructType).add("ts", TimestampType)
+      val jsonDF = sqlContext.read.schema(schema).json(timestampAsLong)
+
+      jsonDF.registerTempTable("jsonTable")
+
+      checkAnswer(
+        sql("select ts from jsonTable"),
+        Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05"))
+      )
+    }
+  }
 }
