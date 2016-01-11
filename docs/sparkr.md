@@ -148,7 +148,7 @@ printSchema(people)
 </div>
 
 The data sources API can also be used to save out DataFrames into multiple file formats. For example we can save the DataFrame from the previous example
-to a Parquet file using `write.df`
+to a Parquet file using `write.df` (Until Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.7 to `error` to match the Scala API)
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -384,5 +384,13 @@ The following functions are masked by the SparkR package:
   </tr>
 </table>
 
+Since part of SparkR is modeled on the `dplyr` package, certain functions in SparkR share the same names with those in `dplyr`. Depending on the load order of the two packages, some functions from the package loaded first are masked by those in the package loaded after. In such case, prefix such calls with the package name, for instance, `SparkR::cume_dist(x)` or `dplyr::cume_dist(x)`.
+
 You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/search.html)
 
+
+# Migration Guide
+
+## Upgrading From SparkR 1.5.x to 1.6
+
+ - Before Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.

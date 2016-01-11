@@ -86,7 +86,7 @@ class Transformer(Params):
     @abstractmethod
     def _transform(self, dataset):
         """
-        Transforms the input dataset with optional parameters.
+        Transforms the input dataset.
 
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`

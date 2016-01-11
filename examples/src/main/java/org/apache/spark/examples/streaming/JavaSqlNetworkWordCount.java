@@ -26,7 +26,7 @@ import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.Function2;
+import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.api.java.StorageLevels;
@@ -78,13 +78,14 @@ public final class JavaSqlNetworkWordCount {
     });
 
     // Convert RDDs of the words DStream to DataFrame and run SQL query
-    words.foreachRDD(new Function2<JavaRDD<String>, Time, Void>() {
+    words.foreachRDD(new VoidFunction2<JavaRDD<String>, Time>() {
       @Override
-      public Void call(JavaRDD<String> rdd, Time time) {
+      public void call(JavaRDD<String> rdd, Time time) {
         SQLContext sqlContext = JavaSQLContextSingleton.getInstance(rdd.context());
 
         // Convert JavaRDD[String] to JavaRDD[bean class] to DataFrame
         JavaRDD<JavaRecord> rowRDD = rdd.map(new Function<String, JavaRecord>() {
+          @Override
           public JavaRecord call(String word) {
             JavaRecord record = new JavaRecord();
             record.setWord(word);
@@ -101,7 +102,6 @@ public final class JavaSqlNetworkWordCount {
             sqlContext.sql("select word, count(*) as total from words group by word");
         System.out.println("========= " + time + "=========");
         wordCountsDataFrame.show();
-        return null;
       }
     });
 
@@ -112,8 +112,8 @@ public final class JavaSqlNetworkWordCount {
 
 /** Lazily instantiated singleton instance of SQLContext */
 class JavaSQLContextSingleton {
-  static private transient SQLContext instance = null;
-  static public SQLContext getInstance(SparkContext sparkContext) {
+  private static transient SQLContext instance = null;
+  public static SQLContext getInstance(SparkContext sparkContext) {
     if (instance == null) {
       instance = new SQLContext(sparkContext);
     }

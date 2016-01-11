@@ -17,6 +17,7 @@
 
 # Utility functions to serialize R objects so they can be read in Java.
 
+# nolint start
 # Type mapping from R to Java
 #
 # NULL -> Void
@@ -31,6 +32,7 @@
 # list[T] -> Array[T], where T is one of above mentioned types
 # environment -> Map[String, T], where T is a native type
 # jobj -> Object, where jobj is an object created in the backend
+# nolint end
 
 getSerdeType <- function(object) {
   type <- class(object)[[1]]

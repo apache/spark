@@ -33,7 +33,6 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import com.google.common.collect.Sets;
 
@@ -43,6 +42,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.api.java.*;
@@ -772,8 +772,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testForeachRDD() {
-    final Accumulator<Integer> accumRdd = ssc.sc().accumulator(0);
-    final Accumulator<Integer> accumEle = ssc.sc().accumulator(0);
+    final Accumulator<Integer> accumRdd = ssc.sparkContext().accumulator(0);
+    final Accumulator<Integer> accumEle = ssc.sparkContext().accumulator(0);
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,1,1),
         Arrays.asList(1,1,1));
@@ -1332,12 +1332,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   public void testUpdateStateByKeyWithInitial() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
 
-    List<Tuple2<String, Integer>> initial = Arrays.asList (
+    List<Tuple2<String, Integer>> initial = Arrays.asList(
         new Tuple2<>("california", 1),
             new Tuple2<>("new york", 2));
 
     JavaRDD<Tuple2<String, Integer>> tmpRDD = ssc.sparkContext().parallelize(initial);
-    JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD (tmpRDD);
+    JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD(tmpRDD);
 
     List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
         Arrays.asList(new Tuple2<>("california", 5),

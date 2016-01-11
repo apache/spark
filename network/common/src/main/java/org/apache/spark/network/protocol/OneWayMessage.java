@@ -17,21 +17,21 @@
 
 package org.apache.spark.network.protocol;
 
-import java.util.Arrays;
-
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
  * A RPC that does not expect a reply, which is handled by a remote
  * {@link org.apache.spark.network.server.RpcHandler}.
  */
-public final class OneWayMessage implements RequestMessage {
-  /** Serialized message to send to remote RpcHandler. */
-  public final byte[] message;
+public final class OneWayMessage extends AbstractMessage implements RequestMessage {
 
-  public OneWayMessage(byte[] message) {
-    this.message = message;
+  public OneWayMessage(ManagedBuffer body) {
+    super(body, true);
   }
 
   @Override
@@ -39,29 +39,34 @@ public final class OneWayMessage implements RequestMessage {
 
   @Override
   public int encodedLength() {
-    return Encoders.ByteArrays.encodedLength(message);
+    // The integer (a.k.a. the body size) is not really used, since that information is already
+    // encoded in the frame length. But this maintains backwards compatibility with versions of
+    // RpcRequest that use Encoders.ByteArrays.
+    return 4;
   }
 
   @Override
   public void encode(ByteBuf buf) {
-    Encoders.ByteArrays.encode(buf, message);
+    // See comment in encodedLength().
+    buf.writeInt((int) body().size());
   }
 
   public static OneWayMessage decode(ByteBuf buf) {
-    byte[] message = Encoders.ByteArrays.decode(buf);
-    return new OneWayMessage(message);
+    // See comment in encodedLength().
+    buf.readInt();
+    return new OneWayMessage(new NettyManagedBuffer(buf.retain()));
   }
 
   @Override
   public int hashCode() {
-    return Arrays.hashCode(message);
+    return Objects.hashCode(body());
   }
 
   @Override
   public boolean equals(Object other) {
     if (other instanceof OneWayMessage) {
       OneWayMessage o = (OneWayMessage) other;
-      return Arrays.equals(message, o.message);
+      return super.equals(o);
     }
     return false;
   }
@@ -69,7 +74,7 @@ public final class OneWayMessage implements RequestMessage {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("message", message)
+      .add("body", body())
       .toString();
   }
 }

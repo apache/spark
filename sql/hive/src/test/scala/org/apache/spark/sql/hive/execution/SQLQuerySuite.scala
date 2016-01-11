@@ -22,13 +22,13 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{TableIdentifier, DefaultParserDialect}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.{DefaultParserDialect, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, FunctionRegistry}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -913,6 +913,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         (5, "c", 9, 9),
         (6, "c", 10, 10)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("window function: distinct should not be silently ignored") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    val e = intercept[AnalysisException] {
+      sql(
+        """
+          |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
+          |from windowData
+        """.stripMargin)
+    }
+    assert(e.getMessage.contains("Distinct window functions are not supported"))
   }
 
   test("window function: expressions in arguments of a window functions") {

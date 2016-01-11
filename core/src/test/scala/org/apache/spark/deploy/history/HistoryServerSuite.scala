@@ -30,6 +30,7 @@ import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.util.ResetSystemProperties
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -43,7 +44,7 @@ import org.apache.spark.ui.{SparkUI, UIUtils}
  * are considered part of Spark's public api.
  */
 class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils {
+  with JsonTestUtils with ResetSystemProperties {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
