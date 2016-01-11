@@ -23,7 +23,7 @@ class BigQueryOperator(BaseOperator):
         :type bql: Can receive a str representing a sql statement,
             a list of str (sql statements), or reference to a template file.
             Template reference are recognized by str ending in '.sql'
-        :param destination_dataset_table: A dotted dataset.table that, if set, 
+        :param destination_dataset_table: A dotted dataset.table that, if set,
             will store the results of the query.
         :type destination_dataset_table: string
         :param bigquery_conn_id: reference to a specific Vertica database

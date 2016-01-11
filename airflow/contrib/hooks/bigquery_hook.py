@@ -75,8 +75,11 @@ class BigQueryHook(BaseHook):
         else:
             return gbq_parse_data(schema, [])
 
-    # TODO docs
     def run(self, bql, destination_dataset_table = False):
+        """
+        Executes a BigQuery SQL query. Either returns results and schema, or
+        stores results in a BigQuery table, if destination is set.
+        """
         connection_info = self.get_connection(self.bigquery_conn_id)
         connection_extras = connection_info.extra_dejson
         project = connection_extras['project']
@@ -98,8 +101,14 @@ class BigQueryHook(BaseHook):
 
         return self.run_with_configuration(configuration)
 
-    # TODO docs
     def run_with_configuration(self, configuration):
+        """
+        Executes a BigQuery SQL query.
+
+        :param configuration: The configuration parameter maps directly to
+        BigQuery's configuration field in the job object. See
+        https://cloud.google.com/bigquery/docs/reference/v2/jobs for details.
+        """
         service = self.get_conn()
         connection_info = self.get_connection(self.bigquery_conn_id)
         connection_extras = connection_info.extra_dejson
