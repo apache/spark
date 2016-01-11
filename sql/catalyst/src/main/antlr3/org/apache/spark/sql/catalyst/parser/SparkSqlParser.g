@@ -651,7 +651,7 @@ import java.util.HashMap;
     return false;
   }
   private CommonTree throwSetOpException() throws RecognitionException {
-    throw new FailedPredicateException(input, "orderByClause clusterByClause distributeByClause sortByClause limitClause can only be applied to the whole union.", "");
+    throw new FailedPredicateException(input, "orderByClause clusterByClause distributeByClause sortByClause can only be applied to the whole union.", "");
   }
   private CommonTree throwColumnNameException() throws RecognitionException {
     throw new FailedPredicateException(input, Arrays.toString(excludedCharForColumnName) + " can not be used in column name in create table statement.", "");
@@ -2250,7 +2250,7 @@ selectStatement[boolean topLevel]
    (set=setOpSelectStatement[$selectStatement.tree, topLevel])?
    -> {set == null}?
       {$selectStatement.tree}
-   -> {o==null && c==null && d==null && sort==null && l==null}?
+   -> {o==null && c==null && d==null && sort==null}?
       {$set.tree}
    -> {throwSetOpException()}
    ;
@@ -2322,8 +2322,9 @@ simpleSelectStatement
    groupByClause?
    havingClause?
    ((window_clause) => window_clause)?
+   ((limitClause) => limitClause)?
    -> ^(TOK_QUERY fromClause? ^(TOK_INSERT ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
-                     selectClause whereClause? groupByClause? havingClause? window_clause?))
+                     selectClause whereClause? groupByClause? havingClause? window_clause? limitClause?))
    ;
 
 selectStatementWithCTE

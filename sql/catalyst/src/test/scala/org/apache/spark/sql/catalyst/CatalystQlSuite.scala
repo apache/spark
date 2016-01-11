@@ -49,4 +49,11 @@ class CatalystQlSuite extends PlanTest {
     parser.createPlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
   }
+
+  test("limit clause: a support in set operation") {
+    parser.createPlan("select key from (select * from t1) x limit 1")
+    parser.createPlan("select key from (select * from t1 limit 2) x limit 1")
+    parser.createPlan("select key from ((select * from testData limit 1) " +
+      "union all (select * from testData limit 1)) x limit 1")
+  }
 }
