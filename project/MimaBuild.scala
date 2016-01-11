@@ -99,8 +99,8 @@ object MimaBuild {
     mimaDefaultSettings ++
     Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
       binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value),
-      sbt.Keys.resolvers :=
-        Seq("MQTT Repository" at "https://repo.eclipse.org/content/repositories/paho-releases"))
+      sbt.Keys.resolvers +=
+        "MQTT Repository" at "https://repo.eclipse.org/content/repositories/paho-releases")
   }
 
 }
