@@ -2500,9 +2500,9 @@ setMethod("write.jdbc",
           signature(x = "DataFrame", url = "character", tableName = "character"),
           function(x, url, tableName, mode = "error", ...){
             jmode <- convertToJSaveMode(mode)
-            jprops <- envToJProperties(varargsToEnv(...))
+            jprops <- varargsToJProperties(...)
             write <- callJMethod(x@sdf, "write")
-            callJMethod(write, "mode", jmode)
+            write <- callJMethod(write, "mode", jmode)
             invisible(callJMethod(write, "jdbc", url, tableName, jprops))
           })
 

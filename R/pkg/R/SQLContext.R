@@ -622,7 +622,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 read.jdbc <- function(sqlContext, url, tableName,
                       partitionColumn = NULL, lowerBound = NULL, upperBound = NULL,
                       numPartitions = 0L, predicates = list(), ...) {
-  jprops <- envToJProperties(varargsToEnv(...))
+  jprops <- varargsToJProperties(...)
 
   read <- callJMethod(sqlContext, "read")
   if (!is.null(partitionColumn)) {

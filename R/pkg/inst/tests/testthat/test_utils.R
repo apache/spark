@@ -141,12 +141,17 @@ test_that("cleanClosure on R functions", {
   expect_equal(get("aBroadcast", envir = env, inherits = FALSE), aBroadcast)
 })
 
-test_that("envToJProperties", {
-  e <- new.env()
-  e[["abc"]] <- "123"
-  jprops <- envToJProperties(e)
+test_that("varargsToJProperties", {
+  jprops <- varargsToJProperties(abc = "123")
   expect_true(class(jprops) == "jobj")
   expect_equal(callJMethod(jprops, "getProperty", "abc"), "123")
+
+  jprops <- varargsToJProperties(abc = "abc", b = b)
+  expect_equal(callJMethod(jprops, "getProperty", "abc"), "abc")
+  expect_equal(callJMethod(jprops, "getProperty", "b"), "b")
+
+  jprops <- varargsToJProperties()
+  expect_equal(callJMethod(jprops, "size"), 0L)
 })
 
 test_that("convertToJSaveMode", {

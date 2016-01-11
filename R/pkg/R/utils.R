@@ -651,13 +651,13 @@ convertToJSaveMode <- function(mode) {
  jmode
 }
 
-envToJProperties <- function(env) {
+varargsToJProperties <- function(...) {
+  pairs <- list(...)
   props <- newJObject("java.util.Properties")
-  if (length(env) > 0) {
-    lapply(ls(env), function(k) {
-      callJMethod(props, "setProperty", as.character(k), as.character(env[[k]]))
+  if (length(pairs) > 0) {
+    lapply(ls(pairs), function(k) {
+      callJMethod(props, "setProperty", as.character(k), as.character(pairs[[k]]))
     })
   }
   props
 }
-
