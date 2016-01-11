@@ -21,9 +21,9 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Since, Experimental}
-import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
@@ -54,24 +54,32 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
  * and uses evaluation metric on the validation set to select the best model.
  * Similar to [[CrossValidator]], but only splits the set once.
  */
+@Since("1.5.0")
 @Experimental
-class TrainValidationSplit(override val uid: String) extends Estimator[TrainValidationSplitModel]
+class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: String)
+  extends Estimator[TrainValidationSplitModel]
   with TrainValidationSplitParams with MLWritable with Logging {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setTrainRatio(value: Double): this.type = set(trainRatio, value)
 
+  @Since("1.5.0")
   override def fit(dataset: DataFrame): TrainValidationSplitModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -111,10 +119,13 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     $(estimator).transformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def validateParams(): Unit = {
     super.validateParams()
     val est = $(estimator)
@@ -123,6 +134,7 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): TrainValidationSplit = {
     val copied = defaultCopy(extra).asInstanceOf[TrainValidationSplit]
     if (copied.isDefined(estimator)) {
@@ -137,17 +149,17 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
   // Currently, this only works if all [[Param]]s in [[estimatorParamMaps]] are simple types.
   // E.g., this may fail if a [[Param]] is an instance of an [[Estimator]].
   // However, this case should be unusual.
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter = new TrainValidationSplit.TrainValidationSplitWriter(this)
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[TrainValidationSplit] = new TrainValidationSplitReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): TrainValidationSplit = super.load(path)
 
   private[TrainValidationSplit]
@@ -188,26 +200,32 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
  * @param bestModel Estimator determined best model.
  * @param validationMetrics Evaluated validation metrics.
  */
+@Since("1.5.0")
 @Experimental
 class TrainValidationSplitModel private[ml] (
-    override val uid: String,
-    val bestModel: Model[_],
-    val validationMetrics: Array[Double])
+    @Since("1.5.0") override val uid: String,
+    @Since("1.5.0") val bestModel: Model[_],
+    @Since("1.5.0") val validationMetrics: Array[Double])
   extends Model[TrainValidationSplitModel] with TrainValidationSplitParams with MLWritable {
 
+  @Since("1.5.0")
   override def validateParams(): Unit = {
     bestModel.validateParams()
   }
 
+  @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     bestModel.transformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): TrainValidationSplitModel = {
     val copied = new TrainValidationSplitModel (
       uid,
@@ -216,17 +234,17 @@ class TrainValidationSplitModel private[ml] (
     copyValues(copied, extra)
   }
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter = new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[TrainValidationSplitModel] = new TrainValidationSplitModelReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): TrainValidationSplitModel = super.load(path)
 
   private[TrainValidationSplitModel]

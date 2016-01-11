@@ -18,34 +18,49 @@
 package org.apache.spark.mllib.stat;
 
 import java.io.Serializable;
-
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.apache.spark.streaming.JavaTestUtils.*;
 import static org.junit.Assert.assertEquals;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.stat.test.BinarySample;
 import org.apache.spark.mllib.stat.test.ChiSqTestResult;
 import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
+import org.apache.spark.mllib.stat.test.StreamingTest;
+import org.apache.spark.streaming.Duration;
+import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 public class JavaStatisticsSuite implements Serializable {
   private transient JavaSparkContext sc;
+  private transient JavaStreamingContext ssc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaStatistics");
+    SparkConf conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("JavaStatistics")
+      .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
+    sc = new JavaSparkContext(conf);
+    ssc = new JavaStreamingContext(sc, new Duration(1000));
+    ssc.checkpoint("checkpoint");
   }
 
   @After
   public void tearDown() {
-    sc.stop();
+    ssc.stop();
+    ssc = null;
     sc = null;
   }
 
@@ -75,5 +90,22 @@ public class JavaStatisticsSuite implements Serializable {
       new LabeledPoint(1.0, Vectors.dense(1.5, 5.1)),
       new LabeledPoint(0.0, Vectors.dense(2.4, 8.1))));
     ChiSqTestResult[] testResults = Statistics.chiSqTest(data);
+  }
+
+  @Test
+  public void streamingTest() {
+    List<BinarySample> trainingBatch = Arrays.asList(
+      new BinarySample(true, 1.0),
+      new BinarySample(false, 2.0));
+    JavaDStream<BinarySample> training =
+      attachTestInputStream(ssc, Arrays.asList(trainingBatch, trainingBatch), 2);
+    int numBatches = 2;
+    StreamingTest model = new StreamingTest()
+      .setWindowSize(0)
+      .setPeacePeriod(0)
+      .setTestMethod("welch");
+    model.registerStream(training);
+    attachTestOutputStream(training);
+    runStreams(ssc, numBatches, numBatches);
   }
 }

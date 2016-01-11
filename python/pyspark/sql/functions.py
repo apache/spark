@@ -149,12 +149,8 @@ _binary_mathfunctions = {
 }
 
 _window_functions = {
-    'rowNumber':
-        """.. note:: Deprecated in 1.6, use row_number instead.""",
     'row_number':
         """returns a sequential number starting at 1 within a window partition.""",
-    'denseRank':
-        """.. note:: Deprecated in 1.6, use dense_rank instead.""",
     'dense_rank':
         """returns the rank of rows within a window partition, without any gaps.
 
@@ -171,13 +167,9 @@ _window_functions = {
         place and that the next person came in third.
 
         This is equivalent to the RANK function in SQL.""",
-    'cumeDist':
-        """.. note:: Deprecated in 1.6, use cume_dist instead.""",
     'cume_dist':
         """returns the cumulative distribution of values within a window partition,
         i.e. the fraction of rows that are below the current row.""",
-    'percentRank':
-        """.. note:: Deprecated in 1.6, use percent_rank instead.""",
     'percent_rank':
         """returns the relative rank (i.e. percentile) of rows within a window partition.""",
 }
@@ -286,14 +278,6 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
-@since(1.4)
-def monotonicallyIncreasingId():
-    """
-    .. note:: Deprecated in 1.6, use monotonically_increasing_id instead.
-    """
-    return monotonically_increasing_id()
-
-
 @since(1.6)
 def input_file_name():
     """Creates a string column for the file name of the current Spark task.
@@ -305,6 +289,10 @@ def input_file_name():
 @since(1.6)
 def isnan(col):
     """An expression that returns true iff the column is NaN.
+
+    >>> df = sqlContext.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
+    >>> df.select(isnan("a").alias("r1"), isnan(df.a).alias("r2")).collect()
+    [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
@@ -313,6 +301,10 @@ def isnan(col):
 @since(1.6)
 def isnull(col):
     """An expression that returns true iff the column is null.
+
+    >>> df = sqlContext.createDataFrame([(1, None), (None, 2)], ("a", "b"))
+    >>> df.select(isnull("a").alias("r1"), isnull(df.a).alias("r2")).collect()
+    [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
@@ -344,6 +336,10 @@ def nanvl(col1, col2):
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
     Both inputs should be floating point columns (DoubleType or FloatType).
+
+    >>> df = sqlContext.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
+    >>> df.select(nanvl("a", "b").alias("r1"), nanvl(df.a, df.b).alias("r2")).collect()
+    [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
@@ -420,14 +416,6 @@ def shiftRightUnsigned(col, numBits):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
     return Column(jc)
-
-
-@since(1.4)
-def sparkPartitionId():
-    """
-    .. note:: Deprecated in 1.6, use spark_partition_id instead.
-    """
-    return spark_partition_id()
 
 
 @since(1.6)
@@ -1030,6 +1018,18 @@ def sha2(col, numBits):
     return Column(jc)
 
 
+@since(2.0)
+def hash(*cols):
+    """Calculates the hash code of given columns, and returns the result as a int column.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(hash('a').alias('hash')).collect()
+    [Row(hash=1358996357)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.hash(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
@@ -1041,7 +1041,7 @@ _string_functions = {
     'lower': 'Converts a string column to lower case.',
     'upper': 'Converts a string column to upper case.',
     'reverse': 'Reverses the string column and returns it as a new string column.',
-    'ltrim': 'Trim the spaces from right end for the specified string value.',
+    'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
 }
@@ -1460,6 +1460,7 @@ def explode(col):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(1.6)
 def get_json_object(col, path):
     """
@@ -1468,22 +1469,33 @@ def get_json_object(col, path):
 
     :param col: string column in json format
     :param path: path to the json object to extract
+
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
+    >>> df = sqlContext.createDataFrame(data, ("key", "jstring"))
+    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \
+                          get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
+    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.get_json_object(_to_java_column(col), path)
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(1.6)
-def json_tuple(col, fields):
+def json_tuple(col, *fields):
     """Creates a new row for a json column according to the given field names.
 
     :param col: string column in json format
     :param fields: list of fields to extract
 
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
+    >>> df = sqlContext.createDataFrame(data, ("key", "jstring"))
+    >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
+    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.json_tuple(_to_java_column(col), fields)
+    jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
     return Column(jc)
 
 

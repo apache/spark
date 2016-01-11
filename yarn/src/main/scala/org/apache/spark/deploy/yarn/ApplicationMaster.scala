@@ -17,23 +17,22 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.util.control.NonFatal
-
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
+
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
-import org.apache.spark.rpc._
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv,
-  SparkException, SparkUserAppException}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
@@ -116,6 +115,10 @@ private[spark] class ApplicationMaster(
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
   private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
+
+  def getAttemptId(): ApplicationAttemptId = {
+    client.getAttemptId()
+  }
 
   final def run(): Int = {
     try {
@@ -277,10 +280,10 @@ private[spark] class ApplicationMaster(
         .getOrElse("")
 
     val _sparkConf = if (sc != null) sc.getConf else sparkConf
-    val driverUrl = _rpcEnv.uriOf(
-        SparkEnv.driverActorSystemName,
-        RpcAddress(_sparkConf.get("spark.driver.host"), _sparkConf.get("spark.driver.port").toInt),
-        CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    val driverUrl = RpcEndpointAddress(
+      _sparkConf.get("spark.driver.host"),
+      _sparkConf.get("spark.driver.port").toInt,
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     allocator = client.register(driverUrl,
       driverRef,
       yarnConf,
@@ -306,7 +309,6 @@ private[spark] class ApplicationMaster(
       port: String,
       isClusterMode: Boolean): RpcEndpointRef = {
     val driverEndpoint = rpcEnv.setupEndpointRef(
-      SparkEnv.driverActorSystemName,
       RpcAddress(host, port.toInt),
       YarnSchedulerBackend.ENDPOINT_NAME)
     amEndpoint =
@@ -372,7 +374,14 @@ private[spark] class ApplicationMaster(
             case i: InterruptedException =>
             case e: Throwable => {
               failureCount += 1
-              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+              // this exception was introduced in hadoop 2.4 and this code would not compile
+              // with earlier versions if we refer it directly.
+              if ("org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException" ==
+                e.getClass().getName()) {
+                logError("Exception from Reporter thread.", e)
+                finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
+                  e.getMessage)
+              } else if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                     s"$failureCount time(s) from Reporter thread.")
@@ -596,11 +605,12 @@ private[spark] class ApplicationMaster(
               localityAwareTasks, hostToLocalTaskCount)) {
               resetAllocatorInterval()
             }
+            context.reply(true)
 
           case None =>
             logWarning("Container allocator is not ready to request executors yet.")
+            context.reply(false)
         }
-        context.reply(true)
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
@@ -660,6 +670,10 @@ object ApplicationMaster extends Logging {
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
     master.sparkContextStopped(sc)
+  }
+
+  private[spark] def getAttemptId(): ApplicationAttemptId = {
+    master.getAttemptId
   }
 
 }

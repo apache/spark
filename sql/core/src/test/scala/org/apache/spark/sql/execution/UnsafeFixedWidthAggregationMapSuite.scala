@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import scala.util.control.NonFatal
 import scala.collection.mutable
-import scala.util.{Try, Random}
+import scala.util.{Random, Try}
+import scala.util.control.NonFatal
 
 import org.scalatest.Matchers
 
-import org.apache.spark.{SparkConf, TaskContextImpl, TaskContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -61,7 +61,7 @@ class UnsafeFixedWidthAggregationMapSuite
     }
 
     test(name) {
-      val conf = new SparkConf().set("spark.unsafe.offHeap", "false")
+      val conf = new SparkConf().set("spark.memory.offHeap.enabled", "false")
       memoryManager = new TestMemoryManager(conf)
       taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
 

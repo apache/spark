@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -66,8 +67,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteArray(message);
+  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+    BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message);
     handleMessage(msgObj, client, callback);
   }
 
@@ -85,13 +86,13 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       }
       long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
       logger.trace("Registered streamId {} with {} buffers", streamId, msg.blockIds.length);
-      callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteArray());
+      callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
 
     } else if (msgObj instanceof RegisterExecutor) {
       RegisterExecutor msg = (RegisterExecutor) msgObj;
       checkAuth(client, msg.appId);
       blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
-      callback.onSuccess(new byte[0]);
+      callback.onSuccess(ByteBuffer.wrap(new byte[0]));
 
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);

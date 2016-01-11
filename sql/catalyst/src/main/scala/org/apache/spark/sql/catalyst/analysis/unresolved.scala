@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{errors, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.{TableIdentifier, errors}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -204,7 +204,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
         case s: StructType => s.zipWithIndex.map {
           case (f, i) =>
             val extract = GetStructField(attribute.get, i)
-            Alias(extract, target.get + "." + f.name)()
+            Alias(extract, f.name)()
         }
 
         case _ => {
@@ -284,8 +284,12 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
 
 /**
  * Holds the expression that has yet to be aliased.
+ *
+ * @param child The computation that is needs to be resolved during analysis.
+ * @param aliasName The name if specified to be asoosicated with the result of computing [[child]]
+ *
  */
-case class UnresolvedAlias(child: Expression)
+case class UnresolvedAlias(child: Expression, aliasName: Option[String] = None)
   extends UnaryExpression with NamedExpression with Unevaluable {
 
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")

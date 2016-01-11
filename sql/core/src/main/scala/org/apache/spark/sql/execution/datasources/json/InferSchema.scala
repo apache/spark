@@ -61,7 +61,10 @@ private[json] object InferSchema {
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
         }
       }
-    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType)
+    }.treeAggregate[DataType](
+      StructType(Seq()))(
+      compatibleRootType(columnNameOfCorruptRecords),
+      compatibleRootType(columnNameOfCorruptRecords))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -170,12 +173,38 @@ private[json] object InferSchema {
     case other => Some(other)
   }
 
+  private def withCorruptField(
+      struct: StructType,
+      columnNameOfCorruptRecords: String): StructType = {
+    if (!struct.fieldNames.contains(columnNameOfCorruptRecords)) {
+      // If this given struct does not have a column used for corrupt records,
+      // add this field.
+      struct.add(columnNameOfCorruptRecords, StringType, nullable = true)
+    } else {
+      // Otherwise, just return this struct.
+      struct
+    }
+  }
+
   /**
    * Remove top-level ArrayType wrappers and merge the remaining schemas
    */
-  private def compatibleRootType: (DataType, DataType) => DataType = {
-    case (ArrayType(ty1, _), ty2) => compatibleRootType(ty1, ty2)
-    case (ty1, ArrayType(ty2, _)) => compatibleRootType(ty1, ty2)
+  private def compatibleRootType(
+      columnNameOfCorruptRecords: String): (DataType, DataType) => DataType = {
+    // Since we support array of json objects at the top level,
+    // we need to check the element type and find the root level data type.
+    case (ArrayType(ty1, _), ty2) => compatibleRootType(columnNameOfCorruptRecords)(ty1, ty2)
+    case (ty1, ArrayType(ty2, _)) => compatibleRootType(columnNameOfCorruptRecords)(ty1, ty2)
+    // If we see any other data type at the root level, we get records that cannot be
+    // parsed. So, we use the struct as the data type and add the corrupt field to the schema.
+    case (struct: StructType, NullType) => struct
+    case (NullType, struct: StructType) => struct
+    case (struct: StructType, o) if !o.isInstanceOf[StructType] =>
+      withCorruptField(struct, columnNameOfCorruptRecords)
+    case (o, struct: StructType) if !o.isInstanceOf[StructType] =>
+      withCorruptField(struct, columnNameOfCorruptRecords)
+    // If we get anything else, we call compatibleType.
+    // Usually, when we reach here, ty1 and ty2 are two StructTypes.
     case (ty1, ty2) => compatibleType(ty1, ty2)
   }
 

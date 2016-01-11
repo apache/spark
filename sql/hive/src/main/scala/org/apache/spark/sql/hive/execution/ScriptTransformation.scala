@@ -31,16 +31,16 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
+import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
-import org.apache.spark.{Logging, TaskContext}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -58,7 +58,9 @@ case class ScriptTransformation(
     ioschema: HiveScriptIOSchema)(@transient private val sc: HiveContext)
   extends UnaryNode {
 
-  override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
+  override protected def otherCopyArgs: Seq[HiveContext] = sc :: Nil
+
+  override def producedAttributes: AttributeSet = outputSet -- inputSet
 
   private val serializedHiveConf = new SerializableConfiguration(sc.hiveconf)
 
@@ -211,7 +213,8 @@ case class ScriptTransformation(
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
-        processIterator(iter)
+        val proj = UnsafeProjection.create(schema)
+        processIterator(iter).map(proj)
       } else {
         // If the input iterator has no rows then do not launch the external script.
         Iterator.empty

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.{QueryTest, Row}
 
 case class Cases(lower: String, UPPER: String)
 

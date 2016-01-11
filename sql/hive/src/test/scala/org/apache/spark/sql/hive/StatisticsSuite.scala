@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{Row, SQLConf, QueryTest}
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._

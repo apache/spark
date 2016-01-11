@@ -21,8 +21,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.Aggregator
@@ -228,10 +228,11 @@ class GroupedDataset[K, V] private[sql](
     val namedColumns =
       columns.map(
         _.withInputType(resolvedVEncoder, dataAttributes).named)
-    val keyColumn = if (groupingAttributes.length > 1) {
-      Alias(CreateStruct(groupingAttributes), "key")()
-    } else {
+    val keyColumn = if (resolvedKEncoder.flat) {
+      assert(groupingAttributes.length == 1)
       groupingAttributes.head
+    } else {
+      Alias(CreateStruct(groupingAttributes), "key")()
     }
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sqlContext, aggregate)

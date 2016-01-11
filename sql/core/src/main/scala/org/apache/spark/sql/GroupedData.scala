@@ -21,12 +21,11 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedAlias, UnresolvedAttribute, Star}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Pivot, Rollup, Cube, Aggregate}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
 import org.apache.spark.sql.types.NumericType
-
 
 /**
  * :: Experimental ::
@@ -58,10 +57,10 @@ class GroupedData protected[sql](
           df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case GroupedData.RollupType =>
         DataFrame(
-          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aliasedAgg))
+          df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.CubeType =>
         DataFrame(
-          df.sqlContext, Cube(groupingExprs, df.logicalPlan, aliasedAgg))
+          df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         DataFrame(
@@ -282,7 +281,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -321,7 +320,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -353,7 +352,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.

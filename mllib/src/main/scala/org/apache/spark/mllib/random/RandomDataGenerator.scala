@@ -19,8 +19,8 @@ package org.apache.spark.mllib.random
 
 import org.apache.commons.math3.distribution._
 
-import org.apache.spark.annotation.{Since, DeveloperApi}
-import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.util.random.{Pseudorandom, XORShiftRandom}
 
 /**
  * :: DeveloperApi ::
