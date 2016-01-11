@@ -76,19 +76,10 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
     HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
   fi
   echo "Performing Maven install for $HADOOP_PROFILE"
-  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar install:install -q \
-    -pl '!assembly' \
-    -pl '!examples' \
-    -pl '!external/flume-assembly' \
-    -pl '!external/kafka-assembly' \
-    -pl '!external/twitter' \
-    -pl '!external/flume' \
-    -pl '!external/mqtt' \
-    -pl '!external/mqtt-assembly' \
-    -pl '!external/zeromq' \
-    -pl '!external/kafka' \
-    -pl '!tags' \
-    -DskipTests
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install -q
+
+  echo "Performing Maven validate for $HADOOP_PROFILE"
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE validate -q
 
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
