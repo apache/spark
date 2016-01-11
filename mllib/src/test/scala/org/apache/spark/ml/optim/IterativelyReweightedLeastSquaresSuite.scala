@@ -78,7 +78,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val irls = new IterativelyReweightedLeastSquares(family = new Binomial,
+      val irls = new IterativelyReweightedLeastSquares(family = Binomial(Logit),
         fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = false,
         maxIter = 100, tol = 1e-8)
         .fit(instances1)
@@ -107,7 +107,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val irls = new IterativelyReweightedLeastSquares(family = new Poisson,
+      val irls = new IterativelyReweightedLeastSquares(family = Poisson(Log),
         fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = false,
         maxIter = 100, tol = 1e-8)
         .fit(instances2)

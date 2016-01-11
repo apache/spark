@@ -73,6 +73,11 @@ private[ml] class Binomial(link: Link = Logit) extends Family(link) {
   }
 }
 
+private[ml] object Binomial {
+
+  def apply(link: Link): Binomial = new Binomial(link)
+}
+
 /**
  * Poisson exponential family.
  * The default link for the Poisson family is the log link.
@@ -87,6 +92,11 @@ private[ml] class Poisson(link: Link = Log) extends Family(link) {
   }
 
   override def weights(mu: Double): Double = mu
+}
+
+private[ml] object Poisson {
+
+  def apply(link: Link): Poisson = new Poisson(link)
 }
 
 /**
