@@ -1795,10 +1795,11 @@
                   <bannedDependencies>
                     <excludes>
                       <!--
-                        Akka depends on io.netty, which places classes under the org.jboss.netty
-                        namespace. This can conflict with the classes in org.jboss.netty:netty
-                        artifact, so we have to ban that artifact here.  In Netty 4.x, the classes
-                        are under the io.netty namespace, so it's fine for us to depend on both
+                      <!--
+                        Akka depends on io.netty:netty, which puts classes under the org.jboss.netty
+                        package. This conflicts with the classes in org.jboss.netty:netty
+                        artifact, so we have to ban that artifact here. In Netty 4.x, the classes
+                        are under the io.netty package, so it's fine for us to depend on both
                         io.netty:netty and io.netty:netty-all.
                        -->
                       <exclude>org.jboss.netty</exclude>
