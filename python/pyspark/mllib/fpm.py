@@ -130,21 +130,24 @@ class PrefixSpan(object):
     @since("1.6.0")
     def train(cls, data, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000):
         """
-        Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
+        Finds the complete set of frequent sequential patterns in the input
+		sequences of itemsets.
         :param data:
           The input data set, each element contains a sequnce of itemsets.
         :param minSupport:
-          The minimal support level of the sequential pattern, any pattern appears more than
-		  (minSupport * size-of-the-dataset) times will be output.
+          The minimal support level of the sequential pattern, any pattern
+		  appears more than (minSupport * size-of-the-dataset) times will be
+		  output.
           (default: 0.1)
         :param maxPatternLength:
-          The maximal length of the sequential pattern, any pattern appears less than maxPatternLength will be
-		  output.
+          The maximal length of the sequential pattern, any pattern appears less
+		  than maxPatternLength will be output.
           (default: 10)
         :param maxLocalProjDBSize:
-          The maximum number of items (including delimiters used in the internal storage format) allowed in a
-		  projected database before local processing. If a projected database exceeds this size, another
-          iteration of distributed prefix growth is run.
+          The maximum number of items (including delimiters used in the internal
+		  storage format) allowed in a projected database before local 
+		  processing. If a projected database exceeds this size, another
+		  iteration of distributed prefix growth is run.
           (default: 32000000)
         """
         model = callMLlibFunc("trainPrefixSpanModel",

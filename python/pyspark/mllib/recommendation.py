@@ -165,28 +165,30 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     @since("1.4.0")
     def recommendUsers(self, product, num):
         """
-        Recommends the top "num" number of users for a given product and returns a list
-        of Rating objects sorted by the predicted rating in descending order.
+        Recommends the top "num" number of users for a given product and returns a 
+		list of Rating objects sorted by the predicted rating in descending order.
         """
         return list(self.call("recommendUsers", product, num))
 
     @since("1.4.0")
     def recommendProducts(self, user, num):
         """
-        Recommends the top "num" number of products for a given user and returns a list
-        of Rating objects sorted by the predicted rating in descending order.
+        Recommends the top "num" number of products for a given user and returns a
+		list of Rating objects sorted by the predicted rating in descending order.
         """
         return list(self.call("recommendProducts", user, num))
 
     def recommendProductsForUsers(self, num):
         """
-        Recommends top "num" products for all users. The number returned may be less than this.
+        Recommends top "num" products for all users. The number returned may be 
+		less than this.
         """
         return self.call("wrappedRecommendProductsForUsers", num)
 
     def recommendUsersForProducts(self, num):
         """
-        Recommends top "num" users for all products. The number returned may be less than this.
+        Recommends top "num" users for all products. The number returned may be 
+		less than this.
         """
         return self.call("wrappedRecommendUsersForProducts", num)
 
@@ -234,11 +236,12 @@ class ALS(object):
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
               seed=None):
         """
-        Train a matrix factorization model given an RDD of ratings given by users to some products,
-        in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-        product of two lower-rank matrices of a given rank (number of features). To solve for these
-        features, we run a given number of iterations of ALS. This is done using a level of
-        parallelism given by `blocks`.
+        Train a matrix factorization model given an RDD of ratings given by users
+		to some products, in the form of (userID, productID, rating) pairs. We
+		approximate the ratings matrix as the product of two lower-rank matrices
+		of a given rank (number of features). To solve for these features, we run
+		a given number of iterations of ALS. This is done using a level of
+		parallelism given by `blocks`.
 		
 		:param iterations:
 		  Number of iterations run for each batch of data.
@@ -259,11 +262,12 @@ class ALS(object):
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
                       nonnegative=False, seed=None):
         """
-        Train a matrix factorization model given an RDD of 'implicit preferences' given by users
-        to some products, in the form of (userID, productID, preference) pairs. We approximate the
-        ratings matrix as the product of two lower-rank matrices of a given rank (number of
-        features).  To solve for these features, we run a given number of iterations of ALS.
-        This is done using a level of parallelism given by `blocks`.
+        Train a matrix factorization model given an RDD of 'implicit preferences'
+		given by users to some products, in the form of (userID, productID,
+		preference) pairs. We approximate the ratings matrix as the product of
+		two lower-rank matrices of a given rank (number of features).To solve
+		for these features, we run a given number of iterations of ALS. This is
+		done using a level of parallelism given by `blocks`.
 		
 		:param iterations:
 		  Number of iterations run for each batch of data.
