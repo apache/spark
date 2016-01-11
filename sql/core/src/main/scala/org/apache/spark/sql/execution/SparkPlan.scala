@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future, ExecutionContext}
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -31,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
@@ -116,7 +119,33 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def prepare(): Unit = {
     if (prepareCalled.compareAndSet(false, true)) {
       doPrepare()
+
+      // collect all the subqueries and submit jobs to execute them in background
+      val queryResults = ArrayBuffer[(ScalarSubQuery, Future[Array[InternalRow]])]()
+      val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubQuery => e})
+      allSubqueries.foreach { e =>
+        val futureResult = scala.concurrent.future {
+          val df = DataFrame(sqlContext, e.query)
+          df.queryExecution.toRdd.collect()
+        }(SparkPlan.subqueryExecutionContext)
+        queryResults += e -> futureResult
+      }
+
       children.foreach(_.prepare())
+
+      // fill in the result of subqueries
+      queryResults.foreach {
+        case (e, futureResult) =>
+          val rows = Await.result(futureResult, Duration.Inf)
+          if (rows.length > 1) {
+            sys.error(s"Scalar subquery should return at most one row, but got ${rows.length}: " +
+              s"${e.query.treeString}")
+          }
+          // Analyzer will make sure that it only return on column
+          if (rows.length > 0) {
+            e.updateResult(rows(0).get(0, e.dataType))
+          }
+      }
     }
   }
 
@@ -251,6 +280,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
+}
+
+object SparkPlan {
+  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 private[sql] trait LeafNode extends SparkPlan {

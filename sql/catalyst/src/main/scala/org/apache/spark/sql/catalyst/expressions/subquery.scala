@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, NullType}
@@ -30,24 +31,30 @@ abstract class SubQueryExpression extends LeafExpression {
 
 case class ScalarSubQuery(query: LogicalPlan) extends SubQueryExpression with CodegenFallback {
   override lazy val resolved: Boolean = query.resolved
-  override def dataType: DataType = {
-    if (resolved) {
-      query.schema.fields(0).dataType
+
+  override def dataType: DataType = query.schema.fields.head.dataType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (query.schema.length != 1) {
+      TypeCheckResult.TypeCheckFailure("Scalar subquery can only have 1 column, but got " +
+        query.schema.length.toString)
     } else {
-      NullType
+      TypeCheckResult.TypeCheckSuccess
     }
   }
+
   override def nullable: Boolean = true
-  override def foldable: Boolean = true
+  override def foldable: Boolean = false
 
   override def withNewPlan(plan: LogicalPlan): ScalarSubQuery = ScalarSubQuery(plan)
 
-  private lazy val result: Any = {
-    // SQLContext
-  }
-  override def eval(input: InternalRow): Any = {
+  private var result: Any = null
 
+  def updateResult(v: Any): Unit = {
+    result = v
   }
+
+  override def eval(input: InternalRow): Any = result
 }
 
 case class ListSubQuery(query: LogicalPlan)
