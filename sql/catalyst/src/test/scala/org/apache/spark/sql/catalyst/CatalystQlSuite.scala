@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Limit, Project, Subquery, Union}
 
 class CatalystQlSuite extends PlanTest {
   val parser = new CatalystQl()
@@ -48,5 +51,41 @@ class CatalystQlSuite extends PlanTest {
       "from windowData")
     parser.createPlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
+  }
+
+  test("limit clause: a support in set operation") {
+    val plan1 = parser.createPlan("select key from (select * from t1) x limit 1")
+    val correctPlan1 =
+      Limit (Literal(1),
+        Project(Seq(UnresolvedAlias(UnresolvedAttribute("key"))),
+          Subquery("x",
+            Project(Seq(UnresolvedAlias(UnresolvedStar(None))),
+              UnresolvedRelation(TableIdentifier("t1"))))))
+    comparePlans(plan1, correctPlan1)
+
+    val plan2 = parser.createPlan("select key from (select * from t1 limit 2) x limit 1")
+    val correctPlan2 =
+      Limit (Literal(1),
+        Project(Seq(UnresolvedAlias(UnresolvedAttribute("key"))),
+          Subquery("x",
+            Limit (Literal(2),
+              Project(Seq(UnresolvedAlias(UnresolvedStar(None))),
+                UnresolvedRelation(TableIdentifier("t1")))))))
+    comparePlans(plan2, correctPlan2)
+
+    val plan3 = parser.createPlan("select key from ((select * from testData limit 1) " +
+      "union all (select * from testData limit 1)) x limit 1")
+    val correctPlan3 =
+      Limit (Literal(1),
+        Project(Seq(UnresolvedAlias(UnresolvedAttribute("key"))),
+          Subquery("x",
+            Union(
+              Limit (Literal(1),
+                Project(Seq(UnresolvedAlias(UnresolvedStar(None))),
+                  UnresolvedRelation(TableIdentifier("testData")))),
+              Limit (Literal(1),
+                Project(Seq(UnresolvedAlias(UnresolvedStar(None))),
+                  UnresolvedRelation(TableIdentifier("testData"))))))))
+    comparePlans(plan3, correctPlan3)
   }
 }
