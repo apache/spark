@@ -22,9 +22,9 @@ import java.util.UUID
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JObject, _}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-import org.json4s.{DefaultFormats, JObject, _}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
@@ -33,9 +33,9 @@ import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
 
 trait ClassifierTypeTrait {
@@ -153,17 +153,17 @@ final class OneVsRestModel private[ml] (
     copyValues(copied, extra).setParent(parent)
   }
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter = new OneVsRestModel.OneVsRestModelWriter(this)
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object OneVsRestModel extends MLReadable[OneVsRestModel] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[OneVsRestModel] = new OneVsRestModelReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): OneVsRestModel = super.load(path)
 
   /** [[MLWriter]] instance for [[OneVsRestModel]] */
@@ -304,7 +304,7 @@ final class OneVsRest @Since("1.4.0") (
     copied
   }
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def write: MLWriter = new OneVsRest.OneVsRestWriter(this)
 }
 
@@ -370,13 +370,13 @@ private[classification] object SharedReadWrite extends ClassifierTypeTrait {
   }
 }
 
-@Since("1.7.0")
+@Since("2.0.0")
 object OneVsRest extends MLReadable[OneVsRest] {
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def read: MLReader[OneVsRest] = new OneVsRestReader
 
-  @Since("1.7.0")
+  @Since("2.0.0")
   override def load(path: String): OneVsRest = super.load(path)
 
   /** [[MLWriter]] instance for [[OneVsRest]] */
