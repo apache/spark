@@ -142,13 +142,16 @@ test_that("cleanClosure on R functions", {
 })
 
 test_that("varargsToJProperties", {
+  jprops <- newJObject("java.util.Properties")
+  expect_true(class(jprops) == "jobj")
+
   jprops <- varargsToJProperties(abc = "123")
   expect_true(class(jprops) == "jobj")
   expect_equal(callJMethod(jprops, "getProperty", "abc"), "123")
 
-  jprops <- varargsToJProperties(abc = "abc", b = b)
+  jprops <- varargsToJProperties(abc = "abc", b = 1)
   expect_equal(callJMethod(jprops, "getProperty", "abc"), "abc")
-  expect_equal(callJMethod(jprops, "getProperty", "b"), "b")
+  expect_equal(callJMethod(jprops, "getProperty", "b"), "1")
 
   jprops <- varargsToJProperties()
   expect_equal(callJMethod(jprops, "size"), 0L)
