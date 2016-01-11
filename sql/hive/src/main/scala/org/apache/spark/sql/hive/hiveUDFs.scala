@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.hive
 
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.hive.ql.exec._
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory}
@@ -32,15 +31,12 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.Obje
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.{analysis, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.sql.types._
@@ -75,19 +71,19 @@ private[hive] class HiveFunctionRegistry(
       try {
         if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
           HiveGenericUDF(
-            new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF), children)
+            name, new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF), children)
         } else if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveSimpleUDF(new HiveFunctionWrapper(functionClassName), children)
+          HiveSimpleUDF(name, new HiveFunctionWrapper(functionClassName), children)
         } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveGenericUDF(new HiveFunctionWrapper(functionClassName), children)
+          HiveGenericUDF(name, new HiveFunctionWrapper(functionClassName), children)
         } else if (
           classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveUDAFFunction(new HiveFunctionWrapper(functionClassName), children)
+          HiveUDAFFunction(name, new HiveFunctionWrapper(functionClassName), children)
         } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
           HiveUDAFFunction(
-            new HiveFunctionWrapper(functionClassName), children, isUDAFBridgeRequired = true)
+            name, new HiveFunctionWrapper(functionClassName), children, isUDAFBridgeRequired = true)
         } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          val udtf = HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children)
+          val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(functionClassName), children)
           udtf.elementTypes // Force it to check input data types.
           udtf
         } else {
@@ -137,7 +133,8 @@ private[hive] class HiveFunctionRegistry(
   }
 }
 
-private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
+private[hive] case class HiveSimpleUDF(
+    name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with CodegenFallback with Logging {
 
   override def deterministic: Boolean = isUDFDeterministic
@@ -191,6 +188,8 @@ private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, childre
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
+
+  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 // Adapter from Catalyst ExpressionResult to Hive DeferredObject
@@ -205,7 +204,8 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataTyp
   override def get(): AnyRef = wrap(func(), oi, dataType)
 }
 
-private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
+private[hive] case class HiveGenericUDF(
+    name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with CodegenFallback with Logging {
 
   override def nullable: Boolean = true
@@ -257,6 +257,8 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
+
+  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 /**
@@ -271,6 +273,7 @@ private[hive] case class HiveGenericUDF(funcWrapper: HiveFunctionWrapper, childr
  * user defined aggregations, which have clean semantics even in a partitioned execution.
  */
 private[hive] case class HiveGenericUDTF(
+    name: String,
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression])
   extends Generator with HiveInspectors with CodegenFallback {
@@ -336,6 +339,8 @@ private[hive] case class HiveGenericUDTF(
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
+
+  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 /**
@@ -343,6 +348,7 @@ private[hive] case class HiveGenericUDTF(
  * performance a lot.
  */
 private[hive] case class HiveUDAFFunction(
+    name: String,
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
     isUDAFBridgeRequired: Boolean = false,
@@ -427,5 +433,9 @@ private[hive] case class HiveUDAFFunction(
   override def supportsPartial: Boolean = false
 
   override val dataType: DataType = inspectorToDataType(returnInspector)
-}
 
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else " "
+    s"$name($distinct${children.map(_.sql).mkString(", ")})"
+  }
+}

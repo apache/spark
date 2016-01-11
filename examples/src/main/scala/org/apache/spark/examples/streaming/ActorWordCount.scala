@@ -26,8 +26,7 @@ import akka.actor.{actorRef2Scala, Actor, ActorRef, Props}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
-import org.apache.spark.streaming.receiver.ActorHelper
+import org.apache.spark.streaming.receiver.ActorReceiver
 import org.apache.spark.util.AkkaUtils
 
 case class SubscribeReceiver(receiverActor: ActorRef)
@@ -62,15 +61,13 @@ class FeederActor extends Actor {
   }.start()
 
   def receive: Receive = {
-
     case SubscribeReceiver(receiverActor: ActorRef) =>
       println("received subscribe from %s".format(receiverActor.toString))
-    receivers = LinkedList(receiverActor) ++ receivers
+      receivers = LinkedList(receiverActor) ++ receivers
 
     case UnsubscribeReceiver(receiverActor: ActorRef) =>
       println("received unsubscribe from %s".format(receiverActor.toString))
-    receivers = receivers.dropWhile(x => x eq receiverActor)
-
+      receivers = receivers.dropWhile(x => x eq receiverActor)
   }
 }
 
@@ -82,7 +79,7 @@ class FeederActor extends Actor {
  * @see [[org.apache.spark.examples.streaming.FeederActor]]
  */
 class SampleActorReceiver[T: ClassTag](urlOfPublisher: String)
-extends Actor with ActorHelper {
+extends ActorReceiver {
 
   lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
@@ -129,9 +126,9 @@ object FeederActor {
  *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
  *
  * To run this example locally, you may run Feeder Actor as
- *    `$ bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
+ *    `$ bin/run-example org.apache.spark.examples.streaming.FeederActor localhost 9999`
  * and then run the example
- *    `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount 127.0.1.1 9999`
+ *    `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount localhost 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {

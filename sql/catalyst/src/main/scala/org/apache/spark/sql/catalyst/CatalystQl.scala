@@ -22,10 +22,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -399,9 +399,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // return With plan if there is CTE
       cteRelations.map(With(query, _)).getOrElse(query)
 
-    // HIVE-9039 renamed TOK_UNION => TOK_UNIONALL while adding TOK_UNIONDISTINCT
     case Token("TOK_UNIONALL", left :: right :: Nil) =>
       Union(nodeToPlan(left), nodeToPlan(right))
+    case Token("TOK_UNIONDISTINCT", left :: right :: Nil) =>
+      Distinct(Union(nodeToPlan(left), nodeToPlan(right)))
+    case Token("TOK_EXCEPT", left :: right :: Nil) =>
+      Except(nodeToPlan(left), nodeToPlan(right))
+    case Token("TOK_INTERSECT", left :: right :: Nil) =>
+      Intersect(nodeToPlan(left), nodeToPlan(right))
 
     case _ =>
       noParseRule("Plan", node)
