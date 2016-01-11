@@ -79,7 +79,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install -q
 
   echo "Performing Maven validate for $HADOOP_PROFILE"
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE validate -q
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE validate -q
 
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
