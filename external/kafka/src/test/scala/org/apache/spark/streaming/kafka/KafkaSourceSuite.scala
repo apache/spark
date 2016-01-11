@@ -17,19 +17,16 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.util.Try
-
 import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
-import org.apache.spark.sql.streaming.OffsetSuite
 import org.apache.spark.sql.test.SharedSQLContext
 
 
-class KafkaSourceSuite extends StreamTest with SharedSQLContext with OffsetSuite {
+class KafkaSourceSuite extends StreamTest with SharedSQLContext {
 
   import testImplicits._
 
@@ -116,28 +113,4 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext with OffsetSuite
       )
     }
   }
-
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L)),
-    two = KafkaSourceOffset(("t", 0, 2L)))
-
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L), ("t", 1, 0L)),
-    two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)))
-
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L), ("T", 0, 0L)),
-    two = KafkaSourceOffset(("t", 0, 2L), ("T", 0, 1L)))
-
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L)),
-    two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)))
-
-  compareInvalid(
-    one = KafkaSourceOffset(("t", 1, 1L)),
-    two = KafkaSourceOffset(("t", 0, 2L)))
-
-  compareInvalid(
-    one = KafkaSourceOffset(("t", 0, 1L)),
-    two = KafkaSourceOffset(("T", 0, 2L)))
 }

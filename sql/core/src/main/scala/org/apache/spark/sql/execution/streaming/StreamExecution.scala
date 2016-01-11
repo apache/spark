@@ -44,7 +44,7 @@ class StreamExecution(
   var batchRun = false
 
   /** Minimum amount of time in between the start of each batch. */
-  val minBatchTime = 100
+  val minBatchTime = 10
 
   /** Tracks how much data we have processed from each input source. */
   private[sql] val currentOffsets = new StreamProgress

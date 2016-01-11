@@ -50,13 +50,8 @@ case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offs
             } else {
               0
             }
-          case (None, _) =>
-            -1
-          case (_, None) =>
-            1
-          case _ =>
-            throw new IllegalArgumentException(
-              s"Invalid comparison between two sets of Kafka offsets: $this <=> $other")
+          case (None, _) => -1
+          case (_, None) => 1
         }
       }
       val nonZeroSigns = comparisons.filter { _ != 0 }.toSet
@@ -114,7 +109,7 @@ private[kafka] object KafkaSourceOffset {
         case o: KafkaSourceOffset => o
         case _ =>
           throw new IllegalArgumentException(
-            s"Invalid conversion from offset of ${offset.getClass} to $getClass")
+            s"Invalid conversion from offset of ${offset.getClass} to KafkaSourceOffset")
       }
     }
   }
@@ -162,7 +157,7 @@ private[kafka] case class KafkaSource(
     if (offsetRanges.nonEmpty) {
       val rdd = KafkaUtils.createRDD[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
         sparkContext, kafkaParams, offsetRanges.toArray)
-      logInfo("Creating DF with offset ranges: " + offsetRanges)
+      logInfo(s"Creating DF with offset ranges: $offsetRanges")
       Some(new Batch(latestOffset, sqlContext.createDataset(rdd).toDF))
     } else {
       None
