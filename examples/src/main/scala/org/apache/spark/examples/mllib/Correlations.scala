@@ -20,10 +20,9 @@ package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.{SparkConf, SparkContext}
-
 
 /**
  * An example app for summarizing multivariate data from a file. Run with

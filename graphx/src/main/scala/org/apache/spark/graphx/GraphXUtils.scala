@@ -18,12 +18,10 @@
 package org.apache.spark.graphx
 
 import org.apache.spark.SparkConf
-
 import org.apache.spark.graphx.impl._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
-
-import org.apache.spark.util.collection.{OpenHashSet, BitSet}
 import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 
 object GraphXUtils {
   /**

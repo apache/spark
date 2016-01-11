@@ -18,8 +18,8 @@
 package org.apache.spark.mllib.rdd
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.rdd.RDDFunctions._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class RDDFunctionsSuite extends SparkFunSuite with MLlibTestSparkContext {
 

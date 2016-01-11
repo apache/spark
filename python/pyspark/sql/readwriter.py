@@ -130,11 +130,9 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            if type(path) == list:
-                return self._df(
-                    self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
-            else:
-                return self._df(self._jreader.load(path))
+            if type(path) != list:
+                path = [path]
+            return self._df(self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         else:
             return self._df(self._jreader.load())
 
@@ -160,6 +158,8 @@ class DataFrameReader(object):
                 quotes
             * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
                 (e.g. 00012)
+            * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
+                of all character using backslash quoting mechanism
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -177,7 +177,17 @@ class DataFrameReader(object):
         elif type(path) == list:
             return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
-            return self._df(self._jreader.json(path._jrdd))
+            def func(iterator):
+                for x in iterator:
+                    if not isinstance(x, basestring):
+                        x = unicode(x)
+                    if isinstance(x, unicode):
+                        x = x.encode("utf-8")
+                    yield x
+            keyed = path.mapPartitions(func)
+            keyed._bypass_serializer = True
+            jrdd = keyed._jrdd.map(self._sqlContext._jvm.BytesToString())
+            return self._df(self._jreader.json(jrdd))
         else:
             raise TypeError("path can be only string or RDD")
 

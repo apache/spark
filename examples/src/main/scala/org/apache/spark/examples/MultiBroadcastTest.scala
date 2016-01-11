@@ -18,8 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.rdd.RDD
 
 /**
   * Usage: MultiBroadcastTest [slices] [numElem]
