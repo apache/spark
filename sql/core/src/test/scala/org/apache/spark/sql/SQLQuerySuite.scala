@@ -602,8 +602,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("from follow multiple brackets") {
     checkAnswer(sql(
       """
-        |select key from ((select * from testData limit 1)
-        |  union all (select * from testData limit 1)) x limit 1
+        |select key from ((select * from testData)
+        |  union all (select * from testData)) x limit 1
       """.stripMargin),
       Row(1)
     )
@@ -616,7 +616,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql(
       """
         |select key from
-        |  (select * from testData limit 1 union all select * from testData limit 1) x
+        |  (select * from testData union all select * from testData) x
         |  limit 1
       """.stripMargin),
       Row(1)
@@ -1750,7 +1750,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e1.message.contains("Table not found"))
 
     val e2 = intercept[AnalysisException] {
-      sql("select * from no_db.no_table")
+      sql("select * from no_db.no_table").show()
     }
     assert(e2.message.contains("Table not found"))
 

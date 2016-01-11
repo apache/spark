@@ -135,7 +135,7 @@ case class HyperLogLogPlusPlus(
 
   override def dataType: DataType = LongType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, DoubleType)
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
@@ -447,6 +447,7 @@ object HyperLogLogPlusPlus {
 
   private def validateDoubleLiteral(exp: Expression): Double = exp match {
     case Literal(d: Double, DoubleType) => d
+    case Literal(dec: Decimal, dt: DecimalType) => dec.toDouble
     case _ =>
       throw new AnalysisException("The second argument should be a double literal.")
   }

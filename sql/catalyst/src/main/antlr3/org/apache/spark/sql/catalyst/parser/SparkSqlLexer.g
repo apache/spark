@@ -307,12 +307,12 @@ KW_AUTHORIZATION: 'AUTHORIZATION';
 KW_CONF: 'CONF';
 KW_VALUES: 'VALUES';
 KW_RELOAD: 'RELOAD';
-KW_YEAR: 'YEAR';
-KW_MONTH: 'MONTH';
-KW_DAY: 'DAY';
-KW_HOUR: 'HOUR';
-KW_MINUTE: 'MINUTE';
-KW_SECOND: 'SECOND';
+KW_YEAR: 'YEAR'|'YEARS';
+KW_MONTH: 'MONTH'|'MONTHS';
+KW_DAY: 'DAY'|'DAYS';
+KW_HOUR: 'HOUR'|'HOURS';
+KW_MINUTE: 'MINUTE'|'MINUTES';
+KW_SECOND: 'SECOND'|'SECONDS';
 KW_START: 'START';
 KW_TRANSACTION: 'TRANSACTION';
 KW_COMMIT: 'COMMIT';
@@ -332,6 +332,9 @@ KW_LAZY: 'LAZY';
 KW_DFS: 'DFS';
 KW_REFRESH: 'REFRESH';
 KW_OPTIONS: 'OPTIONS';
+KW_WEEK: 'WEEK'|'WEEKS';
+KW_MILLISECOND: 'MILLISECOND'|'MILLISECONDS';
+KW_MICROSECOND: 'MICROSECOND'|'MICROSECONDS';
 
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.
@@ -441,7 +444,7 @@ ByteLengthLiteral
 
 Number
     :
-    (Digit)+ ( DOT (Digit)* (Exponent)? | Exponent)?
+    ((Digit+ (DOT Digit*)?) | (DOT Digit+)) Exponent?
     ;
 
 /*
@@ -464,10 +467,10 @@ An Identifier can be:
 - macro name
 - hint name
 - window name
-*/    
+*/
 Identifier
     :
-    (Letter | Digit) (Letter | Digit | '_')*
+    (Letter | Digit | '_')+
     | {allowQuotedId()}? QuotedIdentifier  /* though at the language level we allow all Identifiers to be QuotedIdentifiers; 
                                               at the API level only columns are allowed to be of this form */
     | '`' RegexComponent+ '`'
