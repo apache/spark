@@ -17,6 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
+import java.nio.ByteBuffer
 import java.util.concurrent.Callable
 import javax.annotation.concurrent.GuardedBy
 
@@ -34,7 +35,7 @@ private[netty] sealed trait OutboxMessage {
 
 }
 
-private[netty] case class OneWayOutboxMessage(content: Array[Byte]) extends OutboxMessage
+private[netty] case class OneWayOutboxMessage(content: ByteBuffer) extends OutboxMessage
   with Logging {
 
   override def sendWith(client: TransportClient): Unit = {
@@ -48,9 +49,9 @@ private[netty] case class OneWayOutboxMessage(content: Array[Byte]) extends Outb
 }
 
 private[netty] case class RpcOutboxMessage(
-    content: Array[Byte],
+    content: ByteBuffer,
     _onFailure: (Throwable) => Unit,
-    _onSuccess: (TransportClient, Array[Byte]) => Unit)
+    _onSuccess: (TransportClient, ByteBuffer) => Unit)
   extends OutboxMessage with RpcResponseCallback {
 
   private var client: TransportClient = _
@@ -70,7 +71,7 @@ private[netty] case class RpcOutboxMessage(
     _onFailure(e)
   }
 
-  override def onSuccess(response: Array[Byte]): Unit = {
+  override def onSuccess(response: ByteBuffer): Unit = {
     _onSuccess(client, response)
   }
 

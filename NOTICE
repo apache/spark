@@ -607,3 +607,10 @@ Vis.js uses and redistributes the following third-party libraries:
 - keycharm
   https://github.com/AlexDM0/keycharm
   The MIT License
+
+===============================================================================
+
+The CSS style for the navigation sidebar of the documentation was originally 
+submitted by Óscar Nájera for the scikit-learn project. The scikit-learn project
+is distributed under the 3-Clause BSD license.
+===============================================================================

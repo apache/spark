@@ -21,7 +21,7 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkException, Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock}
@@ -84,13 +84,14 @@ private[streaming] class BlockGenerator(
 
   /**
    * The BlockGenerator can be in 5 possible states, in the order as follows.
-   * - Initialized: Nothing has been started
-   * - Active: start() has been called, and it is generating blocks on added data.
-   * - StoppedAddingData: stop() has been called, the adding of data has been stopped,
-   *                      but blocks are still being generated and pushed.
-   * - StoppedGeneratingBlocks: Generating of blocks has been stopped, but
-   *                            they are still being pushed.
-   * - StoppedAll: Everything has stopped, and the BlockGenerator object can be GCed.
+   *
+   *  - Initialized: Nothing has been started
+   *  - Active: start() has been called, and it is generating blocks on added data.
+   *  - StoppedAddingData: stop() has been called, the adding of data has been stopped,
+   *                       but blocks are still being generated and pushed.
+   *  - StoppedGeneratingBlocks: Generating of blocks has been stopped, but
+   *                             they are still being pushed.
+   *  - StoppedAll: Everything has stopped, and the BlockGenerator object can be GCed.
    */
   private object GeneratorState extends Enumeration {
     type GeneratorState = Value
@@ -125,9 +126,10 @@ private[streaming] class BlockGenerator(
 
   /**
    * Stop everything in the right order such that all the data added is pushed out correctly.
-   * - First, stop adding data to the current buffer.
-   * - Second, stop generating blocks.
-   * - Finally, wait for queue of to-be-pushed blocks to be drained.
+   *
+   *  - First, stop adding data to the current buffer.
+   *  - Second, stop generating blocks.
+   *  - Finally, wait for queue of to-be-pushed blocks to be drained.
    */
   def stop(): Unit = {
     // Set the state to stop adding data

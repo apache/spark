@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
@@ -36,32 +36,44 @@ import org.apache.spark.sql.DataFrame
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
+@Since("1.4.0")
 @Experimental
-final class DecisionTreeClassifier(override val uid: String)
+final class DecisionTreeClassifier @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams with TreeClassifierParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
+  @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
+  @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
+  @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
 
+  @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
+  @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
+  @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
+  @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
+  @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
+  @Since("1.6.0")
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
   override protected def train(dataset: DataFrame): DecisionTreeClassificationModel = {
@@ -89,12 +101,15 @@ final class DecisionTreeClassifier(override val uid: String)
       subsamplingRate = 1.0)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopy(extra)
 }
 
+@Since("1.4.0")
 @Experimental
 object DecisionTreeClassifier {
   /** Accessor for supported impurities: entropy, gini */
+  @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
@@ -104,12 +119,13 @@ object DecisionTreeClassifier {
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
+@Since("1.4.0")
 @Experimental
 final class DecisionTreeClassificationModel private[ml] (
-    override val uid: String,
-    override val rootNode: Node,
-    override val numFeatures: Int,
-    override val numClasses: Int)
+    @Since("1.4.0")override val uid: String,
+    @Since("1.4.0")override val rootNode: Node,
+    @Since("1.6.0")override val numFeatures: Int,
+    @Since("1.5.0")override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
 
@@ -142,11 +158,13 @@ final class DecisionTreeClassificationModel private[ml] (
     }
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
     copyValues(new DecisionTreeClassificationModel(uid, rootNode, numFeatures, numClasses), extra)
       .setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
     s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
   }

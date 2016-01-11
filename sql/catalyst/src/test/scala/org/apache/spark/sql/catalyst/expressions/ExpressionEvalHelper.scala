@@ -43,7 +43,6 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, catalystValue, inputRow)
-    checkEvaluationWithGeneratedProjection(expression, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expression.dataType)) {
       checkEvalutionWithUnsafeProjection(expression, catalystValue, inputRow)
     }
@@ -58,8 +57,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
+      case (result: Double, expected: Spread[Double @unchecked]) =>
+        expected.asInstanceOf[Spread[Double]].isWithin(result)
       case _ => result == expected
     }
   }
@@ -120,42 +119,6 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  protected def checkEvaluationWithGeneratedProjection(
-      expression: Expression,
-      expected: Any,
-      inputRow: InternalRow = EmptyRow): Unit = {
-
-    val plan = generateProject(
-      GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
-
-    val actual = plan(inputRow)
-    val expectedRow = InternalRow(expected)
-
-    // We reimplement hashCode in generated `SpecificRow`, make sure it's consistent with our
-    // interpreted version.
-    if (actual.hashCode() != expectedRow.hashCode()) {
-      val ctx = new CodeGenContext
-      val evaluated = expression.gen(ctx)
-      fail(
-        s"""
-          |Mismatched hashCodes for values: $actual, $expectedRow
-          |Hash Codes: ${actual.hashCode()} != ${expectedRow.hashCode()}
-          |Expressions: $expression
-          |Code: $evaluated
-        """.stripMargin)
-    }
-
-    if (actual != expectedRow) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail("Incorrect Evaluation in codegen mode: " +
-        s"$expression, actual: $actual, expected: $expectedRow$input")
-    }
-    if (actual.copy() != expectedRow) {
-      fail(s"Copy of generated Row is wrong: actual: ${actual.copy()}, expected: $expectedRow")
-    }
-  }
-
   protected def checkEvalutionWithUnsafeProjection(
       expression: Expression,
       expected: Any,
@@ -202,7 +165,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     checkEvaluationWithOptimization(expression, expected)
 
     var plan = generateProject(
-      GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
       expression)
     var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected))
@@ -312,8 +275,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
+      case (result: Double, expected: Spread[Double @unchecked]) =>
+        expected.asInstanceOf[Spread[Double]].isWithin(result)
       case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
         true
       case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>

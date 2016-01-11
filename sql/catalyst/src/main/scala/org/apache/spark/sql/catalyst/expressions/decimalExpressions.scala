@@ -47,6 +47,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
   override def dataType: DataType = DecimalType(precision, scale)
+  override def nullable: Boolean = true
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
   protected override def nullSafeEval(input: Any): Any =
@@ -72,6 +73,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
   override def prettyName: String = "promote_precision"
+  override def sql: String = child.sql
 }
 
 /**
@@ -106,4 +108,6 @@ case class CheckOverflow(child: Expression, dataType: DecimalType) extends Unary
   }
 
   override def toString: String = s"CheckOverflow($child, $dataType)"
+
+  override def sql: String = child.sql
 }

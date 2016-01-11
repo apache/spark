@@ -448,7 +448,6 @@ private[spark] object UIUtils extends Logging {
       new RuleTransformer(rule).transform(xml)
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Invalid job description: $desc ", e)
         <span class="description-input">{desc}</span>
     }
   }

@@ -51,7 +51,7 @@ private[classification] object GLMClassificationModel {
         weights: Vector,
         intercept: Double,
         threshold: Option[Double]): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       // Create JSON metadata.
@@ -74,7 +74,7 @@ private[classification] object GLMClassificationModel {
      */
     def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
       val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataRDD = sqlContext.read.parquet(datapath)
       val dataArray = dataRDD.select("weights", "intercept", "threshold").take(1)
       assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
