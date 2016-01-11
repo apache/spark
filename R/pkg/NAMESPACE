@@ -94,7 +94,8 @@ exportMethods("arrange",
               "withColumnRenamed",
               "write.df",
               "write.json",
-              "write.parquet")
+              "write.parquet",
+              "write.text")
 
 exportClasses("Column")
 
@@ -129,6 +130,7 @@ exportMethods("%in%",
               "count",
               "countDistinct",
               "crc32",
+              "hash",
               "cume_dist",
               "date_add",
               "date_format",
@@ -274,6 +276,7 @@ export("as.DataFrame",
        "parquetFile",
        "read.df",
        "read.parquet",
+       "read.text",
        "sql",
        "table",
        "tableNames",
