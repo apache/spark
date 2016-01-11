@@ -57,7 +57,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
         throw new AnalysisException(e.getMessage)
       case e: NotImplementedError =>
         throw new AnalysisException(
-          s"""== Unsupported language features in query ==
+          s"""Unsupported language features in query
              |== SQL ==
              |$sql
              |== AST ==
@@ -78,7 +78,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   def parseExpression(sql: String): Expression =
     safeParse(sql, ParseDriver.parseExpression(sql, conf))(selExprNodeToExpr(_).get)
 
-  /** Creates Expression for a given SQL string. */
+  /** Creates TableIdentifier for a given SQL string. */
   def parseTableIdentifier(sql: String): TableIdentifier =
     safeParse(sql, ParseDriver.parseTableName(sql, conf))(extractTableIdent)
 
