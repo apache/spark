@@ -162,7 +162,6 @@ trait HadoopFsRelationProvider {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
 
-  // TODO: expose bucket API to users.
   private[sql] def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
@@ -370,7 +369,6 @@ abstract class OutputWriterFactory extends Serializable {
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
 
-  // TODO: expose bucket API to users.
   private[sql] def newInstance(
       path: String,
       bucketId: Option[Int],
@@ -460,7 +458,6 @@ abstract class HadoopFsRelation private[sql](
 
   private var _partitionSpec: PartitionSpec = _
 
-  // TODO: expose bucket API to users.
   private[sql] def bucketSpec: Option[BucketSpec] = None
 
   private class FileStatusCache {
