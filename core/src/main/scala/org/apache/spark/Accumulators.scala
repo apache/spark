@@ -77,10 +77,10 @@ class Accumulable[R, T] private[spark] (
   val zero = param.zero(initialValue)  // Zero value to be passed to executors
   private var deserialized = false
 
-  // In certain places we create accumulators on the executors. If we register them here then
-  // we will never clean them up because there's no context cleaner on the executors. E.g. we
-  // manually create ShuffleWriteMetrics, which is a collection of accumulators, in some places.
-  if (isDriver) {
+  // In many places we create internal accumulators without registering them with the active
+  // context cleaner, so these accumulators are not automatically cleaned up. To avoid leaking
+  // map entries, we explicitly register these internal accumulators elsewhere.
+  if (!internal) {
     Accumulators.register(this)
   }
 
@@ -165,14 +165,6 @@ class Accumulable[R, T] private[spark] (
    * Set the accumulator's value. For internal use only.
    */
   private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
-
-  /**
-   * Whether we are on the driver or on the executors.
-   * Note: in local mode, this will inevitably return true even when we're on the executors.
-   */
-  private def isDriver: Boolean = {
-    Option(SparkEnv.get).map(_.isDriver).getOrElse(true)
-  }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
@@ -417,7 +409,7 @@ private[spark] object InternalAccumulator {
   import AccumulatorParam._
 
   // Prefixes used in names of internal task level metrics
-  private val METRICS_PREFIX = "metrics."
+  val METRICS_PREFIX = "internal.metrics."
   val SHUFFLE_READ_METRICS_PREFIX = METRICS_PREFIX + "shuffle.read."
   val SHUFFLE_WRITE_METRICS_PREFIX = METRICS_PREFIX + "shuffle.write."
   val OUTPUT_METRICS_PREFIX = METRICS_PREFIX + "output."
@@ -468,7 +460,6 @@ private[spark] object InternalAccumulator {
 
   /**
    * Accumulators for tracking internal metrics.
-   * Note: this method does not register accumulators for cleanup.
    */
   def create(): Seq[Accumulator[_]] = {
     Seq[Accumulator[_]](
@@ -493,7 +484,6 @@ private[spark] object InternalAccumulator {
 
   /**
    * Accumulators for tracking shuffle read metrics.
-   * Note: this method does not register accumulators for cleanup.
    */
   def createShuffleReadAccums(): Seq[Accumulator[_]] = {
     Seq[Accumulator[_]](
@@ -507,7 +497,6 @@ private[spark] object InternalAccumulator {
 
   /**
    * Accumulators for tracking shuffle write metrics.
-   * Note: this method does not register accumulators for cleanup.
    */
   def createShuffleWriteAccums(): Seq[Accumulator[_]] = {
     Seq[Accumulator[_]](
@@ -518,7 +507,6 @@ private[spark] object InternalAccumulator {
 
   /**
    * Accumulators for tracking input metrics.
-   * Note: this method does not register accumulators for cleanup.
    */
   def createInputAccums(): Seq[Accumulator[_]] = {
     Seq[Accumulator[_]](
@@ -529,7 +517,6 @@ private[spark] object InternalAccumulator {
 
   /**
    * Accumulators for tracking output metrics.
-   * Note: this method does not register accumulators for cleanup.
    */
   private def createOutputAccums(): Seq[Accumulator[_]] = {
     Seq[Accumulator[_]](
@@ -548,6 +535,7 @@ private[spark] object InternalAccumulator {
   def create(sc: SparkContext): Seq[Accumulator[_]] = {
     val accums = create()
     accums.foreach { accum =>
+      Accumulators.register(accum)
       sc.cleaner.foreach(_.registerAccumulatorForCleanup(accum))
     }
     accums

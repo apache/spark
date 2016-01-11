@@ -424,8 +424,8 @@ private[spark] class Executor(
 
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
-    // list of (task id, metrics) to send back to the driver
-    val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
+    // list of (task id, accumUpdates) to send back to the driver
+    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulableInfo])]()
     val curGCTime = computeTotalGcTime()
 
     for (taskRunner <- runningTasks.values().asScala) {
@@ -433,23 +433,12 @@ private[spark] class Executor(
         taskRunner.task.metrics.foreach { metrics =>
           metrics.mergeShuffleReadMetrics()
           metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-
-          if (isLocal) {
-            // JobProgressListener will hold an reference of it during
-            // onExecutorMetricsUpdate(), then JobProgressListener can not see
-            // the changes of metrics any more, so make a deep copy of it
-            val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
-            tasksMetrics += ((taskRunner.taskId, copiedMetrics))
-          } else {
-            // It will be copied by serialization
-            tasksMetrics += ((taskRunner.taskId, metrics))
-          }
+          accumUpdates += ((taskRunner.taskId, metrics.accumulatorUpdates()))
         }
       }
     }
 
-    // TODO: don't send TaskMetrics here; send accumulator updates.
-    val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
           message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))

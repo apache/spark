@@ -233,14 +233,14 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
-    val taskMetrics = metricsUpdate.taskMetrics
+    val accumUpdates = metricsUpdate.accumUpdates
     ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
     ("Executor ID" -> execId) ~
-    ("Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
+    ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
       ("Task ID" -> taskId) ~
       ("Stage ID" -> stageId) ~
       ("Stage Attempt ID" -> stageAttemptId) ~
-      ("Task Metrics" -> taskMetricsToJson(metrics))
+      ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     })
   }
 
@@ -621,14 +621,15 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
     val execInfo = (json \ "Executor ID").extract[String]
-    val taskMetrics = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
+    val accumUpdates = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
       val taskId = (json \ "Task ID").extract[Long]
       val stageId = (json \ "Stage ID").extract[Int]
       val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
-      val metrics = taskMetricsFromJson(json \ "Task Metrics")
-      (taskId, stageId, stageAttemptId, metrics)
+      val updates =
+        (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
+      (taskId, stageId, stageAttemptId, updates)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, taskMetrics)
+    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
   }
 
   /** --------------------------------------------------------------------- *
@@ -790,9 +791,10 @@ private[spark] object JsonProtocol {
         val stackTrace = stackTraceFromJson(json \ "Stack Trace")
         val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
           map(_.extract[String]).orNull
-        val metrics = Utils.jsonOption(json \ "Metrics").map(taskMetricsFromJson)
+        val accumUpdates = (json \ "Accumulator Updates")
+          .extract[List[JValue]].map(accumulableInfoFromJson)
         ExceptionFailure(
-          className, description, stackTrace, fullStackTrace, None, metrics = metrics)
+          className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
       case `taskCommitDenied` =>

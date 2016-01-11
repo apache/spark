@@ -220,9 +220,10 @@ class DAGScheduler(
    */
   def executorHeartbeatReceived(
       execId: String,
-      taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
+      // (taskId, stageId, stageAttemptId, accumUpdates)
+      accumUpdates: Array[(Long, Int, Int, Seq[AccumulableInfo])],
       blockManagerId: BlockManagerId): Boolean = {
-    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
+    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates))
     blockManagerMaster.driverEndpoint.askWithRetry[Boolean](
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
   }
@@ -1110,65 +1111,12 @@ class DAGScheduler(
   }
 
   /**
-   * Reconstruct [[TaskMetrics]] from accumulator updates.
-   *
-   * Executors only send accumulator updates back to the driver, not [[TaskMetrics]]. However,
-   * we need the latter to post task end events to listeners, so we need to reconstruct the
-   * metrics here on the driver.
-   *
-   * Note: If the task failed, we may return null after attempting to reconstruct the
-   * [[TaskMetrics]] in vain.
-   *
-   * TODO: write tests here.
-   */
-  private def reconstructTaskMetrics(
-      task: Task[_],
-      accumUpdates: Seq[AccumulableInfo]): TaskMetrics = {
-    if (accumUpdates == null) {
-      return null
-    }
-    val taskId = task.partitionId
-    try {
-      // Initial accumulators are passed into the TaskMetrics constructor first because these
-      // are required to be uniquely named. The rest of the accumulators from this task are
-      // registered later because they need not satisfy this requirement.
-      val initialAccumsMap =
-        task.initialAccumulators.map { a => (a.id, a) }.toMap[Long, Accumulator[_]]
-      val (initialAccumUpdates, otherAccumUpdates) = accumUpdates.partition { a =>
-        assert(a.update.isDefined, "accumulator update from task should have a partial value")
-        initialAccumsMap.contains(a.id)
-      }
-      // Note: it is important that we copy the accumulators here since they are used across
-      // many tasks and we want to maintain a snapshot of their local task values when we post
-      // them to listeners downstream. Otherwise, when a new task comes in the listener may get
-      // a different value for an old task.
-      val newInitialAccums = initialAccumUpdates.map { a =>
-        initialAccumsMap(a.id).copy(a.update.get)
-      }
-      val otherAccums = otherAccumUpdates.flatMap { a =>
-        val id = a.id
-        Accumulators.get(id).map(_.copy(a.update.get)).orElse {
-          logWarning(s"Task $taskId returned unregistered accumulator $id.")
-          None
-        }
-      }
-      val metrics = new TaskMetrics(newInitialAccums.toSeq)
-      otherAccums.foreach(metrics.registerAccumulator)
-      metrics
-    } catch {
-      // Do not crash the scheduler if reconstruction fails
-      case NonFatal(e) =>
-        logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
-        null
-    }
-  }
-
-  /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
+    val taskId = task.partitionId
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
@@ -1203,11 +1151,18 @@ class DAGScheduler(
     }
 
     // Reconstruct task metrics. Note: this may be null if the task failed.
-    val taskMetrics = reconstructTaskMetrics(task, event.accumUpdates)
+    val taskMetrics: TaskMetrics =
+      try {
+        TaskMetrics.fromAccumulatorUpdates(taskId, event.accumUpdates)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
+          null
+      }
 
     outputCommitCoordinator.taskCompleted(
       stageId,
-      task.partitionId,
+      taskId,
       event.taskInfo.attemptNumber, // this is a task attempt number
       event.reason)
 

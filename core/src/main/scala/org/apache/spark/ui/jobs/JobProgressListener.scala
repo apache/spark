@@ -325,12 +325,13 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val taskInfo = taskStart.taskInfo
     if (taskInfo != null) {
+      val metrics = new TaskMetrics
       val stageData = stageIdToData.getOrElseUpdate((taskStart.stageId, taskStart.stageAttemptId), {
         logWarning("Task start for unknown stage " + taskStart.stageId)
         new StageUIData
       })
       stageData.numActiveTasks += 1
-      stageData.taskData.put(taskInfo.taskId, new TaskUIData(taskInfo))
+      stageData.taskData.put(taskInfo.taskId, new TaskUIData(taskInfo, Some(metrics)))
     }
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskStart.stageId);
@@ -381,15 +382,21 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             (None, Option(taskEnd.taskMetrics))
           case e: ExceptionFailure =>  // Handle ExceptionFailure because we might have metrics
             stageData.numFailedTasks += 1
-            (Some(e.toErrorString), e.metrics)
+            val metrics =
+              if (e.accumUpdates.nonEmpty) {
+                Some(TaskMetrics.fromAccumulatorUpdates(info.taskId, e.accumUpdates))
+              } else {
+                None
+              }
+            (Some(e.toErrorString), metrics)
           case e: TaskFailedReason =>  // All other failure cases
             stageData.numFailedTasks += 1
             (Some(e.toErrorString), None)
         }
 
-      if (!metrics.isEmpty) {
+      metrics.foreach { m =>
         val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.taskMetrics)
-        updateAggregateMetrics(stageData, info.executorId, metrics.get, oldMetrics)
+        updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
       }
 
       val taskData = stageData.taskData.getOrElseUpdate(info.taskId, new TaskUIData(info))
@@ -417,8 +424,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
    * Upon receiving new metrics for a task, updates the per-stage and per-executor-per-stage
    * aggregate metrics by calculating deltas between the currently recorded metrics and the new
    * metrics.
-   *
-   * TODO: no need to do this! Just use accumulators. :)
    */
   private def updateAggregateMetrics(
       stageData: StageUIData,
@@ -491,19 +496,18 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   }
 
   override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
-    for ((taskId, sid, sAttempt, taskMetrics) <- executorMetricsUpdate.taskMetrics) {
+    for ((taskId, sid, sAttempt, accumUpdates) <- executorMetricsUpdate.accumUpdates) {
       val stageData = stageIdToData.getOrElseUpdate((sid, sAttempt), {
         logWarning("Metrics update for task in unknown stage " + sid)
         new StageUIData
       })
       val taskData = stageData.taskData.get(taskId)
+      val metrics = TaskMetrics.fromAccumulatorUpdates(taskId, accumUpdates)
       taskData.map { t =>
         if (!t.taskInfo.finished) {
-          updateAggregateMetrics(stageData, executorMetricsUpdate.execId, taskMetrics,
-            t.taskMetrics)
-
+          updateAggregateMetrics(stageData, executorMetricsUpdate.execId, metrics, t.taskMetrics)
           // Overwrite task metrics
-          t.taskMetrics = Some(taskMetrics)
+          t.taskMetrics = Some(metrics)
         }
       }
     }

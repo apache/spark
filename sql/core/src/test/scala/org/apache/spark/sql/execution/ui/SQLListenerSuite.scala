@@ -119,16 +119,16 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, metrics)
-      (0L, 0, 0, createTaskMetrics(accumulatorUpdates)),
-      (1L, 0, 0, createTaskMetrics(accumulatorUpdates))
+      (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, metrics)
-      (0L, 0, 0, createTaskMetrics(accumulatorUpdates)),
-      (1L, 0, 0, createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)))
+      (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 0, 0, createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 3))
@@ -138,8 +138,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, metrics)
-      (0L, 0, 1, createTaskMetrics(accumulatorUpdates)),
-      (1L, 0, 1, createTaskMetrics(accumulatorUpdates))
+      (0L, 0, 1, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 0, 1, createTaskMetrics(accumulatorUpdates).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
@@ -178,8 +178,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, metrics)
-      (0L, 1, 0, createTaskMetrics(accumulatorUpdates)),
-      (1L, 1, 0, createTaskMetrics(accumulatorUpdates))
+      (0L, 1, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 1, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 7))
