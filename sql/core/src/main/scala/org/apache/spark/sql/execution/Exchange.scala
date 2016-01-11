@@ -173,7 +173,9 @@ case class Exchange(
           position += 1
           position
         }
-      case HashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
+      case HashPartitioning(expressions, _) =>
+        val projection = UnsafeProjection.create(new Murmur3Hash(expressions) :: Nil, child.output)
+        row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }

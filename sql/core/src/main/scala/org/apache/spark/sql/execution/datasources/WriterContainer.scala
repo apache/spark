@@ -324,6 +324,8 @@ private[sql] class DynamicPartitionWriterContainer(
 
   private def bucketIdExpression: Option[Expression] = for {
     BucketSpec(numBuckets, _, _) <- bucketSpec
+  // Use `Pmod` to match the behaviour of `Utils.nonNegativeMod`, which is the function used to
+  // calculate partition id from hashCode in shuffle.
   } yield Pmod(new Murmur3Hash(bucketColumns), Literal(numBuckets))
 
   // Expressions that given a partition key build a string like: col1=val/col2=val/...
