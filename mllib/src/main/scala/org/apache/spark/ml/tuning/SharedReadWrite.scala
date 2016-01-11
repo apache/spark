@@ -18,8 +18,8 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.hadoop.fs.Path
-import org.json4s.jackson.JsonMethods._
 import org.json4s.{DefaultFormats, JObject}
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml._
@@ -27,8 +27,8 @@ import org.apache.spark.ml.classification.OneVsRestParams
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 
 private trait SharedReadWrite {
   /**

@@ -21,17 +21,17 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator}
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.types.StructType
 
 class SharedReadWriteSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
