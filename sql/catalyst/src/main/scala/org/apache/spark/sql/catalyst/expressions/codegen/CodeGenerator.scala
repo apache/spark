@@ -25,6 +25,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.Logging
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -56,6 +57,12 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
+  val broadcasts: mutable.ArrayBuffer[Broadcast[_]] = new mutable.ArrayBuffer[Broadcast[_]]()
+
+  var currentVars: Array[GeneratedExpressionCode] = null
+
+  var currentRowTerm: String = "i"
+
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
    * 3-tuple: java type, variable name, code to init it.
@@ -76,6 +83,16 @@ class CodeGenContext {
 
   def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
     mutableStates += ((javaType, variableName, initCode))
+  }
+
+  def declareMutableStates(): String = {
+    mutableStates.map { case (javaType, variableName, _) =>
+      s"private $javaType $variableName;"
+    }.mkString("\n")
+  }
+
+  def initMutableStates(): String = {
+    mutableStates.map(_._3).mkString("\n")
   }
 
   /**
@@ -111,6 +128,10 @@ class CodeGenContext {
 
   // The collection of sub-exression result resetting methods that need to be called on each row.
   val subExprResetVariables = mutable.ArrayBuffer.empty[String]
+
+  def declareAddedFunctions(): String = {
+    addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+  }
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -479,20 +500,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
-  protected def declareMutableStates(ctx: CodeGenContext): String = {
-    ctx.mutableStates.map { case (javaType, variableName, _) =>
-      s"private $javaType $variableName;"
-    }.mkString("\n")
-  }
-
-  protected def initMutableStates(ctx: CodeGenContext): String = {
-    ctx.mutableStates.map(_._3).mkString("\n")
-  }
-
-  protected def declareAddedFunctions(ctx: CodeGenContext): String = {
-    ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n").trim
-  }
-
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.
@@ -508,16 +515,33 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   /** Binds an input expression to a given input schema */
   protected def bind(in: InType, inputSchema: Seq[Attribute]): InType
 
+  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
+  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
+    generate(bind(expressions, inputSchema))
+
+  /** Generates the requested evaluator given already bound expression(s). */
+  def generate(expressions: InType): OutType = create(canonicalize(expressions))
+
   /**
-   * Compile the Java source code into a Java class, using Janino.
+   * Create a new codegen context for expression evaluator, used to store those
+   * expressions that don't support codegen
    */
-  protected def compile(code: String): GeneratedClass = {
+  def newCodeGenContext(): CodeGenContext = {
+    new CodeGenContext
+  }
+}
+
+object CodeGenerator extends Logging {
+  /**
+    * Compile the Java source code into a Java class, using Janino.
+    */
+  def compile(code: String): GeneratedClass = {
     cache.get(code)
   }
 
   /**
-   * Compile the Java source code into a Java class, using Janino.
-   */
+    * Compile the Java source code into a Java class, using Janino.
+    */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
@@ -558,14 +582,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 
   /**
-   * A cache of generated classes.
-   *
-   * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
-   * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
-   * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
-   * automatically, in order to constrain its memory footprint.  Note that this cache does not use
-   * weak keys/values and thus does not respond to memory pressure.
-   */
+    * A cache of generated classes.
+    *
+    * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
+    * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
+    * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
+    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
+    * weak keys/values and thus does not respond to memory pressure.
+    */
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
@@ -579,19 +603,4 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           result
         }
       })
-
-  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
-  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
-    generate(bind(expressions, inputSchema))
-
-  /** Generates the requested evaluator given already bound expression(s). */
-  def generate(expressions: InType): OutType = create(canonicalize(expressions))
-
-  /**
-   * Create a new codegen context for expression evaluator, used to store those
-   * expressions that don't support codegen
-   */
-  def newCodeGenContext(): CodeGenContext = {
-    new CodeGenContext
-  }
 }

@@ -339,13 +339,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         private $exprType[] expressions;
 
-        ${declareMutableStates(ctx)}
+        ${ctx.declareMutableStates()}
 
-        ${declareAddedFunctions(ctx)}
+        ${ctx.declareAddedFunctions()}
 
         public SpecificUnsafeProjection($exprType[] expressions) {
           this.expressions = expressions;
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
         // Scala.Function1 need this
@@ -362,7 +362,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
   }
 }

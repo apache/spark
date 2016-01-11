@@ -106,7 +106,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def execute(): RDD[InternalRow] = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      doExecute()
+      if (sqlContext.conf.wholeStageEnabled && supportCodeGen) {
+        doCodeGen()
+      } else {
+        doExecute()
+      }
     }
   }
 
@@ -135,6 +139,115 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Produces the result of the query as an RDD[InternalRow]
    */
   protected def doExecute(): RDD[InternalRow]
+
+  protected def supportCodeGen: Boolean = false
+
+  protected def doCodeGen(): RDD[InternalRow] = {
+    val ctx = new CodeGenContext
+    val (rdd, code) = produce(ctx, null)
+    val exprType: String = classOf[Expression].getName
+    val references = ctx.references.toArray
+    val source = s"""
+     public Object generate($exprType[] exprs) {
+       return new GeneratedIterator(exprs);
+     }
+
+     class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
+
+       private $exprType[] expressions;
+       ${ctx.declareMutableStates()}
+
+       private UnsafeRow unsafeRow = new UnsafeRow(${output.length});
+       private BufferHolder bufferHolder = new BufferHolder();
+       private UnsafeRowWriter rowWriter = new UnsafeRowWriter();
+       private MutableUnsafeRow mutableRow = null;
+
+       public GeneratedIterator($exprType[] exprs) {
+         expressions = exprs;
+         ${ctx.initMutableStates()}
+
+         this.mutableRow = new MutableUnsafeRow(rowWriter);
+       }
+
+       protected void processNext() {
+         $code
+       }
+     }
+     """
+    // try to compile
+    // println(s"${CodeFormatter.format(source)}")
+    val clazz = CodeGenerator.compile(CodeFormatter.format(source))
+
+    rdd.mapPartitions { iter =>
+      val clazz = CodeGenerator.compile(source)
+      val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+      buffer.process(iter)
+      new Iterator[InternalRow] {
+        override def hasNext: Boolean = buffer.hasNext
+        override def next: InternalRow = buffer.next()
+      }
+    }
+  }
+
+  var calledParent: SparkPlan = null
+
+  def produce(ctx: CodeGenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
+    calledParent = parent
+    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val columns = exprs.map(_.gen(ctx))
+    val accesses = columns.map(_.code).mkString("\n")
+    val code = s"""
+       |  while (input.hasNext()) {
+       |   InternalRow i = (InternalRow) input.next();
+       |   $accesses
+       |   ${genNext(ctx, columns)}
+       | }
+     """.stripMargin
+    (doExecute(), code)
+  }
+
+  def genNext(ctx: CodeGenContext, columns: Seq[GeneratedExpressionCode]): String = {
+    columns.foreach {c =>
+      c.code = ""
+    }
+    ctx.currentVars = columns.toArray
+    if (calledParent != null) {
+      calledParent.consume(ctx, this, columns)
+    } else {
+      consume0(ctx, null, columns)
+    }
+  }
+
+  def consume(
+      ctx: CodeGenContext,
+      child: SparkPlan,
+      columns: Seq[GeneratedExpressionCode]): String = {
+    ""
+  }
+
+  private def consume0(
+      ctx: CodeGenContext,
+      child: SparkPlan,
+      columns: Seq[GeneratedExpressionCode]): String = {
+    assert(columns.length == output.length)
+    val writers = columns.zipWithIndex.map { case (c, i) =>
+      s"""
+         | if (${c.isNull}) {
+         |   mutableRow.setNull($i);
+         | } else {
+         |   ${ctx.setColumn("mutableRow", output(i).dataType, i, c.value)}
+         | }
+       """.stripMargin
+    }
+    s"""
+       | bufferHolder.reset();
+       | rowWriter.initialize(bufferHolder, ${output.length});
+       | ${writers.mkString("\n")}
+       | unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize());
+       | currentRow = unsafeRow;
+       | return;
+     """.stripMargin
+  }
 
   /**
    * Runs this query returning the result as an array.

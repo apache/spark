@@ -196,7 +196,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     c.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
   }
 }
