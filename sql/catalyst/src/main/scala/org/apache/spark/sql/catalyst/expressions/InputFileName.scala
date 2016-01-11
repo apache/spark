@@ -49,4 +49,5 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
       "org.apache.spark.rdd.SqlNewHadoopRDDState.getInputFileName();"
   }
 
+  override def sql: String = prettyName
 }
