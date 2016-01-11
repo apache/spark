@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.execution.{Sort, Exchange}
-import org.apache.spark.sql.execution.datasources.BucketingUtils
+import org.apache.spark.sql.{Column, DataFrame, DataFrameWriter, QueryTest, SQLConf}
+import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
+import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.joins.SortMergeJoin
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
@@ -43,9 +43,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
         val attrs = df.select("j", "k").schema.toAttributes
         val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
-          val bucketIdExpression = BucketingUtils.bucketIdExpression(attrs, 8)
-          val projection = UnsafeProjection.create(bucketIdExpression :: Nil, attrs)
-          rows.map(row => projection(row).getInt(0) == index)
+          val projection = UnsafeProjection.create(new Murmur3Hash(attrs) :: Nil, attrs)
+          rows.map(row => Utils.nonNegativeMod(projection(row).getInt(0), 8) == index)
         })
 
         assert(checkBucketId.collect().reduce(_ && _))
@@ -53,58 +52,78 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
   }
 
-  test("avoid shuffle and sort when join 2 bucketed tables") {
-    def createTable(df: DataFrame, tableName: String): Unit = {
-      df.write.format("parquet").bucketBy(8, "i", "j").sortBy("i", "j").saveAsTable(tableName)
-    }
+  private val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k").as("df1")
+  private val df2 = (0 until 50).map(i => (i % 7, i % 11, i.toString)).toDF("i", "j", "k").as("df2")
 
+  private def testBucketing(
+      bucketing1: DataFrameWriter => DataFrameWriter,
+      bucketing2: DataFrameWriter => DataFrameWriter,
+      joinColumns: Seq[String],
+      shuffleLeft: Boolean,
+      shuffleRight: Boolean): Unit = {
     withTable("bucketed_table1", "bucketed_table2") {
-      val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-      val df2 = (0 until 50).map(i => (i % 7, i % 11, i.toString)).toDF("i", "j", "k")
+      bucketing1(df1.write.format("parquet")).saveAsTable("bucketed_table1")
+      bucketing2(df2.write.format("parquet")).saveAsTable("bucketed_table2")
 
-      createTable(df1, "bucketed_table1")
-      createTable(df2, "bucketed_table2")
-
-      withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
         val t1 = hiveContext.table("bucketed_table1")
         val t2 = hiveContext.table("bucketed_table2")
+        val joined = t1.join(t2, joinCondition(t1, t2, joinColumns))
 
-        val joined = t1.join(t2, t1("i") === t2("i") && t1("j") === t2("j"))
-        assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoin])
-        assert(joined.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isEmpty)
-        assert(joined.queryExecution.executedPlan.find(_.isInstanceOf[Sort]).isEmpty)
+        // First check the result is corrected.
         checkAnswer(
-          joined.sort(t1("k")),
-          df1.join(df2, df1("i") === df2("i") && df1("j") === df2("j")).sort(df1("k")))
+          joined.sort("bucketed_table1.k", "bucketed_table2.k"),
+          df1.join(df2, joinCondition(df1, df2, joinColumns)).sort("df1.k", "df2.k"))
+
+        assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoin])
+        val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoin]
+        assert(joinOperator.left.find(_.isInstanceOf[Exchange]).isDefined == shuffleLeft)
+        assert(joinOperator.right.find(_.isInstanceOf[Exchange]).isDefined == shuffleRight)
       }
     }
   }
 
+  private def joinCondition(left: DataFrame, right: DataFrame, joinCols: Seq[String]): Column = {
+    joinCols.map(col => left(col) === right(col)).reduce(_ && _)
+  }
+
+  test("avoid shuffle when join 2 bucketed tables") {
+    val bucketing = (writer: DataFrameWriter) => writer.bucketBy(8, "i", "j")
+    testBucketing(bucketing, bucketing, Seq("i", "j"), shuffleLeft = false, shuffleRight = false)
+  }
+
+  // Enable it after fix https://issues.apache.org/jira/browse/SPARK-12704
+  ignore("avoid shuffle when join keys are a super-set of bucket keys") {
+    val bucketing = (writer: DataFrameWriter) => writer.bucketBy(8, "i")
+    testBucketing(bucketing, bucketing, Seq("i", "j"), shuffleLeft = false, shuffleRight = false)
+  }
+
+  ignore("only shuffle one side when join bucketed table and non-bucketed table") {
+    val bucketing = (writer: DataFrameWriter) => writer.bucketBy(8, "i", "j")
+    testBucketing(bucketing, identity, Seq("i", "j"), shuffleLeft = false, shuffleRight = true)
+  }
+
+  ignore("only shuffle one side when 2 bucketed tables have different bucket number") {
+    val bucketing1 = (writer: DataFrameWriter) => writer.bucketBy(8, "i", "j")
+    val bucketing2 = (writer: DataFrameWriter) => writer.bucketBy(5, "i", "j")
+    testBucketing(bucketing1, bucketing2, Seq("i", "j"), shuffleLeft = false, shuffleRight = true)
+  }
+
+  ignore("only shuffle one side when 2 bucketed tables have different bucket keys") {
+    val bucketing1 = (writer: DataFrameWriter) => writer.bucketBy(8, "i")
+    val bucketing2 = (writer: DataFrameWriter) => writer.bucketBy(8, "j")
+    testBucketing(bucketing1, bucketing2, Seq("i"), shuffleLeft = false, shuffleRight = true)
+  }
+
+  test("shuffle when join keys are not equal to bucket keys") {
+    val bucketing = (writer: DataFrameWriter) => writer.bucketBy(8, "i")
+    testBucketing(bucketing, bucketing, Seq("j"), shuffleLeft = true, shuffleRight = true)
+  }
+
   test("shuffle when join 2 bucketed tables with bucketing disabled") {
-    withSQLConf("spark.sql.sources.bucketing.enabled" -> "false") {
-      def createTable(df: DataFrame, tableName: String): Unit = {
-        df.write.format("parquet").bucketBy(8, "i", "j").saveAsTable(tableName)
-      }
-
-      withTable("bucketed_table1", "bucketed_table2") {
-        val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-        val df2 = (0 until 50).map(i => (i % 7, i % 11, i.toString)).toDF("i", "j", "k")
-
-        createTable(df1, "bucketed_table1")
-        createTable(df2, "bucketed_table2")
-
-        withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
-          val t1 = hiveContext.table("bucketed_table1")
-          val t2 = hiveContext.table("bucketed_table2")
-
-          val joined = t1.join(t2, t1("i") === t2("i") && t1("j") === t2("j"))
-          assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoin])
-          assert(joined.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isDefined)
-          checkAnswer(
-            joined.sort(t1("k")),
-            df1.join(df2, df1("i") === df2("i") && df1("j") === df2("j")).sort(df1("k")))
-        }
-      }
+    val bucketing = (writer: DataFrameWriter) => writer.bucketBy(8, "i", "j")
+    withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+      testBucketing(bucketing, bucketing, Seq("i", "j"), shuffleLeft = true, shuffleRight = true)
     }
   }
 }

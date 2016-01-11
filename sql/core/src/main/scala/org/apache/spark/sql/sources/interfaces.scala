@@ -28,7 +28,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.{UnionRDD, RDD}
+import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -688,16 +688,16 @@ abstract class HadoopFsRelation private[sql](
     if (bucketSpec.isEmpty || !sqlContext.conf.bucketingEnabled()) {
       buildInternalScan(requiredColumns, filters, allInputFiles, broadcastedConf)
     } else {
+      // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket id
+      // from file name. Then read these files into a RDD(use one-partition empty RDD for empty
+      // bucket), and coalesce it to one partition. Finally union all bucket RDDs to final result.
       val perBucketRows = (0 until bucketSpec.get.numBuckets).map { bucketId =>
         val inputStatuses = allInputFiles.filter(f => getBucketId(f) == bucketId)
         if (inputStatuses.isEmpty) {
           sqlContext.emptyResult
         } else {
-          BucketingUtils.coalesce(
-            buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf),
-            dataSchema,
-            bucketSpec.get.sortColumnNames,
-            sqlContext)
+          // TODO: only coalesce when necessary, e.g. join 2 bucketed tables.
+          buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
         }
       }
 

@@ -18,11 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.mapreduce.TaskAttemptContext
-import org.apache.spark.rdd.RDD
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources.{HadoopFsRelation, HadoopFsRelationProvider, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
@@ -61,27 +58,9 @@ private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFact
 }
 
 private[sql] object BucketingUtils {
-
-  def bucketIdExpression(bucketColumns: Seq[Attribute], numBuckets: Int): Expression =
-    Pmod(new Murmur3Hash(bucketColumns), Literal(numBuckets))
-
   private val bucketedFileName = """.*-(\d+)(?:\..*)?$""".r
 
   def getBucketId(fileName: String): Int = fileName match {
     case bucketedFileName(bucketId) => bucketId.toInt
-  }
-
-  def coalesce(
-      data: RDD[InternalRow],
-      schema: StructType,
-      sortColumnNames: Seq[String],
-      sQLContext: SQLContext): RDD[InternalRow] = {
-    if (sortColumnNames.isEmpty) {
-      data.coalesce(1)
-    } else {
-      val df = sQLContext.internalCreateDataFrame(data, schema)
-      val sorted = df.sort(sortColumnNames.head, sortColumnNames.tail: _*)
-      sorted.queryExecution.toRdd.coalesce(1)
-    }
   }
 }

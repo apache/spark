@@ -22,8 +22,8 @@ import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
 import org.apache.spark.sql.types.DataType
 
@@ -100,8 +100,7 @@ private[sql] case class PhysicalRDD(
     override val nodeName: String,
     override val metadata: Map[String, String] = Map.empty,
     isUnsafeRow: Boolean = false,
-    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
-    override val outputOrdering: Seq[SortOrder] = Nil)
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0))
   extends LeafNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -146,12 +145,9 @@ private[sql] object PhysicalRDD {
       if relation.sqlContext.conf.bucketingEnabled()
       numBuckets = spec.numBuckets
       bucketColumns = spec.bucketColumnNames.map(toAttribute)
-      sortColumns = spec.sortColumnNames.map(toAttribute)
     } yield {
       val partitioning = HashPartitioning(bucketColumns, numBuckets)
-      val ordering = sortColumns.map(col => SortOrder(col, Ascending))
-      PhysicalRDD(
-        output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning, ordering)
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
     }
 
     bucketedPhysicalRDD.getOrElse(
