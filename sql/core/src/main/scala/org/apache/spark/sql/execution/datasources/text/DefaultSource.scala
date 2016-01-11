@@ -18,19 +18,22 @@
 package org.apache.spark.sql.execution.datasources.text
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.{Path, FileStatus}
-import org.apache.hadoop.io.{NullWritable, Text, LongWritable}
-import org.apache.hadoop.mapred.{TextInputFormat, JobConf}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
+import org.apache.spark.sql.execution.streaming.{FileStreamSink, Sink, FileStreamSource, Source}
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -39,7 +42,11 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A data source for reading text files.
  */
-class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+class DefaultSource
+    extends HadoopFsRelationProvider
+    with DataSourceRegister
+    with StreamSourceProvider
+    with StreamSinkProvider {
 
   override def createRelation(
       sqlContext: SQLContext,
@@ -63,6 +70,23 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       throw new AnalysisException(
         s"Text data source supports only a string column, but you have ${tpe.simpleString}.")
     }
+  }
+
+  override def createSource(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: Option[StructType]): Source = {
+    val path = parameters("path")
+    val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
+
+    new FileStreamSource(sqlContext, metadataPath, path)
+  }
+
+  override def createSink(sqlContext: SQLContext, parameters: Map[String, String]): Sink = {
+    val path = parameters("path")
+    val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
+
+    new FileStreamSink(sqlContext, metadataPath, path)
   }
 }
 

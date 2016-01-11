@@ -25,9 +25,12 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.encoders.{RowEncoder, encoderFor}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -285,5 +288,55 @@ trait StreamTest extends QueryTest with Timeouts {
         currentStream.stop()
       }
     }
+  }
+
+  /**
+   * Creates a stress test that randomly starts/stops/adds data/checks the result.
+   *
+   * @param ds a dataframe that executes + 1 on a stream of integers, returning the result.
+   * @param addData and add data action that adds the given numbers to the stream, encoding them
+   *                as needed
+   */
+  def createStressTest(ds: Dataset[Int], addData: Seq[Int] => StreamAction): Unit = {
+    implicit val intEncoder = ExpressionEncoder[Int]
+    var dataPos = 0
+    var running = true
+    val actions = new ArrayBuffer[StreamAction]()
+
+    def addCheck() = { actions += CheckAnswer(1 to dataPos: _*) }
+
+    (1 to 500).foreach { i =>
+      val rand = Random.nextDouble()
+      if(!running) {
+        rand match {
+          case r if r < 0.7 => // AddData
+            val numItems = Random.nextInt(10)
+            val data = dataPos until (dataPos + numItems)
+            dataPos += numItems
+            actions += addData(data)
+          case _ => // StartStream
+            actions += StartStream
+            running = true
+        }
+      } else {
+        rand match {
+          case r if r < 0.1 =>
+            addCheck()
+
+          case r if r < 0.7 => // AddData
+            val numItems = Random.nextInt(10)
+            val data = dataPos until (dataPos + numItems)
+            dataPos += numItems
+            actions += addData(data)
+
+          case _ => // StartStream
+            actions += StopStream
+            running = false
+        }
+      }
+    }
+    if(!running) { actions += StartStream }
+    addCheck()
+    testStream(ds)(actions: _*)
   }
 }

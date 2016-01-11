@@ -21,21 +21,23 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
-import org.apache.hadoop.mapred.{JobConf, FileInputFormat}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, Partition, PartitioningUtils, PartitionSpec}
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -124,6 +126,25 @@ trait SchemaRelationProvider {
 }
 
 /**
+ * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ */
+trait StreamSourceProvider {
+  def createSource(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: Option[StructType]): Source
+}
+
+/**
+ * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ */
+trait StreamSinkProvider {
+  def createSink(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): Sink
+}
+
+/**
  * ::Experimental::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
@@ -161,6 +182,20 @@ trait HadoopFsRelationProvider {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
+
+  // TODO: expose bucket API to users.
+  private[sql] def createRelation(
+      sqlContext: SQLContext,
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
+      parameters: Map[String, String]): HadoopFsRelation = {
+    if (bucketSpec.isDefined) {
+      throw new AnalysisException("Currently we don't support bucketing for this data source.")
+    }
+    createRelation(sqlContext, paths, dataSchema, partitionColumns, parameters)
+  }
 }
 
 /**
@@ -351,7 +386,18 @@ abstract class OutputWriterFactory extends Serializable {
    *
    * @since 1.4.0
    */
-  def newInstance(path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter
+  def newInstance(
+      path: String,
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter
+
+  // TODO: expose bucket API to users.
+  private[sql] def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter =
+    newInstance(path, dataSchema, context)
 }
 
 /**
@@ -434,6 +480,9 @@ abstract class HadoopFsRelation private[sql](
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
   private var _partitionSpec: PartitionSpec = _
+
+  // TODO: expose bucket API to users.
+  private[sql] def bucketSpec: Option[BucketSpec] = None
 
   private class FileStatusCache {
     var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]

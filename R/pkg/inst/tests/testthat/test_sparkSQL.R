@@ -423,12 +423,12 @@ test_that("read/write json files", {
 test_that("jsonRDD() on a RDD with json string", {
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
-  df <- jsonRDD(sqlContext, rdd)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
 
   rdd2 <- flatMap(rdd, function(x) c(x, x))
-  df <- jsonRDD(sqlContext, rdd2)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 6)
 })
@@ -922,7 +922,7 @@ test_that("column functions", {
   c <- column("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
-  c3 <- cosh(c) + count(c) + crc32(c) + exp(c)
+  c3 <- cosh(c) + count(c) + crc32(c) + hash(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
@@ -1495,6 +1495,27 @@ test_that("read/write Parquet files", {
   unlink(parquetPath2)
   unlink(parquetPath3)
   unlink(parquetPath4)
+})
+
+test_that("read/write text files", {
+  # Test write.df and read.df
+  df <- read.df(sqlContext, jsonPath, "text")
+  expect_is(df, "DataFrame")
+  expect_equal(colnames(df), c("value"))
+  expect_equal(count(df), 3)
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.df(df, textPath, "text", mode="overwrite")
+
+  # Test write.text and read.text
+  textPath2 <- tempfile(pattern = "textPath2", fileext = ".txt")
+  write.text(df, textPath2)
+  df2 <- read.text(sqlContext, c(textPath, textPath2))
+  expect_is(df2, "DataFrame")
+  expect_equal(colnames(df2), c("value"))
+  expect_equal(count(df2), count(df) * 2)
+
+  unlink(textPath)
+  unlink(textPath2)
 })
 
 test_that("describe() and summarize() on a DataFrame", {

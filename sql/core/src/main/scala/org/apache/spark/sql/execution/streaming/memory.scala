@@ -113,30 +113,34 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   /** Used to convert an [[InternalRow]] to an external [[Row]] for comparison in testing. */
   private val externalRowConverter = RowEncoder(schema)
 
-  override def currentProgress: Option[Offset] = batches.lastOption.map(_.end)
+  override def currentOffset: Option[Offset] = synchronized {
+    batches.lastOption.map(_.end)
+  }
 
-  override def addBatch(nextBatch: Batch): Unit = {
+  override def addBatch(nextBatch: Batch): Unit = synchronized {
     batches.append(nextBatch)
   }
 
   /** Returns all rows that are stored in this [[Sink]]. */
-  def allData: Seq[Row] =
+  def allData: Seq[Row] = synchronized {
     batches
-      .map(_.data)
-      .reduceOption(_ unionAll _)
-      .map(_.collect().toSeq)
-      .getOrElse(Seq.empty)
+        .map(_.data)
+        .reduceOption(_ unionAll _)
+        .map(_.collect().toSeq)
+        .getOrElse(Seq.empty)
+  }
 
   /**
    * Atomically drops the most recent `num` batches and resets the [[StreamProgress]] to the
    * corresponding point in the input. This function can be used when testing to simulate data
    * that has been lost due to buffering.
    */
-  def dropBatches(num: Int): Unit = {
+  def dropBatches(num: Int): Unit = synchronized {
     batches.remove(batches.size - num, num)
   }
 
-  override def toString: String =
+  override def toString: String = synchronized {
     batches.map(b => s"${b.end}: ${b.data.collect().mkString(" ")}").mkString("\n")
+  }
 }
 

@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
+import org.apache.spark.sql.catalyst.expressions.{RowOrdering, Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation, InsertableRelation}
-import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
 
 /**
  * Try to replaces [[UnresolvedRelation]]s with [[ResolvedDataSource]].
@@ -165,22 +165,22 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-      case CreateTableUsingAsSelect(tableIdent, _, _, partitionColumns, mode, _, query) =>
+      case c: CreateTableUsingAsSelect =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (mode == SaveMode.Overwrite && catalog.tableExists(tableIdent)) {
+        if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableIdent)) {
           // Need to remove SubQuery operator.
-          EliminateSubQueries(catalog.lookupRelation(tableIdent)) match {
+          EliminateSubQueries(catalog.lookupRelation(c.tableIdent)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _) =>
               // Get all input data source relations of the query.
-              val srcRelations = query.collect {
+              val srcRelations = c.child.collect {
                 case LogicalRelation(src: BaseRelation, _) => src
               }
               if (srcRelations.contains(dest)) {
                 failAnalysis(
-                  s"Cannot overwrite table $tableIdent that is also being read from.")
+                  s"Cannot overwrite table ${c.tableIdent} that is also being read from.")
               } else {
                 // OK
               }
@@ -192,7 +192,17 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         }
 
         PartitioningUtils.validatePartitionColumnDataTypes(
-          query.schema, partitionColumns, catalog.conf.caseSensitiveAnalysis)
+          c.child.schema, c.partitionColumns, catalog.conf.caseSensitiveAnalysis)
+
+        for {
+          spec <- c.bucketSpec
+          sortColumnName <- spec.sortColumnNames
+          sortColumn <- c.child.schema.find(_.name == sortColumnName)
+        } {
+          if (!RowOrdering.isOrderable(sortColumn.dataType)) {
+            failAnalysis(s"Cannot use ${sortColumn.dataType.simpleString} for sorting column.")
+          }
+        }
 
       case _ => // OK
     }

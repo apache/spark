@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import com.fasterxml.jackson.core.{JsonParser, JsonFactory}
+import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
 /**
  * Options for the JSON data source.

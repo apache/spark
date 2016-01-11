@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{StandingQuery, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
 
@@ -35,7 +35,13 @@ import scala.collection.mutable.ArrayBuffer
 class StreamExecution(
     sqlContext: SQLContext,
     private[sql] val logicalPlan: LogicalPlan,
-    val sink: Sink) extends Logging {
+    val sink: Sink) extends StandingQuery with Logging {
+
+  /** An monitor used to wait/notify when batches complete. */
+  val awaitBatchLock = new Object
+
+  @volatile
+  var batchRun = false
 
   /** Minimum amount of time in between the start of each batch. */
   val minBatchTime = 100
@@ -50,7 +56,7 @@ class StreamExecution(
   // Start the execution at the current offsets stored in the sink. (i.e. avoid reprocessing data
   // that we have already processed).
   {
-    sink.currentProgress match {
+    sink.currentOffset match {
       case Some(c: CompositeOffset) =>
         val storedProgress = c.offsets
         val sources = logicalPlan collect {
@@ -76,7 +82,10 @@ class StreamExecution(
   private[sql] val microBatchThread = new Thread("stream execution thread") {
     override def run(): Unit = {
       SQLContext.setActive(sqlContext)
-      while (shouldRun) { attemptBatch() }
+      while (shouldRun) {
+        attemptBatch()
+        Thread.sleep(minBatchTime) // TODO: Could be tighter
+      }
     }
   }
   microBatchThread.setDaemon(true)
@@ -129,20 +138,23 @@ class StreamExecution(
       val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
       logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-      // Update the offsets and calculate a new composite offset
-      newOffsets.foreach(currentOffsets.update)
-      val newStreamProgress = logicalPlan.collect {
-        case StreamingRelation(source, _) => currentOffsets.get(source)
-      }
-      val batchOffset = CompositeOffset(newStreamProgress)
-
-      // Construct the batch and send it to the sink.
-      val nextBatch = new Batch(batchOffset, new DataFrame(sqlContext, newPlan))
-      sink.addBatch(nextBatch)
-
-      // Wake up any threads that are waiting for the stream to progress.
       StreamExecution.this.synchronized {
-        StreamExecution.this.notifyAll()
+        // Update the offsets and calculate a new composite offset
+        newOffsets.foreach(currentOffsets.update)
+        val newStreamProgress = logicalPlan.collect {
+          case StreamingRelation(source, _) => currentOffsets.get(source)
+        }
+        val batchOffset = CompositeOffset(newStreamProgress)
+
+        // Construct the batch and send it to the sink.
+        val nextBatch = new Batch(batchOffset, new DataFrame(sqlContext, newPlan))
+        sink.addBatch(nextBatch)
+      }
+
+      batchRun = true
+      awaitBatchLock.synchronized {
+        // Wake up any threads that are waiting for the stream to progress.
+        awaitBatchLock.notifyAll()
       }
 
       val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
@@ -150,9 +162,6 @@ class StreamExecution(
     }
 
     logDebug(s"Waiting for data, current: $currentOffsets")
-
-    // TODO: this could be tighter...
-    Thread.sleep(minBatchTime)
   }
 
   /**
@@ -169,11 +178,30 @@ class StreamExecution(
    * least the given `Offset`. This method is indented for use primarily when writing tests.
    */
   def awaitOffset(source: Source, newOffset: Offset): Unit = {
-    while (!currentOffsets.contains(source) || currentOffsets(source) < newOffset) {
+    def notDone = synchronized {
+      !currentOffsets.contains(source) || currentOffsets(source) < newOffset
+    }
+
+    while (notDone) {
       logInfo(s"Waiting until $newOffset at $source")
-      synchronized { wait() }
+      awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
+  }
+
+  /** Clears the indicator that a batch has completed.  Used for testing. */
+  override def clearBatchMarker(): Unit = {
+    batchRun = false
+  }
+
+  /**
+   * Awaits the completion of at least one streaming batch. Must be called after `clearBatchMarker`
+   * to gurantee that a new batch has been processed.
+   */
+  override def awaitBatchCompletion(): Unit = {
+    while (!batchRun) {
+      awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
+    }
   }
 }
 

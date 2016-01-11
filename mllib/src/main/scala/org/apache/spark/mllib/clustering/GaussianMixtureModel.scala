@@ -177,7 +177,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
   }
 
   @Since("1.4.0")
-  override def load(sc: SparkContext, path: String) : GaussianMixtureModel = {
+  override def load(sc: SparkContext, path: String): GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats
     val k = (metadata \ "k").extract[Int]

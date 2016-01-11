@@ -18,20 +18,20 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.concurrent.locks.ReentrantLock
 import java.util.{Collections, List => JList}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import com.google.common.collect.HashBiMap
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
+import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
-import org.apache.spark.rpc.{RpcEndpointAddress, RpcAddress}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils

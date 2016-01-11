@@ -28,7 +28,7 @@ class StreamProgress extends Serializable {
 
   private[streaming] def update(source: Source, newOffset: Offset): Unit = {
     currentOffsets.get(source).foreach(old =>
-      assert(newOffset > old, s"New offset $newOffset not more than older offset $old "))
+      assert(newOffset > old, s"Stream going backwards $newOffset -> $old"))
     currentOffsets.put(source, newOffset)
   }
 

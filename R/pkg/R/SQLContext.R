@@ -256,9 +256,12 @@ jsonFile <- function(sqlContext, path) {
 
 # TODO: support schema
 jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
+  .Deprecated("read.json")
   rdd <- serializeToString(rdd)
   if (is.null(schema)) {
-    sdf <- callJMethod(sqlContext, "jsonRDD", callJMethod(getJRDD(rdd), "rdd"), samplingRatio)
+    read <- callJMethod(sqlContext, "read")
+    # samplingRatio is deprecated
+    sdf <- callJMethod(read, "json", callJMethod(getJRDD(rdd), "rdd"))
     dataFrame(sdf)
   } else {
     stop("not implemented")
@@ -289,9 +292,32 @@ read.parquet <- function(sqlContext, path) {
 # TODO: Implement saveasParquetFile and write examples for both
 parquetFile <- function(sqlContext, ...) {
   .Deprecated("read.parquet")
+  read.parquet(sqlContext, unlist(list(...)))
+}
+
+#' Create a DataFrame from a text file.
+#'
+#' Loads a text file and returns a DataFrame with a single string column named "value".
+#' Each line in the text file is a new row in the resulting DataFrame.
+#'
+#' @param sqlContext SQLContext to use
+#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @return DataFrame
+#' @rdname read.text
+#' @name read.text
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.txt"
+#' df <- read.text(sqlContext, path)
+#' }
+read.text <- function(sqlContext, path) {
   # Allow the user to have a more flexible definiton of the text file path
-  paths <- lapply(list(...), function(x) suppressWarnings(normalizePath(x)))
-  sdf <- callJMethod(sqlContext, "parquetFile", paths)
+  paths <- as.list(suppressWarnings(normalizePath(path)))
+  read <- callJMethod(sqlContext, "read")
+  sdf <- callJMethod(read, "text", paths)
   dataFrame(sdf)
 }
 
