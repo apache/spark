@@ -80,7 +80,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
   def parseExpression(sql: String): Expression =
     safeParse(sql, ParseDriver.parseExpression(sql, conf))(selExprNodeToExpr(_).get)
 
-  /** Creates Expression for a given SQL string. */
+  /** Creates TableIdentifier for a given SQL string. */
   def parseTableIdentifier(sql: String): TableIdentifier =
     safeParse(sql, ParseDriver.parseTableName(sql, conf))(extractTableIdent)
 
