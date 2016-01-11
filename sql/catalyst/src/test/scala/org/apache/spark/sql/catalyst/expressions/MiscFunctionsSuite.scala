@@ -127,6 +127,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
           case (value, dt) => Literal.create(value, dt)
         }
+        // Only test the interpreted version has same result with unsafe version.
         checkEvaluation(Murmur3Hash(literals, seed), Murmur3Hash(literals, seed).eval())
       }
     }
