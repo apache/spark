@@ -21,6 +21,7 @@ import org.apache.spark.sql.{Column, DataFrame, DataFrameWriter, QueryTest, SQLC
 import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.joins.SortMergeJoin
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
@@ -124,6 +125,34 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     val bucketing = (writer: DataFrameWriter) => writer.bucketBy(8, "i", "j")
     withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
       testBucketing(bucketing, bucketing, Seq("i", "j"), shuffleLeft = true, shuffleRight = true)
+    }
+  }
+
+  test("avoid shuffle when grouping keys are equal to bucket keys") {
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("bucketed_table")
+      val tbl = hiveContext.table("bucketed_table")
+      val agged = tbl.groupBy("i", "j").agg(max("k"))
+
+      checkAnswer(
+        agged.sort("i", "j"),
+        df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
+
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isEmpty)
+    }
+  }
+
+  test("avoid shuffle when grouping keys are a super-set of bucket keys") {
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+      val tbl = hiveContext.table("bucketed_table")
+      val agged = tbl.groupBy("i", "j").agg(max("k"))
+
+      checkAnswer(
+        agged.sort("i", "j"),
+        df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
+
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isEmpty)
     }
   }
 }
