@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
-
 import org.codehaus.janino.ClassBodyEvaluator
+
+import org.apache.spark.Logging
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+
 /**
  * An object for creating a code generated decision tree model.
  * NodeToTree is used to convert a node to a series if code gen
