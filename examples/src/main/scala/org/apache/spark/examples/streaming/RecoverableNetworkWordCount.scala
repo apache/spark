@@ -26,7 +26,7 @@ import com.google.common.io.Files
 import org.apache.spark.{Accumulator, SparkConf, SparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
+import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
 import org.apache.spark.util.IntParam
 
 /**

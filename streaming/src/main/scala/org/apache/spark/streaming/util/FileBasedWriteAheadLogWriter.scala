@@ -19,10 +19,7 @@ package org.apache.spark.streaming.util
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.util.Try
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FSDataOutputStream
 
 import org.apache.spark.util.Utils
 
@@ -34,11 +31,6 @@ private[streaming] class FileBasedWriteAheadLogWriter(path: String, hadoopConf: 
 
   private lazy val stream = HdfsUtils.getOutputStream(path, hadoopConf)
 
-  private lazy val hadoopFlushMethod = {
-    // Use reflection to get the right flush operation
-    val cls = classOf[FSDataOutputStream]
-    Try(cls.getMethod("hflush")).orElse(Try(cls.getMethod("sync"))).toOption
-  }
 
   private var nextOffset = stream.getPos()
   private var closed = false
@@ -62,7 +54,7 @@ private[streaming] class FileBasedWriteAheadLogWriter(path: String, hadoopConf: 
   }
 
   private def flush() {
-    hadoopFlushMethod.foreach { _.invoke(stream) }
+    stream.hflush()
     // Useful for local file system where hflush/sync does not work (HADOOP-7844)
     stream.getWrappedStream.flush()
   }

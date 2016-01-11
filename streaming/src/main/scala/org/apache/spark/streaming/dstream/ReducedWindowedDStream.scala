@@ -17,17 +17,14 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.{CoGroupedRDD, MapPartitionsRDD}
-import org.apache.spark.Partitioner
-import org.apache.spark.SparkContext._
-import org.apache.spark.storage.StorageLevel
-
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.streaming.{Duration, Interval, Time}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+
+import org.apache.spark.Partitioner
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.{CoGroupedRDD, MapPartitionsRDD, RDD}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Duration, Interval, Time}
 
 private[streaming]
 class ReducedWindowedDStream[K: ClassTag, V: ClassTag](

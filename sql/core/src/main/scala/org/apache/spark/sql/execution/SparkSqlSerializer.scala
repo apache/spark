@@ -22,16 +22,15 @@ import java.util.{HashMap => JavaHashMap}
 
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.io.{Input, Output}
 import com.twitter.chill.ResourcePool
 
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{KryoSerializer, SerializerInstance}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.MutablePair
-import org.apache.spark.{SparkConf, SparkEnv}
-
 
 private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {

@@ -30,10 +30,10 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.SqlParser
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JSONRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -99,17 +99,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Loads input in as a [[DataFrame]], for data sources that require a path (e.g. data backed by
-   * a local or distributed file system).
-   *
-   * @since 1.4.0
-   */
-  // TODO: Remove this one in Spark 2.0.
-  def load(path: String): DataFrame = {
-    option("path", path).load()
-  }
-
-  /**
    * Loads input in as a [[DataFrame]], for data sources that don't require a path (e.g. external
    * key-value stores).
    *
@@ -123,6 +112,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data sources that require a path (e.g. data backed by
+   * a local or distributed file system).
+   *
+   * @since 1.4.0
+   */
+  def load(path: String): DataFrame = {
+    option("path", path).load()
   }
 
   /**
@@ -258,6 +257,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
+   * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
+   * character using backslash quoting mechanism</li>
    *
    * @since 1.6.0
    */

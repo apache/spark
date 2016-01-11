@@ -19,9 +19,9 @@ package org.apache.spark.mllib.impl
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkContext, Logging}
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.storage.StorageLevel
 
 

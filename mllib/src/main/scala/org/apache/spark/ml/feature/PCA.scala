@@ -77,6 +77,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")
@@ -130,6 +131,7 @@ class PCAModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")
@@ -180,7 +182,7 @@ object PCAModel extends MLReadable[PCAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       // explainedVariance field is not present in Spark <= 1.6
-      val versionRegex = "([0-9]+)\\.([0-9])+.*".r
+      val versionRegex = "([0-9]+)\\.([0-9]+).*".r
       val hasExplainedVariance = metadata.sparkVersion match {
         case versionRegex(major, minor) =>
           (major.toInt >= 2 || (major.toInt == 1 && minor.toInt > 6))

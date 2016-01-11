@@ -31,7 +31,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.util.{Distribution, Utils}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
@@ -1233,7 +1233,8 @@ private[ui] class TaskPagedTable(
 
   override def tableId: String = "task-table"
 
-  override def tableCssClass: String = "table table-bordered table-condensed table-striped"
+  override def tableCssClass: String =
+    "table table-bordered table-condensed table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "task.pageSize"
 

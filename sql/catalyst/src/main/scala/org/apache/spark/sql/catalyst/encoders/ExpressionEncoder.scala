@@ -22,15 +22,15 @@ import java.util.concurrent.ConcurrentMap
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import org.apache.spark.util.Utils
 import org.apache.spark.sql.{AnalysisException, Encoder}
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
-import org.apache.spark.sql.catalyst.{JavaTypeInference, InternalRow, ScalaReflection}
-import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * A factory for constructing encoders that convert objects and primitives to and from the
@@ -133,7 +133,7 @@ object ExpressionEncoder {
     }
 
     val fromRowExpression =
-      NewInstance(cls, fromRowExpressions, propagateNull = false, ObjectType(cls))
+      NewInstance(cls, fromRowExpressions, ObjectType(cls), propagateNull = false)
 
     new ExpressionEncoder[Any](
       schema,
@@ -197,6 +197,15 @@ case class ExpressionEncoder[T](
 
   @transient
   private lazy val constructProjection = GenerateSafeProjection.generate(fromRowExpression :: Nil)
+
+  /**
+   * Returns this encoder where it has been bound to its own output (i.e. no remaping of columns
+   * is performed).
+   */
+  def defaultBinding: ExpressionEncoder[T] = {
+    val attrs = schema.toAttributes
+    resolve(attrs, OuterScopes.outerScopes).bind(attrs)
+  }
 
   /**
    * Returns an encoded version of `t` as a Spark SQL row.  Note that multiple calls to

@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
-import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
-import org.apache.spark.sql.execution.PhysicalRDD
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._

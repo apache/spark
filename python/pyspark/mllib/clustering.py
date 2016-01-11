@@ -173,7 +173,7 @@ class KMeans(object):
         """Train a k-means clustering model."""
         if runs != 1:
             warnings.warn(
-                "Support for runs is deprecated in 1.6.0. This param will have no effect in 1.7.0.")
+                "Support for runs is deprecated in 1.6.0. This param will have no effect in 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
@@ -346,7 +346,7 @@ class GaussianMixture(object):
             if initialModel.k != k:
                 raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
                                 % (initialModel.k, k))
-            initialModelWeights = initialModel.weights
+            initialModelWeights = list(initialModel.weights)
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
         java_model = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),

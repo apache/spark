@@ -227,7 +227,7 @@ a.expandbutton {
   cursor:pointer;
 }
 
-th a, th a:hover {
+.table-head-clickable th a, .table-head-clickable th a:hover {
   /* Make the entire header clickable, not just the text label */
   display: block;
   width: 100%;

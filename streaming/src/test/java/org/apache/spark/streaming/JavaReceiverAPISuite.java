@@ -18,13 +18,14 @@
 package org.apache.spark.streaming;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import static org.junit.Assert.*;
 
 import com.google.common.io.Closeables;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -68,12 +69,11 @@ public class JavaReceiverAPISuite implements Serializable {
           return v1 + ".";
         }
       });
-      mapped.foreachRDD(new Function<JavaRDD<String>, Void>() {
+      mapped.foreachRDD(new VoidFunction<JavaRDD<String>>() {
         @Override
-        public Void call(JavaRDD<String> rdd) {
+        public void call(JavaRDD<String> rdd) {
           long count = rdd.count();
           dataCounter.addAndGet(count);
-          return null;
         }
       });
 
@@ -90,7 +90,7 @@ public class JavaReceiverAPISuite implements Serializable {
         Thread.sleep(100);
       }
       ssc.stop();
-      assertTrue(dataCounter.get() > 0);
+      Assert.assertTrue(dataCounter.get() > 0);
     } finally {
       server.stop();
     }
@@ -98,8 +98,8 @@ public class JavaReceiverAPISuite implements Serializable {
 
   private static class JavaSocketReceiver extends Receiver<String> {
 
-    String host = null;
-    int port = -1;
+    private String host = null;
+    private int port = -1;
 
     JavaSocketReceiver(String host_ , int port_) {
       super(StorageLevel.MEMORY_AND_DISK());

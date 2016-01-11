@@ -17,19 +17,18 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.StreamingContext
-
-import scala.reflect.ClassTag
-
+import java.io.EOFException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
-import java.io.EOFException
 import java.util.concurrent.ArrayBlockingQueue
-import org.apache.spark.streaming.receiver.Receiver
 
+import scala.reflect.ClassTag
+
+import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.storage.{StorageLevel, StreamBlockId}
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * An input stream that reads blocks of serialized objects from a given network address.

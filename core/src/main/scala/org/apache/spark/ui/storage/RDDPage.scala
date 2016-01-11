@@ -237,7 +237,8 @@ private[ui] class BlockPagedTable(
 
   override def tableId: String = "rdd-storage-by-block-table"
 
-  override def tableCssClass: String = "table table-bordered table-condensed table-striped"
+  override def tableCssClass: String =
+    "table table-bordered table-condensed table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "block.pageSize"
 

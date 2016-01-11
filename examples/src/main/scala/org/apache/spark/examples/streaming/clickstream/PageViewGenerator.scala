@@ -18,9 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
-import java.net.ServerSocket
 import java.io.PrintWriter
-import util.Random
+import java.net.ServerSocket
+import java.util.Random
 
 /** Represents a page view on a website with associated dimension data. */
 class PageView(val url : String, val status : Int, val zipCode : Int, val userID : Int)

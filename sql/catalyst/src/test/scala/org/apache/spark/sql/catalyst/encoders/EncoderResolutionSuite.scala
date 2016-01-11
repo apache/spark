@@ -46,8 +46,8 @@ class EncoderResolutionSuite extends PlanTest {
           toExternalString('a.string),
           AssertNotNull('b.int.cast(LongType), cls.getName, "b", "Long")
         ),
-        false,
-        ObjectType(cls))
+        ObjectType(cls),
+        propagateNull = false)
       compareExpressions(fromRowExpr, expected)
     }
 
@@ -60,8 +60,8 @@ class EncoderResolutionSuite extends PlanTest {
           toExternalString('a.int.cast(StringType)),
           AssertNotNull('b.long, cls.getName, "b", "Long")
         ),
-        false,
-        ObjectType(cls))
+        ObjectType(cls),
+        propagateNull = false)
       compareExpressions(fromRowExpr, expected)
     }
   }
@@ -88,11 +88,11 @@ class EncoderResolutionSuite extends PlanTest {
               AssertNotNull(
                 GetStructField('b.struct('a.int, 'b.long), 1, Some("b")),
                 innerCls.getName, "b", "Long")),
-            false,
-            ObjectType(innerCls))
+            ObjectType(innerCls),
+            propagateNull = false)
         )),
-      false,
-      ObjectType(cls))
+      ObjectType(cls),
+      propagateNull = false)
     compareExpressions(fromRowExpr, expected)
   }
 
@@ -114,11 +114,11 @@ class EncoderResolutionSuite extends PlanTest {
             AssertNotNull(
               GetStructField('a.struct('a.string, 'b.byte), 1, Some("b")).cast(LongType),
               cls.getName, "b", "Long")),
-          false,
-          ObjectType(cls)),
+          ObjectType(cls),
+          propagateNull = false),
         'b.int.cast(LongType)),
-      false,
-      ObjectType(classOf[Tuple2[_, _]]))
+      ObjectType(classOf[Tuple2[_, _]]),
+      propagateNull = false)
     compareExpressions(fromRowExpr, expected)
   }
 
