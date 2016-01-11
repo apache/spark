@@ -421,7 +421,7 @@ class ListTests(MLlibTestCase):
 
     def test_bisecting_kmeans(self):
         from pyspark.mllib.clustering import BisectingKMeans
-        data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
+        data = array([0.0, 0.0, 1.0, 1.0, 9.0, 8.0, 8.0, 9.0]).reshape(4, 2)
         bskm = BisectingKMeans()
         model = bskm.train(sc.parallelize(data, 2), k=4)
         p = array([0.0, 0.0])
