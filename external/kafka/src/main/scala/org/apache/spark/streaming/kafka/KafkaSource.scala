@@ -67,8 +67,6 @@ case class KafkaSourceOffset(offsets: Map[TopicAndPartition, Long]) extends Offs
       throw new IllegalArgumentException(s"Cannot compare $this <=> $other")
   }
 
-  override def ==(other: Offset): Boolean = Try(compareTo(other) == 0).getOrElse(false)
-
   /** Returns a set of offset ranges between `this` and `other` */
   def to(other: KafkaSourceOffset): Seq[OffsetRange] = {
 

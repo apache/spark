@@ -49,8 +49,6 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
       throw new IllegalArgumentException(s"Cannot compare $this <=> $other")
   }
 
-  override def ==(other: Offset): Boolean = Try(compareTo(other) == 0).getOrElse(false)
-
   private def sign(num: Int): Int = num match {
     case i if i < 0 => -1
     case i if i == 0 => 0
