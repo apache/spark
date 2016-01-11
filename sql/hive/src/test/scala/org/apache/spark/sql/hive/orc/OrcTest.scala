@@ -23,8 +23,8 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
 private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
   import testImplicits._

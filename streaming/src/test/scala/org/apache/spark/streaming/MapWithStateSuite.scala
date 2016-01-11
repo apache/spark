@@ -22,12 +22,12 @@ import java.io.File
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
 
-import org.scalatest.PrivateMethodTester._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.PrivateMethodTester._
 
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 class MapWithStateSuite extends SparkFunSuite
   with DStreamCheckpointTester with BeforeAndAfterAll with BeforeAndAfter {

@@ -17,8 +17,8 @@
 
 package org.apache.spark.deploy
 
-import java.net.URI
 import java.io.File
+import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._

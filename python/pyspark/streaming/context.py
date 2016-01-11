@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import sys
+from threading import RLock, Timer
 
 from py4j.java_gateway import java_import, JavaObject
 
@@ -30,6 +31,63 @@ from pyspark.streaming.dstream import DStream
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
 
 __all__ = ["StreamingContext"]
+
+
+class Py4jCallbackConnectionCleaner(object):
+
+    """
+    A cleaner to clean up callback connections that are not closed by Py4j. See SPARK-12617.
+    It will scan all callback connections every 30 seconds and close the dead connections.
+    """
+
+    def __init__(self, gateway):
+        self._gateway = gateway
+        self._stopped = False
+        self._timer = None
+        self._lock = RLock()
+
+    def start(self):
+        if self._stopped:
+            return
+
+        def clean_closed_connections():
+            from py4j.java_gateway import quiet_close, quiet_shutdown
+
+            callback_server = self._gateway._callback_server
+            if callback_server:
+                with callback_server.lock:
+                    try:
+                        closed_connections = []
+                        for connection in callback_server.connections:
+                            if not connection.isAlive():
+                                quiet_close(connection.input)
+                                quiet_shutdown(connection.socket)
+                                quiet_close(connection.socket)
+                                closed_connections.append(connection)
+
+                        for closed_connection in closed_connections:
+                            callback_server.connections.remove(closed_connection)
+                    except Exception:
+                        import traceback
+                        traceback.print_exc()
+
+            self._start_timer(clean_closed_connections)
+
+        self._start_timer(clean_closed_connections)
+
+    def _start_timer(self, f):
+        with self._lock:
+            if not self._stopped:
+                self._timer = Timer(30.0, f)
+                self._timer.daemon = True
+                self._timer.start()
+
+    def stop(self):
+        with self._lock:
+            self._stopped = True
+            if self._timer:
+                self._timer.cancel()
+                self._timer = None
 
 
 class StreamingContext(object):
@@ -46,6 +104,9 @@ class StreamingContext(object):
 
     # Reference to a currently active StreamingContext
     _activeContext = None
+
+    # A cleaner to clean leak sockets of callback server every 30 seconds
+    _py4j_cleaner = None
 
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
@@ -95,11 +156,33 @@ class StreamingContext(object):
             jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
             # update the port of CallbackClient with real port
             gw.jvm.PythonDStream.updatePythonGatewayPort(jgws, gw._python_proxy_port)
+            _py4j_cleaner = Py4jCallbackConnectionCleaner(gw)
+            _py4j_cleaner.start()
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
-        cls._transformerSerializer = TransformFunctionSerializer(
-            SparkContext._active_spark_context, CloudPickleSerializer(), gw)
+        if cls._transformerSerializer is None:
+            transformer_serializer = TransformFunctionSerializer()
+            transformer_serializer.init(
+                SparkContext._active_spark_context, CloudPickleSerializer(), gw)
+            # SPARK-12511 streaming driver with checkpointing unable to finalize leading to OOM
+            # There is an issue that Py4J's PythonProxyHandler.finalize blocks forever.
+            # (https://github.com/bartdag/py4j/pull/184)
+            #
+            # Py4j will create a PythonProxyHandler in Java for "transformer_serializer" when
+            # calling "registerSerializer". If we call "registerSerializer" twice, the second
+            # PythonProxyHandler will override the first one, then the first one will be GCed and
+            # trigger "PythonProxyHandler.finalize". To avoid that, we should not call
+            # "registerSerializer" more than once, so that "PythonProxyHandler" in Java side won't
+            # be GCed.
+            #
+            # TODO Once Py4J fixes this issue, we should upgrade Py4j to the latest version.
+            transformer_serializer.gateway.jvm.PythonDStream.registerSerializer(
+                transformer_serializer)
+            cls._transformerSerializer = transformer_serializer
+        else:
+            cls._transformerSerializer.init(
+                SparkContext._active_spark_context, CloudPickleSerializer(), gw)
 
     @classmethod
     def getOrCreate(cls, checkpointPath, setupFunc):
@@ -116,16 +199,13 @@ class StreamingContext(object):
         gw = SparkContext._gateway
 
         # Check whether valid checkpoint information exists in the given path
-        if gw.jvm.CheckpointReader.read(checkpointPath).isEmpty():
+        ssc_option = gw.jvm.StreamingContextPythonHelper().tryRecoverFromCheckpoint(checkpointPath)
+        if ssc_option.isEmpty():
             ssc = setupFunc()
             ssc.checkpoint(checkpointPath)
             return ssc
 
-        try:
-            jssc = gw.jvm.JavaStreamingContext(checkpointPath)
-        except Exception:
-            print("failed to load StreamingContext from checkpoint", file=sys.stderr)
-            raise
+        jssc = gw.jvm.JavaStreamingContext(ssc_option.get())
 
         # If there is already an active instance of Python SparkContext use it, or create a new one
         if not SparkContext._active_spark_context:
