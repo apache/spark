@@ -139,6 +139,21 @@ private[ml] trait HasProbabilityCol extends Params {
 }
 
 /**
+ * Trait for shared param varianceCol.
+ */
+private[ml] trait HasVarianceCol extends Params {
+
+  /**
+   * Param for Column name for the biased sample variance of prediction.
+   * @group param
+   */
+  final val varianceCol: Param[String] = new Param[String](this, "varianceCol", "Column name for the biased sample variance of prediction")
+
+  /** @group getParam */
+  final def getVarianceCol: String = $(varianceCol)
+}
+
+/**
  * Trait for shared param threshold (default: 0.5).
  */
 private[ml] trait HasThreshold extends Params {

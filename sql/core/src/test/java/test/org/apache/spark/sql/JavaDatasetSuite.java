@@ -18,8 +18,13 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.*;
 
+import com.google.common.base.Objects;
+import org.junit.rules.ExpectedException;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -386,6 +391,20 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testPrimitiveEncoder() {
+    Encoder<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> encoder =
+      Encoders.tuple(Encoders.DOUBLE(), Encoders.DECIMAL(), Encoders.DATE(), Encoders.TIMESTAMP(),
+        Encoders.FLOAT());
+    List<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> data =
+      Arrays.asList(new Tuple5<Double, BigDecimal, Date, Timestamp, Float>(
+        1.7976931348623157E308, new BigDecimal("0.922337203685477589"),
+          Date.valueOf("1970-01-01"), new Timestamp(System.currentTimeMillis()), Float.MAX_VALUE));
+    Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =
+      context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
   public void testTypedAggregation() {
     Encoder<Tuple2<String, Integer>> encoder = Encoders.tuple(Encoders.STRING(), Encoders.INT());
     List<Tuple2<String, Integer>> data =
@@ -591,6 +610,44 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
+  public class SimpleJavaBean2 implements Serializable {
+    private Timestamp a;
+    private Date b;
+    private java.math.BigDecimal c;
+
+    public Timestamp getA() { return a; }
+
+    public void setA(Timestamp a) { this.a = a; }
+
+    public Date getB() { return b; }
+
+    public void setB(Date b) { this.b = b; }
+
+    public java.math.BigDecimal getC() { return c; }
+
+    public void setC(java.math.BigDecimal c) { this.c = c; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      SimpleJavaBean that = (SimpleJavaBean) o;
+
+      if (!a.equals(that.a)) return false;
+      if (!b.equals(that.b)) return false;
+      return c.equals(that.c);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = a.hashCode();
+      result = 31 * result + b.hashCode();
+      result = 31 * result + c.hashCode();
+      return result;
+    }
+  }
+
   public class NestedJavaBean implements Serializable {
     private SimpleJavaBean a;
 
@@ -671,5 +728,141 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<SimpleJavaBean> ds3 = context.createDataFrame(Arrays.asList(row1, row2), schema)
       .as(Encoders.bean(SimpleJavaBean.class));
     Assert.assertEquals(data, ds3.collectAsList());
+  }
+
+  @Test
+  public void testJavaBeanEncoder2() {
+    // This is a regression test of SPARK-12404
+    OuterScopes.addOuterScope(this);
+    SimpleJavaBean2 obj = new SimpleJavaBean2();
+    obj.setA(new Timestamp(0));
+    obj.setB(new Date(0));
+    obj.setC(java.math.BigDecimal.valueOf(1));
+    Dataset<SimpleJavaBean2> ds =
+      context.createDataset(Arrays.asList(obj), Encoders.bean(SimpleJavaBean2.class));
+    ds.collect();
+  }
+
+  public class SmallBean implements Serializable {
+    private String a;
+
+    private int b;
+
+    public int getB() {
+      return b;
+    }
+
+    public void setB(int b) {
+      this.b = b;
+    }
+
+    public String getA() {
+      return a;
+    }
+
+    public void setA(String a) {
+      this.a = a;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      SmallBean smallBean = (SmallBean) o;
+      return b == smallBean.b && com.google.common.base.Objects.equal(a, smallBean.a);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(a, b);
+    }
+  }
+
+  public class NestedSmallBean implements Serializable {
+    private SmallBean f;
+
+    public SmallBean getF() {
+      return f;
+    }
+
+    public void setF(SmallBean f) {
+      this.f = f;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      NestedSmallBean that = (NestedSmallBean) o;
+      return Objects.equal(f, that.f);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(f);
+    }
+  }
+
+  @Rule
+  public transient ExpectedException nullabilityCheck = ExpectedException.none();
+
+  @Test
+  public void testRuntimeNullabilityCheck() {
+    OuterScopes.addOuterScope(this);
+
+    StructType schema = new StructType()
+      .add("f", new StructType()
+        .add("a", StringType, true)
+        .add("b", IntegerType, true), true);
+
+    // Shouldn't throw runtime exception since it passes nullability check.
+    {
+      Row row = new GenericRow(new Object[] {
+          new GenericRow(new Object[] {
+              "hello", 1
+          })
+      });
+
+      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
+
+      SmallBean smallBean = new SmallBean();
+      smallBean.setA("hello");
+      smallBean.setB(1);
+
+      NestedSmallBean nestedSmallBean = new NestedSmallBean();
+      nestedSmallBean.setF(smallBean);
+
+      Assert.assertEquals(ds.collectAsList(), Collections.singletonList(nestedSmallBean));
+    }
+
+    // Shouldn't throw runtime exception when parent object (`ClassData`) is null
+    {
+      Row row = new GenericRow(new Object[] { null });
+
+      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
+
+      NestedSmallBean nestedSmallBean = new NestedSmallBean();
+      Assert.assertEquals(ds.collectAsList(), Collections.singletonList(nestedSmallBean));
+    }
+
+    nullabilityCheck.expect(RuntimeException.class);
+    nullabilityCheck.expectMessage(
+      "Null value appeared in non-nullable field " +
+        "test.org.apache.spark.sql.JavaDatasetSuite$SmallBean.b of type int.");
+
+    {
+      Row row = new GenericRow(new Object[] {
+          new GenericRow(new Object[] {
+              "hello", null
+          })
+      });
+
+      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
+
+      ds.collect();
+    }
   }
 }

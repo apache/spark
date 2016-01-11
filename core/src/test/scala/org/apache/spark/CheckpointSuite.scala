@@ -256,8 +256,11 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   override def afterEach(): Unit = {
-    super.afterEach()
-    Utils.deleteRecursively(checkpointDir)
+    try {
+      Utils.deleteRecursively(checkpointDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   override def sparkContext: SparkContext = sc

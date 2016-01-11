@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.master
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rpc.RpcEnv
-
-import scala.reflect.ClassTag
 
 /**
  * Allows Master to persist any state that is necessary in order to recover from a failure.

@@ -115,7 +115,7 @@ original_dir = os.getcwd()
 # maven that links against them. This will catch issues with messed up
 # dependencies within those projects.
 modules = [
-    "spark-core", "spark-bagel", "spark-mllib", "spark-streaming", "spark-repl",
+    "spark-core", "spark-mllib", "spark-streaming", "spark-repl",
     "spark-graphx", "spark-streaming-flume", "spark-streaming-kafka",
     "spark-streaming-mqtt", "spark-streaming-twitter", "spark-streaming-zeromq",
     "spark-catalyst", "spark-sql", "spark-hive", "spark-streaming-kinesis-asl"
