@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
-import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -604,6 +604,11 @@ class Analyzer(
       e.find(_.isInstanceOf[SubQueryExpression]).isDefined
     }
 
+    def onlyHasScalarSubquery(e: Expression): Boolean = {
+      (e.find(x => x.isInstanceOf[Exists] || x.isInstanceOf[ListSubQuery]).isEmpty
+        && e.find(_.isInstanceOf[ScalarSubQuery]).isDefined)
+    }
+
     def hasSubquery(q: LogicalPlan): Boolean = {
       q.expressions.exists(hasSubquery)
     }
@@ -627,7 +632,7 @@ class Analyzer(
       val (removed, joinCondition) = removeUnresolvedFilter(execute(subquery))
       val resolved = execute(removed)
       assert(resolved.resolved)
-      val right = resolved.output(0)
+      val right = resolved.output.head
       val equalCond = EqualTo(value, right)
       val cond = if (joinCondition.isDefined){
         And(joinCondition.get, equalCond)
@@ -641,13 +646,8 @@ class Analyzer(
       case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
 
         val afterResolve = q transformExpressions {
-          case e @ ScalarSubQuery(subquery) if !subquery.resolved =>
-            val afterRule = execute(subquery)
-            if (afterRule.resolved) {
-              ScalarSubQuery(afterRule)
-            } else {
-              e
-            }
+          case e: SubQueryExpression if !e.query.resolved =>
+            e.withNewPlan(execute(e.query))
         }
 
         if (afterResolve.resolved) {
@@ -655,8 +655,9 @@ class Analyzer(
         } else {
           afterResolve match {
             case f @ Filter(condition, child) =>
-              val (withSubquery, withoutSubquery) =
+              val (withSubquery, withoutSubquery: Seq[Expression]) =
                 splitConjunctivePredicates(condition).partition(hasSubquery)
+              val newConds = ArrayBuffer[Expression]()
               var newChild: LogicalPlan = child
               withSubquery.foreach {
                 case Exists(sub) =>
@@ -666,24 +667,52 @@ class Analyzer(
                 case Not(Exists(sub)) =>
                   val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
                   newChild = Join(newChild, removed, LeftAnti, joinCondition)
-                // TODO: support Or(Exists(), Exists())
                 case In(value, ListSubQuery(sub) :: Nil) =>
                   val (resolved, cond) = rewriteInSubquery(value, sub)
                   newChild = Join(newChild, resolved, LeftSemi, Some(cond))
                 case Not(In(value, ListSubQuery(sub) :: Nil)) =>
                   val (resolved, cond) = rewriteInSubquery(value, sub)
                   newChild = Join(newChild, resolved, LeftAnti, Some(cond))
+                case expr: Expression if onlyHasScalarSubquery(expr) =>
+                  val newCond = expr.transformUp {
+                    case ScalarSubQuery(sub) if !sub.resolved =>
+                      val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
+                      val (internalExprs, externalJoinExprs) =
+                        splitConjunctivePredicates(joinCondition.get).
+                          flatMap(_.children).partition(_.resolved)
+                      val joinAttrs: Seq[NamedExpression] = internalExprs.map {
+                        case e: NamedExpression => e
+                        case e => Alias(e, e.toString)()
+                      }
+                      val newCond = joinAttrs.zip(externalJoinExprs).map {
+                        case (attr, expr) => EqualTo(expr, attr.toAttribute)
+                      }.reduceLeftOption(And)
+                      val resolved = execute(removed)
+                      assert(resolved.resolved)
+                      val newAgg = resolved match {
+                        // the scalar subquery can have not grouping keys and single
+                        // AggregateExpression
+                        case Aggregate(Nil, aggregateExpression :: Nil, child) =>
+                          Aggregate(
+                            internalExprs,
+                            joinAttrs ++ Seq(aggregateExpression),
+                            child)
+                      }
+                      newChild = Join(newChild, newAgg, LeftOuter, newCond)
+                      val output = resolved.output.head
+                      output
+                  }
+                  newConds += newCond
                 case other =>
+                  // TODO: support Or(Exists(), Exists())
                   sys.error(s"not supported subquery: $other")
               }
-              if (withoutSubquery.nonEmpty) {
-                Filter(withoutSubquery.reduceLeft(And), newChild)
+              if (withoutSubquery.nonEmpty || newConds.nonEmpty) {
+                Filter((withoutSubquery ++ newConds).reduceLeft(And), newChild)
               } else {
                 newChild
               }
-            case other =>
-              sys.error(s"Does not support subquery in $other")
-              other
+            case other => other
           }
         }
     }
