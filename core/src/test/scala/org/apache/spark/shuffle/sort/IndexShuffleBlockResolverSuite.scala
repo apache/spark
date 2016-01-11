@@ -19,18 +19,18 @@ package org.apache.spark.shuffle.sort
 
 import java.io.{File, FileInputStream, FileOutputStream}
 
+import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.mockito.{Mock, MockitoAnnotations}
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkFunSuite}
 
 
 class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEach {
