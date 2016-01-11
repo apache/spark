@@ -817,6 +817,19 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  test("in subquery") {
+    assertResult(Array(Row(1))) {
+      sql("with t2 as (select 1 as b) " +
+        "select * from (select 1 as a union all select 2 as a) t " +
+        "where a in (select b as a from t2 where b < 2) ").collect()
+    }
+    assertResult(Array(Row(2))) {
+      sql("with t2 as (select 1 as b) " +
+        "select * from (select 1 as a union all select 2 as a) t " +
+        "where a not in (select b as a from t2 where b < 2) ").collect()
+    }
+  }
+
   test("SPARK-5383 alias for udfs with multi output columns") {
     assert(
       sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")

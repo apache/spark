@@ -118,7 +118,13 @@ class Analyzer(
             withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)
+        case other =>
+          other transformExpressions {
+            case e: SubQueryExpression =>
+              e.withNewPlan(substituteCTE(e.query, cteRelations))
+          }
       }
+
     }
   }
 
@@ -617,10 +623,24 @@ class Analyzer(
       (removed, unresolvedConditions.reduceLeftOption(And))
     }
 
+    def rewriteInSubquery(value: Expression, subquery: LogicalPlan): (LogicalPlan, Expression) = {
+      val (removed, joinCondition) = removeUnresolvedFilter(execute(subquery))
+      val resolved = execute(removed)
+      assert(resolved.resolved)
+      val right = resolved.output(0)
+      val equalCond = EqualTo(value, right)
+      val cond = if (joinCondition.isDefined){
+        And(joinCondition.get, equalCond)
+      } else {
+        equalCond
+      }
+      (resolved, cond)
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
 
-        var afterResolve = q transformExpressions {
+        val afterResolve = q transformExpressions {
           case e @ ScalarSubQuery(subquery) if !subquery.resolved =>
             val afterRule = execute(subquery)
             if (afterRule.resolved) {
@@ -630,29 +650,41 @@ class Analyzer(
             }
         }
 
-        afterResolve match {
-          case f @ Filter(condition, child) =>
-            val (withSubquery, withoutSubquery) =
-              splitConjunctivePredicates(condition).partition(hasSubquery)
-            var newChild: LogicalPlan = child
-            withSubquery.foreach {
-              case Exists(sub) =>
-                // use all the conditions as join condition
-                val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
-                newChild = Join(newChild, removed, LeftSemi, joinCondition)
-              case Not(Exists(sub)) =>
-                val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
-                newChild = Join(newChild, removed, LeftAnti, joinCondition)
-              // TODO: support Or(Exists(), Exists())
-              case InSubQuery(value, sub) =>
-              case Not(InSubQuery(value, sub)) =>
-              case _ =>
-            }
-            if (withoutSubquery.nonEmpty) {
-              Filter(withoutSubquery.reduceLeft(And), newChild)
-            } else {
-              newChild
-            }
+        if (afterResolve.resolved) {
+          afterResolve
+        } else {
+          afterResolve match {
+            case f @ Filter(condition, child) =>
+              val (withSubquery, withoutSubquery) =
+                splitConjunctivePredicates(condition).partition(hasSubquery)
+              var newChild: LogicalPlan = child
+              withSubquery.foreach {
+                case Exists(sub) =>
+                  // use all the conditions as join condition
+                  val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
+                  newChild = Join(newChild, removed, LeftSemi, joinCondition)
+                case Not(Exists(sub)) =>
+                  val (removed, joinCondition) = removeUnresolvedFilter(execute(sub))
+                  newChild = Join(newChild, removed, LeftAnti, joinCondition)
+                // TODO: support Or(Exists(), Exists())
+                case In(value, ListSubQuery(sub) :: Nil) =>
+                  val (resolved, cond) = rewriteInSubquery(value, sub)
+                  newChild = Join(newChild, resolved, LeftSemi, Some(cond))
+                case Not(In(value, ListSubQuery(sub) :: Nil)) =>
+                  val (resolved, cond) = rewriteInSubquery(value, sub)
+                  newChild = Join(newChild, resolved, LeftAnti, Some(cond))
+                case other =>
+                  sys.error(s"not supported subquery: $other")
+              }
+              if (withoutSubquery.nonEmpty) {
+                Filter(withoutSubquery.reduceLeft(And), newChild)
+              } else {
+                newChild
+              }
+            case other =>
+              sys.error(s"Does not support subquery in $other")
+              other
+          }
         }
     }
   }

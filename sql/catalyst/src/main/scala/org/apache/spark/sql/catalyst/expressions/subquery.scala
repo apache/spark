@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{BooleanType, DataType, NullType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, NullType}
 
 
 abstract class SubQueryExpression extends LeafExpression {
   def query: LogicalPlan
+  def withNewPlan(plan: LogicalPlan): SubQueryExpression
 }
 
 case class ScalarSubQuery(query: LogicalPlan) extends SubQueryExpression with CodegenFallback {
@@ -39,6 +40,8 @@ case class ScalarSubQuery(query: LogicalPlan) extends SubQueryExpression with Co
   override def nullable: Boolean = true
   override def foldable: Boolean = true
 
+  override def withNewPlan(plan: LogicalPlan): ScalarSubQuery = ScalarSubQuery(plan)
+
   private lazy val result: Any = {
     // SQLContext
   }
@@ -47,15 +50,17 @@ case class ScalarSubQuery(query: LogicalPlan) extends SubQueryExpression with Co
   }
 }
 
-case class InSubQuery(value: Expression, query: LogicalPlan)
+case class ListSubQuery(query: LogicalPlan)
   extends SubQueryExpression with Unevaluable  {
   override lazy val resolved: Boolean = false  // can't be resolved
-  override def dataType: DataType = BooleanType
-  override def nullable: Boolean = false
+  override def dataType: DataType = ArrayType(NullType)
+  override def nullable: Boolean = true
+  override def withNewPlan(plan: LogicalPlan): ListSubQuery = ListSubQuery(plan)
 }
 
 case class Exists(query: LogicalPlan) extends SubQueryExpression with Unevaluable {
   override lazy val resolved: Boolean = false  // can't be resolved
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = false
+  override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
 }

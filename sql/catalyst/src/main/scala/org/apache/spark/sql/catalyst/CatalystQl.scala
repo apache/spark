@@ -717,7 +717,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       In(nodeToExpr(value), list.map(nodeToExpr))
     case Token("TOK_SUBQUERY_EXPR",
     Token("TOK_SUBQUERY_OP", Token(IN(), Nil) :: Nil) :: subquery :: value :: Nil) =>
-      InSubQuery(nodeToExpr(value), nodeToPlan(subquery))
+      In(nodeToExpr(value), ListSubQuery(nodeToPlan(subquery)) :: Nil)
     case Token("TOK_FUNCTION",
     Token(BETWEEN(), Nil) ::
       kw ::
