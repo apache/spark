@@ -10,6 +10,7 @@ from builtins import str
 from builtins import object, bytes
 import copy
 from datetime import datetime, timedelta
+import dill
 import functools
 import getpass
 import imp
@@ -17,11 +18,12 @@ import jinja2
 import json
 import logging
 import os
-import dill
+import pickle
 import re
 import signal
 import socket
 import sys
+import traceback
 from urllib.parse import urlparse
 
 from sqlalchemy import (
@@ -147,48 +149,53 @@ class DagBag(LoggingMixin):
         """
         Gets the DAG out of the dictionary, and refreshes it if expired
         """
+        # If asking for a known subdag, we want to refresh the parent
+        root_dag_id = dag_id
         if dag_id in self.dags:
             dag = self.dags[dag_id]
             if dag.is_subdag:
-                orm_dag = DagModel.get_current(dag.parent_dag.dag_id)
-            else:
-                orm_dag = DagModel.get_current(dag_id)
-            if orm_dag and dag.last_loaded < (
-                    orm_dag.last_expired or datetime(2100, 1, 1)):
-                self.process_file(
-                    filepath=orm_dag.fileloc, only_if_updated=False)
-                dag = self.dags[dag_id]
-        else:
-            orm_dag = DagModel.get_current(dag_id)
-            if orm_dag:
-                self.process_file(filepath=orm_dag.fileloc,
-                                  only_if_updated=False)
-            if dag_id in self.dags:
-                dag = self.dags[dag_id]
-            else:
-                dag = None
-        return dag
+                root_dag_id = dag.parent_dag.dag_id
+
+        # If the root_dag_id is absent or expired
+        orm_dag = DagModel.get_current(root_dag_id)
+        if orm_dag and (
+                root_dag_id not in self.dags or (
+                    dag.last_loaded < (
+                    orm_dag.last_expired or datetime(2100, 1, 1)
+                )
+        )):
+            # Reprocessing source file
+            found_dags = self.process_file(
+                filepath=orm_dag.fileloc, only_if_updated=False)
+
+            if dag_id in [dag.dag_id for dag in found_dags]:
+                return self.dags[dag_id]
+            elif dag_id in self.dags:
+                del self.dags[dag_id]
+        return self.dags.get(dag_id)
 
     def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
         Given a path to a python module, this method imports the module and
         look for dag objects within it.
         """
+        found_dags = []
         try:
             # This failed before in what may have been a git sync
             # race condition
             dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
             mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
             mod_name = 'unusual_prefix_' + mod_name
-        except:
-            return
+        except Exception as e:
+            logging.exception(e)
+            return found_dags
 
         if safe_mode and os.path.isfile(filepath):
             # Skip file if no obvious references to airflow or DAG are found.
             with open(filepath, 'r') as f:
                 content = f.read()
                 if not all([s in content for s in ('DAG', 'airflow')]):
-                    return
+                    return found_dags
 
         if (not only_if_updated or
                     filepath not in self.file_last_changed or
@@ -210,8 +217,10 @@ class DagBag(LoggingMixin):
                     dag.full_filepath = filepath
                     dag.is_subdag = False
                     self.bag_dag(dag, parent_dag=dag, root_dag=dag)
+                    found_dags.append(dag)
 
             self.file_last_changed[filepath] = dttm
+        return found_dags
 
     @provide_session
     def kill_zombies(self, session):
@@ -375,7 +384,7 @@ class Connection(Base):
     host = Column(String(500))
     schema = Column(String(500))
     login = Column(String(500))
-    _password = Column('password', String(500))
+    _password = Column('password', String(5000))
     port = Column(Integer())
     is_encrypted = Column(Boolean, unique=False, default=False)
     extra = Column(String(5000))
@@ -531,7 +540,7 @@ class TaskInstance(Base):
     end_date = Column(DateTime)
     duration = Column(Float)
     state = Column(String(20))
-    try_number = Column(Integer)
+    try_number = Column(Integer, default=1)
     hostname = Column(String(1000))
     unixname = Column(String(1000))
     job_id = Column(Integer)
@@ -686,6 +695,13 @@ class TaskInstance(Base):
         """
         return (self.dag_id, self.task_id, self.execution_date)
 
+    @provide_session
+    def set_state(self, state, session):
+        self.state = state
+        self.start_date = datetime.now()
+        self.end_date = datetime.now()
+        session.merge(self)
+
     def is_queueable(self, flag_upstream_failed=False):
         """
         Returns a boolean on whether the task instance has met all dependencies
@@ -792,59 +808,60 @@ class TaskInstance(Base):
         # Checking that all upstream dependencies have succeeded
         if not task._upstream_list or task.trigger_rule == TR.DUMMY:
             return True
-        else:
-            upstream_task_ids = [t.task_id for t in task._upstream_list]
-            qry = (
-                session
-                .query(
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.SUCCESS, 1)], else_=0)), 0),
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.FAILED, 1)], else_=0)), 0),
-                    func.coalesce(func.sum(
-                        case([(TI.state == State.UPSTREAM_FAILED, 1)], else_=0)), 0),
-                    func.count(TI.task_id),
-                )
-                .filter(
-                    TI.dag_id == self.dag_id,
-                    TI.task_id.in_(upstream_task_ids),
-                    TI.execution_date == self.execution_date,
-                    TI.state.in_([
-                        State.SUCCESS, State.FAILED,
-                        State.UPSTREAM_FAILED, State.SKIPPED]),
-                )
-            )
-            successes, skipped, failed, upstream_failed, done = qry.first()
-            if flag_upstream_failed:
-                if (skipped >= len(task._upstream_list) or
-                      (task.trigger_rule == TR.ALL_SUCCESS and skipped > 0)):
-                    self.state = State.SKIPPED
-                    self.start_date = datetime.now()
-                    self.end_date = datetime.now()
-                    session.merge(self)
-                elif (failed + upstream_failed >= len(task._upstream_list) or
-                      (task.trigger_rule == TR.ALL_SUCCESS and upstream_failed > 0)):
-                    self.state = State.UPSTREAM_FAILED
-                    self.start_date = datetime.now()
-                    self.end_date = datetime.now()
-                    session.merge(self)
 
-            if task.trigger_rule == TR.ONE_SUCCESS and successes > 0:
-                return True
-            elif (task.trigger_rule == TR.ONE_FAILED and
-                  (failed + upstream_failed) > 0):
-                return True
-            elif (task.trigger_rule == TR.ALL_SUCCESS and
-                  successes == len(task._upstream_list)):
-                return True
-            elif (task.trigger_rule == TR.ALL_FAILED and
-                  failed + upstream_failed == len(task._upstream_list)):
-                return True
-            elif (task.trigger_rule == TR.ALL_DONE and
-                  done == len(task._upstream_list)):
-                return True
+        upstream_task_ids = [t.task_id for t in task._upstream_list]
+        qry = (
+            session
+            .query(
+                func.coalesce(func.sum(
+                    case([(TI.state == State.SUCCESS, 1)], else_=0)), 0),
+                func.coalesce(func.sum(
+                    case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
+                func.coalesce(func.sum(
+                    case([(TI.state == State.FAILED, 1)], else_=0)), 0),
+                func.coalesce(func.sum(
+                    case([(TI.state == State.UPSTREAM_FAILED, 1)], else_=0)), 0),
+                func.count(TI.task_id),
+            )
+            .filter(
+                TI.dag_id == self.dag_id,
+                TI.task_id.in_(upstream_task_ids),
+                TI.execution_date == self.execution_date,
+                TI.state.in_([
+                    State.SUCCESS, State.FAILED,
+                    State.UPSTREAM_FAILED, State.SKIPPED]),
+            )
+        )
+        successes, skipped, failed, upstream_failed, done = qry.first()
+        upstream = len(task._upstream_list)
+        tr = task.trigger_rule
+        upstream_done = done >= upstream
+
+        # handling instant state assignment based on trigger rules
+        if flag_upstream_failed:
+            if tr == TR.ALL_SUCCESS:
+                if upstream_failed or failed:
+                    self.set_state(State.UPSTREAM_FAILED)
+                elif skipped:
+                    self.set_state(State.SKIPPED)
+            elif tr == TR.ALL_FAILED:
+                if successes or skipped:
+                    self.set_state(State.SKIPPED)
+            elif tr == TR.ONE_SUCCESS:
+                if upstream_done and not successes:
+                    self.set_state(State.SKIPPED)
+            elif tr == TR.ONE_FAILED:
+                if upstream_done and not(failed or upstream_failed):
+                    self.set_state(State.SKIPPED)
+
+        if (
+            (tr == TR.ONE_SUCCESS and successes) or
+            (tr == TR.ONE_FAILED and (failed or upstream_failed)) or
+            (tr == TR.ALL_SUCCESS and successes >= upstream) or
+            (tr == TR.ALL_FAILED and failed + upstream_failed >= upstream) or
+            (tr == TR.ALL_DONE and upstream_done)
+        ):
+            return True
 
         if not main_session:
             session.commit()
@@ -929,21 +946,21 @@ class TaskInstance(Base):
                 "Next run after {0}".format(next_run)
             )
         elif force or self.state in State.runnable():
-            msg = "\n" + ("-" * 80)
+            HR = "\n" + ("-" * 80) + "\n"  # Line break
             if self.state == State.UP_FOR_RETRY:
-                msg += "\nRetry run {self.try_number} out of {task.retries} "
-                msg += "starting @{iso}\n"
-            else:
-                msg += "\nNew run starting @{iso}\n"
-            msg += ("-" * 80)
-            logging.info(msg.format(**locals()))
-
-            self.start_date = datetime.now()
-            if self.state == State.UP_FOR_RETRY:
+                msg = (
+                    "Retry run {self.try_number} out of {task.retries} "
+                    "starting @{iso}")
                 self.try_number += 1
             else:
+                msg = "New run starting @{iso}"
                 self.try_number = 1
-            if not force and (self.pool or self.task.dag.concurrency_reached):
+            msg = msg.format(**locals())
+            logging.info(HR + msg + HR)
+            self.start_date = datetime.now()
+
+            if self.state != State.QUEUED and (
+                    self.pool or self.task.dag.concurrency_reached):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
@@ -1463,6 +1480,13 @@ class BaseOperator(object):
             logging.warning(
                 "start_date for {} isn't datetime.datetime".format(self))
         self.end_date = end_date
+        if not TriggerRule.is_valid(trigger_rule):
+            raise AirflowException(
+                "The trigger_rule must be one of {all_triggers},"
+                "'{d}.{t}'; received '{tr}'."
+                .format(all_triggers=TriggerRule.all_triggers,
+                        d=dag.dag_id, t=task_id, tr = trigger_rule))
+
         self.trigger_rule = trigger_rule
         self.depends_on_past = depends_on_past
         self.wait_for_downstream = wait_for_downstream
@@ -2377,8 +2401,23 @@ class DAG(LoggingMixin):
                 return task
         raise AirflowException("Task {task_id} not found".format(**locals()))
 
-    def pickle(self, main_session=None):
-        session = main_session or settings.Session()
+    @provide_session
+    def pickle_info(self, session=None):
+        d = {}
+        d['is_picklable'] = True
+        try:
+            dttm = datetime.now()
+            pickled = pickle.dumps(self)
+            d['pickle_len'] = len(pickled)
+            d['pickling_duration'] = "{}".format(datetime.now() - dttm)
+        except Exception as e:
+            logging.exception(e)
+            d['is_picklable'] = False
+            d['stacktrace'] = traceback.format_exc()
+        return d
+
+    @provide_session
+    def pickle(self, session=None):
         dag = session.query(
             DagModel).filter(DagModel.dag_id == self.dag_id).first()
         dp = None
@@ -2392,8 +2431,6 @@ class DAG(LoggingMixin):
             session.commit()
             self.pickle_id = dp.id
 
-        if not main_session:
-            session.close()
         return dp
 
     def tree_view(self):

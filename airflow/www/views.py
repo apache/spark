@@ -23,7 +23,7 @@ from flask import redirect, url_for, request, Markup, Response, current_app, ren
 from flask.ext.admin import BaseView, expose, AdminIndexView
 from flask.ext.admin.contrib.sqla import ModelView
 from flask.ext.admin.actions import action
-from flask.ext.login import current_user, flash, logout_user, login_required
+from flask.ext.login import flash
 from flask._compat import PY2
 
 import jinja2
@@ -31,7 +31,6 @@ import markdown
 import json
 
 from wtforms import (
-    widgets,
     Form, SelectField, TextAreaField, PasswordField, StringField)
 
 from pygments import highlight, lexers
@@ -41,7 +40,6 @@ import airflow
 from airflow import models
 from airflow.settings import Session
 from airflow import configuration
-from airflow import login
 from airflow import utils
 from airflow.utils import AirflowException
 from airflow.www import utils as wwwutils
@@ -668,6 +666,16 @@ class Airflow(BaseView):
             d['username'] = current_user.username
         return wwwutils.json_response(d)
 
+    @expose('/pickle_info')
+    def pickle_info(self):
+        d = {}
+        dag_id = request.args.get('dag_id')
+        dags = [dagbag.dags.get(dag_id)] if dag_id else dagbag.dags.values()
+        for dag in dags:
+            if not dag.is_subdag:
+                d[dag.dag_id] = dag.pickle_info()
+        return wwwutils.json_response(d)
+
     @expose('/login', methods=['GET', 'POST'])
     def login(self):
         return airflow.login.login(self, request)
@@ -1235,7 +1243,7 @@ class Airflow(BaseView):
             dttm = dag.latest_execution_date or datetime.now().date()
 
         DR = models.DagRun
-        drs = session.query(DR).filter_by(dag_id=dag_id).all()
+        drs = session.query(DR).filter_by(dag_id=dag_id).order_by('execution_date desc').all()
         dr_choices = []
         dr_state = None
         for dr in drs:
@@ -1476,7 +1484,7 @@ class Airflow(BaseView):
                 'inverted': True,
                 'height': height,
             },
-            'xAxis': {'categories': tasks},
+            'xAxis': {'categories': tasks, 'alternateGridColor': '#FAFAFA'},
             'yAxis': {'type': 'datetime'},
             'title': {
                 'text': None

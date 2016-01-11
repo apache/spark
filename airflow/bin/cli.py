@@ -427,7 +427,8 @@ def kerberos(args):
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(help='sub-command help')
+    subparsers = parser.add_subparsers(help='sub-command help', dest='subcommand')
+    subparsers.required = True
 
     ht = "Run subsections of a DAG for a specified date range"
     parser_backfill = subparsers.add_parser('backfill', help=ht)
@@ -495,6 +496,7 @@ def get_parser():
     parser_clear.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
+    ht = "Do not request confirmation"
     parser_clear.add_argument(
         "-c", "--no_confirm", help=ht, action="store_true")
     parser_clear.set_defaults(func=clear)
