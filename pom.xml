@@ -1885,10 +1885,6 @@
                        -->
                       <exclude>org.jboss.netty</exclude>
                     </excludes>
-                    <includes>
-                      <!-- Required by Flume sink tests -->
-                      <include>io.netty:netty:3.4.0.Final:*:test</include>
-                    </includes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
                 </rules>
