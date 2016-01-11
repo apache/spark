@@ -519,12 +519,6 @@
         <groupId>${akka.group}</groupId>
         <artifactId>akka-remote_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
@@ -768,10 +762,6 @@
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -831,10 +821,6 @@
           <exclusion>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -937,10 +923,6 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
@@ -962,10 +944,6 @@
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
@@ -998,10 +976,6 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
           </exclusion>
@@ -1027,10 +1001,6 @@
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
@@ -1062,10 +1032,6 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
           </exclusion>
@@ -1083,10 +1049,6 @@
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
@@ -1832,13 +1794,15 @@
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
-                      <exclude>io.netty:netty</exclude>
+                      <!--
+                        Akka depends on io.netty:netty, which puts classes under the org.jboss.netty
+                        package. This conflicts with the classes in org.jboss.netty:netty
+                        artifact, so we have to ban that artifact here. In Netty 4.x, the classes
+                        are under the io.netty package, so it's fine for us to depend on both
+                        io.netty:netty and io.netty:netty-all.
+                      -->
                       <exclude>org.jboss.netty</exclude>
                     </excludes>
-                    <includes>
-                      <!-- Required by Flume sink tests -->
-                      <include>io.netty:netty:3.4.0.Final:*:test</include>
-                    </includes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
                 </rules>
