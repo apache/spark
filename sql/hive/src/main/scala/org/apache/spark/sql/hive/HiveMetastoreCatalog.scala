@@ -31,21 +31,21 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
+import org.apache.spark.sql.execution.{datasources, FileRelation}
+import org.apache.spark.sql.execution.datasources.{Partition => ParquetPartition, _}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
-import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
 
 private[hive] case class HiveSerDe(
     inputFormat: Option[String] = None,
@@ -211,6 +211,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       tableIdent: TableIdentifier,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
@@ -237,6 +238,25 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       tableProperties.put("spark.sql.sources.schema.numPartCols", partitionColumns.length.toString)
       partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
         tableProperties.put(s"spark.sql.sources.schema.partCol.$index", partCol)
+      }
+    }
+
+    if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
+      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
+
+      tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
+      tableProperties.put("spark.sql.sources.schema.numBucketCols",
+        bucketColumnNames.length.toString)
+      bucketColumnNames.zipWithIndex.foreach { case (bucketCol, index) =>
+        tableProperties.put(s"spark.sql.sources.schema.bucketCol.$index", bucketCol)
+      }
+
+      if (sortColumnNames.nonEmpty) {
+        tableProperties.put("spark.sql.sources.schema.numSortCols",
+          sortColumnNames.length.toString)
+        sortColumnNames.zipWithIndex.foreach { case (sortCol, index) =>
+          tableProperties.put(s"spark.sql.sources.schema.sortCol.$index", sortCol)
+        }
       }
     }
 
@@ -596,6 +616,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
+            bucketSpec = None,
             mode,
             options = Map.empty[String, String],
             child

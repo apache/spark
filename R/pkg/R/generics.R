@@ -549,6 +549,10 @@ setGeneric("write.parquet", function(x, path) { standardGeneric("write.parquet")
 #' @export
 setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
 
+#' @rdname write.text
+#' @export
+setGeneric("write.text", function(x, path) { standardGeneric("write.text") })
+
 #' @rdname schema
 #' @export
 setGeneric("schema", function(x) { standardGeneric("schema") })
@@ -731,6 +735,10 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @rdname crc32
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
+
+#' @rdname hash
+#' @export
+setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
 #' @rdname cume_dist
 #' @export

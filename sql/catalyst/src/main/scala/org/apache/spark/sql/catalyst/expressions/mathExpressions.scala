@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.{lang => jl}
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.NumberConverter
@@ -70,6 +70,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
   }
+
+  override def sql: String = s"$name(${child.sql})"
 }
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)

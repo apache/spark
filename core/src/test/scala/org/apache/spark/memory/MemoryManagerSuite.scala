@@ -20,8 +20,8 @@ package org.apache.spark.memory
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import org.mockito.Matchers.{any, anyLong}
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}

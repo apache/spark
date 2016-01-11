@@ -21,7 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand}
+import org.apache.spark.sql.hive.execution.{AddFile, AddJar, HiveNativeCommand}
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
