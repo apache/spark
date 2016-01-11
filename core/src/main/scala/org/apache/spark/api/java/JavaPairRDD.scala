@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
@@ -296,7 +295,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /** Count the number of elements for each key, and return the result to the master as a Map. */
   def countByKey(): java.util.Map[K, jl.Long] =
-    mapAsSerializableJavaMap(rdd.countByKey().mapValues(jl.Long.valueOf))
+    mapAsSerializableJavaMap(rdd.countByKey()).asInstanceOf[java.util.Map[K, jl.Long]]
 
   /**
    * Approximate version of countByKey that can return a partial result if it does
@@ -655,7 +654,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * keys; this also retains the original RDD's partitioning.
    */
   def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairRDD[K, U] = {
-    import scala.collection.JavaConverters._
     def fn: (V) => Iterable[U] = (x: V) => f.call(x).asScala
     implicit val ctag: ClassTag[U] = fakeClassTag
     fromRDD(rdd.flatMapValues(fn))

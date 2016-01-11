@@ -57,7 +57,16 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
-        ) ++
+      ) ++
+      Seq(
+        // SPARK-4819 replace Guava Optional
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getCheckpointDir"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getSparkHome"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.getCheckpointFile"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitioner"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.getCheckpointFile"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitioner")
+      ) ++
       Seq(
         // SPARK-12481 Remove Hadoop 1.x
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.mapred.SparkHadoopMapRedUtil"),
@@ -119,6 +128,13 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$")
+      ) ++ Seq(
+        // SPARK-12591 Register OpenHashMapBasedStateMap for Kryo
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoInputDataInputBridge"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoOutputDataOutputBridge")
+      ) ++ Seq(
+        // SPARK-12510 Refactor ActorReceiver to support Java
+        ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.streaming.receiver.ActorReceiver")
       )
     case v if v.startsWith("1.6") =>
       Seq(

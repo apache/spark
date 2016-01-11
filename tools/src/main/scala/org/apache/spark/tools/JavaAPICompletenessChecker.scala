@@ -161,7 +161,7 @@ object JavaAPICompletenessChecker {
               }
             case "scala.Option" => {
               if (isReturnType) {
-                ParameterizedType("com.google.common.base.Optional", parameters.map(applySubs))
+                ParameterizedType("org.apache.spark.api.java.Optional", parameters.map(applySubs))
               } else {
                 applySubs(parameters(0))
               }

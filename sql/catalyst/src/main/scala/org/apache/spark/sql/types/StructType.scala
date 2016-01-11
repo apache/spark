@@ -279,6 +279,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     s"struct<${fieldTypes.mkString(",")}>"
   }
 
+  override def sql: String = {
+    val fieldTypes = fields.map(f => s"`${f.name}`: ${f.dataType.sql}")
+    s"STRUCT<${fieldTypes.mkString(", ")}>"
+  }
+
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
     val fieldTypes = fields.take(maxNumberFields).map {
