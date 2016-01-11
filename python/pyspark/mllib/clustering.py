@@ -286,11 +286,11 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     @since('1.3.0')
     def predict(self, x):
         """
-        Find the cluster to which the points in 'x' has maximum membership
-        in this model.
+        Find the cluster to which the point 'x' or each point in RDD 'x'
+        has maximum membership in this model.
 
-        :param x:    RDD of data points.
-        :return:     cluster_labels. RDD of cluster labels.
+        :param x:    vector or RDD of vector represents data points.
+        :return:     cluster label or RDD of cluster labels.
         """
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
@@ -302,10 +302,11 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     @since('1.3.0')
     def predictSoft(self, x):
         """
-        Find the membership of each point in 'x' to all mixture components.
+        Find the membership of point 'x' or each point in RDD 'x' to all mixture components.
 
-        :param x:    RDD of data points.
-        :return:     membership_matrix. RDD of array of double values.
+        :param x:    vector or RDD of vector represents data points.
+        :return:     the membership value to all mixture components for vector 'x'
+                     or each vector in RDD 'x'.
         """
         if isinstance(x, RDD):
             means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
