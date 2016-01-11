@@ -81,8 +81,8 @@ class CompositeOffsetSuite extends OffsetSuite {
     one = CompositeOffset(None :: Nil),
     two = CompositeOffset(Some(LongOffset(2)) :: Nil))
 
-  compareInvalid(
-    one = CompositeOffset(Nil),                         // sizes must be same
+  compareInvalid(                                               // sizes must be same
+    one = CompositeOffset(Nil),
     two = CompositeOffset(Some(LongOffset(2)) :: Nil))
 
   compare(
@@ -94,7 +94,7 @@ class CompositeOffsetSuite extends OffsetSuite {
     two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
 
   compareInvalid(
-    one = CompositeOffset.fill(LongOffset(2), LongOffset(1)),
+    one = CompositeOffset.fill(LongOffset(2), LongOffset(1)),   // vector time inconsistent
     two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
 }
 
