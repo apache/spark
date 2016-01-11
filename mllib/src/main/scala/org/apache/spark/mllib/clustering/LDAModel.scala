@@ -392,7 +392,7 @@ class LocalLDAModel private[spark] (
    * literature).  Returns a vector of zeros for an empty document.
    *
    * Note this means to allow quick query for single document. For batch documents, please refer
-   * to [[topicDistributions(documents: RDD[(Long, Vector)])]] to avoid overhead.
+   * to [[topicDistributions()]] to avoid overhead.
    *
    * @param document document to predict topic mixture distributions for
    * @return topic mixture distribution for the document
