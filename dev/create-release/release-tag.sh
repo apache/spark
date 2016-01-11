@@ -64,9 +64,6 @@ git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
 git tag $RELEASE_TAG
 
-# TODO: It would be nice to do some verifications here
-#       i.e. check whether ec2 scripts have the new version
-
 # Create next version
 $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
 git commit -a -m "Preparing development version $NEXT_VERSION"
