@@ -56,7 +56,11 @@ class BigQueryHook(BaseHook):
 
     def get_pandas_df(self, bql, parameters=None):
         """
-        Returns a Pandas DataFrame for the results produced by a BigQuery query.
+        Returns a Pandas DataFrame for the results produced by a BigQuery 
+        query.
+
+        :param bql: The BigQuery SQL to execute.
+        :type bql: string
         """
         service = self.get_conn()
         connection_info = self.get_connection(self.bigquery_conn_id)
@@ -75,17 +79,29 @@ class BigQueryHook(BaseHook):
         else:
             return gbq_parse_data(schema, [])
 
-    def run(self, bql, destination_dataset_table = False):
+    def run(self, bql, destination_dataset_table = False, write_disposition = 'WRITE_EMPTY'):
         """
         Executes a BigQuery SQL query. Either returns results and schema, or
-        stores results in a BigQuery table, if destination is set.
+        stores results in a BigQuery table, if destination is set. See here:
+
+        https://cloud.google.com/bigquery/docs/reference/v2/jobs
+
+        For more details about these parameters.
+
+        :param bql: The BigQuery SQL to execute.
+        :type bql: string
+        :param destination_dataset_table: The dotted <dataset>.<table> 
+            BigQuery table to save the query results.
+        :param write_disposition: What to do if the table already exists in 
+            BigQuery.
         """
         connection_info = self.get_connection(self.bigquery_conn_id)
         connection_extras = connection_info.extra_dejson
         project = connection_extras['project']
         configuration = {
             'query': {
-                'query': bql
+                'query': bql,
+                'writeDisposition': write_disposition,
             }
         }
 
@@ -99,11 +115,64 @@ class BigQueryHook(BaseHook):
                 'tableId': destination_table,
             }
 
-        return self.run_with_configuration(configuration)
+        self.run_with_configuration(configuration)
+
+    def run_extract(self, source_dataset_table, destination_cloud_storage_uris, compression='NONE', export_format='CSV', field_delimiter=',', print_header=True):
+        """
+        Executes a BigQuery extract command to copy data from BigQuery to 
+        Google Cloud Storage. See here:
+
+        https://cloud.google.com/bigquery/docs/reference/v2/jobs
+
+        For more details about these parameters.
+
+        :param source_dataset_table: The dotted <dataset>.<table> BigQuery table to use as the source data.
+        :type source_dataset_table: string
+        :param destination_cloud_storage_uris: The destination Google Cloud 
+            Storage URI (e.g. gs://some-bucket/some-file.txt). Follows 
+            convention defined here: 
+            https://cloud.google.com/bigquery/exporting-data-from-bigquery#exportingmultiple
+        :type destination_cloud_storage_uris: list
+        :param compression: Type of compression to use.
+        :type compression: string
+        :param export_format: File format to export.
+        :type field_delimiter: string
+        :param field_delimiter: The delimiter to use when extracting to a CSV.
+        :type field_delimiter: string
+        :param print_header: Whether to print a header for a CSV file extract.
+        :type print_header: boolean
+        """
+        assert '.' in source_dataset_table, \
+            'Expected source_dataset_table in the format of <dataset>.<table>. Got: {}'.format(source_dataset_table)
+
+        connection_info = self.get_connection(self.bigquery_conn_id)
+        connection_extras = connection_info.extra_dejson
+        project = connection_extras['project']
+        source_dataset, source_table = source_dataset_table.split('.', 1)
+        configuration = {
+            'extract': {
+                'sourceTable': {
+                    'projectId': project,
+                    'datasetId': source_dataset,
+                    'tableId': source_table,
+                },
+                'compression': compression,
+                'destinationUris': destination_cloud_storage_uris,
+                'destinationFormat': export_format,
+                'fieldDelimiter': field_delimiter,
+                'printHeader': print_header,
+            }
+        }
+
+        self.run_with_configuration(configuration)
 
     def run_with_configuration(self, configuration):
         """
-        Executes a BigQuery SQL query.
+        Executes a BigQuery SQL query. See here:
+
+        https://cloud.google.com/bigquery/docs/reference/v2/jobs
+
+        For more details about the configuration parameter.
 
         :param configuration: The configuration parameter maps directly to
         BigQuery's configuration field in the job object. See
@@ -113,53 +182,27 @@ class BigQueryHook(BaseHook):
         connection_info = self.get_connection(self.bigquery_conn_id)
         connection_extras = connection_info.extra_dejson
         project = connection_extras['project']
-        job_collection = service.jobs()
+        jobs = service.jobs()
         job_data = {
             'configuration': configuration
         }
 
         # Send query and wait for reply.
-        query_reply = job_collection \
+        query_reply = jobs \
             .insert(projectId=project, body=job_data) \
             .execute()
-        job_reference = query_reply['jobReference']
+        job_id = query_reply['jobReference']['jobId']
+        job = jobs.get(projectId=project, jobId=job_id).execute()
 
         # Wait for query to finish.
-        while not query_reply.get('jobComplete', False):
-            logging.info('Waiting for job to complete: %s', job_reference)
+        while not job['status']['state'] == 'DONE':
+            logging.info('Waiting for job to complete: %s, %s', project, job_id)
             time.sleep(5)
-            query_reply = job_collection \
-                .getQueryResults(projectId=job_reference['projectId'], jobId=job_reference['jobId']) \
-                .execute()
+            job = jobs.get(projectId=project, jobId=job_id).execute()
 
-        total_rows = int(query_reply['totalRows'])
-        results = list()
-        seen_page_tokens = set()
-        current_row = 0
-        schema = query_reply['schema']
-
-        # Loop through each page of data, and stuff it into the results variable.
-        while 'rows' in query_reply and current_row < total_rows:
-            page = query_reply['rows']
-            results.extend(page)
-            current_row += len(page)
-            page_token = query_reply.get('pageToken', None)
-
-            if not page_token and current_row < total_rows:
-                raise Exception('Required pageToken was missing. Received {0} of {1} rows.'.format(current_row, total_rows))
-            elif page_token in seen_page_tokens:
-                raise Exception('A duplicate pageToken was returned. This is unexpected.')
-
-            seen_page_tokens.add(page_token)
-
-            query_reply = job_collection \
-                .getQueryResults(projectId=job_reference['projectId'], jobId=job_reference['jobId'], pageToken=page_token) \
-                .execute()
-
-        if current_row < total_rows:
-            raise Exception('Didn\'t get complete result set. Something went wrong. Aborting.')
-
-        return schema, results
+        # Check if job had errors.
+        if 'errorResult' in job['status']:
+            raise Exception('BigQuery job failed. Final error was: %s', job['status']['errorResult'])
 
 class BigQueryPandasConnector(GbqConnector):
     """
