@@ -736,10 +736,6 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
-#' @rdname hash
-#' @export
-setGeneric("hash", function(x, ...) { standardGeneric("hash") })
-
 #' @rdname cume_dist
 #' @export
 setGeneric("cume_dist", function(x) { standardGeneric("cume_dist") })
