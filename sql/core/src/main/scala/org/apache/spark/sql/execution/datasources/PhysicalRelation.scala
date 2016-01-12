@@ -37,9 +37,9 @@ private[sql] case class PhysicalRelation(
     meta: Map[String, String],
     useBucketInfo: Boolean = true) extends LeafNode {
 
-  def toPhysicalRDD: PhysicalRDD = {
-    val rdd = scanBuilder(useBucketInfo)
-    if (useBucketInfo) {
+  def toPhysicalRDD(enableBucket: Boolean): PhysicalRDD = {
+    val rdd = scanBuilder(enableBucket)
+    if (enableBucket) {
       PhysicalRDD.createFromDataSource(output, rdd, relation, meta, outputPartitioning)
     } else {
       PhysicalRDD.createFromDataSource(output, rdd, relation, meta)
@@ -96,11 +96,11 @@ private[sql] case class ReplacePhysicalRelation(sqlContext: SQLContext) extends 
       plan
     } else if (numShuffle(addShuffle(bucketDisabled)) > numShuffle(plan)) {
       bucketDisabled transform {
-        case r: PhysicalRelation if !r.useBucketInfo => r.copy(useBucketInfo = true).toPhysicalRDD
+        case r: PhysicalRelation if !r.useBucketInfo => r.toPhysicalRDD(enableBucket = true)
       }
     } else {
       bucketDisabled transform {
-        case r: PhysicalRelation if !r.useBucketInfo => r.toPhysicalRDD
+        case r: PhysicalRelation if !r.useBucketInfo => r.toPhysicalRDD(enableBucket = false)
       }
     }
   }

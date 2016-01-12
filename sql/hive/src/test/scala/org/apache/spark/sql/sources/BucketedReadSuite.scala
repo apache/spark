@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.{Column, DataFrame, DataFrameWriter, QueryTest, SQLConf}
 import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
-import org.apache.spark.sql.execution.{SparkPlan, PhysicalRDD, Exchange}
+import org.apache.spark.sql.execution.{Exchange, PhysicalRDD, SparkPlan}
 import org.apache.spark.sql.execution.joins.SortMergeJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -101,7 +101,6 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   private def assertNonBucketed(plan: SparkPlan): Unit = {
     val rdd = plan.find(_.isInstanceOf[PhysicalRDD]).get.execute()
     assert(rdd.partitions.length != 8)
-    println(rdd.partitions.length)
   }
 
   private def joinCondition(left: DataFrame, right: DataFrame, joinCols: Seq[String]): Column = {

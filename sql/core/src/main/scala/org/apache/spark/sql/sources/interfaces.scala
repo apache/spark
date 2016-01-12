@@ -686,9 +686,8 @@ abstract class HadoopFsRelation private[sql](
       }
     }
 
-    val inputFilesWithBucketId = allInputFiles.groupBy(getBucketId)
-
     if (bucketSpec.isDefined && useBucketInfo) {
+      val inputFilesWithBucketId = allInputFiles.groupBy(getBucketId)
       // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket id
       // from file name. Then read these files into a RDD(use one-partition empty RDD for empty
       // bucket), and coalesce it to one partition. Finally union all bucket RDDs to final result.
