@@ -105,10 +105,10 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 object DecimalType extends AbstractDataType {
   import scala.math.min
 
-  val MAX_PRECISION = 38
-  val MAX_SCALE = 38
-  val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
-  val USER_DEFAULT: DecimalType = DecimalType(10, 0)
+  val MAX_PRECISION = 127
+  val MAX_SCALE = 63
+  val SYSTEM_DEFAULT: DecimalType = DecimalType(38, 18)
+  val USER_DEFAULT: DecimalType = DecimalType(38, 18)
 
   // The decimal types compatible with other numeric types
   private[sql] val ByteDecimal = DecimalType(3, 0)
