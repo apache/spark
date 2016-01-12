@@ -388,6 +388,14 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
+#' @rdname as.data.frame
+#' @export
+setGeneric("as.data.frame")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")
+
 #' @rdname columns
 #' @export
 setGeneric("colnames", function(x, do.NULL = TRUE, prefix = "col") { standardGeneric("colnames") })
@@ -531,7 +539,7 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
 #' @export
 setGeneric("str")
 
-#' @rdname withColumn
+#' @rdname transform
 #' @export
 setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
@@ -1109,15 +1117,3 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
-
-#' @rdname as.data.frame
-#' @export
-setGeneric("as.data.frame")
-
-#' @rdname attach
-#' @export
-setGeneric("attach")
-
-#' @rdname with
-#' @export
-setGeneric("with")
