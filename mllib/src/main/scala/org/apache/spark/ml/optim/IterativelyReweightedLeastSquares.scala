@@ -49,7 +49,7 @@ private[ml] class IterativelyReweightedLeastSquares(
   def fit(instances: RDD[Instance]): IterativelyReweightedLeastSquaresModel = {
 
     val y = instances.map(_.label).persist(StorageLevel.MEMORY_AND_DISK)
-    val yMean = y.reduce(_ + _) / y.count()
+    val yMean = y.mean()
     var mu = y.map { yi => family.startingMu(yi, yMean) }
     var eta: RDD[Double] = null
     var dev = family.deviance(y, mu)

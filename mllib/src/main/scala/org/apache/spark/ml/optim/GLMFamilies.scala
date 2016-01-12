@@ -36,8 +36,13 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
    */
   def deviance(y: RDD[Double], mu: RDD[Double]): Double
 
+  /** The variance of mu to its mean. */
+  def variance(mu: Double): Double = 1.0
+
   /** Weights for IRLS steps. */
-  def weights(mu: Double): Double
+  def weights(mu: Double): Double = {
+    1.0 / (math.pow(this.link.deriv(mu), 2.0) * this.variance(mu))
+  }
 
   /** The adjusted response variable. */
   def adjusted(y: Double, mu: Double, eta: Double): Double = {
@@ -68,7 +73,7 @@ private[ml] class Binomial(link: Link = Logit) extends Family(link) {
     }.sum() * 2
   }
 
-  override def weights(mu: Double): Double = {
+  override def variance(mu: Double): Double = {
     mu * (1 - mu)
   }
 }
@@ -91,7 +96,7 @@ private[ml] class Poisson(link: Link = Log) extends Family(link) {
     }.sum() * 2
   }
 
-  override def weights(mu: Double): Double = mu
+  override def variance(mu: Double): Double = mu
 }
 
 private[ml] object Poisson {
