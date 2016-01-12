@@ -41,12 +41,12 @@ import org.apache.spark.util.Utils
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
-  ssc_ : StreamingContext,
+  _ssc: StreamingContext,
   host: String,
   port: Int,
   storageLevel: StorageLevel,
   enableDecompression: Boolean
-) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
+) extends ReceiverInputDStream[SparkFlumeEvent](_ssc) {
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
     new FlumeReceiver(host, port, storageLevel, enableDecompression)
@@ -60,7 +60,7 @@ class FlumeInputDStream[T: ClassTag](
  * which are not serializable.
  */
 class SparkFlumeEvent() extends Externalizable {
-  var event : AvroFlumeEvent = new AvroFlumeEvent()
+  var event: AvroFlumeEvent = new AvroFlumeEvent()
 
   /* De-serialize from bytes. */
   def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -75,12 +75,12 @@ class SparkFlumeEvent() extends Externalizable {
       val keyLength = in.readInt()
       val keyBuff = new Array[Byte](keyLength)
       in.readFully(keyBuff)
-      val key : String = Utils.deserialize(keyBuff)
+      val key: String = Utils.deserialize(keyBuff)
 
       val valLength = in.readInt()
       val valBuff = new Array[Byte](valLength)
       in.readFully(valBuff)
-      val value : String = Utils.deserialize(valBuff)
+      val value: String = Utils.deserialize(valBuff)
 
       headers.put(key, value)
     }
@@ -109,7 +109,7 @@ class SparkFlumeEvent() extends Externalizable {
 }
 
 private[streaming] object SparkFlumeEvent {
-  def fromAvroFlumeEvent(in : AvroFlumeEvent) : SparkFlumeEvent = {
+  def fromAvroFlumeEvent(in: AvroFlumeEvent): SparkFlumeEvent = {
     val event = new SparkFlumeEvent
     event.event = in
     event
@@ -118,13 +118,13 @@ private[streaming] object SparkFlumeEvent {
 
 /** A simple server that implements Flume's Avro protocol. */
 private[streaming]
-class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
-  override def append(event : AvroFlumeEvent) : Status = {
+class FlumeEventServer(receiver: FlumeReceiver) extends AvroSourceProtocol {
+  override def append(event: AvroFlumeEvent): Status = {
     receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event))
     Status.OK
   }
 
-  override def appendBatch(events : java.util.List[AvroFlumeEvent]) : Status = {
+  override def appendBatch(events: java.util.List[AvroFlumeEvent]): Status = {
     events.asScala.foreach(event => receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event)))
     Status.OK
   }

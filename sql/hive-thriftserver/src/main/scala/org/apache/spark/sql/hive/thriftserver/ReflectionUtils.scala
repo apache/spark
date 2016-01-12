@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 private[hive] object ReflectionUtils {
-  def setSuperField(obj : Object, fieldName: String, fieldValue: Object) {
+  def setSuperField(obj: Object, fieldName: String, fieldValue: Object) {
     setAncestorField(obj, 1, fieldName, fieldValue)
   }
 
