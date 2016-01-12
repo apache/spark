@@ -436,13 +436,11 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val g = g0.partitionBy(PartitionStrategy.EdgePartition2D, 2)
       val cc = g.connectedComponents()
       assert(sc.persistentRdds.isEmpty === false)
-      println("persistentRdds = "+ sc.persistentRdds)
       cc.unpersist()
       g.unpersist()
       g0.unpersist()
       vert.unpersist()
       edges.unpersist()
-      println("persistentRdds = "+ sc.persistentRdds)
       assert(sc.persistentRdds.isEmpty === true)
     }
   }
