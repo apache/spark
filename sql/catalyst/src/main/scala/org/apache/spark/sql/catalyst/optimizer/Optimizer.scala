@@ -63,6 +63,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      SimplifyConditionals,
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
@@ -608,7 +609,16 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case Not(a And b) => Or(Not(a), Not(b))
 
       case Not(Not(e)) => e
+    }
+  }
+}
 
+/**
+ * Simplifies conditional expressions (if / case).
+ */
+object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
     }
