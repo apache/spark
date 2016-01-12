@@ -46,7 +46,7 @@ class ExecutorMetrics extends Serializable {
   private[spark] def hostPort: String = {
     val hp = port match {
       case None => hostname
-      case value => hostname + ":" + value
+      case value => hostname + ":" + value.get
     }
     hp
   }
@@ -55,12 +55,6 @@ class ExecutorMetrics extends Serializable {
   def transportMetrics: TransportMetrics = _transportMetrics
   private[spark] def setTransportMetrics(value: TransportMetrics) = {
     _transportMetrics = value
-  }
-
-  // for test only
-  def metricsDetails: (String, Long, Long, Long) = {
-    (hostname, transportMetrics.timeStamp, transportMetrics.onHeapSize,
-      transportMetrics.offHeapSize)
   }
 }
 
