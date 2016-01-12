@@ -22,13 +22,12 @@ import java.util.Map.Entry
 
 import scala.collection.mutable
 
-import com.google.common.base.Optional
-
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
-    option match {
-      case Some(value) => Optional.of(value)
-      case None => Optional.absent()
+    if (option.isDefined) {
+      Optional.of(option.get)
+    } else {
+      Optional.empty[T]
     }
 
   // Workaround for SPARK-3926 / SI-8911

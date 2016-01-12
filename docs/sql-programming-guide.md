@@ -2151,6 +2151,11 @@ options.
      ...
    {% endhighlight %}
 
+ - From Spark 1.6, LongType casts to TimestampType expect seconds instead of microseconds. This
+   change was made to match the behavior of Hive 1.2 for more consistent type casting to TimestampType
+   from numeric types. See [SPARK-11724](https://issues.apache.org/jira/browse/SPARK-11724) for
+   details.
+
 ## Upgrading From Spark SQL 1.4 to 1.5
 
  - Optimized execution using manually managed memory (Tungsten) is now enabled by default, along with
