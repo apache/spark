@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -118,6 +120,9 @@ final class ChiSqSelectorModel private[ml] (
 
   /** list of indices to select (filter). Must be ordered asc */
   val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
+
+  /** Java-friendly version of [[selectedFeatures]]. */
+  def javaSelectedFeatures: java.util.List[Int] = selectedFeatures.toSeq.asJava
 
   /** @group setParam */
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)

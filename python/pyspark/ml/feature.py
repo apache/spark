@@ -2111,6 +2111,8 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
     >>> model = selector.fit(df)
     >>> model.transform(df).head().selectedFeatures
     DenseVector([1.0])
+    >>> model.selectedFeatures
+    [3]
 
     .. versionadded:: 2.0.0
     """
@@ -2176,6 +2178,14 @@ class ChiSqSelectorModel(JavaModel):
 
     .. versionadded:: 2.0.0
     """
+
+    @property
+    @since("2.0.0")
+    def selectedFeatures(self):
+        """
+        Standard deviation of the StandardScalerModel.
+        """
+        return self._call_java("javaSelectedFeatures")
 
 
 if __name__ == "__main__":
