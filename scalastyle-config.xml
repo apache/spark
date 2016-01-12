@@ -218,7 +218,7 @@ This file is divided into 3 sections:
   <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="false"></check>
 
   <!-- Should turn this on, but we have a few places that need to be fixed first -->
-  <check level="warning" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="true">
+  <check customId="whitespacebeforetoken" level="warning" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="true">
     <parameters>
       <parameter name="tokens">COLON, COMMA</parameter>
     </parameters>
