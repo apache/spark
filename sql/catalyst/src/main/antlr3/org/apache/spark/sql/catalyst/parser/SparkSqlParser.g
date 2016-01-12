@@ -2102,6 +2102,7 @@ primitiveType
     | KW_SMALLINT      ->    TOK_SMALLINT
     | KW_INT           ->    TOK_INT
     | KW_BIGINT        ->    TOK_BIGINT
+    | KW_LONG          ->    TOK_BIGINT
     | KW_BOOLEAN       ->    TOK_BOOLEAN
     | KW_FLOAT         ->    TOK_FLOAT
     | KW_DOUBLE        ->    TOK_DOUBLE
