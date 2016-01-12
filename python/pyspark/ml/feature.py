@@ -2104,19 +2104,15 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame(
     ...    [(Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
-    ...    (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
-    ...    (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0)],
+    ...     (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
+    ...     (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0)],
     ...    ["features", "label"])
     >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
     >>> model = selector.fit(df)
-    >>> model.transform(df).collect()[0].selectedFeatures
+    >>> model.transform(df).head().selectedFeatures
     DenseVector([1.0])
-    >>> model.transform(df).collect()[1].selectedFeatures
-    DenseVector([0.0])
-    >>> model.transform(df).collect()[2].selectedFeatures
-    DenseVector([0.1])
 
-    .. versionadded:: 2.2.0
+    .. versionadded:: 2.0.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -2142,7 +2138,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("2.2.0")
+    @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
                   labelCol="labels"):
         """
@@ -2153,7 +2149,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    @since("2.2.0")
+    @since("2.0.0")
     def setNumTopFeatures(self, value):
         """
         Sets the value of :py:attr:`numTopFeatures`.
@@ -2161,7 +2157,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
         self._paramMap[self.numTopFeatures] = value
         return self
 
-    @since("2.2.0")
+    @since("2.0.0")
     def getNumTopFeatures(self):
         """
         Gets the value of numTopFeatures or its default value.
@@ -2178,7 +2174,7 @@ class ChiSqSelectorModel(JavaModel):
 
     Model fitted by ChiSqSelector.
 
-    .. versionadded:: 2.2.0
+    .. versionadded:: 2.0.0
     """
 
 
