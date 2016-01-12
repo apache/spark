@@ -37,7 +37,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
 
   case class AddKafkaData(
       kafkaSource: KafkaSource,
-      topic: String, data: Int*)(implicit multiPartitionCheck: Boolean = true) extends AddData {
+      topic: String, data: Int*) extends AddData {
 
     override def addData(): Offset = {
       val sentMetadata = testUtils.sendMessages(topic, data.map{ _.toString}.toArray)
@@ -52,8 +52,9 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
         s"Sent ${m._1} to partition ${m._2.partition()}, offset ${m._2.offset()}"
       }
 
-      assert(latestOffsetMap.size > 1,
-        s"Added data does not test multiple partitions: " + sentMetadata.map(metadataToStr))
+      // Verify that the test data gets inserted into multiple partitions
+      require(latestOffsetMap.size > 1,
+        s"Added data does not test multiple partitions: ${sentMetadata.map(metadataToStr)}")
 
       // Expected offset to ensure this data is read is last offset of this data + 1
       val offset = KafkaSourceOffset(latestOffsetMap)
