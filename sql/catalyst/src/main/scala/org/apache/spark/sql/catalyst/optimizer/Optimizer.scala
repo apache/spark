@@ -51,6 +51,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
+      PushDownLimit,
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
@@ -82,6 +83,39 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
 object DefaultOptimizer extends Optimizer
 
 /**
+ * Pushes down Limit for reducing the amount of returned data.
+ *
+ * 1. Adding Extra Limit beneath the operations, including Union All.
+ * 2. Project is pushed through Limit in the rule ColumnPruning
+ *
+ * Any operator that a Limit can be pushed passed should override the maxRows function.
+ */
+object PushDownLimit extends Rule[LogicalPlan] {
+
+  private def buildUnionChild (limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+    (limitExp, plan.maxRows) match {
+      case (IntegerLiteral(maxRow), Some(IntegerLiteral(childMaxRows))) if maxRow < childMaxRows =>
+        Limit(limitExp, plan)
+      case (_, None) =>
+        Limit(limitExp, plan)
+      case _ => plan
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // Adding extra Limit below UNION ALL iff both left and right childs are not Limit or
+    // do not have Limit descendants whose maxRow is larger. This heuristic is valid assuming
+    // there does not exist any Limit push-down rule that is unable to infer the value of maxRows.
+    // Note, right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
+    // safe to pushdown Limit through it. Once we add UNION DISTINCT, we will not be able to
+    // pushdown Limit.
+    case Limit(exp, Union(left, right)) =>
+      Limit(exp, Union(buildUnionChild(exp, left), buildUnionChild(exp, right)))
+  }
+}
+
+/**
  * Pushes operations down into a Sample.
  */
 object SamplePushDown extends Rule[LogicalPlan] {
@@ -99,8 +133,8 @@ object SamplePushDown extends Rule[LogicalPlan] {
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
- * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
- * we will not be able to pushdown Projections.
+ * safe to pushdown Filters, Projections and Limits through it. Once we add UNION DISTINCT,
+ * we will not be able to pushdown Projections and Limits.
  *
  * Intersect:
  * It is not safe to pushdown Projections through it because we need to get the
