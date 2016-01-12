@@ -18,8 +18,14 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
+
+  object DummyRule extends Rule[LogicalPlan] {
+    def apply(p: LogicalPlan): LogicalPlan = p
+  }
 
   test("getOrCreate instantiates SQLContext") {
     val sqlContext = SQLContext.getOrCreate(sc)
@@ -64,5 +70,11 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
     intercept[AnalysisException] {
       session2.sql("select myadd(1, 2)").explain()
     }
+  }
+
+  test("Catalyst optimization passes are modifiable at runtime") {
+    val sqlContext = SQLContext.getOrCreate(sc)
+    sqlContext.experimental.extraOptimizations = Seq(DummyRule)
+    assert(sqlContext.optimizer.batches.flatMap(_.rules).contains(DummyRule))
   }
 }
