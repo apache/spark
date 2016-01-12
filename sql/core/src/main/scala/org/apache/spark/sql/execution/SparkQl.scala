@@ -52,26 +52,30 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           nodeToDescribeFallback(node)
         } else {
           tableType match {
-            case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts :: Nil) :: Nil) =>
+            case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts) :: Nil) =>
               nameParts match {
-                case Token(".", dbName :: tableName :: Nil) =>
+                case Token(dbName, _) :: Token(tableName, _) :: Nil =>
                   // It is describing a table with the format like "describe db.table".
                   // TODO: Actually, a user may mean tableName.columnName. Need to resolve this
                   // issue.
-                  val tableIdent = extractTableIdent(nameParts)
+                  val tableIdent = TableIdentifier(
+                    cleanIdentifier(tableName), Some(cleanIdentifier(dbName)))
                   datasources.DescribeCommand(
                     UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
-                case Token(".", dbName :: tableName :: colName :: Nil) =>
+                case Token(dbName, _) :: Token(tableName, _) :: Token(colName, _) :: Nil =>
                   // It is describing a column with the format like "describe db.table column".
                   nodeToDescribeFallback(node)
-                case tableName =>
+                case tableName :: Nil =>
                   // It is describing a table with the format like "describe table".
                   datasources.DescribeCommand(
                     UnresolvedRelation(TableIdentifier(tableName.text), None),
                     isExtended = extended.isDefined)
+                case _ =>
+                  nodeToDescribeFallback(node)
               }
             // All other cases.
-            case _ => nodeToDescribeFallback(node)
+            case _ =>
+              nodeToDescribeFallback(node)
           }
         }
 
