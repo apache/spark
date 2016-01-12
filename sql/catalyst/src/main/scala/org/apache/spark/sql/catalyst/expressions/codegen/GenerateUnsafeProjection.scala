@@ -360,7 +360,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       }
       """
 
-    logError(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
+    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
