@@ -171,7 +171,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     UnresolvedExtractValue(expr, lit(extraction).expr)
   }
 
-  // scalastyle:off
+  // scalastyle:off whitespacebeforetoken
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
@@ -203,7 +203,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def unary_! : Column = withExpr { Not(expr) }
-  // scalastyle:on
+  // scalastyle:on whitespacebeforetoken
 
   /**
    * Equality test.
