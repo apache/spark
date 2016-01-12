@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.util.Try
-
 import kafka.common.TopicAndPartition
 import kafka.serializer._
 

@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
-import kafka.common.TopicAndPartition
+import scala.util.Random
+
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.scalatest.time.SpanSugar._
 
@@ -34,36 +35,6 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
   private var kafkaParams: Map[String, String] = _
 
   override val streamingTimout = 10.seconds
-
-  case class AddKafkaData(
-      kafkaSource: KafkaSource,
-      topic: String, data: Int*) extends AddData {
-
-    override def addData(): Offset = {
-      val sentMetadata = testUtils.sendMessages(topic, data.map{ _.toString}.toArray)
-      val latestOffsetMap = sentMetadata
-        .groupBy { _._2.partition }
-        .map { case (partition, msgAndMetadata) =>
-          val maxOffsetInPartition = msgAndMetadata.map(_._2).maxBy(_.offset).offset()
-          (TopicAndPartition(topic, partition), maxOffsetInPartition + 1)
-        }
-
-      def metadataToStr(m: (String, RecordMetadata)): String = {
-        s"Sent ${m._1} to partition ${m._2.partition()}, offset ${m._2.offset()}"
-      }
-
-      // Verify that the test data gets inserted into multiple partitions
-      require(latestOffsetMap.size > 1,
-        s"Added data does not test multiple partitions: ${sentMetadata.map(metadataToStr)}")
-
-      // Expected offset to ensure this data is read is last offset of this data + 1
-      val offset = KafkaSourceOffset(latestOffsetMap)
-      logInfo(s"Added data, expected offset $offset")
-      offset
-    }
-
-    override def source: Source = kafkaSource
-  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -94,24 +65,72 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       val mapped =
         kafkaSource
           .toDS()
-          .map[Int]((kv: (Array[Byte], Array[Byte])) => new String(kv._2).toInt + 1)
+          .map((kv: (Array[Byte], Array[Byte])) => new String(kv._2).toInt + 1)
 
       logInfo(s"Initial offsets: ${kafkaSource.initialOffsets}")
 
       testStream(mapped)(
-        AddKafkaData(kafkaSource, topic, 1, 2, 3),
+        AddKafkaData(kafkaSource, Set(topic), 1, 2, 3),
         CheckAnswer(2, 3, 4),
         StopStream ,
         DropBatches(1),         // Lose last batch in the sink
         StartStream,
         CheckAnswer(2, 3, 4),   // Should get the data back on recovery
         StopStream,
-        AddKafkaData(kafkaSource, topic, 4, 5, 6),    // Add data when stream is stopped
+        AddKafkaData(kafkaSource, Set(topic), 4, 5, 6),    // Add data when stream is stopped
         StartStream,
         CheckAnswer(2, 3, 4, 5, 6, 7),                // Should get the added data
-        AddKafkaData(kafkaSource, topic, 7, 8),
+        AddKafkaData(kafkaSource, Set(topic), 7, 8),
         CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9)
       )
     }
+  }
+
+  test("stress test with multiple topics and partitions") {
+    val topics = (1 to 5).map (i => s"stress$i").toSet
+    topics.foreach(testUtils.createTopic(_, partitions = Random.nextInt(10)))
+
+    for (i <- 1 to 5) {
+      // Create Kafka source that reads from latest offset
+      val kafkaSource = KafkaSource(topics, kafkaParams)
+
+      val mapped =
+        kafkaSource
+          .toDS()
+          .map(r => new String(r._2).toInt + 1)
+
+      createStressTest(
+        mapped,
+        d => AddKafkaData(kafkaSource, topics, d: _*)(ensureDataInMultiplePartition = false),
+        iterations = 30)
+    }
+  }
+
+
+  case class AddKafkaData(
+      kafkaSource: KafkaSource,
+      topics: Set[String], data: Int*)(implicit ensureDataInMultiplePartition: Boolean = true)
+    extends AddData {
+
+    override def addData(): Offset = {
+      val topic = topics.toSeq(Random.nextInt(topics.size))
+      val sentMetadata = testUtils.sendMessages(topic, data.map{ _.toString}.toArray)
+
+      def metadataToStr(m: (String, RecordMetadata)): String = {
+        s"Sent ${m._1} to partition ${m._2.partition()}, offset ${m._2.offset()}"
+      }
+
+      // Verify that the test data gets inserted into multiple partitions
+      if (ensureDataInMultiplePartition) {
+        require(sentMetadata.groupBy(_._2.partition).size > 1,
+          s"Added data does not test multiple partitions: ${sentMetadata.map(metadataToStr)}")
+      }
+
+      val offset = KafkaSourceOffset(testUtils.getLatestOffsets(topics))
+      logInfo(s"Added data, expected offset $offset")
+      offset
+    }
+
+    override def source: Source = kafkaSource
   }
 }

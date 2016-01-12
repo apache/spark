@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
 import kafka.api.Request
+import kafka.common.TopicAndPartition
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
@@ -191,6 +192,14 @@ private[kafka] class KafkaTestUtils extends Logging {
       }
     }
     offsets
+  }
+
+  /** Get the latest offset of all the partitions in a topic */
+  def getLatestOffsets(topics: Set[String]): Map[TopicAndPartition, Long] = {
+    val kc = new KafkaCluster(Map("metadata.broker.list" -> brokerAddress))
+    val topicPartitions = kc.getPartitions(topics).right.get
+    val offsets = kc.getLatestLeaderOffsets(topicPartitions).right.get
+    offsets.mapValues(_.offset)
   }
 
   private def brokerConfiguration: Properties = {
