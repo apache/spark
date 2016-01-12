@@ -197,13 +197,15 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
  *  - double:             turn it into long: java.lang.Double.doubleToLongBits(input), and hash it.
  *  - decimal:            if it's a small decimal, i.e. precision <= 18, turn it into long and hash
  *                        it. Else, turn it into bytes and hash it.
- *  - calendar interval:  hash the `months` and `microseconds`, and XOR them.
+ *  - calendar interval:  hash `microseconds` first, and use the result as seed to hash `months`.
  *  - binary:             use murmur3 to hash the bytes with seed.
  *  - string:             get the bytes of string and hash it.
- *  - array:              recursively calculate hash value for each element, and aggregate them by
- *                        `result = result * 31 + elementHash`, starts with 0.
- *  - map:                recursively calculate hash value for each key-value pair, and aggregate
- *                        them by `result += keyHash XOR valueHash`, starts with 0.
+ *  - array:              The `result` starts with seed, then use `result` as seed, recursively
+ *                        calculate hash value for each element, and assign the element hash value
+ *                        to `result`.
+ *  - map:                The `result` starts with seed, then use `result` as seed, recursively
+ *                        calculate hash value for each key-value, and assign the key-value hash
+ *                        value to `result`.
  *  - struct:             The `result` starts with seed, then use `result` as seed, recursively
  *                        calculate hash value for each field, and assign the field hash value to
  *                        `result`.
@@ -266,7 +268,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
           val bytes = d.toJavaBigDecimal.unscaledValue().toByteArray
           Murmur3_x86_32.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
         }
-      case c: CalendarInterval => hashInt(c.months) ^ hashLong(c.microseconds)
+      case c: CalendarInterval => Murmur3_x86_32.hashInt(c.months, hashLong(c.microseconds))
       case a: Array[Byte] =>
         Murmur3_x86_32.hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
@@ -277,11 +279,10 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
           case udt: UserDefinedType[_] => udt.sqlType.asInstanceOf[ArrayType].elementType
           case ArrayType(et, _) => et
         }
-        var result = 0
+        var result = seed
         var i = 0
         while (i < array.numElements()) {
-          val hashValue = computeHash(array.get(i, elementType), elementType, seed)
-          result = result * 31 + hashValue
+          result = computeHash(array.get(i, elementType), elementType, result)
           i += 1
         }
         result
@@ -295,12 +296,11 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
         }
         val keys = map.keyArray()
         val values = map.valueArray()
-        var result = 0
+        var result = seed
         var i = 0
         while (i < map.numElements()) {
-          val keyHash = computeHash(keys.get(i, kt), kt, seed)
-          val valueHash = computeHash(values.get(i, vt), vt, seed)
-          result += keyHash ^ valueHash
+          result = computeHash(keys.get(i, kt), kt, result)
+          result = computeHash(values.get(i, vt), vt, result)
           i += 1
         }
         result
@@ -372,9 +372,9 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
           GeneratedExpressionCode(code, "false", result)
         }
       case CalendarIntervalType =>
-        val monthsHash = s"$hasher.hashInt($input.months, $seed)"
         val microsecondsHash = s"$hasher.hashLong($input.microseconds, $seed)"
-        inlineValue(s"($monthsHash ^ $microsecondsHash)")
+        val monthsHash = s"$hasher.hashInt($input.months, $microsecondsHash)"
+        inlineValue(monthsHash)
       case BinaryType =>
         val offset = "Platform.BYTE_ARRAY_OFFSET"
         inlineValue(s"$hasher.hashUnsafeBytes($input, $offset, $input.length, $seed)")
@@ -388,17 +388,15 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
         val result = ctx.freshName("result")
         val index = ctx.freshName("index")
         val element = ctx.freshName("element")
-        val elementHash = computeHash(element, et, seed, ctx)
+        val elementHash = computeHash(element, et, result, ctx)
         val code =
           s"""
-            int $result = 0;
+            int $result = $seed;
             for (int $index = 0; $index < $input.numElements(); $index++) {
-              if ($input.isNullAt($index)) {
-                $result = $result * 31 + $seed;
-              } else {
+              if (!$input.isNullAt($index)) {
                 final ${ctx.javaType(et)} $element = ${ctx.getValue(input, et, index)};
                 ${elementHash.code}
-                $result = $result * 31 + ${elementHash.value};
+                $result = ${elementHash.value};
               }
             }
           """
@@ -411,22 +409,21 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
         val values = ctx.freshName("values")
         val key = ctx.freshName("key")
         val value = ctx.freshName("value")
-        val keyHash = computeHash(key, kt, seed, ctx)
-        val valueHash = computeHash(value, vt, seed, ctx)
+        val keyHash = computeHash(key, kt, result, ctx)
+        val valueHash = computeHash(value, vt, result, ctx)
         val code =
           s"""
-            int $result = 0;
+            int $result = $seed;
             final ArrayData $keys = $input.keyArray();
             final ArrayData $values = $input.valueArray();
             for (int $index = 0; $index < $input.numElements(); $index++) {
               final ${ctx.javaType(kt)} $key = ${ctx.getValue(keys, kt, index)};
               ${keyHash.code}
-              if ($values.isNullAt($index)) {
-                $result += ${keyHash.value} ^ $seed;
-              } else {
+              $result = ${keyHash.value};
+              if (!$values.isNullAt($index)) {
                 final ${ctx.javaType(vt)} $value = ${ctx.getValue(values, vt, index)};
                 ${valueHash.code}
-                $result += ${keyHash.value} ^ ${valueHash.value};
+                $result = ${valueHash.value};
               }
             }
           """
