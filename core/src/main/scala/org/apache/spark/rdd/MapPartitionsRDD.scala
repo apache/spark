@@ -26,12 +26,14 @@ import org.apache.spark.{Partition, TaskContext}
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
-    f: (TaskContext, Int, Int, Iterator[T]) => Iterator[U],  // (TaskContext, rdd id, partition index, iterator)
+    // (TaskContext, rdd id, partition index, iterator)
+    f: (TaskContext, Int, Int, Iterator[T]) => Iterator[U],
     preservesPartitioning: Boolean = false)
   extends RDD[U](prev) {
 
   def this(prev: RDD[T],
-    f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
+    // (TaskContext, partition index, iterator)
+    f: (TaskContext, Int, Iterator[T]) => Iterator[U],
     preservesPartitioning: Boolean) = {
     this(prev, (t, _, p, i) => f(t, p, i), preservesPartitioning)
   }

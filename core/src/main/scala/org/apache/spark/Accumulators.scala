@@ -310,8 +310,8 @@ class Accumulator[T] private[spark] (
 case class UpdateInfo private[spark](val rddId: Int, splitId: Int)
 /**
  * Structure for keeping track of the values being accumulated.
- * When collecting updates from the workers values are accumulated in pending hash map of (rddId, splitId) -> T
- * When merging values on the driver the total is collected in value and
+ * When collecting updates from the workers values are accumulated in pending hash map of
+ * (rddId, splitId) -> T. When merging values on the driver the total is collected in value and
  * before merging in each pending record, checked against processed.
  */
 private[spark] case class UpdateTracking[T](
@@ -350,7 +350,8 @@ class ConsistentAccumulator[T] private[spark] (
     param: ConsistentAccumulatorParam[T],
     name: Option[String],
     internal: Boolean)
-  extends GenericAccumulable[T, UpdateTracking[T], (UpdateInfo, T)](initialValue, param, name, internal, {x => println(x); x.value}, true) {
+  extends GenericAccumulable[T, UpdateTracking[T], (UpdateInfo, T)](
+  initialValue, param, name, internal, {x => x.value}, true) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(new UpdateTracking(initialValue),
@@ -359,10 +360,6 @@ class ConsistentAccumulator[T] private[spark] (
 
   def this(initialValue: T, param: AccumulatorParam[T]) = {
     this(initialValue, param, None)
-  }
-
-  def sketch() = {
-    param
   }
 }
 
@@ -411,8 +408,8 @@ object AccumulatorParam {
 }
 
 /**
- * A consistent wrapper of [[org.apache.spark.AccumulatorParam]] where we keep track of RDD/partitions
- * which have already been processed
+ * A consistent wrapper of [[org.apache.spark.AccumulatorParam]] where we keep track of
+ * RDD/partitions which have already been processed
  *
  * @tparam T type of value to accumulate
  */
