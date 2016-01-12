@@ -16,9 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.DoubleBuffer;
 
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DoubleType;
@@ -170,13 +168,8 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    // TODO: there must be a faster way to do this.
-    DoubleBuffer values = ByteBuffer.wrap(src, srcIndex, src.length - srcIndex).asDoubleBuffer();
-    long offset = data + 8 * rowId;
-    for (int i = 0; i < count; ++i) {
-      Platform.putDouble(null, offset, values.get());
-      offset += 8;
-    }
+    Platform.copyMemory(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex,
+        null, data + rowId * 8, count * 8);
   }
 
   @Override
