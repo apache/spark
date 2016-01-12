@@ -42,7 +42,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
     var maybeRelation: Option[OrcRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: OrcRelation, _)) =>
+      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: OrcRelation, _, _)) =>
         maybeRelation = Some(orcRelation)
         filters
     }.flatten.reduceLeftOption(_ && _)

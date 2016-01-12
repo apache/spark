@@ -146,4 +146,14 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   ignore("distinct and non-distinct aggregation") {
     checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM t2 GROUP BY a")
   }
+
+  test("persisted data source relations") {
+    Seq("orc", "json", "parquet").foreach { format =>
+      val tableName = s"${format}_t0"
+      withTable(tableName) {
+        sqlContext.range(10).write.format(format).saveAsTable(tableName)
+        checkHiveQl(s"SELECT id FROM $tableName")
+      }
+    }
+  }
 }

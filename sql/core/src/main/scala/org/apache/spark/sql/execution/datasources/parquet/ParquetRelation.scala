@@ -44,9 +44,9 @@ import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -146,12 +146,6 @@ private[sql] class ParquetRelation(
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
-
-  // If this relation is converted from a Hive metastore table, this method returns the name of the
-  // original Hive metastore table.
-  private[sql] def metastoreTableName: Option[TableIdentifier] = {
-    parameters.get(ParquetRelation.METASTORE_TABLE_NAME).map(SqlParser.parseTableIdentifier)
-  }
 
   private lazy val metadataCache: MetadataCache = {
     val meta = new MetadataCache

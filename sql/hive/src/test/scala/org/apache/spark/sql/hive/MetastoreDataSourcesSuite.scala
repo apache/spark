@@ -571,7 +571,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: ParquetRelation, _) => // OK
+            case LogicalRelation(p: ParquetRelation, _, _) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation]}")
           }
