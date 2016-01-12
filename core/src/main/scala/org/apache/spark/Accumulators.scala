@@ -343,8 +343,11 @@ object AccumulatorParam {
     def zero(initialValue: Float): Float = 0f
   }
 
-  private[spark] implicit object StringAccumulatorParam extends AccumulatorParam[String] {
-    def addInPlace(t1: String, t2: String): String = t1 + t2
+  // Note: when merging values, this param just adopts the newer value. This is used only
+  // internally for things that shouldn't really be accumulated across tasks, like input
+  // read method, which should be the same across all tasks in the same stage.
+  private[spark] object StringAccumulatorParam extends AccumulatorParam[String] {
+    def addInPlace(t1: String, t2: String): String = t2
     def zero(initialValue: String): String = ""
   }
 
