@@ -47,7 +47,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   def enqueueSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,
-      serializedData: ByteBuffer) {
+      serializedData: ByteBuffer): Unit = {
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {

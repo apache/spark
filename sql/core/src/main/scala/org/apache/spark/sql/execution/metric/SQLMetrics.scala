@@ -24,7 +24,7 @@ import org.apache.spark.util.Utils
  * Create a layer for specialized metric. We cannot add `@specialized` to
  * `Accumulable/AccumulableParam` because it will break Java source compatibility.
  *
- * An implementation of SQLMetric should override `+=` and `add` to avoid boxing
+ * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String, val param: SQLMetricParam[R, T])

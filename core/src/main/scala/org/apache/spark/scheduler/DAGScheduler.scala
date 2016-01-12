@@ -1116,33 +1116,11 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
-    // Note: the following events must occur in this order:
-    //   (1) Merge accumulator updates from this task
-    //   (2) Reconstruct TaskMetrics
-    //   (3) Post SparkListenerTaskEnd event
-    //   (4) Post SparkListenerStageCompleted / SparkListenerJobEnd event
-
-    // Merge accumulator updates from this task. We must do this before reconstructing
-    // TaskMetrics or else the listeners downstream will not receive the most recent values.
-    if (stageIdToStage.contains(stageId)) {
-      val stage = stageIdToStage(stageId)
-      // We should do this if the task either succeeded or failed with an exception. In the
-      // latter case executors may still send back accumulator updates, so we should try our
-      // best to collect the values. TODO: write a test.
-      val shouldUpdateAccums = event.reason match {
-        case Success =>
-          task match {
-            // This being true means the job has not finished yet
-            case rt: ResultTask[_, _] => stage.asInstanceOf[ResultStage].activeJob.isDefined
-            case smt: ShuffleMapTask => true
-          }
-        case _: ExceptionFailure => true
-        case _ => false
-      }
-      if (shouldUpdateAccums) {
-        updateAccumulators(event)
-      }
-    }
+    outputCommitCoordinator.taskCompleted(
+      stageId,
+      taskId,
+      event.taskInfo.attemptNumber, // this is a task attempt number
+      event.reason)
 
     // Reconstruct task metrics. Note: this may be null if the task has failed.
     val taskMetrics: TaskMetrics =
@@ -1157,12 +1135,6 @@ class DAGScheduler(
       } else {
         null
       }
-
-    outputCommitCoordinator.taskCompleted(
-      stageId,
-      taskId,
-      event.taskInfo.attemptNumber, // this is a task attempt number
-      event.reason)
 
     listenerBus.post(SparkListenerTaskEnd(
       stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
@@ -1184,6 +1156,7 @@ class DAGScheduler(
             resultStage.activeJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
+                  updateAccumulators(event)
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it
@@ -1210,6 +1183,7 @@ class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
+            updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
@@ -1321,7 +1295,8 @@ class DAGScheduler(
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case exceptionFailure: ExceptionFailure =>
-        // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+        // Tasks failed with exceptions might still have accumulator updates. TODO: write a test.
+        updateAccumulators(event)
 
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
