@@ -30,9 +30,10 @@ class BigQueryOperator(BaseOperator):
         super(BigQueryOperator, self).__init__(*args, **kwargs)
         self.bql = bql
         self.destination_dataset_table = destination_dataset_table
+        self.write_disposition = write_disposition
         self.bigquery_conn_id = bigquery_conn_id
 
     def execute(self, context):
         logging.info('Executing: %s', str(self.bql))
         hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id)
-        hook.run(self.bql, self.destination_dataset_table)
+        hook.run(self.bql, self.destination_dataset_table, self.write_disposition)
