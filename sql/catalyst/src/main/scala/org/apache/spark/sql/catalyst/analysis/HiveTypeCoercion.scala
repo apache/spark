@@ -529,7 +529,7 @@ object HiveTypeCoercion {
         if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
 
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
-        transform(left, right)
+        transform(left , right)
       case EqualTo(left @ NumericType(), right @ BooleanType()) =>
         transform(right, left)
       case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
