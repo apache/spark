@@ -560,29 +560,18 @@ private[spark] object InternalAccumulator {
   /**
    * Create a new accumulator representing an internal task metric.
    */
-  private def newMetric[T](initialValue: T, name: String, param: AccumulatorParam[T]) = {
+  private def newMetric[T](
+      initialValue: T,
+      name: String,
+      param: AccumulatorParam[T]): Accumulator[T] = {
     new Accumulator[T](initialValue, param, Some(name), internal = true, countFailedValues = true)
   }
 
-  /**
-   * Create a new Long accumulator representing an internal task metric.
-   */
-  private def newIntMetric(name: String): Accumulator[Int] = {
+  private def newIntMetric(name: String): Accumulator[Int] =
     newMetric[Int](0, name, IntAccumulatorParam)
-  }
-
-  /**
-   * Create a new Long accumulator representing an internal task metric.
-   */
-  private def newLongMetric(name: String): Accumulator[Long] = {
+  private def newLongMetric(name: String): Accumulator[Long] =
     newMetric[Long](0L, name, LongAccumulatorParam)
-  }
-
-  /**
-   * Create a new String accumulator representing an internal task metric.
-   */
-  private def newStringMetric(name: String): Accumulator[String] = {
+  private def newStringMetric(name: String): Accumulator[String] =
     newMetric[String]("", name, StringAccumulatorParam)
-  }
 
 }
