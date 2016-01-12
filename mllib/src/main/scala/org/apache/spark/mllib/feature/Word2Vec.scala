@@ -539,7 +539,12 @@ class Word2VecModel private[spark] (
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
     while (ind < numWords) {
-      cosVec(ind) /= wordVecNorms(ind)
+      val norm = wordVecNorms(ind)
+      if (norm == 0.0) {
+        cosVec(ind) = 0.0
+      } else {
+        cosVec(ind) /= norm
+      }
       ind += 1
     }
     wordList.zip(cosVec)
