@@ -114,7 +114,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         try {
           doCodeGen()
         } catch {
-          case e: Exception =>
+          case e: CompileFailure =>
             if (isTesting) {
               throw e
             } else {
@@ -156,6 +156,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   protected def supportCodeGen: Boolean = false
 
+  class CompileFailure(e: Exception) extends Exception {}
+
   protected def doCodeGen(): RDD[InternalRow] = {
     val ctx = new CodeGenContext
     val (rdd, code) = produce(ctx, null)
@@ -191,9 +193,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
        }
       }
      """
-    // try to compile
-    println(s"${CodeFormatter.format(source)}")
-    val clazz = CodeGenerator.compile(source)
+    // try to compile, will fallback if fail
+    // println(s"${CodeFormatter.format(source)}")
+    try {
+      CodeGenerator.compile(source)
+    } catch {
+      case e: Exception =>
+        throw new CompileFailure(e)
+    }
 
     rdd.mapPartitions { iter =>
       val clazz = CodeGenerator.compile(source)
