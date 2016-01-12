@@ -143,9 +143,16 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           }
         }
 
-        def getColumnNames(propertyName: String): Seq[String] = {
-          table.properties.get(s"spark.sql.sources.schema.$propertyName")
-            .map(_.split(",").toSeq).getOrElse(Nil)
+        def getColumnNames(colType: String): Seq[String] = {
+          table.properties.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").map {
+            numCols => (0 until numCols.toInt).map { index =>
+              table.properties.get(s"spark.sql.sources.schema.${colType}Col.$index").getOrElse {
+                throw new AnalysisException(
+                  s"Could not read $colType columns from the metastore because it is corrupted " +
+                    s"(missing part $index of it, $numCols parts are expected).")
+              }
+            }
+          }.getOrElse(Nil)
         }
 
         // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
@@ -160,10 +167,10 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         // We only need names at here since userSpecifiedSchema we loaded from the metastore
         // contains partition columns. We can always get datatypes of partitioning columns
         // from userSpecifiedSchema.
-        val partitionColumns = getColumnNames("partCols")
+        val partitionColumns = getColumnNames("part")
 
         val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
-          BucketSpec(n.toInt, getColumnNames("bucketCols"), getColumnNames("sortCols"))
+          BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
 
         // It does not appear that the ql client for the metastore has a way to enumerate all the
@@ -230,17 +237,28 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     }
 
     if (userSpecifiedSchema.isDefined && partitionColumns.length > 0) {
-      tableProperties.put("spark.sql.sources.schema.partCols", partitionColumns.mkString(","))
+      tableProperties.put("spark.sql.sources.schema.numPartCols", partitionColumns.length.toString)
+      partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
+        tableProperties.put(s"spark.sql.sources.schema.partCol.$index", partCol)
+      }
     }
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
-      tableProperties.put("spark.sql.sources.schema.bucketCols", bucketColumnNames.mkString(","))
+      tableProperties.put("spark.sql.sources.schema.numBucketCols",
+        bucketColumnNames.length.toString)
+      bucketColumnNames.zipWithIndex.foreach { case (bucketCol, index) =>
+        tableProperties.put(s"spark.sql.sources.schema.bucketCol.$index", bucketCol)
+      }
 
       if (sortColumnNames.nonEmpty) {
-        tableProperties.put("spark.sql.sources.schema.sortCols", sortColumnNames.mkString(","))
+        tableProperties.put("spark.sql.sources.schema.numSortCols",
+          sortColumnNames.length.toString)
+        sortColumnNames.zipWithIndex.foreach { case (sortCol, index) =>
+          tableProperties.put(s"spark.sql.sources.schema.sortCol.$index", sortCol)
+        }
       }
     }
 
