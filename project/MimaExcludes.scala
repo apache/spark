@@ -135,6 +135,15 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-12510 Refactor ActorReceiver to support Java
         ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.streaming.receiver.ActorReceiver")
+      ) ++ Seq(
+        // SPARK-10620 Migrate TaskMetrics to accumulators
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.TaskContext.internalMetricsToAccumulators"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.TaskContext.collectInternalAccumulators"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.TaskContext.collectAccumulators"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
