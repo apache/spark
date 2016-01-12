@@ -48,6 +48,7 @@ private[hive] object HiveShim {
   // scale Hive 0.13 infers for BigDecimals from sources that don't specify them (e.g. UDFs)
   val UNLIMITED_DECIMAL_PRECISION = 38
   val UNLIMITED_DECIMAL_SCALE = 18
+  val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*
    * This function in hive-0.13 become private, but we have to do this to walkaround hive bug
@@ -127,19 +128,21 @@ private[hive] object HiveShim {
     def this() = this(null)
 
     override def hashCode(): Int = {
-        if (instance != null && instance.isInstanceOf[GenericUDFMacro]) {
-          Objects.hashCode(functionClassName, instance)
-        } else {
-          functionClassName.hashCode()
-        }
+      if (functionClassName == HIVE_GENERIC_UDF_MACRO_CLS) {
+        Objects.hashCode(functionClassName, instance.asInstanceOf[GenericUDFMacro].getBody())
+      } else {
+        functionClassName.hashCode()
+      }
     }
 
     override def equals(other: Any): Boolean = other match {
-      case a: HiveFunctionWrapper =>
-        if (a.instance != null && a.instance.isInstanceOf[GenericUDFMacro]) {
-          functionClassName == a.functionClassName && instance == a.instance
+      case a: HiveFunctionWrapper if functionClassName == a.functionClassName =>
+        // In case of udf macro, check to make sure they point to the same underlying UDF
+        if (functionClassName == HIVE_GENERIC_UDF_MACRO_CLS) {
+          a.instance.asInstanceOf[GenericUDFMacro].getBody() ==
+            instance.asInstanceOf[GenericUDFMacro].getBody()
         } else {
-          functionClassName == a.functionClassName
+          true
         }
       case _ => false
     }
