@@ -670,7 +670,8 @@ abstract class HadoopFsRelation private[sql](
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      useBucketInfo: Boolean): RDD[InternalRow] = {
     val allInputFiles = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -685,9 +686,7 @@ abstract class HadoopFsRelation private[sql](
       }
     }
 
-    if (bucketSpec.isEmpty || !sqlContext.conf.bucketingEnabled()) {
-      buildInternalScan(requiredColumns, filters, allInputFiles, broadcastedConf)
-    } else {
+    if (bucketSpec.isDefined && useBucketInfo) {
       // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket id
       // from file name. Then read these files into a RDD(use one-partition empty RDD for empty
       // bucket), and coalesce it to one partition. Finally union all bucket RDDs to final result.
@@ -696,12 +695,13 @@ abstract class HadoopFsRelation private[sql](
         if (inputStatuses.isEmpty) {
           sqlContext.emptyResult
         } else {
-          // TODO: only coalesce when necessary, e.g. join 2 bucketed tables.
           buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
         }
       }
 
       new UnionRDD(sqlContext.sparkContext, perBucketRows)
+    } else {
+      buildInternalScan(requiredColumns, filters, allInputFiles, broadcastedConf)
     }
   }
 

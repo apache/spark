@@ -129,29 +129,10 @@ private[sql] object PhysicalRDD {
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
+      metadata: Map[String, String] = Map.empty,
+      outputPartitioning: Partitioning = UnknownPartitioning(0)): PhysicalRDD = {
     // All HadoopFsRelations output UnsafeRows
     val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
-
-    val bucketSpec = relation match {
-      case r: HadoopFsRelation => r.bucketSpec
-      case _ => None
-    }
-
-    def toAttribute(colName: String): Attribute = output.find(_.name == colName).get
-
-    val bucketedPhysicalRDD = for {
-      spec <- bucketSpec
-      if relation.sqlContext.conf.bucketingEnabled()
-      numBuckets = spec.numBuckets
-      bucketColumns = spec.bucketColumnNames.map(toAttribute)
-    } yield {
-      val partitioning = HashPartitioning(bucketColumns, numBuckets)
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
-    }
-
-    bucketedPhysicalRDD.getOrElse(
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
-    )
+    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, outputPartitioning)
   }
 }

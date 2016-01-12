@@ -46,7 +46,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l,
         projects,
         filters,
-        (requestedColumns, allPredicates, _) =>
+        (requestedColumns, allPredicates, _, _) =>
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _)) =>
@@ -54,14 +54,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l,
         projects,
         filters,
-        (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
+        (a, f, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
-        (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
+        (a, _, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _))
@@ -128,7 +128,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l,
         projects,
         filters,
-        (a, f) => t.buildInternalScan(a.map(_.name).toArray, f, t.paths, confBroadcast)) :: Nil
+        (requiredColumns, filters, useBucketInfo) =>
+          t.buildInternalScan(
+            requiredColumns.map(_.name).toArray,
+            filters,
+            t.paths,
+            confBroadcast,
+            useBucketInfo)) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _) =>
       execution.PhysicalRDD.createFromDataSource(
@@ -164,7 +170,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Now, we create a scan builder, which will be used by pruneFilterProject. This scan builder
     // will union all partitions and attach partition values if needed.
     val scanBuilder = {
-      (requiredColumns: Seq[Attribute], filters: Array[Filter]) => {
+      (requiredColumns: Seq[Attribute], filters: Array[Filter], useBucketInfo: Boolean) => {
         val requiredDataColumns =
           requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
 
@@ -174,7 +180,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           // assuming partition columns data stored in data files are always consistent with those
           // partition values encoded in partition directory paths.
           val dataRows = relation.buildInternalScan(
-            requiredDataColumns.map(_.name).toArray, filters, Array(dir), confBroadcast)
+            requiredDataColumns.map(_.name).toArray,
+            filters,
+            Array(dir),
+            confBroadcast,
+            useBucketInfo)
 
           // Merges data values with partition values.
           mergeWithPartitionValues(
@@ -283,17 +293,17 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       relation: LogicalRelation,
       projects: Seq[NamedExpression],
       filterPredicates: Seq[Expression],
-      scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow]) = {
+      scanBuilder: (Seq[Attribute], Array[Filter], Boolean) => RDD[InternalRow]) = {
     pruneFilterProjectRaw(
       relation,
       projects,
       filterPredicates,
-      (requestedColumns, _, pushedFilters) => {
-        scanBuilder(requestedColumns, pushedFilters.toArray)
+      (requestedColumns, _, pushedFilters, useBucketInfo) => {
+        scanBuilder(requestedColumns, pushedFilters.toArray, useBucketInfo)
       })
   }
 
-  // Based on Catalyst expressions. The `scanBuilder` function accepts three arguments:
+  // Based on Catalyst expressions. The `scanBuilder` function accepts 4 arguments:
   //
   //  1. A `Seq[Attribute]`, containing all required column attributes. Used to handle relation
   //     traits that support column pruning (e.g. `PrunedScan` and `PrunedFilteredScan`).
@@ -306,12 +316,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   //     relation traits (`CatalystScan` excluded) that support filter push-down (e.g.
   //     `PrunedFilteredScan` and `HadoopFsRelation`).
   //
+  //  4. A `boolean`, indicate if we should use bucket information of the relation. If the relation
+  //     is not under join or aggregate, i.e. bucketing optimization can't be applied, we should
+  //     ignore bucket information to avoid unnecessary coalesce.
+  //
   // Note that 2 and 3 shouldn't be used together.
   protected def pruneFilterProjectRaw(
     relation: LogicalRelation,
     projects: Seq[NamedExpression],
     filterPredicates: Seq[Expression],
-    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]) = {
+    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter], Boolean) => RDD[InternalRow]) = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
@@ -365,20 +379,22 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // Don't request columns that are only referenced by pushed filters.
         .filterNot(handledSet.contains)
 
-      val scan = execution.PhysicalRDD.createFromDataSource(
+      val scan = PhysicalRelation(
         projects.map(_.toAttribute),
-        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata)
+        scanBuilder(requestedColumns, candidatePredicates, pushedFilters, _),
+        relation.relation,
+        metadata)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
       // Don't request columns that are only referenced by pushed filters.
       val requestedColumns =
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.PhysicalRDD.createFromDataSource(
+      val scan = PhysicalRelation(
         requestedColumns,
-        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata)
+        scanBuilder(requestedColumns, candidatePredicates, pushedFilters, _),
+        relation.relation,
+        metadata)
       execution.Project(
         projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
