@@ -216,7 +216,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     // If InputStream was closed without first stopping the appender, an exception will be logged
     verify(mockAppender, atLeast(1)).doAppend(loggingEventCaptor.capture)
     val loggingEvent = loggingEventCaptor.getValue
-    assert(loggingEvent.getLevel == Level.ERROR)
+    assert(loggingEvent.getThrowableInformation !== null)
     assert(loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
   }
 
@@ -249,7 +249,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     verify(mockAppender, atLeast(0)).doAppend(loggingEventCaptor.capture)
     import scala.collection.JavaConverters._
     loggingEventCaptor.getAllValues.asScala.foreach { loggingEvent =>
-      assert(loggingEvent.getLevel != Level.ERROR
+      assert(loggingEvent.getThrowableInformation === null
         || !loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
     }
   }
