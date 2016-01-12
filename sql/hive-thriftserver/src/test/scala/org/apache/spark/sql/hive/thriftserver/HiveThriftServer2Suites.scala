@@ -347,7 +347,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     )
   }
 
-  test("test jdbc cancel") {
+  // This test often hangs and then times out, leaving the hanging processes.
+  // Let's ignore it and improve the test.
+  ignore("test jdbc cancel") {
     withJdbcStatement { statement =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_map",
