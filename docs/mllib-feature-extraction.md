@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction and Transformation - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Feature Extraction and Transformation
+title: Feature Extraction and Transformation - spark.mllib
+displayTitle: Feature Extraction and Transformation - spark.mllib
 ---
 
 * Table of contents
@@ -31,7 +31,7 @@ The TF-IDF measure is simply the product of TF and IDF:
 TFIDF(t, d, D) = TF(t, d) \cdot IDF(t, D).
 \]`
 There are several variants on the definition of term frequency and document frequency.
-In MLlib, we separate TF and IDF to make them flexible.
+In `spark.mllib`, we separate TF and IDF to make them flexible.
 
 Our implementation of term frequency utilizes the
 [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
@@ -44,7 +44,7 @@ To reduce the chance of collision, we can increase the target feature dimension,
 the number of buckets of the hash table.
 The default feature dimension is `$2^{20} = 1,048,576$`.
 
-**Note:** MLlib doesn't provide tools for text segmentation.
+**Note:** `spark.mllib` doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
 [scalanlp/chalk](https://github.com/scalanlp/chalk).
 
@@ -86,7 +86,7 @@ val idf = new IDF().fit(tf)
 val tfidf: RDD[Vector] = idf.transform(tf)
 {% endhighlight %}
 
-MLlib's IDF implementation provides an option for ignoring terms which occur in less than a
+`spark.mllib`'s IDF implementation provides an option for ignoring terms which occur in less than a
 minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
 can be used by passing the `minDocFreq` value to the IDF constructor.
 
@@ -134,7 +134,7 @@ idf = IDF().fit(tf)
 tfidf = idf.transform(tf)
 {% endhighlight %}
 
-MLLib's IDF implementation provides an option for ignoring terms which occur in less than a
+`spark.mllib`'s IDF implementation provides an option for ignoring terms which occur in less than a
 minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
 can be used by passing the `minDocFreq` value to the IDF constructor.
 

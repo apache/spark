@@ -21,8 +21,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.Aggregator
@@ -73,7 +73,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def keyAs[L : Encoder]: GroupedDataset[L, V] =
+  def keyAs[L: Encoder]: GroupedDataset[L, V] =
     new GroupedDataset(
       encoderFor[L],
       unresolvedVEncoder,
@@ -110,7 +110,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
       MapGroups(
@@ -158,7 +158,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def mapGroups[U : Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
+  def mapGroups[U: Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
     val func = (key: K, it: Iterator[V]) => Iterator(f(key, it))
     flatMapGroups(func)
   }
@@ -302,7 +302,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def cogroup[U, R : Encoder](
+  def cogroup[U, R: Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
     new Dataset[R](

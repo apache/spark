@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -163,7 +164,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns the hash for this expression. Expressions that compute the same result, even if
    * they differ cosmetically should return the same hash.
    */
-  def semanticHash() : Int = {
+  def semanticHash(): Int = {
     def computeHash(e: Seq[Any]): Int = {
       // See http://stackoverflow.com/questions/113511/hash-code-implementation
       var hash: Int = 17
@@ -223,6 +224,15 @@ abstract class Expression extends TreeNode[Expression] {
   protected def toCommentSafeString: String = this.toString
     .replace("*/", "\\*\\/")
     .replace("\\u", "\\\\u")
+
+  /**
+   * Returns SQL representation of this expression.  For expressions that don't have a SQL
+   * representation (e.g. `ScalaUDF`), this method should throw an `UnsupportedOperationException`.
+   */
+  @throws[UnsupportedOperationException](cause = "Expression doesn't have a SQL representation")
+  def sql: String = throw new UnsupportedOperationException(
+    s"Cannot map expression $this to its SQL representation"
+  )
 }
 
 
@@ -340,15 +350,24 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(eval.value)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        $resultCode
-      }
-    """
+    if (nullable) {
+      eval.code + s"""
+        boolean ${ev.isNull} = ${eval.isNull};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${eval.isNull}) {
+          ${f(eval.value)}
+        }
+      """
+    } else {
+      ev.isNull = "false"
+      eval.code + s"""
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${f(eval.value)}
+      """
+    }
   }
+
+  override def sql: String = s"($prettyName(${child.sql}))"
 }
 
 
@@ -424,20 +443,33 @@ abstract class BinaryExpression extends Expression {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
     val resultCode = f(eval1.value, eval2.value)
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval2.code}
-        if (!${eval2.isNull}) {
-          $resultCode
-        } else {
-          ${ev.isNull} = true;
+    if (nullable) {
+      s"""
+        ${eval1.code}
+        boolean ${ev.isNull} = ${eval1.isNull};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          ${eval2.code}
+          if (!${eval2.isNull}) {
+            $resultCode
+          } else {
+            ${ev.isNull} = true;
+          }
         }
-      }
-    """
+      """
+
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${eval1.code}
+        ${eval2.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
+    }
   }
+
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
 
@@ -474,6 +506,8 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
       TypeCheckResult.TypeCheckSuccess
     }
   }
+
+  override def sql: String = s"(${left.sql} $symbol ${right.sql})"
 }
 
 
@@ -548,20 +582,36 @@ abstract class TernaryExpression extends Expression {
     f: (String, String, String) => String): String = {
     val evals = children.map(_.gen(ctx))
     val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
-    s"""
-      ${evals(0).code}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${evals(0).isNull}) {
-        ${evals(1).code}
-        if (!${evals(1).isNull}) {
-          ${evals(2).code}
-          if (!${evals(2).isNull}) {
-            ${ev.isNull} = false;  // resultCode could change nullability
-            $resultCode
+    if (nullable) {
+      s"""
+        ${evals(0).code}
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${evals(0).isNull}) {
+          ${evals(1).code}
+          if (!${evals(1).isNull}) {
+            ${evals(2).code}
+            if (!${evals(2).isNull}) {
+              ${ev.isNull} = false;  // resultCode could change nullability
+              $resultCode
+            }
           }
         }
-      }
-    """
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${evals(0).code}
+        ${evals(1).code}
+        ${evals(2).code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
+    }
+  }
+
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql).mkString(", ")
+    s"$prettyName($childrenSQL)"
   }
 }

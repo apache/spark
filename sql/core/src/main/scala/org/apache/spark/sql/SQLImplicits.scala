@@ -21,11 +21,10 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.types.StructField
+import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -38,7 +37,7 @@ abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
 
   /** @since 1.6.0 */
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
+  implicit def newProductEncoder[T <: Product: TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /** @since 1.6.0 */
   implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder()
@@ -68,7 +67,7 @@ abstract class SQLImplicits {
    * Creates a [[Dataset]] from an RDD.
    * @since 1.6.0
    */
-  implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
+  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T] = {
     DatasetHolder(_sqlContext.createDataset(rdd))
   }
 
@@ -76,7 +75,7 @@ abstract class SQLImplicits {
    * Creates a [[Dataset]] from a local Seq.
    * @since 1.6.0
    */
-  implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] = {
     DatasetHolder(_sqlContext.createDataset(s))
   }
 
@@ -90,7 +89,7 @@ abstract class SQLImplicits {
    * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    * @since 1.3.0
    */
-  implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
+  implicit def rddToDataFrameHolder[A <: Product: TypeTag](rdd: RDD[A]): DataFrameHolder = {
     DataFrameHolder(_sqlContext.createDataFrame(rdd))
   }
 
@@ -98,7 +97,7 @@ abstract class SQLImplicits {
    * Creates a DataFrame from a local Seq of Product.
    * @since 1.3.0
    */
-  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
+  implicit def localSeqToDataFrameHolder[A <: Product: TypeTag](data: Seq[A]): DataFrameHolder =
   {
     DataFrameHolder(_sqlContext.createDataFrame(data))
   }

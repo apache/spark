@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 
 /**

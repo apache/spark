@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.metric
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
+import org.apache.spark.util.Utils
 
 /**
  * Create a layer for specialized metric. We cannot add `@specialized` to
@@ -64,7 +64,7 @@ private[sql] trait SQLMetricValue[T] extends Serializable {
 /**
  * A wrapper of Long to avoid boxing and unboxing when using Accumulator
  */
-private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
+private[sql] class LongSQLMetricValue(private var _value: Long) extends SQLMetricValue[Long] {
 
   def add(incr: Long): LongSQLMetricValue = {
     _value += incr

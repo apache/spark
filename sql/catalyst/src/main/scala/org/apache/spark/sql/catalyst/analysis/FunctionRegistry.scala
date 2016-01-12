@@ -49,7 +49,7 @@ trait FunctionRegistry {
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private val functionBuilders =
+  private[sql] val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
   override def registerFunction(
@@ -278,12 +278,27 @@ object FunctionRegistry {
     // misc functions
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
+    expression[Murmur3Hash]("hash"),
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
-    expression[MonotonicallyIncreasingID]("monotonically_increasing_id")
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+
+    // grouping sets
+    expression[Cube]("cube"),
+    expression[Rollup]("rollup"),
+
+    // window functions
+    expression[Lead]("lead"),
+    expression[Lag]("lag"),
+    expression[RowNumber]("row_number"),
+    expression[CumeDist]("cume_dist"),
+    expression[NTile]("ntile"),
+    expression[Rank]("rank"),
+    expression[DenseRank]("dense_rank"),
+    expression[PercentRank]("percent_rank")
   )
 
   val builtin: SimpleFunctionRegistry = {
@@ -308,13 +323,13 @@ object FunctionRegistry {
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params: _*)) match {
           case Success(e) =>
             e
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+        Try(f.newInstance(expressions: _*).asInstanceOf[Expression]) match {
           case Success(e) => e
           case Failure(e) => throw new AnalysisException(e.getMessage)
         }

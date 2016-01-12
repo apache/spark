@@ -529,7 +529,7 @@ object HiveTypeCoercion {
         if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
 
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
-        transform(left , right)
+        transform(left, right)
       case EqualTo(left @ NumericType(), right @ BooleanType()) =>
         transform(right, left)
       case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
@@ -592,6 +592,20 @@ object HiveTypeCoercion {
         findWiderCommonType(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None => c
+        }
+
+      case g @ Greatest(children) if children.map(_.dataType).distinct.size > 1 =>
+        val types = children.map(_.dataType)
+        findTightestCommonType(types) match {
+          case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
+          case None => g
+        }
+
+      case l @ Least(children) if children.map(_.dataType).distinct.size > 1 =>
+        val types = children.map(_.dataType)
+        findTightestCommonType(types) match {
+          case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
+          case None => l
         }
 
       case NaNvl(l, r) if l.dataType == DoubleType && r.dataType == FloatType =>

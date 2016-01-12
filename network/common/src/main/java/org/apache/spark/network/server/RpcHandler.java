@@ -57,7 +57,7 @@ public abstract class RpcHandler {
 
   /**
    * Receives an RPC message that does not expect a reply. The default implementation will
-   * call "{@link receive(TransportClient, byte[], RpcResponseCallback)}" and log a warning if
+   * call "{@link #receive(TransportClient, ByteBuffer, RpcResponseCallback)}" and log a warning if
    * any of the callback methods are called.
    *
    * @param client A channel client which enables the handler to make requests back to the sender
@@ -69,10 +69,15 @@ public abstract class RpcHandler {
   }
 
   /**
-   * Invoked when the connection associated with the given client has been invalidated.
+   * Invoked when the channel associated with the given client is active.
+   */
+  public void channelActive(TransportClient client) { }
+
+  /**
+   * Invoked when the channel associated with the given client is inactive.
    * No further requests will come from this client.
    */
-  public void connectionTerminated(TransportClient client) { }
+  public void channelInactive(TransportClient client) { }
 
   public void exceptionCaught(Throwable cause, TransportClient client) { }
 

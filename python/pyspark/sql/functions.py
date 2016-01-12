@@ -149,12 +149,8 @@ _binary_mathfunctions = {
 }
 
 _window_functions = {
-    'rowNumber':
-        """.. note:: Deprecated in 1.6, use row_number instead.""",
     'row_number':
         """returns a sequential number starting at 1 within a window partition.""",
-    'denseRank':
-        """.. note:: Deprecated in 1.6, use dense_rank instead.""",
     'dense_rank':
         """returns the rank of rows within a window partition, without any gaps.
 
@@ -171,13 +167,9 @@ _window_functions = {
         place and that the next person came in third.
 
         This is equivalent to the RANK function in SQL.""",
-    'cumeDist':
-        """.. note:: Deprecated in 1.6, use cume_dist instead.""",
     'cume_dist':
         """returns the cumulative distribution of values within a window partition,
         i.e. the fraction of rows that are below the current row.""",
-    'percentRank':
-        """.. note:: Deprecated in 1.6, use percent_rank instead.""",
     'percent_rank':
         """returns the relative rank (i.e. percentile) of rows within a window partition.""",
 }
@@ -318,14 +310,6 @@ def isnull(col):
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
 
-@since(1.4)
-def monotonicallyIncreasingId():
-    """
-    .. note:: Deprecated in 1.6, use monotonically_increasing_id instead.
-    """
-    return monotonically_increasing_id()
-
-
 @since(1.6)
 def monotonically_increasing_id():
     """A column that generates monotonically increasing 64-bit integers.
@@ -432,14 +416,6 @@ def shiftRightUnsigned(col, numBits):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
     return Column(jc)
-
-
-@since(1.4)
-def sparkPartitionId():
-    """
-    .. note:: Deprecated in 1.6, use spark_partition_id instead.
-    """
-    return spark_partition_id()
 
 
 @since(1.6)
@@ -1042,6 +1018,18 @@ def sha2(col, numBits):
     return Column(jc)
 
 
+@since(2.0)
+def hash(*cols):
+    """Calculates the hash code of given columns, and returns the result as a int column.
+
+    >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(hash('a').alias('hash')).collect()
+    [Row(hash=1358996357)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.hash(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
@@ -1053,7 +1041,7 @@ _string_functions = {
     'lower': 'Converts a string column to lower case.',
     'upper': 'Converts a string column to upper case.',
     'reverse': 'Reverses the string column and returns it as a new string column.',
-    'ltrim': 'Trim the spaces from right end for the specified string value.',
+    'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
 }

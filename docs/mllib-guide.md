@@ -49,6 +49,7 @@ We list major functionality from both below, with links to detailed guides.
   * [Gaussian mixture](mllib-clustering.html#gaussian-mixture)
   * [power iteration clustering (PIC)](mllib-clustering.html#power-iteration-clustering-pic)
   * [latent Dirichlet allocation (LDA)](mllib-clustering.html#latent-dirichlet-allocation-lda)
+  * [bisecting k-means](mllib-clustering.html#bisecting-kmeans)
   * [streaming k-means](mllib-clustering.html#streaming-k-means)
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * [singular value decomposition (SVD)](mllib-dimensionality-reduction.html#singular-value-decomposition-svd)
@@ -66,15 +67,14 @@ We list major functionality from both below, with links to detailed guides.
 
 # spark.ml: high-level APIs for ML pipelines
 
-**[spark.ml programming guide](ml-guide.html)** provides an overview of the Pipelines API and major
-concepts. It also contains sections on using algorithms within the Pipelines API, for example:
-
-* [Feature extraction, transformation, and selection](ml-features.html)
+* [Overview: estimators, transformers and pipelines](ml-guide.html)
+* [Extracting, transforming and selecting features](ml-features.html)
+* [Classification and regression](ml-classification-regression.html)
 * [Clustering](ml-clustering.html)
-* [Decision trees for classification and regression](ml-decision-tree.html)
-* [Ensembles](ml-ensembles.html)
-* [Linear methods with elastic net regularization](ml-linear-methods.html)
-* [Multilayer perceptron classifier](ml-ann.html)
+* [Advanced topics](ml-advanced.html)
+
+Some techniques are not available yet in spark.ml, most notably dimensionality reduction 
+Users can seamlessly combine the implementation of these techniques found in `spark.mllib` with the rest of the algorithms found in `spark.ml`.
 
 # Dependencies
 
@@ -101,24 +101,32 @@ MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
 and the migration guide below will explain all changes between releases.
 
-## From 1.4 to 1.5
+## From 1.5 to 1.6
 
-In the `spark.mllib` package, there are no break API changes but several behavior changes:
+There are no breaking API changes in the `spark.mllib` or `spark.ml` packages, but there are
+deprecations and changes of behavior.
 
-* [SPARK-9005](https://issues.apache.org/jira/browse/SPARK-9005):
-  `RegressionMetrics.explainedVariance` returns the average regression sum of squares.
-* [SPARK-8600](https://issues.apache.org/jira/browse/SPARK-8600): `NaiveBayesModel.labels` become
-  sorted.
-* [SPARK-3382](https://issues.apache.org/jira/browse/SPARK-3382): `GradientDescent` has a default
-  convergence tolerance `1e-3`, and hence iterations might end earlier than 1.4.
+Deprecations:
 
-In the `spark.ml` package, there exists one break API change and one behavior change:
+* [SPARK-11358](https://issues.apache.org/jira/browse/SPARK-11358):
+ In `spark.mllib.clustering.KMeans`, the `runs` parameter has been deprecated.
+* [SPARK-10592](https://issues.apache.org/jira/browse/SPARK-10592):
+ In `spark.ml.classification.LogisticRegressionModel` and
+ `spark.ml.regression.LinearRegressionModel`, the `weights` field has been deprecated in favor of
+ the new name `coefficients`.  This helps disambiguate from instance (row) "weights" given to
+ algorithms.
 
-* [SPARK-9268](https://issues.apache.org/jira/browse/SPARK-9268): Java's varargs support is removed
-  from `Params.setDefault` due to a
-  [Scala compiler bug](https://issues.scala-lang.org/browse/SI-9013).
-* [SPARK-10097](https://issues.apache.org/jira/browse/SPARK-10097): `Evaluator.isLargerBetter` is
-  added to indicate metric ordering. Metrics like RMSE no longer flip signs as in 1.4.
+Changes of behavior:
+
+* [SPARK-7770](https://issues.apache.org/jira/browse/SPARK-7770):
+ `spark.mllib.tree.GradientBoostedTrees`: `validationTol` has changed semantics in 1.6.
+ Previously, it was a threshold for absolute change in error. Now, it resembles the behavior of
+ `GradientDescent`'s `convergenceTol`: For large errors, it uses relative error (relative to the
+ previous error); for small errors (`< 0.01`), it uses absolute error.
+* [SPARK-11069](https://issues.apache.org/jira/browse/SPARK-11069):
+ `spark.ml.feature.RegexTokenizer`: Previously, it did not convert strings to lowercase before
+ tokenizing. Now, it converts to lowercase by default, with an option not to. This matches the
+ behavior of the simpler `Tokenizer` transformer.
 
 ## Previous Spark versions
 

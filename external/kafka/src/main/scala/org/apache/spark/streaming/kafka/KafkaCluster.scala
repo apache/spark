@@ -17,14 +17,17 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.util.control.NonFatal
-import scala.util.Random
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConverters._
 import java.util.Properties
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
+import scala.util.control.NonFatal
+
 import kafka.api._
 import kafka.common.{ErrorMapping, OffsetAndMetadata, OffsetMetadataAndError, TopicAndPartition}
 import kafka.consumer.{ConsumerConfig, SimpleConsumer}
+
 import org.apache.spark.SparkException
 
 /**
@@ -382,7 +385,7 @@ object KafkaCluster {
     val seedBrokers: Array[(String, Int)] = brokers.split(",").map { hp =>
       val hpa = hp.split(":")
       if (hpa.size == 1) {
-        throw new SparkException(s"Broker not the in correct format of <host>:<port> [$brokers]")
+        throw new SparkException(s"Broker not in the correct format of <host>:<port> [$brokers]")
       }
       (hpa(0), hpa(1).toInt)
     }

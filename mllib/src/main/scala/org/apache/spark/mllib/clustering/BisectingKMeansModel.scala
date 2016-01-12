@@ -32,8 +32,8 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.6.0")
 @Experimental
-class BisectingKMeansModel @Since("1.6.0") (
-    @Since("1.6.0") val root: ClusteringTreeNode
+class BisectingKMeansModel private[clustering] (
+    private[clustering] val root: ClusteringTreeNode
   ) extends Serializable with Logging {
 
   /**

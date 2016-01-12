@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{RoundingMode, MathContext}
+import java.math.{MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -310,6 +310,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def remainder(that: Decimal): Decimal = this % that
 
+  // scalastyle:off whitespacebeforetoken
   def unary_- : Decimal = {
     if (decimalVal.ne(null)) {
       Decimal(-decimalVal, precision, scale)
@@ -317,6 +318,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       Decimal(-longVal, precision, scale)
     }
   }
+  // scalastyle:on whitespacebeforetoken
 
   def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
 

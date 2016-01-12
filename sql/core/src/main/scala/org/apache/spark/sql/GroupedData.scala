@@ -21,12 +21,11 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedAlias, UnresolvedAttribute, Star}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Pivot, Rollup, Cube, Aggregate}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
 import org.apache.spark.sql.types.NumericType
-
 
 /**
  * :: Experimental ::
@@ -58,10 +57,10 @@ class GroupedData protected[sql](
           df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case GroupedData.RollupType =>
         DataFrame(
-          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aliasedAgg))
+          df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.CubeType =>
         DataFrame(
-          df.sqlContext, Cube(groupingExprs, df.logicalPlan, aliasedAgg))
+          df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         DataFrame(
@@ -230,7 +229,7 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames: _*)(Average)
   }
 
   /**
@@ -242,7 +241,7 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Max)
+    aggregateNumericColumns(colNames: _*)(Max)
   }
 
   /**
@@ -254,7 +253,7 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames: _*)(Average)
   }
 
   /**
@@ -266,7 +265,7 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Min)
+    aggregateNumericColumns(colNames: _*)(Min)
   }
 
   /**
@@ -278,7 +277,7 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Sum)
+    aggregateNumericColumns(colNames: _*)(Sum)
   }
 
   /**

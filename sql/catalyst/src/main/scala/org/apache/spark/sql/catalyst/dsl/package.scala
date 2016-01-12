@@ -21,11 +21,11 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedExtractValue, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
 /**
@@ -61,9 +61,11 @@ package object dsl {
   trait ImplicitOperators {
     def expr: Expression
 
+    // scalastyle:off whitespacebeforetoken
     def unary_- : Expression = UnaryMinus(expr)
     def unary_! : Predicate = Not(expr)
     def unary_~ : Expression = BitwiseNot(expr)
+    // scalastyle:on whitespacebeforetoken
 
     def + (other: Expression): Expression = Add(expr, other)
     def - (other: Expression): Expression = Subtract(expr, other)
@@ -141,7 +143,7 @@ package object dsl {
       // Note that if we make ExpressionConversions an object rather than a trait, we can
       // then make this a value class to avoid the small penalty of runtime instantiation.
       def $(args: Any*): analysis.UnresolvedAttribute = {
-        analysis.UnresolvedAttribute(sc.s(args : _*))
+        analysis.UnresolvedAttribute(sc.s(args: _*))
       }
     }
 
@@ -227,9 +229,10 @@ package object dsl {
         AttributeReference(s, mapType, nullable = true)()
 
       /** Creates a new AttributeReference of type struct */
-      def struct(fields: StructField*): AttributeReference = struct(StructType(fields))
       def struct(structType: StructType): AttributeReference =
         AttributeReference(s, structType, nullable = true)()
+      def struct(attrs: AttributeReference*): AttributeReference =
+        struct(StructType.fromAttributes(attrs))
     }
 
     implicit class DslAttribute(a: AttributeReference) {
@@ -275,13 +278,14 @@ package object dsl {
 
       def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
-      // TODO specify the output column names
       def generate(
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
-        alias: Option[String] = None): LogicalPlan =
-        Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
+        alias: Option[String] = None,
+        outputNames: Seq[String] = Nil): LogicalPlan =
+        Generate(generator, join = join, outer = outer, alias,
+          outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Basic Statistics - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Basic Statistics 
+title: Basic Statistics - spark.mllib
+displayTitle: Basic Statistics - spark.mllib
 ---
 
 * Table of contents
@@ -112,7 +112,7 @@ print(summary.numNonzeros())
 
 ## Correlations
 
-Calculating the correlation between two series of data is a common operation in Statistics. In MLlib
+Calculating the correlation between two series of data is a common operation in Statistics. In `spark.mllib`
 we provide the flexibility to calculate pairwise correlations among many series. The supported 
 correlation methods are currently Pearson's and Spearman's correlation.
  
@@ -209,7 +209,7 @@ print(Statistics.corr(data, method="pearson"))
 
 ## Stratified sampling
 
-Unlike the other statistics functions, which reside in MLlib, stratified sampling methods,
+Unlike the other statistics functions, which reside in `spark.mllib`, stratified sampling methods,
 `sampleByKey` and `sampleByKeyExact`, can be performed on RDD's of key-value pairs. For stratified
 sampling, the keys can be thought of as a label and the value as a specific attribute. For example 
 the key can be man or woman, or document ids, and the respective values can be the list of ages 
@@ -294,12 +294,12 @@ approxSample = data.sampleByKey(False, fractions);
 ## Hypothesis testing
 
 Hypothesis testing is a powerful tool in statistics to determine whether a result is statistically 
-significant, whether this result occurred by chance or not. MLlib currently supports Pearson's 
+significant, whether this result occurred by chance or not. `spark.mllib` currently supports Pearson's 
 chi-squared ( $\chi^2$) tests for goodness of fit and independence. The input data types determine
 whether the goodness of fit or the independence test is conducted. The goodness of fit test requires 
 an input type of `Vector`, whereas the independence test requires a `Matrix` as input.
 
-MLlib also supports the input type `RDD[LabeledPoint]` to enable feature selection via chi-squared 
+`spark.mllib` also supports the input type `RDD[LabeledPoint]` to enable feature selection via chi-squared 
 independence tests.
 
 <div class="codetabs">
@@ -438,7 +438,7 @@ for i, result in enumerate(featureTestResults):
 
 </div>
 
-Additionally, MLlib provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov (KS) test
+Additionally, `spark.mllib` provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov (KS) test
 for equality of probability distributions. By providing the name of a theoretical distribution
 (currently solely supported for the normal distribution) and its parameters, or a function to 
 calculate the cumulative distribution according to a given theoretical distribution, the user can
@@ -522,7 +522,7 @@ print(testResult) # summary of the test including the p-value, test statistic,
 </div>
 
 ### Streaming Significance Testing
-MLlib provides online implementations of some tests to support use cases
+`spark.mllib` provides online implementations of some tests to support use cases
 like A/B testing. These tests may be performed on a Spark Streaming
 `DStream[(Boolean,Double)]` where the first element of each tuple
 indicates control group (`false`) or treatment group (`true`) and the
@@ -550,7 +550,7 @@ provides streaming hypothesis testing.
 ## Random data generation
 
 Random data generation is useful for randomized algorithms, prototyping, and performance testing.
-MLlib supports generating random RDDs with i.i.d. values drawn from a given distribution:
+`spark.mllib` supports generating random RDDs with i.i.d. values drawn from a given distribution:
 uniform, standard normal, or Poisson.
 
 <div class="codetabs">

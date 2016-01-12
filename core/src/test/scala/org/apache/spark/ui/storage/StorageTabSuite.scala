@@ -18,6 +18,7 @@
 package org.apache.spark.ui.storage
 
 import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.{SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._

@@ -30,11 +30,16 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
   var tempDir: File = _
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     tempDir = Utils.createTempDir()
   }
 
   override def afterEach(): Unit = {
-    Utils.deleteRecursively(tempDir)
+    try {
+      Utils.deleteRecursively(tempDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("verify write metrics") {

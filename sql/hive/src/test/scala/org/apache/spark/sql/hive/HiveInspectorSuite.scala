@@ -30,7 +30,7 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayBasedMapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 
@@ -118,8 +118,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.writableHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        java.util.Arrays.asList(fields.map(f => f.name) : _*),
-        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) : _*))
+        java.util.Arrays.asList(fields.map(f => f.name): _*),
+        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)): _*))
   }
 
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {

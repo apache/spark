@@ -22,14 +22,12 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
-
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -93,6 +91,12 @@ private[spark] abstract class Task[T](
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
           SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+          // Notify any tasks waiting for execution memory to be freed to wake up and try to
+          // acquire memory again. This makes impossible the scenario where a task sleeps forever
+          // because there are no other tasks left to notify it. Since this is safe to do but may
+          // not be strictly necessary, we should revisit whether we can remove this in the future.
+          val memoryManager = SparkEnv.get.memoryManager
+          memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
         TaskContext.unset()
@@ -172,7 +176,7 @@ private[spark] object Task {
       serializer: SerializerInstance)
     : ByteBuffer = {
 
-    val out = new ByteArrayOutputStream(4096)
+    val out = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -193,7 +197,7 @@ private[spark] object Task {
     dataOut.flush()
     val taskBytes = serializer.serialize(task)
     Utils.writeByteBuffer(taskBytes, out)
-    ByteBuffer.wrap(out.toByteArray)
+    out.toByteBuffer
   }
 
   /**

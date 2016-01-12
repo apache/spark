@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 
@@ -77,6 +77,10 @@ class SizeEstimatorSuite
     super.beforeEach()
     System.setProperty("os.arch", "amd64")
     System.setProperty("spark.test.useCompressedOops", "true")
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
   }
 
   test("simple classes") {

@@ -23,7 +23,6 @@ import java.net.URI
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
@@ -115,7 +114,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val applications = fileSystem.listStatus(logDirPath)
     assert(applications != null && applications.size > 0)
     val eventLog = applications.sortBy(_.getModificationTime).last
-    assert(!eventLog.isDir)
+    assert(!eventLog.isDirectory)
 
     // Replay events
     val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
