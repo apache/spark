@@ -88,6 +88,7 @@ Community-contributed Operators
 .. automodule:: airflow.contrib.operators
     :show-inheritance:
     :members:
+        BigQueryOperator,
         VerticaOperator,
         VerticaToHiveTransfer
 
