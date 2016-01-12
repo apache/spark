@@ -38,11 +38,11 @@ import org.apache.spark.streaming.receiver.Receiver
  */
 private[streaming]
 class RawInputDStream[T: ClassTag](
-    ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     host: String,
     port: Int,
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[T](ssc_ ) with Logging {
+  ) extends ReceiverInputDStream[T](_ssc) with Logging {
 
   def getReceiver(): Receiver[T] = {
     new RawNetworkReceiver(host, port, storageLevel).asInstanceOf[Receiver[T]]

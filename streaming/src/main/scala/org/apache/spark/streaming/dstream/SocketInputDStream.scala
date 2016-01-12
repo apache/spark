@@ -31,12 +31,12 @@ import org.apache.spark.util.NextIterator
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
-    ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     host: String,
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[T](ssc_) {
+  ) extends ReceiverInputDStream[T](_ssc) {
 
   def getReceiver(): Receiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)

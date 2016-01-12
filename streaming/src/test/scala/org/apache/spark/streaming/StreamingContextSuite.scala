@@ -896,7 +896,7 @@ object SlowTestReceiver {
 package object testPackage extends Assertions {
   def test() {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
-    val ssc = new StreamingContext(conf , Milliseconds(100))
+    val ssc = new StreamingContext(conf, Milliseconds(100))
     try {
       val inputStream = ssc.receiverStream(new TestReceiver)
 

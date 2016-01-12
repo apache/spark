@@ -280,7 +280,7 @@ class StateMapSuite extends SparkFunSuite {
     testSerialization(new KryoSerializer(conf), map, msg)
   }
 
-  private def testSerialization[T : ClassTag](
+  private def testSerialization[T: ClassTag](
       serializer: Serializer,
       map: OpenHashMapBasedStateMap[T, T],
       msg: String): OpenHashMapBasedStateMap[T, T] = {

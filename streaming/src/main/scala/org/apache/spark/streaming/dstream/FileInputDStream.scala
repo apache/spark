@@ -73,13 +73,13 @@ import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Uti
  */
 private[streaming]
 class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
-    ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
     conf: Option[Configuration] = None)
     (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
-  extends InputDStream[(K, V)](ssc_) {
+  extends InputDStream[(K, V)](_ssc) {
 
   private val serializableConfOpt = conf.map(new SerializableConfiguration(_))
 
@@ -128,8 +128,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   // Timestamp of the last round of finding files
   @transient private var lastNewFileFindingTime = 0L
 
-  @transient private var path_ : Path = null
-  @transient private var fs_ : FileSystem = null
+  @transient private var _path: Path = null
+  @transient private var _fs: FileSystem = null
 
   override def start() { }
 
@@ -289,17 +289,17 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   private def directoryPath: Path = {
-    if (path_ == null) path_ = new Path(directory)
-    path_
+    if (_path == null) _path = new Path(directory)
+    _path
   }
 
   private def fs: FileSystem = {
-    if (fs_ == null) fs_ = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
-    fs_
+    if (_fs == null) _fs = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
+    _fs
   }
 
   private def reset()  {
-    fs_ = null
+    _fs = null
   }
 
   @throws(classOf[IOException])

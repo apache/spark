@@ -200,12 +200,12 @@ object MasterFailureTest extends Logging {
    * the last expected output is generated. Finally, return
    */
   private def runStreams[T: ClassTag](
-      ssc_ : StreamingContext,
+      _ssc: StreamingContext,
       lastExpectedOutput: T,
       maxTimeToRun: Long
    ): Seq[T] = {
 
-    var ssc = ssc_
+    var ssc = _ssc
     var totalTimeRan = 0L
     var isLastOutputGenerated = false
     var isTimedOut = false

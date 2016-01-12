@@ -44,7 +44,7 @@ import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSy
  * A input stream that records the times of restore() invoked
  */
 private[streaming]
-class CheckpointInputDStream(ssc_ : StreamingContext) extends InputDStream[Int](ssc_) {
+class CheckpointInputDStream(_ssc: StreamingContext) extends InputDStream[Int](_ssc) {
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
   override def start(): Unit = { }
   override def stop(): Unit = { }

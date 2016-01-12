@@ -50,7 +50,7 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
   private var ssc: StreamingContext = _
   private var tempDirectory: File = null
 
-  override def beforeAll() : Unit = {
+  override def beforeAll(): Unit = {
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
 

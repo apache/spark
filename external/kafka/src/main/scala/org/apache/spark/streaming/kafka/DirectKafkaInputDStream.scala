@@ -58,11 +58,11 @@ class DirectKafkaInputDStream[
   U <: Decoder[K]: ClassTag,
   T <: Decoder[V]: ClassTag,
   R: ClassTag](
-    ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     val kafkaParams: Map[String, String],
     val fromOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
-  ) extends InputDStream[R](ssc_) with Logging {
+  ) extends InputDStream[R](_ssc) with Logging {
   val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
 
