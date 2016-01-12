@@ -89,6 +89,7 @@ Community-contributed Operators
     :show-inheritance:
     :members:
         BigQueryOperator,
+        BigQueryToCloudStorageOperator,
         VerticaOperator,
         VerticaToHiveTransfer
 
