@@ -261,7 +261,7 @@ class KMeansModel(Saveable, Loader):
         their nearest center) for this model on the given
         data.
 
-        :param point: the point or RDD of points to compute the cost(s).
+        :param point: the RDD of points to compute the cost on.
         """
         cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
                              [_convert_to_vector(c) for c in self.centers])
