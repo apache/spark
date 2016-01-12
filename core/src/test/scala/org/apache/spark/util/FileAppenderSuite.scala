@@ -25,7 +25,7 @@ import scala.reflect._
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.apache.log4j.{Level, Appender, Logger}
+import org.apache.log4j.{Appender, Level, Logger}
 import org.apache.log4j.spi.LoggingEvent
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito.{atLeast, mock, verify}
