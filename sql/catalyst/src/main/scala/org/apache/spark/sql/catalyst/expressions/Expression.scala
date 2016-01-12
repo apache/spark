@@ -164,7 +164,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns the hash for this expression. Expressions that compute the same result, even if
    * they differ cosmetically should return the same hash.
    */
-  def semanticHash(): Int = {
+  def semanticHash() : Int = {
     def computeHash(e: Seq[Any]): Int = {
       // See http://stackoverflow.com/questions/113511/hash-code-implementation
       var hash: Int = 17

@@ -306,7 +306,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply): _*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
    * Aggregate function: returns the first value in a group.
@@ -768,7 +768,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
-    array((colName +: colNames).map(col): _*)
+    array((colName +: colNames).map(col) : _*)
   }
 
   /**
@@ -977,7 +977,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
-    struct((colName +: colNames).map(col): _*)
+    struct((colName +: colNames).map(col) : _*)
   }
 
   /**

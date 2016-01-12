@@ -46,7 +46,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-    UTF8String.concat(inputs: _*)
+    UTF8String.concat(inputs : _*)
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -99,7 +99,7 @@ case class ConcatWs(children: Seq[Expression])
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
-    UTF8String.concatWs(flatInputs.head, flatInputs.tail: _*)
+    UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -990,7 +990,7 @@ case class FormatNumber(x: Expression, d: Expression)
 
       def typeHelper(p: String): String = {
         x.dataType match {
-          case _: DecimalType => s"""$p.toJavaBigDecimal()"""
+          case _ : DecimalType => s"""$p.toJavaBigDecimal()"""
           case _ => s"$p"
         }
       }

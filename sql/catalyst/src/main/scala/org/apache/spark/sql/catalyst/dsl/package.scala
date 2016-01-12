@@ -61,11 +61,9 @@ package object dsl {
   trait ImplicitOperators {
     def expr: Expression
 
-    // scalastyle:off whitespacebeforetoken
     def unary_- : Expression = UnaryMinus(expr)
     def unary_! : Predicate = Not(expr)
     def unary_~ : Expression = BitwiseNot(expr)
-    // scalastyle:on whitespacebeforetoken
 
     def + (other: Expression): Expression = Add(expr, other)
     def - (other: Expression): Expression = Subtract(expr, other)
@@ -143,7 +141,7 @@ package object dsl {
       // Note that if we make ExpressionConversions an object rather than a trait, we can
       // then make this a value class to avoid the small penalty of runtime instantiation.
       def $(args: Any*): analysis.UnresolvedAttribute = {
-        analysis.UnresolvedAttribute(sc.s(args: _*))
+        analysis.UnresolvedAttribute(sc.s(args : _*))
       }
     }
 

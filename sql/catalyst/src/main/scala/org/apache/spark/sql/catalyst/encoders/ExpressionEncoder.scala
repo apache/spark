@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  def apply[T: TypeTag](): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
