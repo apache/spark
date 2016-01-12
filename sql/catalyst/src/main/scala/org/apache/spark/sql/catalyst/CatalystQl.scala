@@ -30,6 +30,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
+private[sql] object CatalystQl {
+  val parser = new CatalystQl
+  def parseExpression(sql: String): Expression = parser.parseExpression(sql)
+  def parseTableIdentifier(sql: String): TableIdentifier = parser.parseTableIdentifier(sql)
+}
+
 /**
  * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
  */
@@ -41,16 +47,13 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
     }
   }
 
-
   /**
-   * Returns the AST for the given SQL string.
+   * The safeParse method allows a user to focus on the parsing/AST transformation logic. This
+   * method will take care of possible errors during the parsing process.
    */
-  protected def getAst(sql: String): ASTNode = ParseDriver.parse(sql, conf)
-
-  /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String): LogicalPlan = {
+  protected def safeParse[T](sql: String, ast: ASTNode)(toResult: ASTNode => T): T = {
     try {
-      createPlan(sql, ParseDriver.parse(sql, conf))
+      toResult(ast)
     } catch {
       case e: MatchError => throw e
       case e: AnalysisException => throw e
@@ -58,26 +61,39 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
         throw new AnalysisException(e.getMessage)
       case e: NotImplementedError =>
         throw new AnalysisException(
-          s"""
-             |Unsupported language features in query: $sql
-             |${getAst(sql).treeString}
+          s"""Unsupported language features in query
+             |== SQL ==
+             |$sql
+             |== AST ==
+             |${ast.treeString}
+             |== Error ==
              |$e
+             |== Stacktrace ==
              |${e.getStackTrace.head}
           """.stripMargin)
     }
   }
 
-  protected def createPlan(sql: String, tree: ASTNode): LogicalPlan = nodeToPlan(tree)
+  /** Creates LogicalPlan for a given SQL string. */
+  def parsePlan(sql: String): LogicalPlan =
+    safeParse(sql, ParseDriver.parsePlan(sql, conf))(nodeToPlan)
 
-  def parseDdl(ddl: String): Seq[Attribute] = {
-    val tree = getAst(ddl)
-    assert(tree.text == "TOK_CREATETABLE", "Only CREATE TABLE supported.")
-    val tableOps = tree.children
-    val colList = tableOps
-      .find(_.text == "TOK_TABCOLLIST")
-      .getOrElse(sys.error("No columnList!"))
+  /** Creates Expression for a given SQL string. */
+  def parseExpression(sql: String): Expression =
+    safeParse(sql, ParseDriver.parseExpression(sql, conf))(selExprNodeToExpr(_).get)
 
-    colList.children.map(nodeToAttribute)
+  /** Creates TableIdentifier for a given SQL string. */
+  def parseTableIdentifier(sql: String): TableIdentifier =
+    safeParse(sql, ParseDriver.parseTableName(sql, conf))(extractTableIdent)
+
+  def parseDdl(sql: String): Seq[Attribute] = {
+    safeParse(sql, ParseDriver.parseExpression(sql, conf)) { ast =>
+      val Token("TOK_CREATETABLE", children) = ast
+      children
+        .find(_.text == "TOK_TABCOLLIST")
+        .getOrElse(sys.error("No columnList!"))
+        .flatMap(_.children.map(nodeToAttribute))
+    }
   }
 
   protected def getClauses(
@@ -187,7 +203,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     val keyMap = keyASTs.zipWithIndex.toMap
 
     val bitmasks: Seq[Int] = setASTs.map {
-      case Token("TOK_GROUPING_SETS_EXPRESSION", null) => 0
       case Token("TOK_GROUPING_SETS_EXPRESSION", columns) =>
         columns.foldLeft(0)((bitmap, col) => {
           val keyIndex = keyMap.find(_._1.treeEquals(col)).map(_._2)

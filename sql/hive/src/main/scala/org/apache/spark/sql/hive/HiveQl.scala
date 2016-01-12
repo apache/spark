@@ -230,15 +230,16 @@ private[hive] object HiveQl extends SparkQl with Logging {
     CreateViewAsSelect(tableDesc, nodeToPlan(query), allowExist, replace, sql)
   }
 
-  protected override def createPlan(
-      sql: String,
-      node: ASTNode): LogicalPlan = {
-    if (nativeCommands.contains(node.text)) {
-      HiveNativeCommand(sql)
-    } else {
-      nodeToPlan(node) match {
-        case NativePlaceholder => HiveNativeCommand(sql)
-        case plan => plan
+  /** Creates LogicalPlan for a given SQL string. */
+  override def parsePlan(sql: String): LogicalPlan = {
+    safeParse(sql, ParseDriver.parsePlan(sql, conf)) { ast =>
+      if (nativeCommands.contains(ast.text)) {
+        HiveNativeCommand(sql)
+      } else {
+        nodeToPlan(ast) match {
+          case NativePlaceholder => HiveNativeCommand(sql)
+          case plan => plan
+        }
       }
     }
   }
