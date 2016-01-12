@@ -48,22 +48,22 @@ COMPLEX_TYPES <- list(
 DATA_TYPES <- as.environment(c(as.list(PRIMITIVE_TYPES), COMPLEX_TYPES))
 
 SHORT_TYPES <- as.environment(list(
-  "character"="chr",
-  "logical"="logi",
-  "POSIXct"="POSIXct",
-  "integer"="int",
-  "numeric"="num",
-  "raw"="raw",
-  "Date"="Date",
-  "map"="map",
-  "array"="array",
-  "struct"="struct"
+  "character" = "chr",
+  "logical" = "logi",
+  "POSIXct" = "POSIXct",
+  "integer" = "int",
+  "numeric" = "num",
+  "raw" = "raw",
+  "Date" = "Date",
+  "map" = "map",
+  "array" = "array",
+  "struct" = "struct"
 ))
 
 # An environment for mapping R to Scala, names are R types and values are Scala types.
 rToSQLTypes <- as.environment(list(
-  "integer"   = "integer", # in R, integer is 32bit
-  "numeric"   = "double",  # in R, numeric == double which is 64bit
-  "double"    = "double",
+  "integer" = "integer", # in R, integer is 32bit
+  "numeric" = "double",  # in R, numeric == double which is 64bit
+  "double" = "double",
   "character" = "string",
-  "logical"   = "boolean"))
+  "logical" = "boolean"))
