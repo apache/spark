@@ -151,9 +151,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // When running tests, let's not assume the user has built the assembly module, which also
     // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
     // needed locations.
-    val sparkHome = sys.props("spark.test.home");
+    val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.9-src.zip",
+        s"$sparkHome/python/lib/py4j-0.9.1-src.zip",
         s"$sparkHome/python")
     val extraEnv = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),

@@ -7,7 +7,7 @@ SPHINXBUILD   = sphinx-build
 PAPER         =
 BUILDDIR      = _build
 
-export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.9-src.zip)
+export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.9.1-src.zip)
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
