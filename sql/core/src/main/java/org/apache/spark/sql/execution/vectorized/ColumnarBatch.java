@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.util.Arrays;
+import java.util.Iterator;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -25,8 +28,6 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-
-import java.util.*;
 
 import org.apache.commons.lang.NotImplementedException;
 
