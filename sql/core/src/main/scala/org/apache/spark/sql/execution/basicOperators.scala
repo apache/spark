@@ -164,6 +164,68 @@ case class Range(
     output: Seq[Attribute])
   extends LeafNode {
 
+  override def supportCodeGen: Boolean = true
+
+  override def produce(ctx: CodeGenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
+    val initTerm = ctx.freshName("initRange")
+    ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
+    val partitionEnd = ctx.freshName("partitionEnd")
+    ctx.addMutableState("long", partitionEnd, s"$partitionEnd = 0L;")
+    val number = ctx.freshName("number")
+    ctx.addMutableState("long", number, s"$number = 0L;")
+    val overflow = ctx.freshName("overflow")
+    ctx.addMutableState("boolean", overflow, s"$overflow = false;")
+
+    val value = ctx.freshName("value")
+    val ev = GeneratedExpressionCode("", "false", value)
+    val BigInt = classOf[java.math.BigInteger].getName
+    val checkEnd = if (step > 0) {
+      s"$number < $partitionEnd"
+    } else {
+      s"$number > $partitionEnd"
+    }
+    
+    // fetch the first number from RDD, then generate following nubmers using codegen
+    ctx.currentVars = Array(ev)
+    val code = s"""
+      | if (!$initTerm) {
+      |   if (input.hasNext()) {
+      |     $number = ((InternalRow) input.next()).getLong(0);
+
+      |     // This is crazy, should not be this complicated
+      |     $BigInt v = $BigInt.valueOf(($number - ${start}L) / ${step}L);
+      |     $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
+      |     $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
+      |     $BigInt step = $BigInt.valueOf(${step}L);
+      |     $BigInt start = $BigInt.valueOf(${start}L);
+      |     $BigInt index = v.multiply(numSlice).divide(numElement);
+      |     $BigInt end = index.add($BigInt.ONE).multiply(numElement).divide(numSlice)
+      |       .multiply(step).add(start);
+      |     if (end.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
+      |       $partitionEnd = Long.MAX_VALUE;
+      |     } else if (end.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
+      |       $partitionEnd = Long.MIN_VALUE;
+      |     } else {
+      |       $partitionEnd = end.longValue();
+      |     }
+      |   } else {
+      |     return;
+      |   }
+      |   $initTerm = true;
+      | }
+      |
+      | while (!$overflow && $checkEnd) {
+      |  long $value = $number;
+      |  $number += ${step}L;
+      |  if ($number < $value ^ ${step}L < 0) {
+      |    $overflow = true;
+      |  }
+      |  ${parent.consume(ctx, this, Seq(ev))}
+      | }
+     """.stripMargin
+    (doExecute(), code)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext
       .sparkContext

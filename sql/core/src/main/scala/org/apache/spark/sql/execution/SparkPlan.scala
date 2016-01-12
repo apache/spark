@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.sql.execution.columnar.MutableUnsafeRow
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -97,7 +98,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
-
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
    * after adding query plan information to created RDDs for visualization.
@@ -106,8 +106,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def execute(): RDD[InternalRow] = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      if (sqlContext.conf.wholeStageEnabled && supportCodeGen) {
-        doCodeGen()
+
+      // Whole stage codegen is only used when there are at least two levels of operators that
+      // support it (save at least one projection/iterator).
+      if (sqlContext.conf.wholeStageEnabled &&
+        supportCodeGen && children.forall(_.supportCodeGen)) {
+        try {
+          doCodeGen()
+        } catch {
+          case e: Exception =>
+            if (isTesting) {
+              throw e
+            } else {
+              // Fallback if fail to compile the generated code.
+              doExecute()
+            }
+        }
       } else {
         doExecute()
       }
@@ -147,36 +161,39 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val (rdd, code) = produce(ctx, null)
     val exprType: String = classOf[Expression].getName
     val references = ctx.references.toArray
+    val bufferHolderCls = classOf[BufferHolder].getName
+    val unsafeRowWriterCls = classOf[UnsafeRowWriter].getName
+    val mutableUnsafeRowCls = classOf[MutableUnsafeRow].getName
     val source = s"""
-     public Object generate($exprType[] exprs) {
+      public Object generate($exprType[] exprs) {
        return new GeneratedIterator(exprs);
-     }
+      }
 
-     class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
+      class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
        private $exprType[] expressions;
        ${ctx.declareMutableStates()}
 
        private UnsafeRow unsafeRow = new UnsafeRow(${output.length});
-       private BufferHolder bufferHolder = new BufferHolder();
-       private UnsafeRowWriter rowWriter = new UnsafeRowWriter();
-       private MutableUnsafeRow mutableRow = null;
+       private $bufferHolderCls bufferHolder = new $bufferHolderCls();
+       private $unsafeRowWriterCls rowWriter = new $unsafeRowWriterCls();
+       private $mutableUnsafeRowCls mutableRow = null;
 
        public GeneratedIterator($exprType[] exprs) {
          expressions = exprs;
          ${ctx.initMutableStates()}
 
-         this.mutableRow = new MutableUnsafeRow(rowWriter);
+         this.mutableRow = new $mutableUnsafeRowCls(rowWriter);
        }
 
        protected void processNext() {
          $code
        }
-     }
+      }
      """
     // try to compile
-    // println(s"${CodeFormatter.format(source)}")
-    val clazz = CodeGenerator.compile(CodeFormatter.format(source))
+    println(s"${CodeFormatter.format(source)}")
+    val clazz = CodeGenerator.compile(source)
 
     rdd.mapPartitions { iter =>
       val clazz = CodeGenerator.compile(source)
@@ -230,23 +247,31 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       child: SparkPlan,
       columns: Seq[GeneratedExpressionCode]): String = {
     assert(columns.length == output.length)
-    val writers = columns.zipWithIndex.map { case (c, i) =>
+    if (columns.nonEmpty) {
+      val writers = columns.zipWithIndex.map { case (c, i) =>
+        s"""
+           | if (${c.isNull}) {
+           |   mutableRow.setNull($i);
+           | } else {
+           |   ${ctx.setColumn("mutableRow", output(i).dataType, i, c.value)}
+           | }
+       """.stripMargin
+      }
       s"""
-         | if (${c.isNull}) {
-         |   mutableRow.setNull($i);
-         | } else {
-         |   ${ctx.setColumn("mutableRow", output(i).dataType, i, c.value)}
-         | }
+         | bufferHolder.reset();
+         | rowWriter.initialize(bufferHolder, ${output.length});
+         | ${writers.mkString("\n")}
+         | unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize());
+         | currentRow = unsafeRow;
+         | return;
+     """.stripMargin
+    } else {
+      // There is no columns
+      s"""
+         | currentRow = unsafeRow;
+         | return;
        """.stripMargin
     }
-    s"""
-       | bufferHolder.reset();
-       | rowWriter.initialize(bufferHolder, ${output.length});
-       | ${writers.mkString("\n")}
-       | unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize());
-       | currentRow = unsafeRow;
-       | return;
-     """.stripMargin
   }
 
   /**
