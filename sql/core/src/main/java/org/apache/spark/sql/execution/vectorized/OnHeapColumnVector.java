@@ -164,10 +164,8 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    DoubleBuffer values = ByteBuffer.wrap(src, srcIndex, src.length - srcIndex).asDoubleBuffer();
-    for (int i = 0; i < count; ++i) {
-      doubleData[i + rowId] = values.get(i);
-    }
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
+        Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
   }
 
   @Override

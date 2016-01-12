@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.execution.vectorized
 
-import java.nio.ByteBuffer
+import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{StructType, DoubleType, IntegerType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 import org.apache.spark.unsafe.Platform
-
-import scala.collection.mutable
-import scala.util.Random
 
 class ColumnarBatchSuite extends SparkFunSuite {
   test("Null Apis") {
@@ -165,9 +163,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       idx += 3
 
       val buffer = new Array[Byte](16)
-      val doubleVals = ByteBuffer.wrap(buffer).asDoubleBuffer()
-      doubleVals.put(2.234)
-      doubleVals.put(1.123)
+      Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234)
+      Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, 1.123)
 
       column.putDoubles(idx, 1, buffer, 8)
       column.putDoubles(idx + 1, 1, buffer, 0)
