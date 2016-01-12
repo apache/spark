@@ -61,28 +61,10 @@ private[ui] class ExecutorsPage(
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
-    val sumInfo = new ExecutorSummary(
-      "",
-      "",
-      execInfo.map(_.rddBlocks).sum,
-      execInfo.map(_.memoryUsed).sum,
-      execInfo.map(_.diskUsed).sum,
-      execInfo.map(_.activeTasks).sum,
-      execInfo.map(_.failedTasks).sum,
-      execInfo.map(_.completedTasks).sum,
-      execInfo.map(_.totalTasks).sum,
-      execInfo.map(_.totalDuration).sum,
-      execInfo.map(_.totalInputBytes).sum,
-      execInfo.map(_.totalShuffleRead).sum,
-      execInfo.map(_.totalShuffleWrite).sum,
-      execInfo.map(_.maxMemory).sum,
-      Map.empty
-    )
-
     val execTable =
       <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
         <thead>
-          <th class="sorttable_alpha">Executor ID</th>
+          <th>Executor ID</th>
           <th>Address</th>
           <th>RDD Blocks</th>
           <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
@@ -106,7 +88,6 @@ private[ui] class ExecutorsPage(
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
         <tbody>
-          {execRow(sumInfo, logsExist)}
           {execInfoSorted.map(execRow(_, logsExist))}
         </tbody>
       </table>
@@ -133,25 +114,12 @@ private[ui] class ExecutorsPage(
 
   /** Render an HTML row representing an executor */
   private def execRow(info: ExecutorSummary, logsExist: Boolean): Seq[Node] = {
-    val totalRow = info.id.isEmpty && info.hostPort.isEmpty;
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
     <tr>
-      {
-        if (totalRow) {
-          <td sorttable_customkey="-1"></td>
-        } else {
-          <td>{info.id}</td>
-        }
-      }
-      {
-        if (totalRow) {
-          <td sorttable_customkey="-1" style="font-weight: bold;">TOTALS</td>
-        } else {
-          <td>{info.hostPort}</td>
-        }
-      }
+      <td>{info.id}</td>
+      <td>{info.hostPort}</td>
       <td>{info.rddBlocks}</td>
       <td sorttable_customkey={memoryUsed.toString}>
         {Utils.bytesToString(memoryUsed)} /
@@ -180,14 +148,12 @@ private[ui] class ExecutorsPage(
         if (logsExist) {
           <td>
             {
-              if (!totalRow) {
-                info.executorLogs.map { case (logName, logUrl) =>
-                  <div>
-                    <a href={logUrl}>
-                      {logName}
-                    </a>
-                  </div>
-                }
+              info.executorLogs.map { case (logName, logUrl) =>
+                <div>
+                  <a href={logUrl}>
+                    {logName}
+                  </a>
+                </div>
               }
             }
           </td>
@@ -197,11 +163,7 @@ private[ui] class ExecutorsPage(
         if (threadDumpEnabled) {
           val encodedId = URLEncoder.encode(info.id, "UTF-8")
           <td>
-            {
-              if (!totalRow) {
-                <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
-              }
-            }
+            <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
           </td>
         } else {
           Seq.empty
