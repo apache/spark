@@ -755,14 +755,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val metastoreTable = catalog.client.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
 
-      val numPartCols = metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt
-      assert(numPartCols == 2)
-
       val actualPartitionColumns =
-        StructType(
-          (0 until numPartCols).map { index =>
-            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.partCol.$index"))
-          })
+        StructType(metastoreTable.properties(s"spark.sql.sources.schema.partCols").split(",").map {
+          colName => df.schema(colName)
+        })
       // Make sure partition columns are correctly stored in metastore.
       assert(
         expectedPartitionColumns.sameType(actualPartitionColumns),
