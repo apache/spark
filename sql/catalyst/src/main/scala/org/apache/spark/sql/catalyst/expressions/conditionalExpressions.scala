@@ -45,7 +45,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def dataType: DataType = trueValue.dataType
 
   override def eval(input: InternalRow): Any = {
-    if (true == predicate.eval(input)) {
+    if (java.lang.Boolean.TRUE.equals(predicate.eval(input))) {
       trueValue.eval(input)
     } else {
       falseValue.eval(input)
@@ -141,8 +141,8 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     }
   }
 
-  /** Written in imperative fashion for performance considerations. */
   override def eval(input: InternalRow): Any = {
+    // Written in imperative fashion for performance considerations
     val len = branchesArr.length
     var i = 0
     // If all branches fail and an elseVal is not provided, the whole statement
@@ -389,7 +389,7 @@ case class Least(children: Seq[Expression]) extends Expression {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(eval: GeneratedExpressionCode): String =
+    def updateEval(eval: GeneratedExpressionCode): String = {
       s"""
         ${eval.code}
         if (!${eval.isNull} && (${ev.isNull} ||
@@ -398,6 +398,7 @@ case class Least(children: Seq[Expression]) extends Expression {
           ${ev.value} = ${eval.value};
         }
       """
+    }
     s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
@@ -447,7 +448,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(eval: GeneratedExpressionCode): String =
+    def updateEval(eval: GeneratedExpressionCode): String = {
       s"""
         ${eval.code}
         if (!${eval.isNull} && (${ev.isNull} ||
@@ -456,6 +457,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
           ${ev.value} = ${eval.value};
         }
       """
+    }
     s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
