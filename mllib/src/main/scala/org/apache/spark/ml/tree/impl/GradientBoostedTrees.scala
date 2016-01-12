@@ -21,11 +21,11 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impl.TimeTracker
-import org.apache.spark.mllib.tree.impurity.Variance
-import org.apache.spark.mllib.tree.loss.Loss
+import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
+import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -37,12 +37,12 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @return a gradient boosted trees model that can be used for prediction
    */
   def run(input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      boostingStrategy: OldBoostingStrategy): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case Regression =>
+      case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false)
-      case Classification =>
+      case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false)
@@ -64,12 +64,12 @@ private[ml] object GradientBoostedTrees extends Logging {
   def runWithValidation(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      boostingStrategy: OldBoostingStrategy): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case Regression =>
+      case OldAlgo.Regression =>
         GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true)
-      case Classification =>
+      case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
           x => new LabeledPoint((x.label * 2) - 1, x.features))
@@ -96,7 +96,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
       initTree: DecisionTreeRegressionModel,
-      loss: Loss): RDD[(Double, Double)] = {
+      loss: OldLoss): RDD[(Double, Double)] = {
     data.map { lp =>
       val pred = initTreeWeight * initTree.rootNode.predictImpl(lp.features).prediction
       val error = loss.computeError(pred, lp.label)
@@ -120,7 +120,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       predictionAndError: RDD[(Double, Double)],
       treeWeight: Double,
       tree: DecisionTreeRegressionModel,
-      loss: Loss): RDD[(Double, Double)] = {
+      loss: OldLoss): RDD[(Double, Double)] = {
 
     val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
       iter.map { case (lp, (pred, error)) =>
@@ -143,7 +143,7 @@ private[ml] object GradientBoostedTrees extends Logging {
   def boost(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy,
+      boostingStrategy: OldBoostingStrategy,
       validate: Boolean): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
@@ -160,8 +160,8 @@ private[ml] object GradientBoostedTrees extends Logging {
     // Prepare strategy for individual trees, which use regression with variance impurity.
     val treeStrategy = boostingStrategy.treeStrategy.copy
     val validationTol = boostingStrategy.validationTol
-    treeStrategy.algo = Regression
-    treeStrategy.impurity = Variance
+    treeStrategy.algo = OldAlgo.Regression
+    treeStrategy.impurity = OldVariance
     treeStrategy.assertValid()
 
     // Cache input
