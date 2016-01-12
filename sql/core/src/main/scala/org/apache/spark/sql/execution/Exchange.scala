@@ -223,7 +223,7 @@ case class Exchange(
     new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     coordinator match {
       case Some(exchangeCoordinator) =>
         val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)

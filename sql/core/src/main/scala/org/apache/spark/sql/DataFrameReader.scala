@@ -203,7 +203,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-      JDBCPartition(part, i) : Partition
+      JDBCPartition(part, i): Partition
     }
     jdbc(url, table, parts, connectionProperties)
   }
@@ -262,7 +262,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * @since 1.6.0
    */
-  def json(paths: String*): DataFrame = format("json").load(paths : _*)
+  def json(paths: String*): DataFrame = format("json").load(paths: _*)
 
   /**
    * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
@@ -355,7 +355,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): DataFrame = format("text").load(paths: _*)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

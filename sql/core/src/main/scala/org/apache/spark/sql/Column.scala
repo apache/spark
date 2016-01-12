@@ -152,7 +152,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * results into the correct JVM types.
    * @since 1.6.0
    */
-  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](expr, encoderFor[U])
+  def as[U: Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](expr, encoderFor[U])
 
   /**
    * Extracts a value or values from a complex type.
@@ -171,6 +171,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     UnresolvedExtractValue(expr, lit(extraction).expr)
   }
 
+  // scalastyle:off whitespacebeforetoken
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
@@ -202,6 +203,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def unary_! : Column = withExpr { Not(expr) }
+  // scalastyle:on whitespacebeforetoken
 
   /**
    * Equality test.

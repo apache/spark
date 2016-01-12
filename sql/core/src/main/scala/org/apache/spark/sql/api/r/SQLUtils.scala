@@ -39,7 +39,7 @@ private[r] object SQLUtils {
     new JavaSparkContext(sqlCtx.sparkContext)
   }
 
-  def createStructType(fields : Seq[StructField]): StructType = {
+  def createStructType(fields: Seq[StructField]): StructType = {
     StructType(fields)
   }
 

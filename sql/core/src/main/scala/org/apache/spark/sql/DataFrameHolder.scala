@@ -33,5 +33,5 @@ case class DataFrameHolder private[sql](private val df: DataFrame) {
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
   def toDF(): DataFrame = df
 
-  def toDF(colNames: String*): DataFrame = df.toDF(colNames : _*)
+  def toDF(colNames: String*): DataFrame = df.toDF(colNames: _*)
 }

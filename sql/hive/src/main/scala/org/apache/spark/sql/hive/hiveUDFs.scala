@@ -181,7 +181,7 @@ private[hive] case class HiveSimpleUDF(
     val ret = FunctionRegistry.invoke(
       method,
       function,
-      conversionHelper.convertIfNecessary(inputs : _*): _*)
+      conversionHelper.convertIfNecessary(inputs: _*): _*)
     unwrap(ret, returnInspector)
   }
 

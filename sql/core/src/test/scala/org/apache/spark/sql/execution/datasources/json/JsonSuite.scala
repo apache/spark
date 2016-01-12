@@ -206,7 +206,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       StructType(
         StructField("f1", IntegerType, true) ::
         StructField("f2", IntegerType, true) :: Nil),
-      StructType(StructField("f1", LongType, true) :: Nil) ,
+      StructType(StructField("f1", LongType, true) :: Nil),
       StructType(
         StructField("f1", LongType, true) ::
         StructField("f2", IntegerType, true) :: Nil))

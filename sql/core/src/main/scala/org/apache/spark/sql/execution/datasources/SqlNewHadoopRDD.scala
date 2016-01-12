@@ -256,7 +256,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           val infos = c.newGetLocationInfo.invoke(split).asInstanceOf[Array[AnyRef]]
           Some(HadoopRDD.convertSplitLocationInfo(infos))
         } catch {
-          case e : Exception =>
+          case e: Exception =>
             logDebug("Failed to use InputSplit#getLocationInfo.", e)
             None
         }

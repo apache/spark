@@ -71,7 +71,7 @@ private[sql] trait Queryable {
   private[sql] def formatString (
       rows: Seq[Seq[String]],
       numRows: Int,
-      hasMoreData : Boolean,
+      hasMoreData: Boolean,
       truncate: Boolean = true): String = {
     val sb = new StringBuilder
     val numCols = schema.fieldNames.length
