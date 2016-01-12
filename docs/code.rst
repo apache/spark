@@ -90,6 +90,7 @@ Community-contributed Operators
     :members:
         BigQueryOperator,
         BigQueryToCloudStorageOperator,
+        GoogleCloudStorageDownloadOperator,
         VerticaOperator,
         VerticaToHiveTransfer
 
@@ -210,6 +211,7 @@ Community contributed hooks
     :show-inheritance:
     :members:
         BigQueryHook,
+        GoogleCloudStorageHook,
         VerticaHook,
         FTPHook,
         SSHHook
