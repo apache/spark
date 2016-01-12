@@ -109,9 +109,9 @@ private[stat] object ChiSqTest extends Logging {
           }
           i += 1
           distinctLabels += label
-          val featureArray = features.toArray
+          val brzFeatures = features.toBreeze
           (startCol until endCol).map { col =>
-            val feature = featureArray(col)
+            val feature = brzFeatures(col)
             allDistinctFeatures(col) += feature
             (col, feature, label)
           }
