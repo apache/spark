@@ -620,7 +620,7 @@ private[spark] object JsonProtocol {
   }
 
   def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
-    val execInfo = (json \ "Executor ID").extract[String]
+    val execId = (json \ "Executor ID").extract[String]
     val accumUpdates = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
       val taskId = (json \ "Task ID").extract[Long]
       val stageId = (json \ "Stage ID").extract[Int]
@@ -629,7 +629,7 @@ private[spark] object JsonProtocol {
         (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
+    SparkListenerExecutorMetricsUpdate(execId, accumUpdates)
   }
 
   /** --------------------------------------------------------------------- *
@@ -789,8 +789,7 @@ private[spark] object JsonProtocol {
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]
         val stackTrace = stackTraceFromJson(json \ "Stack Trace")
-        val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
-          map(_.extract[String]).orNull
+        val fullStackTrace = (json \ "Full Stack Trace").extractOpt[String].orNull
         val accumUpdates = (json \ "Accumulator Updates")
           .extract[List[JValue]].map(accumulableInfoFromJson)
         ExceptionFailure(

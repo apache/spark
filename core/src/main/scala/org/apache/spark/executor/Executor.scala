@@ -317,7 +317,7 @@ private[spark] class Executor(
             } catch {
               case _: NotSerializableException =>
                 // t is not serializable so just send the stacktrace
-                ser.serialize(new ExceptionFailure(t, accumulatorUpdates, false))
+                ser.serialize(new ExceptionFailure(t, accumulatorUpdates, preserveCause = false))
             }
           }
           execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)

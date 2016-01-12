@@ -364,15 +364,12 @@ private[spark] object TaskMetrics extends Logging {
    *
    * Executors only send accumulator updates back to the driver, not [[TaskMetrics]]. However,
    * we need the latter to post task end events to listeners, so we need to reconstruct the
-   * metrics here on the driver.
+   * metrics on the driver.
    *
    * Note: If the task failed, we may return null after attempting to reconstruct the
    * [[TaskMetrics]] in vain.
    */
   def fromAccumulatorUpdates(taskId: Long, accumUpdates: Seq[AccumulableInfo]): TaskMetrics = {
-    if (accumUpdates == null) {
-      return null
-    }
     // Note: it is important that we copy the accumulators here since they are used across
     // many tasks and we want to maintain a snapshot of their local task values when we post
     // them to listeners downstream. Otherwise, when a new task comes in the listener may get

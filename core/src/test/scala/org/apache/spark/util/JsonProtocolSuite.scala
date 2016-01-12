@@ -33,6 +33,8 @@ import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
 
+  import InternalAccumulator._
+
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
 
@@ -601,7 +603,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
         assert(r1.fullStackTrace === r2.fullStackTrace)
-        assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
+        assertSeqEquals[AccumulableInfo](r1.accumUpdates, r2.accumUpdates, (a, b) => a.equals(b))
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
       case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
@@ -746,7 +748,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
-    new AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), Some("val" + id), internal)
+    new AccumulableInfo(id, "Accumulable" + id, Some("delta" + id), Some("val" + id), internal)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -1043,7 +1045,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
       |      "Local Bytes Read": 1100,
-      |      "Total Records Read" : 10
+      |      "Total Records Read": 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
@@ -1278,14 +1280,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1340,14 +1342,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1420,14 +1422,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1518,14 +1520,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1680,52 +1682,169 @@ class JsonProtocolSuite extends SparkFunSuite {
     """
 
   private val executorMetricsUpdateJsonString =
-  s"""
-     |{
-     |  "Event": "SparkListenerExecutorMetricsUpdate",
-     |  "Executor ID": "exec3",
-     |  "Metrics Updated": [
-     |  {
-     |    "Task ID": 1,
-     |    "Stage ID": 2,
-     |    "Stage Attempt ID": 3,
-     |    "Task Metrics": {
-     |    "Executor Deserialize Time": 300,
-     |    "Executor Run Time": 400,
-     |    "Result Size": 500,
-     |    "JVM GC Time": 600,
-     |    "Result Serialization Time": 700,
-     |    "Memory Bytes Spilled": 800,
-     |    "Disk Bytes Spilled": 0,
-     |    "Input Metrics": {
-     |      "Data Read Method": "Hadoop",
-     |      "Bytes Read": 2100,
-     |      "Records Read": 21
-     |    },
-     |    "Output Metrics": {
-     |      "Data Write Method": "Hadoop",
-     |      "Bytes Written": 1200,
-     |      "Records Written": 12
-     |    },
-     |    "Updated Blocks": [
-     |      {
-     |        "Block ID": "rdd_0_0",
-     |        "Status": {
-     |          "Storage Level": {
-     |            "Use Disk": true,
-     |            "Use Memory": true,
-     |            "Use ExternalBlockStore": false,
-     |            "Deserialized": false,
-     |            "Replication": 2
-     |          },
-     |          "Memory Size": 0,
-     |          "ExternalBlockStore Size": 0,
-     |          "Disk Size": 0
-     |        }
-     |      }
-     |    ]
-     |  }
-     |  }]
-     |}
-   """.stripMargin
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorMetricsUpdate",
+      |  "Executor ID": "exec3",
+      |  "Metrics Updated": [
+      |    {
+      |      "Task ID": 1,
+      |      "Stage ID": 2,
+      |      "Stage Attempt ID": 3,
+      |      "Accumulator Updates": [
+      |        {
+      |          "ID": 82,
+      |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
+      |          "Update": "300",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 83,
+      |          "Name": "$EXECUTOR_RUN_TIME",
+      |          "Update": "400",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 84,
+      |          "Name": "$RESULT_SIZE",
+      |          "Update": "500",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 85,
+      |          "Name": "$JVM_GC_TIME",
+      |          "Update": "600",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 86,
+      |          "Name": "$RESULT_SERIALIZATION_TIME",
+      |          "Update": "700",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 87,
+      |          "Name": "$MEMORY_BYTES_SPILLED",
+      |          "Update": "800",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 88,
+      |          "Name": "$DISK_BYTES_SPILLED",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 89,
+      |          "Name": "$PEAK_EXECUTION_MEMORY",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 90,
+      |          "Name": "$UPDATED_BLOCK_STATUSES",
+      |          "Update": "Vector((rdd_0_0,BlockStatus(StorageLevel(true, true, false, false, 2),0,0,0)))",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 91,
+      |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 92,
+      |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 93,
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 94,
+      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 95,
+      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 96,
+      |          "Name": "${shuffleRead.RECORDS_READ}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 97,
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 98,
+      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 99,
+      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Update": "0",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 100,
+      |          "Name": "${input.READ_METHOD}",
+      |          "Update": "Hadoop",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 101,
+      |          "Name": "${input.BYTES_READ}",
+      |          "Update": "2100",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 102,
+      |          "Name": "${input.RECORDS_READ}",
+      |          "Update": "21",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 103,
+      |          "Name": "${output.WRITE_METHOD}",
+      |          "Update": "Hadoop",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 104,
+      |          "Name": "${output.BYTES_WRITTEN}",
+      |          "Update": "1200",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 105,
+      |          "Name": "${output.RECORDS_WRITTEN}",
+      |          "Update": "12",
+      |          "Internal": true
+      |        },
+      |        {
+      |          "ID": 106,
+      |          "Name": "$TEST_ACCUM",
+      |          "Update": "0",
+      |          "Internal": true
+      |        }
+      |      ]
+      |    }
+      |  ]
+      |}
+    """.stripMargin
 }

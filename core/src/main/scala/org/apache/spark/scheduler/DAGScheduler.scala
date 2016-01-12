@@ -1080,33 +1080,31 @@ class DAGScheduler(
     val task = event.task
     val stage = stageIdToStage(task.stageId)
     var failedDuringThisOne: AccumulableInfo = null
-    if (event.accumUpdates != null) {
-      try {
-        event.accumUpdates.foreach { ainfo =>
-          failedDuringThisOne = ainfo
-          val id = ainfo.id
-          assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
-          val partialValue = ainfo.update.get
-          // Find the previously registered accumulator and update it
-          val acc: Accumulable[Any, Any] = Accumulators.get(id) match {
-            case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
-            case None =>
-              throw new SparkException(s"attempted to access non-existent accumulator $id")
-          }
-          acc ++= partialValue
-          // To avoid UI cruft, ignore cases where value wasn't updated
-          if (acc.name.isDefined && partialValue != acc.zero) {
-            val name = acc.name.get
-            stage.latestInfo.accumulables(id) =
-              new AccumulableInfo(id, name, None, Some(acc.value), acc.isInternal)
-            event.taskInfo.accumulables +=
-              new AccumulableInfo(id, name, Some(partialValue), Some(acc.value), acc.isInternal)
-          }
+    try {
+      event.accumUpdates.foreach { ainfo =>
+        failedDuringThisOne = ainfo
+        val id = ainfo.id
+        assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
+        val partialValue = ainfo.update.get
+        // Find the previously registered accumulator and update it
+        val acc: Accumulable[Any, Any] = Accumulators.get(id) match {
+          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
+          case None =>
+            throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Failed to update accumulators for task ${task.partitionId}", e)
+        acc ++= partialValue
+        // To avoid UI cruft, ignore cases where value wasn't updated
+        if (acc.name.isDefined && partialValue != acc.zero) {
+          val name = acc.name.get
+          stage.latestInfo.accumulables(id) =
+            new AccumulableInfo(id, name, None, Some(acc.value), acc.isInternal)
+          event.taskInfo.accumulables +=
+            new AccumulableInfo(id, name, Some(partialValue), Some(acc.value), acc.isInternal)
+        }
       }
+    } catch {
+      case NonFatal(e) =>
+        logError(s"Failed to update accumulators for task ${task.partitionId}", e)
     }
   }
 
@@ -1152,12 +1150,16 @@ class DAGScheduler(
 
     // Reconstruct task metrics. Note: this may be null if the task failed.
     val taskMetrics: TaskMetrics =
-      try {
-        TaskMetrics.fromAccumulatorUpdates(taskId, event.accumUpdates)
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
-          null
+      if (event.accumUpdates.nonEmpty) {
+        try {
+          TaskMetrics.fromAccumulatorUpdates(taskId, event.accumUpdates)
+        } catch {
+          case NonFatal(e) =>
+            logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
+            null
+        }
+      } else {
+        null
       }
 
     outputCommitCoordinator.taskCompleted(
