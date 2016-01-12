@@ -43,26 +43,19 @@ import org.apache.spark.util.Utils
  * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
  *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
  *                 thread safe so that they can be reported correctly.
- * @tparam R the full accumulated data (result type)
+ * @param process function on the accumulated data to the result (defaults to identity).
+ * @tparam R the full accumulated data
+ * @tparam RR result type
  * @tparam T partial data that can be added in
  */
-class Accumulable[R, T] private[spark] (
+class GenericAccumulable[RR, R, T] private[spark] (
     initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    internal: Boolean)
+    internal: Boolean,
+    @transient process: R => RR,
+    consistent: Boolean)
   extends Serializable {
-
-  private[spark] def this(
-      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
-    this(initialValue, param, None, internal)
-  }
-
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
-    this(initialValue, param, name, false)
-
-  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None)
 
   val id: Long = Accumulators.newId
 
@@ -78,6 +71,12 @@ class Accumulable[R, T] private[spark] (
    * reported correctly.
    */
   private[spark] def isInternal: Boolean = internal
+
+  /**
+   * If this [[Accumulable]] is consistent.
+   * Consistent accumulators will only be added to when a full partition is processed.
+   */
+  private[spark] def isConsistent: Boolean = consistent
 
   /**
    * Add more data to this accumulator / accumulable
@@ -110,9 +109,9 @@ class Accumulable[R, T] private[spark] (
   /**
    * Access the accumulator's current value; only allowed on master.
    */
-  def value: R = {
+  def value: RR = {
     if (!deserialized) {
-      value_
+      process(value_)
     } else {
       throw new UnsupportedOperationException("Can't read accumulator value in task")
     }
@@ -164,6 +163,43 @@ class Accumulable[R, T] private[spark] (
   }
 
   override def toString: String = if (value_ == null) "null" else value_.toString
+}
+
+/**
+ * A data type that can be accumulated, ie has an commutative and associative "add" operation,
+ * but where the result type, `R`, may be different from the element type being added, `T`.
+ *
+ * You must define how to add data, and how to merge two of these together.  For some data types,
+ * such as a counter, these might be the same operation. In that case, you can use the simpler
+ * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
+ * accumulating a set. You will add items to the set, and you will union two sets together.
+ *
+ * @param initialValue initial value of accumulator
+ * @param param helper object defining how to add elements of type `R` and `T`
+ * @param name human-readable name for use in Spark's web UI
+ * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
+ *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
+ *                 thread safe so that they can be reported correctly.
+ * @tparam R the full accumulated data
+ * @tparam T partial data that can be added in
+ */
+class Accumulable[R, T] private[spark] (
+    initialValue: R,
+    param: AccumulableParam[R, T],
+    name: Option[String],
+    internal: Boolean)
+    extends GenericAccumulable[R, R, T](initialValue, param, name, internal, identity, false) {
+
+  private[spark] def this(
+      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
+    this(initialValue, param, None, internal)
+  }
+
+  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
+    this(initialValue, param, name, false)
+
+  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
+    this(initialValue, param, None)
 }
 
 /**
@@ -271,6 +307,63 @@ class Accumulator[T] private[spark] (
   }
 }
 
+case class UpdateInfo private[spark](val rddId: Int, splitId: Int)
+/**
+ * Structure for keeping track of the values being accumulated.
+ * When collecting updates from the workers values are accumulated in pending hash map of
+ * (rddId, splitId) -> T. When merging values on the driver the total is collected in value and
+ * before merging in each pending record, checked against processed.
+ */
+private[spark] case class UpdateTracking[T](
+  pending: mutable.HashMap[UpdateInfo, T],
+  processed: mutable.HashMap[Int, mutable.BitSet],
+  var value: T) extends Serializable {
+  def this(value: T) = {
+    this(new mutable.HashMap[UpdateInfo, T](), new mutable.HashMap[Int, mutable.BitSet](), value)
+  }
+}
+
+/**
+ * A consistent version of [[Accumulator]] where the result will not be added to
+ * multiple times for the same partition/rdd.
+ *
+ * {{{
+ * scala> val accum = sc.consistentAccumulator(0)
+ * accum: spark.ConsistentAccumulator[Int] = 0
+ *
+ * scala> val rdd = sc.parallelize(Array(1, 2, 3, 4)).map(x => accum += x)
+ * scala> rdd.count()
+ * scala> rdd.count()
+ * ...
+ * 10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
+ *
+ * scala> accum.value
+ * res2: Int = 10
+ * }}}
+ *
+ * @param initialValue initial value of accumulator
+ * @param param helper object defining how to add elements of type `T`
+ * @tparam T result type
+ */
+class ConsistentAccumulator[T] private[spark] (
+    @transient private[spark] val initialValue: UpdateTracking[T],
+    param: ConsistentAccumulatorParam[T],
+    name: Option[String],
+    internal: Boolean)
+  extends GenericAccumulable[T, UpdateTracking[T], (UpdateInfo, T)](
+  initialValue, param, name, internal, {x => x.value}, true) {
+
+  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
+    this(new UpdateTracking(initialValue),
+      new ConsistentAccumulatorParam(param), name, false)
+  }
+
+  def this(initialValue: T, param: AccumulatorParam[T]) = {
+    this(initialValue, param, None)
+  }
+}
+
+
 /**
  * A simpler version of [[org.apache.spark.AccumulableParam]] where the only data type you can add
  * in is the same type as the accumulated value. An implicit AccumulatorParam object needs to be
@@ -314,6 +407,59 @@ object AccumulatorParam {
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 }
 
+/**
+ * A consistent wrapper of [[org.apache.spark.AccumulatorParam]] where we keep track of
+ * RDD/partitions which have already been processed
+ *
+ * @tparam T type of value to accumulate
+ */
+class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
+    extends AccumulableParam[UpdateTracking[T], (UpdateInfo, T)] {
+
+  /**
+   * Add additional value to the current accumulator. No consistency checking is perford at this
+   * stage as addAccumulator may be called multiple times inside
+   * the partition.
+   *
+   * @param r the current value of the accumulator
+   * @param t the data to be added to the accumulator
+   * @return the new value of the accumulator
+   */
+  def addAccumulator(r: UpdateTracking[T], t: (UpdateInfo, T)): UpdateTracking[T] = {
+    val v = r.pending.get(t._1).map(
+      accumulatorParam.addAccumulator(_, t._2)
+    ).getOrElse(t._2)
+    r.pending(t._1) = v
+    r.value = t._2
+    r
+  }
+
+  /**
+   * Merge pending updates into the current accumulator.
+   * Checks to make sure that each pending update has not
+   * already been processed before updating.
+   *
+   * @param r1 local source of accumulated
+   * @param r2 set pending updates
+   * @return both data sets merged together
+   */
+  def addInPlace(r1: UpdateTracking[T], r2: UpdateTracking[T]): UpdateTracking[T] = {
+    r2.pending.foreach{case (UpdateInfo(rddId, partitionId), v) =>
+      val partitions = r1.processed.getOrElseUpdate(rddId, new mutable.BitSet())
+      if (!partitions.contains(partitionId)) {
+        partitions += partitionId
+        r1.value = accumulatorParam.addInPlace(r1.value, v)
+      }
+    }
+    r1
+  }
+
+  def zero(initialValue: UpdateTracking[T]): UpdateTracking[T] = {
+    new UpdateTracking(accumulatorParam.zero(initialValue.value))
+  }
+}
+
+
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
 private[spark] object Accumulators extends Logging {
@@ -322,7 +468,7 @@ private[spark] object Accumulators extends Logging {
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
    */
-  val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
+  val originals = mutable.Map[Long, WeakReference[GenericAccumulable[_, _, _]]]()
 
   private var lastId: Long = 0
 
@@ -331,8 +477,8 @@ private[spark] object Accumulators extends Logging {
     lastId
   }
 
-  def register(a: Accumulable[_, _]): Unit = synchronized {
-    originals(a.id) = new WeakReference[Accumulable[_, _]](a)
+  def register(a: GenericAccumulable[_, _, _]): Unit = synchronized {
+    originals(a.id) = new WeakReference[GenericAccumulable[_, _, _]](a)
   }
 
   def remove(accId: Long) {
@@ -348,7 +494,7 @@ private[spark] object Accumulators extends Logging {
         // Since we are now storing weak references, we must check whether the underlying data
         // is valid.
         originals(id).get match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
+          case Some(accum) => accum.asInstanceOf[GenericAccumulable[Any, Any, Any]] ++= value
           case None =>
             throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
         }

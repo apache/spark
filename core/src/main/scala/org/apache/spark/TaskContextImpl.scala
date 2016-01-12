@@ -92,9 +92,10 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  @transient private val accumulators = new HashMap[Long, Accumulable[_, _]]
+  @transient private val accumulators = new HashMap[Long, GenericAccumulable[_, _, _]]
 
-  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = synchronized {
+  private[spark] override def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit =
+    synchronized {
     accumulators(a.id) = a
   }
 
@@ -102,8 +103,10 @@ private[spark] class TaskContextImpl(
     accumulators.filter(_._2.isInternal).mapValues(_.localValue).toMap
   }
 
-  private[spark] override def collectAccumulators(): Map[Long, Any] = synchronized {
-    accumulators.mapValues(_.localValue).toMap
+  private[spark] override def collectAccumulators(includeConsistent: Boolean): Map[Long, Any] =
+    synchronized {
+    accumulators.filter(acc => includeConsistent || !acc._2.isConsistent).
+      mapValues(_.localValue).toMap
   }
 
   private[spark] override val internalMetricsToAccumulators: Map[String, Accumulator[Long]] = {

@@ -165,7 +165,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null, accums)
     val internalMetricsToAccums = taskContext.internalMetricsToAccumulators
     val collectedInternalAccums = taskContext.collectInternalAccumulators()
-    val collectedAccums = taskContext.collectAccumulators()
+    val collectedAccums = taskContext.collectAccumulators(true)
     assert(internalMetricsToAccums.size > 0)
     assert(internalMetricsToAccums.values.forall(_.isInternal))
     assert(internalMetricsToAccums.contains(TEST_ACCUMULATOR))

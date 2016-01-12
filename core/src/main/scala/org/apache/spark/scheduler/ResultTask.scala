@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A task that sends back the output to the driver application.
@@ -53,7 +54,7 @@ private[spark] class ResultTask[T, U](
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
-  override def runTask(context: TaskContext): U = {
+  override def runTask(context: TaskContext): (U, Boolean) = {
     // Deserialize the RDD and the func using the broadcast variables.
     val deserializeStartTime = System.currentTimeMillis()
     val ser = SparkEnv.get.closureSerializer.newInstance()
@@ -62,7 +63,10 @@ private[spark] class ResultTask[T, U](
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
 
     metrics = Some(context.taskMetrics)
-    func(context, rdd.iterator(partition, context))
+    val itr = rdd.iterator(partition, context)
+    val result = func(context, itr)
+    val computedFullPartition = itr.isEmpty || rdd.getStorageLevel != StorageLevel.NONE
+    (result, computedFullPartition)
   }
 
   // This is only callable on the driver side.

@@ -158,7 +158,7 @@ abstract class TaskContext extends Serializable {
    * Register an accumulator that belongs to this task. Accumulators must call this method when
    * deserializing in executors.
    */
-  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
+  private[spark] def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit
 
   /**
    * Return the local values of internal accumulators that belong to this task. The key of the Map
@@ -169,11 +169,14 @@ abstract class TaskContext extends Serializable {
   /**
    * Return the local values of accumulators that belong to this task. The key of the Map is the
    * accumulator id and the value of the Map is the latest accumulator local value.
+   * @param includeConsistent if we should include consistent accumulators.
+   * If we didn't process the full partition should be false.
    */
-  private[spark] def collectAccumulators(): Map[Long, Any]
+  private[spark] def collectAccumulators(includeConsistent: Boolean): Map[Long, Any]
 
   /**
    * Accumulators for tracking internal metrics indexed by the name.
    */
   private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
+
 }
