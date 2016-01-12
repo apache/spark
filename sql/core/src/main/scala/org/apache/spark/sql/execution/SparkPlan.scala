@@ -107,10 +107,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
 
-      // Whole stage codegen is only used when there are at least two levels of operators that
-      // support it (save at least one projection/iterator).
-      if (sqlContext.conf.wholeStageEnabled &&
-        supportCodeGen && children.exists(_.supportCodeGen)) {
+      if (sqlContext.conf.wholeStageEnabled && supportCodeGen
+        // Expression with CodegenFallback does not work with whole stage codegen
+        && !expressions.exists(_.find(_.isInstanceOf[CodegenFallback]).isDefined)
+        // Whole stage codegen is only used when there are at least two levels of operators that
+        // support it (save at least one projection/iterator).
+        && children.exists(_.supportCodeGen)) {
         try {
           doCodeGen()
         } catch {

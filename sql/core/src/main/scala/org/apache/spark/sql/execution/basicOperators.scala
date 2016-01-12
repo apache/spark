@@ -186,21 +186,29 @@ case class Range(
     } else {
       s"$number > $partitionEnd"
     }
-    
-    // fetch the first number from RDD, then generate following nubmers using codegen
+
+    val rdd = sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
+      .map(i => InternalRow(i))
+
     ctx.currentVars = Array(ev)
     val code = s"""
       | if (!$initTerm) {
       |   if (input.hasNext()) {
-      |     $number = ((InternalRow) input.next()).getLong(0);
-
-      |     // This is crazy, should not be this complicated
-      |     $BigInt v = $BigInt.valueOf(($number - ${start}L) / ${step}L);
+      |     $BigInt index = $BigInt.valueOf(((InternalRow) input.next()).getInt(0));
       |     $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
       |     $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
       |     $BigInt step = $BigInt.valueOf(${step}L);
       |     $BigInt start = $BigInt.valueOf(${start}L);
-      |     $BigInt index = v.multiply(numSlice).divide(numElement);
+      |
+      |     $BigInt st = index.multiply(numElement).divide(numSlice).multiply(step).add(start);
+      |     if (st.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
+      |       $number = Long.MAX_VALUE;
+      |     } else if (st.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
+      |       $number = Long.MIN_VALUE;
+      |     } else {
+      |       $number = st.longValue();
+      |     }
+      |
       |     $BigInt end = index.add($BigInt.ONE).multiply(numElement).divide(numSlice)
       |       .multiply(step).add(start);
       |     if (end.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
@@ -225,7 +233,8 @@ case class Range(
       |  ${genNext(ctx, Seq(ev))}
       | }
      """.stripMargin
-    (doExecute(), code)
+
+    (rdd, code)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
