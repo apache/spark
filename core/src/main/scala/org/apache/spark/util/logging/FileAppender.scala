@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.logging
 
-import java.io.{IOException, File, FileOutputStream, InputStream}
+import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.{IntParam, Utils}
