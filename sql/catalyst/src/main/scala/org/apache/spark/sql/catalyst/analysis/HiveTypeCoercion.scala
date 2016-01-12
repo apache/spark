@@ -648,9 +648,7 @@ object HiveTypeCoercion {
               Seq(Cast(elseVal, commonType))
             case other => other
           }.reduce(_ ++ _)
-          c match {
-            case _: CaseWhen => CaseWhen(castedBranches)
-          }
+          CaseWhen(castedBranches)
         }.getOrElse(c)
     }
   }
