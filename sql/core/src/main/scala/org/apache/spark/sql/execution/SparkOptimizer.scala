@@ -15,22 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.optimizer._
 
-package object encoders {
-  /**
-   * Returns an internal encoder object that can be used to serialize / deserialize JVM objects
-   * into Spark SQL rows.  The implicit encoder should always be unresolved (i.e. have no attribute
-   * references from a specific schema.)  This requirement allows us to preserve whether a given
-   * object type is being bound by name or by ordinal when doing resolution.
-   */
-  private[sql] def encoderFor[A: Encoder]: ExpressionEncoder[A] = implicitly[Encoder[A]] match {
-    case e: ExpressionEncoder[A] =>
-      e.assertUnresolved()
-      e
-    case _ => sys.error(s"Only expression encoders are supported today")
-  }
+class SparkOptimizer(val sqlContext: SQLContext)
+    extends Optimizer {
+      override def batches: Seq[Batch] = super.batches :+ Batch(
+        "User Provided Optimizers", FixedPoint(100), sqlContext.experimental.extraOptimizations: _*)
 }

@@ -22,16 +22,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
-/* private[sql] */
-object CatalystQl {
+private[sql] object CatalystQl {
   val parser = new CatalystQl
   def parseExpression(sql: String): Expression = parser.parseExpression(sql)
   def parseTableIdentifier(sql: String): TableIdentifier = parser.parseTableIdentifier(sql)
@@ -49,7 +48,11 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
     }
   }
 
-  protected  def safeParse[T](sql: String, ast: ASTNode)(toResult: ASTNode => T): T = {
+  /**
+   * The safeParse method allows a user to focus on the parsing/AST transformation logic. This
+   * method will take care of possible errors during the parsing process.
+   */
+  protected def safeParse[T](sql: String, ast: ASTNode)(toResult: ASTNode => T): T = {
     try {
       toResult(ast)
     } catch {
