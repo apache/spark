@@ -2060,6 +2060,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
         'conn_type': [
             ('bigquery', 'BigQuery',),
             ('ftp', 'FTP',),
+            ('google_cloud_storage', 'Google Cloud Storage'),
             ('hdfs', 'HDFS',),
             ('http', 'HTTP',),
             ('hive_cli', 'Hive Client Wrapper',),
