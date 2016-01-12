@@ -1073,20 +1073,18 @@ class DAGScheduler(
   }
 
   /**
-   * Merge local values from a task into the corresponding accumulator previously
-   * registered here on the driver.
+   * Merge local values from a task into the corresponding accumulators previously registered
+   * here on the driver.
    */
   private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
     val stage = stageIdToStage(task.stageId)
-    var failedDuringThisOne: AccumulableInfo = null
     try {
       event.accumUpdates.foreach { ainfo =>
-        failedDuringThisOne = ainfo
-        val id = ainfo.id
         assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
+        val id = ainfo.id
         val partialValue = ainfo.update.get
-        // Find the previously registered accumulator and update it
+        // Find the corresponding accumulator on the driver and update it
         val acc: Accumulable[Any, Any] = Accumulators.get(id) match {
           case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
           case None =>
@@ -1119,25 +1117,23 @@ class DAGScheduler(
     val taskType = Utils.getFormattedClassName(task)
 
     // Note: the following events must occur in this order:
-    //   (1) Update accumulator values based on updates from this task
+    //   (1) Merge accumulator updates from this task
     //   (2) Reconstruct TaskMetrics
     //   (3) Post SparkListenerTaskEnd event
     //   (4) Post SparkListenerStageCompleted / SparkListenerJobEnd event
 
-    // Update accumulator values based on updates from this task. Note: we must do this before
-    // reconstructing TaskMetrics, otherwise the TaskMetrics will not have the updated metrics.
-    // This is needed for the SQL UI, for instance.
+    // Merge accumulator updates from this task. We must do this before reconstructing
+    // TaskMetrics or else the listeners downstream will not receive the most recent values.
     if (stageIdToStage.contains(stageId)) {
       val stage = stageIdToStage(stageId)
-      // We should should update registered accumulators if this task succeeded or failed with
-      // an exception. In the latter case executors may still send back some accumulators,
-      // so we should try our best to collect the values. TODO: write a test.
+      // We should do this if the task either succeeded or failed with an exception. In the
+      // latter case executors may still send back accumulator updates, so we should try our
+      // best to collect the values. TODO: write a test.
       val shouldUpdateAccums = event.reason match {
         case Success =>
           task match {
-            case rt: ResultTask[_, _] =>
-              // This being true means the job has not finished yet
-              stage.asInstanceOf[ResultStage].activeJob.isDefined
+            // This being true means the job has not finished yet
+            case rt: ResultTask[_, _] => stage.asInstanceOf[ResultStage].activeJob.isDefined
             case smt: ShuffleMapTask => true
           }
         case _: ExceptionFailure => true
@@ -1148,7 +1144,7 @@ class DAGScheduler(
       }
     }
 
-    // Reconstruct task metrics. Note: this may be null if the task failed.
+    // Reconstruct task metrics. Note: this may be null if the task has failed.
     val taskMetrics: TaskMetrics =
       if (event.accumUpdates.nonEmpty) {
         try {

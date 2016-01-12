@@ -57,9 +57,9 @@ private[spark] abstract class Task[T](
    * @return the result of the task along with updates of Accumulators.
    */
   final def run(
-    taskAttemptId: Long,
-    attemptNumber: Int,
-    metricsSystem: MetricsSystem): T = {
+      taskAttemptId: Long,
+      attemptNumber: Int,
+      metricsSystem: MetricsSystem): T = {
     context = new TaskContextImpl(
       stageId,
       partitionId,

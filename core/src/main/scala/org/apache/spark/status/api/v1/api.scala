@@ -178,11 +178,11 @@ class OutputMetrics private[spark](
     val recordsWritten: Long)
 
 class ShuffleReadMetrics private[spark](
-    val remoteBlocksFetched: Long,
-    val localBlocksFetched: Long,
+    val remoteBlocksFetched: Int,
+    val localBlocksFetched: Int,
     val fetchWaitTime: Long,
     val remoteBytesRead: Long,
-    val totalBlocksFetched: Long,
+    val totalBlocksFetched: Int,
     val recordsRead: Long)
 
 class ShuffleWriteMetrics private[spark](

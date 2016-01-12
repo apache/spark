@@ -716,8 +716,8 @@ private[spark] object JsonProtocol {
     // Shuffle read metrics
     Utils.jsonOption(json \ "Shuffle Read Metrics").foreach { readJson =>
       val readMetrics = metrics.registerTempShuffleReadMetrics()
-      readMetrics.setRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Long])
-      readMetrics.setLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Long])
+      readMetrics.setRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
+      readMetrics.setLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
       readMetrics.setRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
       readMetrics.setLocalBytesRead((readJson \ "Local Bytes Read").extractOpt[Long].getOrElse(0L))
       readMetrics.setFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])

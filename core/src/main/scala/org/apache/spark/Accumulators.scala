@@ -37,6 +37,10 @@ import org.apache.spark.util.Utils
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
  *
+ * All accumulators created on the driver to be used on the executors must be registered with
+ * [[Accumulators]]. This is already done automatically for accumulators created by the user.
+ * Internal accumulators must be explicitly registered by the caller.
+ *
  * Operations are not thread-safe.
  *
  * @param initialValue initial value of accumulator
@@ -77,9 +81,9 @@ class Accumulable[R, T] private[spark] (
   val zero = param.zero(initialValue)  // Zero value to be passed to executors
   private var deserialized = false
 
-  // In many places we create internal accumulators without registering them with the active
-  // context cleaner, so these accumulators are not automatically cleaned up. To avoid leaking
-  // map entries, we explicitly register these internal accumulators elsewhere.
+  // In many places we create internal accumulators without access to the active context cleaner,
+  // so if we register them here then we may never unregister these accumulators. To avoid memory
+  // leaks, we require the caller to explicitly register internal accumulators elsewhere.
   if (!internal) {
     Accumulators.register(this)
   }
@@ -371,6 +375,14 @@ private[spark] object Accumulators extends Logging {
     lastId
   }
 
+  /**
+   * Register an accumulator created on the driver such that it can be used on the executors.
+   *
+   * All accumulators registered here can later be used as a container for accumulating partial
+   * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
+   * Note: if an accumulator is registered here, it should also be registered with the active
+   * context cleaner for cleanup so as to avoid memory leaks.
+   */
   def register(a: Accumulable[_, _]): Unit = synchronized {
     originals(a.id) = new WeakReference[Accumulable[_, _]](a)
   }
@@ -487,8 +499,8 @@ private[spark] object InternalAccumulator {
    */
   def createShuffleReadAccums(): Seq[Accumulator[_]] = {
     Seq[Accumulator[_]](
-      newLongMetric(shuffleRead.REMOTE_BLOCKS_FETCHED),
-      newLongMetric(shuffleRead.LOCAL_BLOCKS_FETCHED),
+      newIntMetric(shuffleRead.REMOTE_BLOCKS_FETCHED),
+      newIntMetric(shuffleRead.LOCAL_BLOCKS_FETCHED),
       newLongMetric(shuffleRead.REMOTE_BYTES_READ),
       newLongMetric(shuffleRead.LOCAL_BYTES_READ),
       newLongMetric(shuffleRead.FETCH_WAIT_TIME),
@@ -546,6 +558,13 @@ private[spark] object InternalAccumulator {
    */
   private def newMetric[T](initialValue: T, name: String, param: AccumulatorParam[T]) = {
     new Accumulator[T](initialValue, param, Some(name), internal = true, countFailedValues = true)
+  }
+
+  /**
+   * Create a new Long accumulator representing an internal task metric.
+   */
+  private def newIntMetric(name: String): Accumulator[Int] = {
+    newMetric[Int](0, name, IntAccumulatorParam)
   }
 
   /**

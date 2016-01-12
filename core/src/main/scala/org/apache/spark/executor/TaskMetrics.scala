@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
@@ -36,8 +37,9 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * to the driver when the task completes. These values are then merged into the corresponding
  * accumulator previously registered on the driver.
  *
- * These accumulator updates are also sent to the driver periodically (on executor heartbeat)
- * or when the task failed with an exception.
+ * The accumulator updates are also sent to the driver periodically (on executor heartbeat)
+ * and when the task failed with an exception. The [[TaskMetrics]] object itself should never
+ * be sent to the driver directly.
  *
  * @param initialAccums the initial set of accumulators that this [[TaskMetrics]] depends on.
  *                      Each accumulator in this initial set must be named and marked as internal.
@@ -63,17 +65,18 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
    * A map for quickly accessing the initial set of accumulators by name.
    */
   private val initialAccumsMap: Map[String, Accumulator[_]] = {
-    initialAccums.map { a =>
-      assert(a.name.isDefined, "initial accumulators passed to TaskMetrics should be named")
+    val map = new mutable.HashMap[String, Accumulator[_]]
+    initialAccums.foreach { a =>
+      assert(a.name.isDefined, "initial accumulators passed to TaskMetrics must be named")
       val name = a.name.get
       assert(a.isInternal,
-        s"initial accumulator '$name' passed to TaskMetrics should be marked as internal")
-      (name, a)
-    }.toMap
+        s"initial accumulator '$name' passed to TaskMetrics must be marked as internal")
+      assert(!map.contains(name),
+        s"detected duplicate accumulator name '$name' when constructing TaskMetrics")
+      map(name) = a
+    }
+    map.toMap
   }
-
-  assert(initialAccumsMap.size == initialAccums.size, s"detected duplicate names in initial " +
-    s"accumulators passed to TaskMetrics:\n ${initialAccums.map(_.name.get).mkString("\n")}")
 
   // Each metric is internally represented as an accumulator
   private val _executorDeserializeTime = getAccum(EXECUTOR_DESERIALIZE_TIME)
@@ -258,8 +261,9 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   /**
    * Create a temporary [[ShuffleReadMetrics]] for a particular shuffle dependency.
    *
-   * All usages are expected to be followed by a call to [[mergeShuffleReadMetrics]],
-   * which merges the temporary values synchronously.
+   * All usages are expected to be followed by a call to [[mergeShuffleReadMetrics]], which
+   * merges the temporary values synchronously. Otherwise, all temporary data collected will
+   * be lost.
    */
   private[spark] def registerTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
     val readMetrics = new ShuffleReadMetrics
@@ -312,27 +316,25 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
     new AccumulableInfo(a.id, a.name.orNull, Some(a.localValue), None, a.isInternal)
   }
 
-  /**
-   * Return whether some accumulators with the given prefix have already been set.
-   * This only considers the initial set of accumulators passed into the constructor.
-   */
-  private def accumsAlreadySet(prefix: String): Boolean = {
-    initialAccumsMap.filterKeys(_.startsWith(prefix)).values.exists { a => a.localValue != a.zero }
-  }
-
   // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.
   // If so, initialize all relevant metrics classes so listeners can access them downstream.
-  if (accumsAlreadySet(SHUFFLE_READ_METRICS_PREFIX)) {
-    _shuffleReadMetrics = Some(new ShuffleReadMetrics(initialAccumsMap))
-  }
-  if (accumsAlreadySet(SHUFFLE_WRITE_METRICS_PREFIX)) {
-    _shuffleWriteMetrics = Some(new ShuffleWriteMetrics(initialAccumsMap))
-  }
-  if (accumsAlreadySet(OUTPUT_METRICS_PREFIX)) {
-    _outputMetrics = Some(new OutputMetrics(initialAccumsMap))
-  }
-  if (accumsAlreadySet(INPUT_METRICS_PREFIX)) {
-    _inputMetrics = Some(new InputMetrics(initialAccumsMap))
+  {
+    var (hasShuffleRead, hasShuffleWrite, hasInput, hasOutput) = (false, false, false, false)
+    initialAccums
+      .filter { a => a.localValue != a.zero }
+      .map { a =>
+        a.name.get match {
+          case sr if sr.startsWith(SHUFFLE_READ_METRICS_PREFIX) => hasShuffleRead = true
+          case sw if sw.startsWith(SHUFFLE_WRITE_METRICS_PREFIX) => hasShuffleWrite = true
+          case in if in.startsWith(INPUT_METRICS_PREFIX) => hasInput = true
+          case out if out.startsWith(OUTPUT_METRICS_PREFIX) => hasOutput = true
+          case _ =>
+        }
+      }
+    if (hasShuffleRead) { _shuffleReadMetrics = Some(new ShuffleReadMetrics(initialAccumsMap)) }
+    if (hasShuffleWrite) { _shuffleWriteMetrics = Some(new ShuffleWriteMetrics(initialAccumsMap)) }
+    if (hasInput) { _inputMetrics = Some(new InputMetrics(initialAccumsMap)) }
+    if (hasOutput) { _outputMetrics = Some(new OutputMetrics(initialAccumsMap)) }
   }
 
 }

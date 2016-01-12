@@ -35,7 +35,7 @@ object DataReadMethod extends Enumeration with Serializable {
 
 /**
  * :: DeveloperApi ::
- * Metrics about reading input data.
+ * A collection of accumulators that represents metrics about reading data from external systems.
  */
 @DeveloperApi
 class InputMetrics private (

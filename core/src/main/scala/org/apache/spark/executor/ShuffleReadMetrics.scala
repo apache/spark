@@ -23,12 +23,12 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Metrics pertaining to shuffle data read in a given task.
+ * A collection of accumulators that represent metrics about reading shuffle data.
  */
 @DeveloperApi
 class ShuffleReadMetrics private (
-    _remoteBlocksFetched: Accumulator[Long],
-    _localBlocksFetched: Accumulator[Long],
+    _remoteBlocksFetched: Accumulator[Int],
+    _localBlocksFetched: Accumulator[Int],
     _remoteBytesRead: Accumulator[Long],
     _localBytesRead: Accumulator[Long],
     _fetchWaitTime: Accumulator[Long],
@@ -37,8 +37,8 @@ class ShuffleReadMetrics private (
 
   private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
     this(
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.REMOTE_BLOCKS_FETCHED),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.LOCAL_BLOCKS_FETCHED),
+      TaskMetrics.getAccum[Int](accumMap, InternalAccumulator.shuffleRead.REMOTE_BLOCKS_FETCHED),
+      TaskMetrics.getAccum[Int](accumMap, InternalAccumulator.shuffleRead.LOCAL_BLOCKS_FETCHED),
       TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.REMOTE_BYTES_READ),
       TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.LOCAL_BYTES_READ),
       TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.FETCH_WAIT_TIME),
@@ -52,7 +52,8 @@ class ShuffleReadMetrics private (
    * many places only to merge their values together later. In the future, we should revisit
    * whether this is needed.
    *
-   * A better alternative is [[TaskMetrics.registerTempShuffleReadMetrics]].
+   * A better alternative is [[TaskMetrics.registerTempShuffleReadMetrics]] followed by
+   * [[TaskMetrics.mergeShuffleReadMetrics]].
    */
   private[spark] def this() {
     this(InternalAccumulator.createShuffleReadAccums().map { a => (a.name.get, a) }.toMap)
@@ -61,12 +62,12 @@ class ShuffleReadMetrics private (
   /**
    * Number of remote blocks fetched in this shuffle by this task.
    */
-  def remoteBlocksFetched: Long = _remoteBlocksFetched.localValue
+  def remoteBlocksFetched: Int = _remoteBlocksFetched.localValue
 
   /**
    * Number of local blocks fetched in this shuffle by this task.
    */
-  def localBlocksFetched: Long = _localBlocksFetched.localValue
+  def localBlocksFetched: Int = _localBlocksFetched.localValue
 
   /**
    * Total number of remote bytes read from the shuffle by this task.
@@ -98,17 +99,17 @@ class ShuffleReadMetrics private (
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local).
    */
-  def totalBlocksFetched: Long = remoteBlocksFetched + localBlocksFetched
+  def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
 
-  private[spark] def incRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched.add(v)
-  private[spark] def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.add(v)
+  private[spark] def incRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched.add(v)
+  private[spark] def incLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.add(v)
   private[spark] def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead.add(v)
   private[spark] def incLocalBytesRead(v: Long): Unit = _localBytesRead.add(v)
   private[spark] def incFetchWaitTime(v: Long): Unit = _fetchWaitTime.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
 
-  private[spark] def setRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched.setValue(v)
-  private[spark] def setLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.setValue(v)
+  private[spark] def setRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched.setValue(v)
+  private[spark] def setLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.setValue(v)
   private[spark] def setRemoteBytesRead(v: Long): Unit = _remoteBytesRead.setValue(v)
   private[spark] def setLocalBytesRead(v: Long): Unit = _localBytesRead.setValue(v)
   private[spark] def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.setValue(v)

@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Metrics pertaining to shuffle data written in a given task.
+ * A collection of accumulators that represent metrics about writing shuffle data.
  */
 @DeveloperApi
 class ShuffleWriteMetrics private (

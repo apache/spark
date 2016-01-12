@@ -34,7 +34,7 @@ object DataWriteMethod extends Enumeration with Serializable {
 
 /**
  * :: DeveloperApi ::
- * Metrics about writing output data.
+ * A collection of accumulators that represents metrics about writing data to external systems.
  */
 @DeveloperApi
 class OutputMetrics private (
@@ -61,7 +61,7 @@ class OutputMetrics private (
   def recordsWritten: Long = _recordsWritten.localValue
 
   /**
-   * The source to which this task writes its input.
+   * The source to which this task writes its output.
    */
   def writeMethod: DataWriteMethod.Value = DataWriteMethod.withName(_writeMethod.localValue)
 
