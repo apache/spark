@@ -20,17 +20,16 @@ package org.apache.spark.sql
 import java.lang.Thread.UncaughtExceptionHandler
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder, encoderFor}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-
-import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -297,7 +296,10 @@ trait StreamTest extends QueryTest with Timeouts {
    * @param addData and add data action that adds the given numbers to the stream, encoding them
    *                as needed
    */
-  def createStressTest(ds: Dataset[Int], addData: Seq[Int] => StreamAction): Unit = {
+  def createStressTest(
+      ds: Dataset[Int],
+      addData: Seq[Int] => StreamAction,
+      iterations: Int = 500): Unit = {
     implicit val intEncoder = ExpressionEncoder[Int]
     var dataPos = 0
     var running = true
@@ -305,15 +307,20 @@ trait StreamTest extends QueryTest with Timeouts {
 
     def addCheck() = { actions += CheckAnswer(1 to dataPos: _*) }
 
-    (1 to 500).foreach { i =>
+    def addRandomData() = {
+      val numItems = Random.nextInt(10)
+      val data = dataPos until (dataPos + numItems)
+      dataPos += numItems
+      actions += addData(data)
+    }
+
+    (1 to iterations).foreach { i =>
       val rand = Random.nextDouble()
       if(!running) {
         rand match {
           case r if r < 0.7 => // AddData
-            val numItems = Random.nextInt(10)
-            val data = dataPos until (dataPos + numItems)
-            dataPos += numItems
-            actions += addData(data)
+            addRandomData()
+
           case _ => // StartStream
             actions += StartStream
             running = true
@@ -324,10 +331,7 @@ trait StreamTest extends QueryTest with Timeouts {
             addCheck()
 
           case r if r < 0.7 => // AddData
-            val numItems = Random.nextInt(10)
-            val data = dataPos until (dataPos + numItems)
-            dataPos += numItems
-            actions += addData(data)
+            addRandomData()
 
           case _ => // StartStream
             actions += StopStream

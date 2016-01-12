@@ -33,22 +33,68 @@ trait OffsetSuite extends SparkFunSuite {
       assert(two >= one)
       assert(one >= one)
       assert(one == one)
+      assert(two == two)
+      assert(one != two)
+      assert(two != one)
+    }
+  }
+
+  /** Creates test to check that non-equality comparisons throw exception. */
+  def compareInvalid(one: Offset, two: Offset): Unit = {
+    test(s"invalid comparison $one <=> $two") {
+      intercept[IllegalArgumentException] {
+        assert(one < two)
+      }
+
+      intercept[IllegalArgumentException] {
+        assert(one <= two)
+      }
+
+      intercept[IllegalArgumentException] {
+        assert(one > two)
+      }
+
+      intercept[IllegalArgumentException] {
+        assert(one >= two)
+      }
+
+      assert(!(one == two))
+      assert(!(two == one))
+      assert(one != two)
+      assert(two != one)
     }
   }
 }
 
 class LongOffsetSuite extends OffsetSuite {
-  val one = new LongOffset(1)
-  val two = new LongOffset(2)
+  val one = LongOffset(1)
+  val two = LongOffset(2)
   compare(one, two)
 }
 
 class CompositeOffsetSuite extends OffsetSuite {
   compare(
-    one = CompositeOffset(Some(new LongOffset(1)) :: Nil),
-    two = CompositeOffset(Some(new LongOffset(2)) :: Nil))
+    one = CompositeOffset(Some(LongOffset(1)) :: Nil),
+    two = CompositeOffset(Some(LongOffset(2)) :: Nil))
 
   compare(
     one = CompositeOffset(None :: Nil),
-    two = CompositeOffset(Some(new LongOffset(2)) :: Nil))
+    two = CompositeOffset(Some(LongOffset(2)) :: Nil))
+
+  compareInvalid(                                               // sizes must be same
+    one = CompositeOffset(Nil),
+    two = CompositeOffset(Some(LongOffset(2)) :: Nil))
+
+  compare(
+    one = CompositeOffset.fill(LongOffset(0), LongOffset(1)),
+    two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
+
+  compare(
+    one = CompositeOffset.fill(LongOffset(1), LongOffset(1)),
+    two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
+
+  compareInvalid(
+    one = CompositeOffset.fill(LongOffset(2), LongOffset(1)),   // vector time inconsistent
+    two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
 }
+

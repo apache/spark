@@ -20,8 +20,8 @@ package org.apache.spark.streaming.kafka
 import java.io.File
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
+import java.util.concurrent.{TimeUnit, TimeoutException}
 import java.util.{Map => JMap, Properties}
-import java.util.concurrent.TimeoutException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -30,16 +30,17 @@ import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
 import kafka.api.Request
-import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
-import kafka.serializer.StringEncoder
+import kafka.common.TopicAndPartition
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
+import org.apache.kafka.clients.producer._
+import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -153,9 +154,15 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
-    AdminUtils.createTopic(zkClient, topic, 1, 1)
+    createTopic(topic, 1)
+  }
+
+  def createTopic(topic: String, partitions: Int): Unit = {
+    AdminUtils.createTopic(zkClient, topic, partitions, 1)
     // wait until metadata is propagated
-    waitUntilMetadataIsPropagated(topic, 0)
+    for (p <- 0 until partitions) {
+      waitUntilMetadataIsPropagated(topic, p)
+    }
   }
 
   /** Java-friendly function for sending messages to the Kafka broker */
@@ -170,11 +177,29 @@ private[kafka] class KafkaTestUtils extends Logging {
   }
 
   /** Send the array of messages to the Kafka broker */
-  def sendMessages(topic: String, messages: Array[String]): Unit = {
-    producer = new Producer[String, String](new ProducerConfig(producerConfiguration))
-    producer.send(messages.map { new KeyedMessage[String, String](topic, _ ) }: _*)
-    producer.close()
-    producer = null
+  def sendMessages(topic: String, messages: Array[String]): Seq[(String, RecordMetadata)] = {
+    producer = new KafkaProducer[String, String](producerConfiguration)
+    val offsets = try {
+      messages.map { m =>
+        val metadata =
+          producer.send(new ProducerRecord[String, String](topic, m)).get(10, TimeUnit.SECONDS)
+        (m, metadata)
+      }
+    } finally {
+      if (producer != null) {
+        producer.close()
+        producer = null
+      }
+    }
+    offsets
+  }
+
+  /** Get the latest offset of all the partitions in a topic */
+  def getLatestOffsets(topics: Set[String]): Map[TopicAndPartition, Long] = {
+    val kc = new KafkaCluster(Map("metadata.broker.list" -> brokerAddress))
+    val topicPartitions = kc.getPartitions(topics).right.get
+    val offsets = kc.getLatestLeaderOffsets(topicPartitions).right.get
+    offsets.mapValues(_.offset)
   }
 
   private def brokerConfiguration: Properties = {
@@ -191,10 +216,11 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   private def producerConfiguration: Properties = {
     val props = new Properties()
-    props.put("metadata.broker.list", brokerAddress)
-    props.put("serializer.class", classOf[StringEncoder].getName)
+    props.put("bootstrap.servers", brokerAddress)
+    props.put("value.serializer", classOf[StringSerializer].getName)
+    props.put("key.serializer", classOf[StringSerializer].getName)
     // wait for all in-sync replicas to ack sends
-    props.put("request.required.acks", "-1")
+    props.put("acks", "-1")
     props
   }
 

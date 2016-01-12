@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.util.Try
+
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
@@ -34,13 +36,15 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
         case (None, None) => 0
         case (None, _) => -1
         case (_, None) => 1
-       }
-      val signs = comparisons.map(sign).distinct
-      if (signs.size != 1) {
-        throw new IllegalArgumentException(
-          s"Invalid comparison between non-linear histories: $this <=> $other")
       }
-      signs.head
+      val nonZeroSigns = comparisons.map(sign).filter(_ != 0).toSet
+      nonZeroSigns.size match {
+        case 0 => 0                       // if both empty or only 0s
+        case 1 => nonZeroSigns.head       // if there are only (0s and 1s) or (0s and -1s)
+        case _ =>                         // there are both 1s and -1s
+          throw new IllegalArgumentException(
+            s"Invalid comparison between non-linear histories: $this <=> $other")
+      }
     case _ =>
       throw new IllegalArgumentException(s"Cannot compare $this <=> $other")
   }
@@ -49,5 +53,15 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
     case i if i < 0 => -1
     case i if i == 0 => 0
     case i if i > 0 => 1
+  }
+}
+
+object CompositeOffset {
+  /**
+   * Returns a [[CompositeOffset]] with a variable sequence of offsets.
+   * `nulls` in the sequence are converted to `None`s.
+   */
+  def fill(offsets: Offset*): CompositeOffset = {
+    CompositeOffset(offsets.map(Option(_)))
   }
 }
