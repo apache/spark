@@ -66,12 +66,11 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
           try {
             n = inputStream.read(buf)
           } catch {
-            case e: IOException =>
-              // An InputStream can throw IOException during read if the stream is closed
-              // asynchronously, so once appender has been flagged to stop these will be ignored
-              if (!markedForStop) throw e
+            // An InputStream can throw IOException during read if the stream is closed
+            // asynchronously, so once appender has been flagged to stop these will be ignored
+            case e: IOException if markedForStop =>  // do nothing and proceed to stop appending
           }
-          if (n != -1) {
+          if (n > 0) {
             appendToFile(buf, n)
           }
         }
