@@ -23,8 +23,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
@@ -86,7 +86,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       DistinctAggregationRewriter(conf) ::
       HiveTypeCoercion.typeCoercionRules ++
-      extendedResolutionRules : _*),
+      extendedResolutionRules: _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -112,7 +112,7 @@ class Analyzer(
         // Taking into account the reasonableness and the implementation complexity,
         // here use the CTE definition first, check table name only and ignore database name
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
-        case u : UnresolvedRelation =>
+        case u: UnresolvedRelation =>
           val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
             val withAlias = u.alias.map(Subquery(_, relation))
             withAlias.getOrElse(relation)
@@ -1114,7 +1114,7 @@ class Analyzer(
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
           // a WindowFunction).
-          case wf : WindowFunction =>
+          case wf: WindowFunction =>
             val newChildren = wf.children.map(extractExpr)
             wf.withNewChildren(newChildren)
 

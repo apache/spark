@@ -21,13 +21,17 @@ import java.sql.{Date, Timestamp}
 
 import org.json4s.JsonAST._
 
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
 object Literal {
+  val TrueLiteral: Literal = Literal(true, BooleanType)
+
+  val FalseLiteral: Literal = Literal(false, BooleanType)
+
   def apply(v: Any): Literal = v match {
     case i: Int => Literal(i, IntegerType)
     case l: Long => Literal(l, LongType)

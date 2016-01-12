@@ -58,9 +58,9 @@ import org.apache.spark.util.{AsynchronousListenerBus, CallSite, ShutdownHookMan
  * of the context by `stop()` or by an exception.
  */
 class StreamingContext private[streaming] (
-    sc_ : SparkContext,
-    cp_ : Checkpoint,
-    batchDur_ : Duration
+    _sc: SparkContext,
+    _cp: Checkpoint,
+    _batchDur: Duration
   ) extends Logging {
 
   /**
@@ -126,18 +126,18 @@ class StreamingContext private[streaming] (
   }
 
 
-  if (sc_ == null && cp_ == null) {
+  if (_sc == null && _cp == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")
   }
 
-  private[streaming] val isCheckpointPresent = (cp_ != null)
+  private[streaming] val isCheckpointPresent = (_cp != null)
 
   private[streaming] val sc: SparkContext = {
-    if (sc_ != null) {
-      sc_
+    if (_sc != null) {
+      _sc
     } else if (isCheckpointPresent) {
-      SparkContext.getOrCreate(cp_.createSparkConf())
+      SparkContext.getOrCreate(_cp.createSparkConf())
     } else {
       throw new SparkException("Cannot create StreamingContext without a SparkContext")
     }
@@ -154,13 +154,13 @@ class StreamingContext private[streaming] (
 
   private[streaming] val graph: DStreamGraph = {
     if (isCheckpointPresent) {
-      cp_.graph.setContext(this)
-      cp_.graph.restoreCheckpointData()
-      cp_.graph
+      _cp.graph.setContext(this)
+      _cp.graph.restoreCheckpointData()
+      _cp.graph
     } else {
-      require(batchDur_ != null, "Batch duration for StreamingContext cannot be null")
+      require(_batchDur != null, "Batch duration for StreamingContext cannot be null")
       val newGraph = new DStreamGraph()
-      newGraph.setBatchDuration(batchDur_)
+      newGraph.setBatchDuration(_batchDur)
       newGraph
     }
   }
@@ -169,15 +169,15 @@ class StreamingContext private[streaming] (
 
   private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
-      sc.setCheckpointDir(cp_.checkpointDir)
-      cp_.checkpointDir
+      sc.setCheckpointDir(_cp.checkpointDir)
+      _cp.checkpointDir
     } else {
       null
     }
   }
 
   private[streaming] val checkpointDuration: Duration = {
-    if (isCheckpointPresent) cp_.checkpointDuration else graph.batchDuration
+    if (isCheckpointPresent) _cp.checkpointDuration else graph.batchDuration
   }
 
   private[streaming] val scheduler = new JobScheduler(this)
@@ -246,7 +246,7 @@ class StreamingContext private[streaming] (
   }
 
   private[streaming] def initialCheckpoint: Checkpoint = {
-    if (isCheckpointPresent) cp_ else null
+    if (isCheckpointPresent) _cp else null
   }
 
   private[streaming] def getNewInputStreamId() = nextInputStreamId.getAndIncrement()
@@ -460,7 +460,7 @@ class StreamingContext private[streaming] (
   def binaryRecordsStream(
       directory: String,
       recordLength: Int): DStream[Array[Byte]] = withNamedScope("binary records stream") {
-    val conf = sc_.hadoopConfiguration
+    val conf = _sc.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
       directory, FileInputDStream.defaultFilter: Path => Boolean, newFilesOnly = true, conf)

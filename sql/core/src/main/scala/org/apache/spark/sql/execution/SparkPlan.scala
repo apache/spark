@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future, ExecutionContext}
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}

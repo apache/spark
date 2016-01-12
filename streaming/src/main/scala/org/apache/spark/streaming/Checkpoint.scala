@@ -27,8 +27,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.Utils
 import org.apache.spark.streaming.scheduler.JobGenerator
+import org.apache.spark.util.Utils
 
 private[streaming]
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
@@ -183,7 +183,7 @@ class CheckpointWriter(
   val executor = Executors.newFixedThreadPool(1)
   val compressionCodec = CompressionCodec.createCodec(conf)
   private var stopped = false
-  private var fs_ : FileSystem = _
+  private var _fs: FileSystem = _
 
   @volatile private var latestCheckpointTime: Time = null
 
@@ -298,12 +298,12 @@ class CheckpointWriter(
   }
 
   private def fs = synchronized {
-    if (fs_ == null) fs_ = new Path(checkpointDir).getFileSystem(hadoopConf)
-    fs_
+    if (_fs == null) _fs = new Path(checkpointDir).getFileSystem(hadoopConf)
+    _fs
   }
 
   private def reset() = synchronized {
-    fs_ = null
+    _fs = null
   }
 }
 
@@ -370,8 +370,8 @@ object CheckpointReader extends Logging {
 }
 
 private[streaming]
-class ObjectInputStreamWithLoader(inputStream_ : InputStream, loader: ClassLoader)
-  extends ObjectInputStream(inputStream_) {
+class ObjectInputStreamWithLoader(_inputStream: InputStream, loader: ClassLoader)
+  extends ObjectInputStream(_inputStream) {
 
   override def resolveClass(desc: ObjectStreamClass): Class[_] = {
     try {
