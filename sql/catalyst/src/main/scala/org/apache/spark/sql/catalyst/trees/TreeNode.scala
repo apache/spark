@@ -559,6 +559,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
     case _ => JNull
   }
+
+  /** Returns total number of tree nodes in this tree. */
+  def size: Int = 1 + children.map(_.size).sum
 }
 
 object TreeNode {

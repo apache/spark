@@ -63,6 +63,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      CNFNormalization,
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
@@ -612,6 +613,12 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
     }
+  }
+}
+
+object CNFNormalization extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, _) => f.copy(condition = Predicate.toCNF(condition, Some(10)))
   }
 }
 
