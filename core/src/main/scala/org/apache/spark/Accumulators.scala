@@ -315,9 +315,10 @@ case class UpdateInfo private[spark](val rddId: Int, splitId: Int)
  * before merging in each pending record, checked against processed.
  */
 private[spark] case class UpdateTracking[T](
-  pending: mutable.HashMap[UpdateInfo, T],
-  processed: mutable.HashMap[Int, mutable.BitSet],
+    pending: mutable.HashMap[UpdateInfo, T],
+    processed: mutable.HashMap[Int, mutable.BitSet],
   var value: T) extends Serializable {
+
   def this(value: T) = {
     this(new mutable.HashMap[UpdateInfo, T](), new mutable.HashMap[Int, mutable.BitSet](), value)
   }
