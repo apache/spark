@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.logging
 
-import java.io.{File, FileOutputStream, InputStream}
+import java.io.{IOException, File, FileOutputStream, InputStream}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.{IntParam, Utils}
@@ -58,20 +58,29 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
   protected def appendStreamToFile() {
     try {
       logDebug("Started appending thread")
-      openFile()
-      val buf = new Array[Byte](bufferSize)
-      var n = 0
-      while (!markedForStop && n != -1) {
-        n = inputStream.read(buf)
-        if (n != -1) {
-          appendToFile(buf, n)
+      Utils.tryWithSafeFinally {
+        openFile()
+        val buf = new Array[Byte](bufferSize)
+        var n = 0
+        while (!markedForStop && n != -1) {
+          try {
+            n = inputStream.read(buf)
+          } catch {
+            case e: IOException =>
+              // An InputStream can throw IOException during read if the stream is closed
+              // asynchronously, so once appender has been flagged to stop these will be ignored
+              if (!markedForStop) throw e
+          }
+          if (n != -1) {
+            appendToFile(buf, n)
+          }
         }
+      } {
+        closeFile()
       }
     } catch {
       case e: Exception =>
         logError(s"Error writing stream to file $file", e)
-    } finally {
-      closeFile()
     }
   }
 
