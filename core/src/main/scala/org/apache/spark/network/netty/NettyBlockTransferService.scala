@@ -25,7 +25,7 @@ import scala.concurrent.{Future, Promise}
 import io.netty.buffer._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
-import org.apache.spark.executor.{TransportMetrics, ExecutorMetrics}
+import org.apache.spark.executor.{ExecutorMetrics, TransportMetrics}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
@@ -36,7 +36,7 @@ import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.{Clock, Utils, SystemClock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
