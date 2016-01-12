@@ -236,7 +236,8 @@ nullCondition
 
 precedenceUnaryPrefixExpression
     :
-    (precedenceUnaryOperator^)* precedenceFieldExpression
+    (precedenceUnaryOperator+)=> precedenceUnaryOperator^ precedenceUnaryPrefixExpression
+    | precedenceFieldExpression
     ;
 
 precedenceUnarySuffixExpression
