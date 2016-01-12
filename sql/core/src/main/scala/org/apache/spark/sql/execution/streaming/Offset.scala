@@ -19,15 +19,14 @@ package org.apache.spark.sql.execution.streaming
 
 /**
  * A offset is a monotonically increasing metric used to track progress in the computation of a
- * stream. An [[Offset]] must be comparable.
+ * stream. An [[Offset]] must be comparable, and the result of `compareTo` must be consistent
+ * with `equals` and `hashcode`.
  */
 trait Offset extends Serializable {
 
   /**
    * Returns a negative integer, zero, or a positive integer as this object is less than, equal to,
-   * or greater than the specified object. Any error is comparison should be throw as
-   * `IllegalArgumentException`, so that operations like `equals` can catch it and handle it
-   * accordingly.
+   * or greater than the specified object.
    */
   def compareTo(other: Offset): Int
 
@@ -35,17 +34,4 @@ trait Offset extends Serializable {
   def <(other: Offset): Boolean = compareTo(other) < 0
   def <=(other: Offset): Boolean = compareTo(other) <= 0
   def >=(other: Offset): Boolean = compareTo(other) >= 0
-
-  override def equals(other: Any): Boolean = {
-    try {
-      other match {
-        case o: Offset => compareTo(o) == 0
-        case _ =>
-          false
-      }
-    } catch {
-      case e: IllegalArgumentException =>
-        false
-    }
-  }
 }
