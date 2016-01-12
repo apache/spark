@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe;
 
 import java.lang.reflect.Field;
+import java.nio.ByteOrder;
 
 import sun.misc.Unsafe;
 
@@ -33,11 +34,21 @@ public final class Platform {
 
   public static final int DOUBLE_ARRAY_OFFSET;
 
+  static final boolean littleEndian = ByteOrder.nativeOrder()
+      .equals(ByteOrder.LITTLE_ENDIAN);
+
+
   public static int getInt(Object object, long offset) {
+    if (littleEndian) {
+      return Integer.reverseBytes(_UNSAFE.getInt(object, offset));
+    }
     return _UNSAFE.getInt(object, offset);
   }
 
   public static void putInt(Object object, long offset, int value) {
+    if (littleEndian) {
+      value = Integer.reverseBytes(value);
+    }
     _UNSAFE.putInt(object, offset, value);
   }
 
@@ -58,18 +69,30 @@ public final class Platform {
   }
 
   public static short getShort(Object object, long offset) {
+    if (littleEndian) {
+      return Short.reverseBytes(_UNSAFE.getShort(object, offset));
+    }
     return _UNSAFE.getShort(object, offset);
   }
 
   public static void putShort(Object object, long offset, short value) {
+    if (littleEndian) {
+      value = Short.reverseBytes(value);
+    }
     _UNSAFE.putShort(object, offset, value);
   }
 
   public static long getLong(Object object, long offset) {
+    if (littleEndian) {
+      return Long.reverseBytes(_UNSAFE.getLong(object, offset));
+    }
     return _UNSAFE.getLong(object, offset);
   }
 
   public static void putLong(Object object, long offset, long value) {
+    if (littleEndian) {
+      value = Long.reverseBytes(value);
+    }
     _UNSAFE.putLong(object, offset, value);
   }
 
