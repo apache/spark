@@ -155,7 +155,8 @@ object MimaExcludes {
           "org.apache.spark.TaskContext.collectInternalAccumulators"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.TaskContext.collectAccumulators"),
-        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.this")
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.this"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulator.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
