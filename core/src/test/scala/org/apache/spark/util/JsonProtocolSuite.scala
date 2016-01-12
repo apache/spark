@@ -1681,6 +1681,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |}
     """
 
+  // scalastyle:off
   private val executorMetricsUpdateJsonString =
     s"""
       |{
@@ -1847,4 +1848,5 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  ]
       |}
     """.stripMargin
+  // scalastyle:on
 }

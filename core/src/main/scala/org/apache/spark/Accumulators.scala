@@ -25,7 +25,7 @@ import scala.ref.WeakReference
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.storage.{BlockStatus, BlockId}
+import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.Utils
 
 /**
@@ -439,6 +439,8 @@ private[spark] object InternalAccumulator {
   val UPDATED_BLOCK_STATUSES = METRICS_PREFIX + "updatedBlockStatuses"
   val TEST_ACCUM = METRICS_PREFIX + "testAccumulator"
 
+  // scalastyle:off
+
   // Names of shuffle read metrics
   object shuffleRead {
     val REMOTE_BLOCKS_FETCHED = SHUFFLE_READ_METRICS_PREFIX + "remoteBlocksFetched"
@@ -469,6 +471,8 @@ private[spark] object InternalAccumulator {
     val BYTES_READ = INPUT_METRICS_PREFIX + "bytesRead"
     val RECORDS_READ = INPUT_METRICS_PREFIX + "recordsRead"
   }
+
+  // scalastyle:on
 
   /**
    * Accumulators for tracking internal metrics.
