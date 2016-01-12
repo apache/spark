@@ -22,7 +22,7 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -46,7 +46,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
-      ReorderJoin,
+      ReorderInnerJoin,
+      ReorderOuterInnerJoin,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -762,7 +763,7 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
   *
   * The order of joins will not be changed if all of them already have at least one condition.
   */
-object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
+object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
     * Join a list of plans together and push down the conditions into them.
@@ -800,6 +801,49 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     case j @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       createOrderedJoin(input, conditions)
+  }
+}
+
+
+/**
+ * Reorder the adjacent outer and inner joins and push inner join through left/right outer join.
+ *
+ * Basic rules are based on associativity of outer and inner joins:
+ *   1. (R1 left R2 on p12) inner R3 on p13 = (R1 inner R3 on p13) left R2 on p12
+ *   2. (R1 right R2 on p12) inner R3 on p23 = R1 right (R2 inner R3 on p23) on p12
+ *      = (R2 inner R3 on p23) left R1 on p1 (<-- left deep tree is preferred)
+ *   3. R1 inner (R2 left R3 on p23) on p12 = (R1 inner R2 on p12) left R3 on p23
+ *   4. R1 inner (R2 right R3 on p23) on p13 = R2 right (R1 inner R3 on p13) on p23
+ *      = (R1 inner R3 on p13) left R2 on p23 (<-- left deep tree is preferred)
+ */
+object ReorderOuterInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    case j @ Join(left @ Join(ll, lr, LeftOuter|RightOuter, lCond), right, Inner, condition) =>
+      val leftJoinKey: Seq[Expression] = j match {
+        case ExtractEquiJoinKeys(_, leftKeys, _, _, _, _) => leftKeys
+      }
+
+      left.joinType match {
+        case LeftOuter if leftJoinKey.forall(canEvaluate(_, ll)) =>
+          Join(Join(ll, right, Inner, condition), lr, LeftOuter, lCond)
+        case RightOuter if leftJoinKey.forall(canEvaluate(_, lr)) =>
+          Join(Join(lr, right, Inner, condition), ll, LeftOuter, lCond)
+        case _ => j
+      }
+
+    case j @ Join(left, right @ Join(rl, rr, LeftOuter|RightOuter, rCond), Inner, condition) =>
+      val rightJoinKey: Seq[Expression] = j match {
+        case ExtractEquiJoinKeys(_, _, rightKey, _, _, _) => rightKey
+      }
+
+      right.joinType match {
+        case LeftOuter if rightJoinKey.forall(canEvaluate(_, rl)) =>
+          Join(Join(rl, left, Inner, condition), rr, LeftOuter, rCond)
+        case RightOuter if rightJoinKey.forall(canEvaluate(_, rr)) =>
+          Join(Join(left, rr, Inner, condition), rl, LeftOuter, rCond)
+        case _ => j
+      }
   }
 }
 
