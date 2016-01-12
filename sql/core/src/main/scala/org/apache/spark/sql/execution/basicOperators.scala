@@ -167,6 +167,8 @@ case class Range(
   override def supportCodeGen: Boolean = true
 
   override def produce(ctx: CodeGenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
+    calledParent = parent
+
     val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
     val partitionEnd = ctx.freshName("partitionEnd")
@@ -220,7 +222,7 @@ case class Range(
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
-      |  ${parent.consume(ctx, this, Seq(ev))}
+      |  ${genNext(ctx, Seq(ev))}
       | }
      """.stripMargin
     (doExecute(), code)

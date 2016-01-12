@@ -110,7 +110,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       // Whole stage codegen is only used when there are at least two levels of operators that
       // support it (save at least one projection/iterator).
       if (sqlContext.conf.wholeStageEnabled &&
-        supportCodeGen && children.forall(_.supportCodeGen)) {
+        supportCodeGen && children.exists(_.supportCodeGen)) {
         try {
           doCodeGen()
         } catch {
@@ -163,9 +163,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val (rdd, code) = produce(ctx, null)
     val exprType: String = classOf[Expression].getName
     val references = ctx.references.toArray
-    val bufferHolderCls = classOf[BufferHolder].getName
-    val unsafeRowWriterCls = classOf[UnsafeRowWriter].getName
-    val mutableUnsafeRowCls = classOf[MutableUnsafeRow].getName
     val source = s"""
       public Object generate($exprType[] exprs) {
        return new GeneratedIterator(exprs);
@@ -175,17 +172,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
        private $exprType[] expressions;
        ${ctx.declareMutableStates()}
-
        private UnsafeRow unsafeRow = new UnsafeRow(${output.length});
-       private $bufferHolderCls bufferHolder = new $bufferHolderCls();
-       private $unsafeRowWriterCls rowWriter = new $unsafeRowWriterCls();
-       private $mutableUnsafeRowCls mutableRow = null;
 
        public GeneratedIterator($exprType[] exprs) {
          expressions = exprs;
          ${ctx.initMutableStates()}
-
-         this.mutableRow = new $mutableUnsafeRowCls(rowWriter);
        }
 
        protected void processNext() {
@@ -255,21 +246,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       columns: Seq[GeneratedExpressionCode]): String = {
     assert(columns.length == output.length)
     if (columns.nonEmpty) {
-      val writers = columns.zipWithIndex.map { case (c, i) =>
-        s"""
-           | if (${c.isNull}) {
-           |   mutableRow.setNull($i);
-           | } else {
-           |   ${ctx.setColumn("mutableRow", output(i).dataType, i, c.value)}
-           | }
-       """.stripMargin
+      val colExprs = output.zipWithIndex.map { case (attr, i) =>
+        BoundReference(i, attr.dataType, attr.nullable)
       }
+      val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
       s"""
-         | bufferHolder.reset();
-         | rowWriter.initialize(bufferHolder, ${output.length});
-         | ${writers.mkString("\n")}
-         | unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize());
-         | currentRow = unsafeRow;
+         | ${code.code.trim}
+         | currentRow = ${code.value};
          | return;
      """.stripMargin
     } else {
