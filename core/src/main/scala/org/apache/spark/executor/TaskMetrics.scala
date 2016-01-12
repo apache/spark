@@ -87,7 +87,7 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   private val _memoryBytesSpilled = getAccum(MEMORY_BYTES_SPILLED)
   private val _diskBytesSpilled = getAccum(DISK_BYTES_SPILLED)
   private val _peakExecutionMemory = getAccum(PEAK_EXECUTION_MEMORY)
-  private val _updatedBlocks =
+  private val _updatedBlockStatuses =
     TaskMetrics.getAccum[Seq[(BlockId, BlockStatus)]](initialAccumsMap, UPDATED_BLOCK_STATUSES)
 
   /**
@@ -136,7 +136,7 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
-  def updatedBlocks: Seq[(BlockId, BlockStatus)] = _updatedBlocks.localValue
+  def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = _updatedBlockStatuses.localValue
 
   private[spark] def setExecutorDeserializeTime(v: Long) = _executorDeserializeTime.setValue(v)
   private[spark] def setExecutorRunTime(v: Long) = _executorRunTime.setValue(v)
@@ -146,8 +146,10 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
   private[spark] def incMemoryBytesSpilled(v: Long) = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long) = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long) = _peakExecutionMemory.add(v)
-  private[spark] def incUpdatedBlocks(v: Seq[(BlockId, BlockStatus)]) = _updatedBlocks.add(v)
-  private[spark] def setUpdatedBlocks(v: Seq[(BlockId, BlockStatus)]) = _updatedBlocks.setValue(v)
+  private[spark] def incUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]) =
+    _updatedBlockStatuses.add(v)
+  private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]) =
+    _updatedBlockStatuses.setValue(v)
 
 
   /* ============================ *

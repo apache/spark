@@ -320,7 +320,7 @@ private[spark] object JsonProtocol {
         ("Records Written" -> om.recordsWritten)
       }.getOrElse(JNothing)
     val updatedBlocks =
-      JArray(taskMetrics.updatedBlocks.toList.map { case (id, status) =>
+      JArray(taskMetrics.updatedBlockStatuses.toList.map { case (id, status) =>
         ("Block ID" -> id.toString) ~
         ("Status" -> blockStatusToJson(status))
       })
@@ -753,7 +753,7 @@ private[spark] object JsonProtocol {
 
     // Updated blocks
     Utils.jsonOption(json \ "Updated Blocks").foreach { blocksJson =>
-      metrics.setUpdatedBlocks(blocksJson.extract[List[JValue]].map { blockJson =>
+      metrics.setUpdatedBlockStatuses(blocksJson.extract[List[JValue]].map { blockJson =>
         val id = BlockId((blockJson \ "Block ID").extract[String])
         val status = blockStatusFromJson(blockJson \ "Status")
         (id, status)

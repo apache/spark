@@ -88,7 +88,7 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
     if (numBytesToFree > 0) {
       memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, evictedBlocks)
       // Register evicted blocks, if any, with the active task metrics
-      Option(TaskContext.get()).foreach(_.taskMetrics().incUpdatedBlocks(evictedBlocks))
+      Option(TaskContext.get()).foreach(_.taskMetrics().incUpdatedBlockStatuses(evictedBlocks))
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
     // back into this StorageMemoryPool in order to free memory. Therefore, these variables
