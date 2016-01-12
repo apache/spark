@@ -94,7 +94,7 @@ class StreamingContext(object):
             # get the GatewayServer object in JVM by ID
             jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
             # update the port of CallbackClient with real port
-            gw.jvm.PythonDStream.updatePythonGatewayPort(jgws, gw._python_proxy_port)
+            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
