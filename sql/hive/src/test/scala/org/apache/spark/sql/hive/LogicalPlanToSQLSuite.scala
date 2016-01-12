@@ -145,10 +145,12 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("persisted data source relations") {
-    Seq("orc", "json", "parquet")
-    withTable("orc_t0") {
-      sqlContext.range(10).write.format("orc").saveAsTable("orc_t0")
-      checkHiveQl("SELECT id FROM orc_t0")
+    Seq("orc", "json", "parquet").foreach { format =>
+      val tableName = s"${format}_t0"
+      withTable(tableName) {
+        sqlContext.range(10).write.format(format).saveAsTable(tableName)
+        checkHiveQl(s"SELECT id FROM $tableName")
+      }
     }
   }
 }
