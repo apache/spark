@@ -6,9 +6,8 @@ from airflow.utils import apply_defaults
 
 class BigQueryToCloudStorageOperator(BaseOperator):
     """
-    Executes BigQuery SQL queries in a specific BigQuery database
+    Transfers a BigQuery table to a Google Cloud Storage bucket.
     """
-
     template_fields = ('source_dataset_table','destination_cloud_storage_uris',)
     template_ext = ('.sql',)
     ui_color = '#e4e6f0'
@@ -27,9 +26,27 @@ class BigQueryToCloudStorageOperator(BaseOperator):
         **kwargs):
         """
         Create a new BigQueryToCloudStorage to move data from BigQuery to 
-        Google Cloud Storage.
+        Google Cloud Storage.  See here:
 
-        TODO: more params to doc
+        https://cloud.google.com/bigquery/docs/reference/v2/jobs
+
+        For more details about these parameters.
+
+        :param source_dataset_table: The dotted <dataset>.<table> BigQuery table to use as the source data.
+        :type source_dataset_table: string
+        :param destination_cloud_storage_uris: The destination Google Cloud 
+            Storage URI (e.g. gs://some-bucket/some-file.txt). Follows 
+            convention defined here: 
+            https://cloud.google.com/bigquery/exporting-data-from-bigquery#exportingmultiple
+        :type destination_cloud_storage_uris: list
+        :param compression: Type of compression to use.
+        :type compression: string
+        :param export_format: File format to export.
+        :type field_delimiter: string
+        :param field_delimiter: The delimiter to use when extracting to a CSV.
+        :type field_delimiter: string
+        :param print_header: Whether to print a header for a CSV file extract.
+        :type print_header: boolean
         :param bigquery_conn_id: reference to a specific BigQuery hook.
         :type bigquery_conn_id: string
         """
