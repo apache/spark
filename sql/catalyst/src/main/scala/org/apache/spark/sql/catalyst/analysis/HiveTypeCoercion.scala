@@ -621,14 +621,16 @@ object HiveTypeCoercion {
       case c: CaseWhen if c.childrenResolved && !c.valueTypesEqual =>
         val maybeCommonType = findWiderCommonType(c.valueTypes)
         maybeCommonType.map { commonType =>
-          val castedBranches = c.branches.grouped(2).map {
-            case Seq(when, value) if value.dataType != commonType =>
-              Seq(when, Cast(value, commonType))
-            case Seq(elseVal) if elseVal.dataType != commonType =>
-              Seq(Cast(elseVal, commonType))
-            case other => other
-          }.reduce(_ ++ _)
-          CaseWhen(castedBranches)
+          var changed = false
+          val newValues = c.values.map { value =>
+            if (value.dataType.sameType(commonType)) {
+              value
+            } else {
+              changed = true
+              Cast(value, commonType)
+            }
+          }
+          if (changed) c.copy(values = newValues) else c
         }.getOrElse(c)
     }
   }

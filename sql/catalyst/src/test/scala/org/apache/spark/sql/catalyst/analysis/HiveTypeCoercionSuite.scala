@@ -452,7 +452,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     val expectedTypes = Seq(DecimalType(10, 5), DecimalType(10, 5), DecimalType(15, 5),
       DecimalType(25, 5), DoubleType, DoubleType)
 
-    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+    rightTypes.zip(expectedTypes).foreach { case (rType, expectedType) =>
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 
