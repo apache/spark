@@ -79,7 +79,8 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("long", LongType)
       .add("float", FloatType)
       .add("double", DoubleType)
-      .add("decimal", DecimalType.SYSTEM_DEFAULT)
+      .add("bigDecimal", DecimalType.SYSTEM_DEFAULT)
+      .add("smallDecimal", DecimalType.USER_DEFAULT)
       .add("string", StringType)
       .add("binary", BinaryType)
       .add("date", DateType)
@@ -126,7 +127,8 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
           case (value, dt) => Literal.create(value, dt)
         }
-        checkEvaluation(Murmur3Hash(literals, seed), input.hashCode(seed))
+        // Only test the interpreted version has same result with codegen version.
+        checkEvaluation(Murmur3Hash(literals, seed), Murmur3Hash(literals, seed).eval())
       }
     }
   }
