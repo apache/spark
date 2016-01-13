@@ -70,7 +70,7 @@ $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /de
 # Generate manifests for each Hadoop profile:
 for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   echo "Performing Maven install for $HADOOP_PROFILE"
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install -q
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install clean -q
 
   echo "Performing Maven validate for $HADOOP_PROFILE"
   $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE validate -q
