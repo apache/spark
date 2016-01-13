@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.receiver
+package org.apache.spark.streaming.akka
 
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,9 +27,10 @@ import scala.reflect.ClassTag
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * :: DeveloperApi ::
@@ -148,7 +149,7 @@ abstract class JavaActorReceiver extends UntypedActor {
  * :: DeveloperApi ::
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `StreamingContext.actorStream` and
- * [[org.apache.spark.streaming.receiver.ActorReceiver]].
+ * [[org.apache.spark.streaming.akka.ActorReceiver]].
  */
 @DeveloperApi
 case class Statistics(numberOfMsgs: Int,
@@ -157,10 +158,10 @@ case class Statistics(numberOfMsgs: Int,
   otherInfo: String)
 
 /** Case class to receive data sent by child actors */
-private[streaming] sealed trait ActorReceiverData
-private[streaming] case class SingleItemData[T](item: T) extends ActorReceiverData
-private[streaming] case class IteratorData[T](iterator: Iterator[T]) extends ActorReceiverData
-private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorReceiverData
+private[akka] sealed trait ActorReceiverData
+private[akka] case class SingleItemData[T](item: T) extends ActorReceiverData
+private[akka] case class IteratorData[T](iterator: Iterator[T]) extends ActorReceiverData
+private[akka] case class ByteBufferData(bytes: ByteBuffer) extends ActorReceiverData
 
 /**
  * Provides Actors as receivers for receiving stream.
@@ -181,14 +182,16 @@ private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorRec
  *  context.parent ! Props(new Worker, "Worker")
  * }}}
  */
-private[streaming] class ActorReceiverSupervisor[T: ClassTag](
+private[akka] class ActorReceiverSupervisor[T: ClassTag](
+    actorSystemCreator: () => ActorSystem,
     props: Props,
     name: String,
     storageLevel: StorageLevel,
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val actorSupervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+  private lazy val actorSystem = actorSystemCreator()
+  protected lazy val actorSupervisor = actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {
@@ -241,5 +244,7 @@ private[streaming] class ActorReceiverSupervisor[T: ClassTag](
 
   def onStop(): Unit = {
     actorSupervisor ! PoisonPill
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
   }
 }

@@ -18,7 +18,13 @@
 package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
+import akka.actor.ActorSystem;
+import com.typesafe.config.ConfigFactory;
+import org.apache.spark.TaskContext;
+import org.apache.spark.streaming.akka.ActorSystemFactory;
 import scala.Tuple2;
 
 import akka.actor.ActorSelection;
@@ -31,7 +37,8 @@ import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.receiver.JavaActorReceiver;
+import org.apache.spark.streaming.akka.AkkaUtils;
+import org.apache.spark.streaming.akka.JavaActorReceiver;
 
 /**
  * A sample actor as receiver, is also simplest. This receiver actor
@@ -110,8 +117,11 @@ public class JavaActorWordCount {
      * For example: Both actorStream and JavaSampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
-    JavaDStream<String> lines = jssc.actorStream(
-        Props.create(JavaSampleActorReceiver.class, feederActorURI), "SampleReceiver");
+    JavaDStream<String> lines = AkkaUtils.actorStream(
+        jssc,
+        new WordcountActorSystemFactory(),
+        Props.create(JavaSampleActorReceiver.class, feederActorURI),
+        "SampleReceiver");
 
     // compute wordcount
     lines.flatMap(new FlatMapFunction<String, String>() {
@@ -133,5 +143,18 @@ public class JavaActorWordCount {
 
     jssc.start();
     jssc.awaitTermination();
+  }
+}
+
+class WordcountActorSystemFactory implements ActorSystemFactory {
+
+  @Override
+  public ActorSystem create() {
+    String uniqueSystemName = "actor-wordcount-" + TaskContext.get().taskAttemptId();
+    Map<String, String> akkaConf = new HashMap<String, String>();
+    akkaConf.put("akka.actor.provider", "akka.remote.RemoteActorRefProvider");
+    akkaConf.put(
+        "akka.remote.netty.tcp.transport-class", "akka.remote.transport.netty.NettyTransport");
+    return ActorSystem.create(uniqueSystemName, ConfigFactory.parseMap(akkaConf));
   }
 }

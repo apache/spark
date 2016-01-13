@@ -25,8 +25,9 @@ import akka.actor.actorRef2Scala
 import akka.util.ByteString
 import akka.zeromq._
 import akka.zeromq.Subscribe
+import com.typesafe.config.ConfigFactory
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.zeromq._
 
@@ -69,10 +70,10 @@ object SimpleZeroMQPublisher {
  *
  * To run this example locally, you may run publisher as
  *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.1.1:1234 foo.bar`
+ *      org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.0.1:1234 foo`
  * and run the example as
  *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.1.1:1234 foo`
+ *      org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.0.1:1234 foo`
  */
 // scalastyle:on
 object ZeroMQWordCount {
@@ -89,8 +90,22 @@ object ZeroMQWordCount {
 
     def bytesToStringIterator(x: Seq[ByteString]): Iterator[String] = x.map(_.utf8String).iterator
 
+    def actorSystemCreator(): ActorSystem = {
+      val uniqueSystemName = s"actor-wordcount-${TaskContext.get().taskAttemptId()}"
+      val akkaConf = ConfigFactory.parseString(
+        s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+           |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+           |""".stripMargin)
+      ActorSystem(uniqueSystemName, akkaConf)
+    }
+
     // For this stream, a zeroMQ publisher should be running.
-    val lines = ZeroMQUtils.createStream(ssc, url, Subscribe(topic), bytesToStringIterator _)
+    val lines = ZeroMQUtils.createStream(
+      ssc,
+      actorSystemCreator _,
+      url,
+      Subscribe(topic),
+      bytesToStringIterator _)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()

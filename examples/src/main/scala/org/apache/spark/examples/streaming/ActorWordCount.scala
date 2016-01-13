@@ -22,12 +22,12 @@ import scala.collection.mutable.LinkedList
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import akka.actor.{actorRef2Scala, Actor, ActorRef, Props}
+import akka.actor._
+import com.typesafe.config.ConfigFactory
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.receiver.ActorReceiver
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.streaming.akka.{ActorReceiver, AkkaUtils}
 
 case class SubscribeReceiver(receiverActor: ActorRef)
 case class UnsubscribeReceiver(receiverActor: ActorRef)
@@ -78,8 +78,7 @@ class FeederActor extends Actor {
  *
  * @see [[org.apache.spark.examples.streaming.FeederActor]]
  */
-class SampleActorReceiver[T: ClassTag](urlOfPublisher: String)
-extends ActorReceiver {
+class SampleActorReceiver[T: ClassTag](urlOfPublisher: String) extends ActorReceiver {
 
   lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
@@ -108,9 +107,13 @@ object FeederActor {
     }
     val Seq(host, port) = args.toSeq
 
-    val conf = new SparkConf
-    val actorSystem = AkkaUtils.createActorSystem("test", host, port.toInt, conf = conf,
-      securityManager = new SecurityManager(conf))._1
+    val akkaConf = ConfigFactory.parseString(
+      s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+         |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+         |akka.remote.netty.tcp.hostname = "$host"
+         |akka.remote.netty.tcp.port = $port
+         |""".stripMargin)
+       val actorSystem = ActorSystem("test", akkaConf)
     val feeder = actorSystem.actorOf(Props[FeederActor], "FeederActor")
 
     println("Feeder started as:" + feeder)
@@ -150,16 +153,27 @@ object ActorWordCount {
      *
      * An important point to note:
      * Since Actor may exist outside the spark framework, It is thus user's responsibility
-     * to ensure the type safety, i.e type of data received and InputDstream
+     * to ensure the type safety, i.e type of data received and InputDStream
      * should be same.
      *
      * For example: Both actorStream and SampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
+    def actorSystemCreator(): ActorSystem = {
+      val uniqueSystemName = s"actor-wordcount-${TaskContext.get().taskAttemptId()}"
+      val akkaConf = ConfigFactory.parseString(
+        s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+           |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+           |""".stripMargin)
+      ActorSystem(uniqueSystemName, akkaConf)
+    }
 
-    val lines = ssc.actorStream[String](
-      Props(new SampleActorReceiver[String]("akka.tcp://test@%s:%s/user/FeederActor".format(
-        host, port.toInt))), "SampleReceiver")
+    val lines = AkkaUtils.actorStream[String](
+      ssc,
+      actorSystemCreator _,
+      Props(new SampleActorReceiver[String](
+        "akka.tcp://test@%s:%s/user/FeederActor".format(host, port.toInt))),
+      "SampleReceiver")
 
     // compute wordcount
     lines.flatMap(_.split("\\s+")).map(x => (x, 1)).reduceByKey(_ + _).print()
