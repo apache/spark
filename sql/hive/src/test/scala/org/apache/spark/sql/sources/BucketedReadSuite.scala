@@ -39,9 +39,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         .saveAsTable("bucketed_table")
 
       for (i <- 0 until 5) {
-        // Add Aggregate so that bucket information will be used.
-        val agged = hiveContext.table("bucketed_table").filter($"i" === i).groupBy("j", "k").count()
-        val rdd = agged.queryExecution.executedPlan.find(_.isInstanceOf[PhysicalRDD]).get.execute()
+        val rdd = hiveContext.table("bucketed_table").filter($"i" === i).queryExecution.toRdd
         assert(rdd.partitions.length == 8)
 
         val attrs = df.select("j", "k").schema.toAttributes
@@ -82,25 +80,9 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoin]
 
         assert(joinOperator.left.find(_.isInstanceOf[Exchange]).isDefined == shuffleLeft)
-        if (shuffleLeft) {
-          assertNonBucketed(joinOperator.left)
-        }
-
         assert(joinOperator.right.find(_.isInstanceOf[Exchange]).isDefined == shuffleRight)
-        if (shuffleRight) {
-          assertNonBucketed(joinOperator.right)
-        }
       }
     }
-  }
-
-  /**
-   * When a bucketed table still needs to be shuffled, then the bucketing stuff is totally useless,
-   * use this method to make sure we ignore bucketing for that case.
-   */
-  private def assertNonBucketed(plan: SparkPlan): Unit = {
-    val rdd = plan.find(_.isInstanceOf[PhysicalRDD]).get.execute()
-    assert(rdd.partitions.length != 8)
   }
 
   private def joinCondition(left: DataFrame, right: DataFrame, joinCols: Seq[String]): Column = {

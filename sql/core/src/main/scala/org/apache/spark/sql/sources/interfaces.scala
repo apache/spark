@@ -670,8 +670,7 @@ abstract class HadoopFsRelation private[sql](
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      useBucketInfo: Boolean): RDD[InternalRow] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val allInputFiles = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -686,7 +685,7 @@ abstract class HadoopFsRelation private[sql](
       }
     }
 
-    if (bucketSpec.isDefined && useBucketInfo) {
+    if (bucketSpec.isDefined && sqlContext.conf.bucketingEnabled()) {
       val inputFilesWithBucketId = allInputFiles.groupBy(getBucketId)
       // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket id
       // from file name. Then read these files into a RDD(use one-partition empty RDD for empty
