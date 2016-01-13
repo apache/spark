@@ -1358,68 +1358,84 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("correctly handle CREATE OR REPLACE VIEW") {
-    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
-      withTable("jt", "jt2") {
-        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
-        sql("CREATE OR REPLACE VIEW testView AS SELECT id FROM jt")
-        checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+  Seq(true, false).foreach { enabled =>
+    val prefix = (if (enabled) "With" else "Without") + " canonical native view: "
+    test(s"$prefix correctly handle CREATE OR REPLACE VIEW") {
+      withSQLConf(
+        SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
+        withTable("jt", "jt2") {
+          sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+          sql("CREATE OR REPLACE VIEW testView AS SELECT id FROM jt")
+          checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
 
-        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
-        df.write.format("json").saveAsTable("jt2")
-        sql("CREATE OR REPLACE VIEW testView AS SELECT * FROM jt2")
-        // make sure the view has been changed.
-        checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
+          val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+          df.write.format("json").saveAsTable("jt2")
+          sql("CREATE OR REPLACE VIEW testView AS SELECT * FROM jt2")
+          // make sure the view has been changed.
+          checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
 
-        sql("DROP VIEW testView")
+          sql("DROP VIEW testView")
 
-        val e = intercept[AnalysisException] {
-          sql("CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
+          val e = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
+          }
+          assert(e.message.contains("not allowed to define a view"))
         }
-        assert(e.message.contains("not allowed to define a view"))
+      }
+    }
+
+    test(s"$prefix correctly handle ALTER VIEW") {
+      withSQLConf(
+        SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
+        withTable("jt", "jt2") {
+          sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+          sql("CREATE VIEW testView AS SELECT id FROM jt")
+
+          val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+          df.write.format("json").saveAsTable("jt2")
+          sql("ALTER VIEW testView AS SELECT * FROM jt2")
+          // make sure the view has been changed.
+          checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
+
+          sql("DROP VIEW testView")
+        }
+      }
+    }
+
+    test(s"$prefix create hive view for json table") {
+      // json table is not hive-compatible, make sure the new flag fix it.
+      withSQLConf(
+        SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
+        withTable("jt") {
+          sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+          sql("CREATE VIEW testView AS SELECT id FROM jt")
+          checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+          sql("DROP VIEW testView")
+        }
+      }
+    }
+
+    test(s"$prefix create hive view for partitioned parquet table") {
+      // partitioned parquet table is not hive-compatible, make sure the new flag fix it.
+      withSQLConf(
+        SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
+        withTable("parTable") {
+          val df = Seq(1 -> "a").toDF("i", "j")
+          df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
+          sql("CREATE VIEW testView AS SELECT i, j FROM parTable")
+          checkAnswer(sql("SELECT * FROM testView"), Row(1, "a"))
+          sql("DROP VIEW testView")
+        }
       }
     }
   }
 
-  test("correctly handle ALTER VIEW") {
-    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
-      withTable("jt", "jt2") {
-        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
-        sql("CREATE VIEW testView AS SELECT id FROM jt")
-
-        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
-        df.write.format("json").saveAsTable("jt2")
-        sql("ALTER VIEW testView AS SELECT * FROM jt2")
-        // make sure the view has been changed.
-        checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
-
-        sql("DROP VIEW testView")
-      }
-    }
-  }
-
-  test("create hive view for json table") {
-    // json table is not hive-compatible, make sure the new flag fix it.
-    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
-      withTable("jt") {
-        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
-        sql("CREATE VIEW testView AS SELECT id FROM jt")
-        checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
-        sql("DROP VIEW testView")
-      }
-    }
-  }
-
-  test("create hive view for partitioned parquet table") {
-    // partitioned parquet table is not hive-compatible, make sure the new flag fix it.
-    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
-      withTable("parTable") {
-        val df = Seq(1 -> "a").toDF("i", "j")
-        df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
-        sql("CREATE VIEW testView AS SELECT i, j FROM parTable")
-        checkAnswer(sql("SELECT * FROM testView"), Row(1, "a"))
-        sql("DROP VIEW testView")
-      }
+  test("CTE within view") {
+    withSQLConf(
+      SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> "true") {
+      sql("CREATE VIEW cte_view AS WITH w AS (SELECT 1 AS n) SELECT n FROM w")
+      checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
+      sql("DROP VIEW cte_view")
     }
   }
 

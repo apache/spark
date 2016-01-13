@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.hadoop.hive.ql.plan.TableDesc
+
+import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.{Row, SQLContext, AnalysisException}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
+import org.apache.spark.sql.hive.{SQLBuilder, HiveMetastoreTypes, HiveContext}
+import org.apache.spark.sql.hive.client.{HiveTable, HiveColumn}
 
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
@@ -32,9 +35,11 @@ import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 // from Hive and may not work for some cases like create view on self join.
 private[hive] case class CreateViewAsSelect(
     tableDesc: HiveTable,
-    childSchema: Seq[Attribute],
+    child: LogicalPlan,
     allowExisting: Boolean,
     orReplace: Boolean) extends RunnableCommand {
+
+  private val childSchema = child.output
 
   assert(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
   assert(tableDesc.viewText.isDefined)
@@ -44,26 +49,36 @@ private[hive] case class CreateViewAsSelect(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    if (hiveContext.catalog.tableExists(tableIdentifier)) {
-      if (allowExisting) {
+    hiveContext.catalog.tableExists(tableIdentifier) match {
+      case true if allowExisting =>
         // view already exists, will do nothing, to keep consistent with Hive
-      } else if (orReplace) {
-        hiveContext.catalog.client.alertView(prepareTable())
-      } else {
+
+      case true if orReplace =>
+        hiveContext.catalog.client.alertView(prepareTable(sqlContext))
+
+      case true =>
         throw new AnalysisException(s"View $tableIdentifier already exists. " +
           "If you want to update the view definition, please use ALTER VIEW AS or " +
           "CREATE OR REPLACE VIEW AS")
-      }
-    } else {
-      hiveContext.catalog.client.createView(prepareTable())
+
+      case false =>
+        hiveContext.catalog.client.createView(prepareTable(sqlContext))
     }
 
     Seq.empty[Row]
   }
 
-  private def prepareTable(): HiveTable = {
-    // setup column types according to the schema of child.
-    val schema = if (tableDesc.schema == Nil) {
+  private def prepareTable(sqlContext: SQLContext): HiveTable = {
+    val expandedText = if (sqlContext.conf.canonicalView) {
+      rebuildViewQueryString(sqlContext).getOrElse(expandViewText)
+    } else {
+      expandViewText
+    }
+    tableDesc.copy(schema = viewSchema, viewText = Some(expandedText))
+  }
+
+  private def viewSchema: Seq[HiveColumn] = {
+    if (tableDesc.schema.isEmpty) {
       childSchema.map { attr =>
         HiveColumn(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
       }
@@ -72,27 +87,40 @@ private[hive] case class CreateViewAsSelect(
         HiveColumn(col.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), col.comment)
       }
     }
+  }
 
-    val columnNames = childSchema.map(f => verbose(f.name))
-
+  private def expandViewText: String = {
     // When user specified column names for view, we should create a project to do the renaming.
     // When no column name specified, we still need to create a project to declare the columns
     // we need, to make us more robust to top level `*`s.
-    val projectList = if (tableDesc.schema == Nil) {
-      columnNames.mkString(", ")
-    } else {
-      columnNames.zip(tableDesc.schema.map(f => verbose(f.name))).map {
-        case (name, alias) => s"$name AS $alias"
-      }.mkString(", ")
+    val viewOutput = {
+      val columnNames = childSchema.map(f => quote(f.name))
+      if (tableDesc.schema.isEmpty) {
+        columnNames.mkString(", ")
+      } else {
+        columnNames.zip(tableDesc.schema.map(f => quote(f.name))).map {
+          case (name, alias) => s"$name AS $alias"
+        }.mkString(", ")
+      }
     }
 
-    val viewName = verbose(tableDesc.name)
+    val viewText = tableDesc.viewText.get
+    val viewName = quote(tableDesc.name)
+    s"SELECT $viewOutput FROM ($viewText) $viewName"
+  }
 
-    val expandedText = s"SELECT $projectList FROM (${tableDesc.viewText.get}) $viewName"
-
-    tableDesc.copy(schema = schema, viewText = Some(expandedText))
+  private def rebuildViewQueryString(sqlContext: SQLContext): Option[String] = {
+    val logicalPlan = if (tableDesc.schema.isEmpty) {
+      child
+    } else {
+      val projectList = childSchema.zip(tableDesc.schema).map {
+        case (attr, col) => Alias(attr, col.name)()
+      }
+      sqlContext.executePlan(Project(projectList, child)).analyzed
+    }
+    new SQLBuilder(logicalPlan, sqlContext).toSQL
   }
 
   // escape backtick with double-backtick in column name and wrap it with backtick.
-  private def verbose(name: String) = s"`${name.replaceAll("`", "``")}`"
+  private def quote(name: String) = s"`${name.replaceAll("`", "``")}`"
 }

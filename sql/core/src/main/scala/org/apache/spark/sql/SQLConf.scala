@@ -372,6 +372,11 @@ private[spark] object SQLConf {
           "possible, or you may get wrong result.",
     isPublic = false)
 
+  val CANONICAL_NATIVE_VIEW = booleanConf("spark.sql.nativeView.canonical",
+    defaultValue = Some(false),
+    doc = "TODO",
+    isPublic = false)
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
     doc = "The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
@@ -569,6 +574,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   private[spark] def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  private[spark] def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
