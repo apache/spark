@@ -22,6 +22,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
@@ -135,6 +136,25 @@ private[history] class ApplicationCache(
   }
 
   /**
+   * Get the Spark UI, converting a lookup failure from an exception to `None`.
+   * @param appAndAttempt application to look up in the format needed by the history server web UI,
+   *                      `appId/attemptId` or `appId`.
+   * @return the entry
+   */
+  def getSparkUI(appAndAttempt: String): Option[SparkUI] = {
+    try {
+      val ui = get(appAndAttempt)
+      Some(ui)
+    } catch {
+      case NonFatal(e) => e.getCause() match {
+        case nsee: NoSuchElementException =>
+          None
+        case cause: Exception => throw cause
+      }
+    }
+  }
+
+  /**
    * Get the associated spark UI. Cache fetch/refresh will have taken place by
    * the time this method returns.
    * @param appId application ID
@@ -159,11 +179,12 @@ private[history] class ApplicationCache(
     var updated = false
     if (entry == null) {
       // no entry, so fetch without any post-fetch probes for out-of-dateness
+      // this will trigger a callback to loadApplicationEntry()
       entry = appCache.get(cacheKey)
     } else if (!entry.completed) {
       val now = clock.getTimeMillis()
       if (now - entry.probeTime > refreshInterval) {
-        log.debug(s"Probing @time $now for updated application $cacheKey -> $entry")
+        log.debug(s"Probing at time $now for updated application $cacheKey -> $entry")
         metrics.updateProbeCount.inc()
         updated = time(metrics.updateProbeTimer) {
           entry.updateProbe.isUpdated()
