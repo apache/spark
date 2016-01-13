@@ -204,7 +204,7 @@ object CaseWhen {
     val cases = branches.grouped(2).flatMap {
       case cond :: value :: Nil => Some((cond, value))
       case value :: Nil => None
-    }.toSeq
+    }.toArray.toSeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
@@ -219,7 +219,7 @@ object CaseKeyWhen {
     val cases = branches.grouped(2).flatMap {
       case cond :: value :: Nil => Some((EqualTo(key, cond), value))
       case value :: Nil => None
-    }.toSeq
+    }.toArray.toSeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
