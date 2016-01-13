@@ -203,6 +203,7 @@ class JDBCSuite extends SparkFunSuite
     assert(stripSparkFilter(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
     assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
     assert(stripSparkFilter(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+    assert(stripSparkFilter(sql("SELECT * FROM inttypes WHERE (A+C)*D-A = 15")).collect().size == 1)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.

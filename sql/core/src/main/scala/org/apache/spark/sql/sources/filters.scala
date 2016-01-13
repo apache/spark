@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.catalyst.expressions.BinaryArithmetic
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -142,3 +144,43 @@ case class StringEndsWith(attribute: String, value: String) extends Filter
  * @since 1.3.1
  */
 case class StringContains(attribute: String, value: String) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the Arithmetic operation evaluates to a value
+ * equal to `value`.
+ *
+ * @since 2.0
+ */
+case class ArithmeticOPEqualTo(operation: BinaryArithmetic, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the Arithmetic operation evaluates to a value
+ * greater than `value`.
+ *
+ * @since 2.0
+ */
+case class ArithmeticOPGreaterThan(operation: BinaryArithmetic, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the Arithmetic operation evaluates to a value
+ * greater than or equal to `value`.
+ *
+ * @since 2.0
+ */
+case class ArithmeticOPGreaterThanOrEqual(operation: BinaryArithmetic, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the Arithmetic operation evaluates to a value
+ * less than `value`.
+ *
+ * @since 2.0
+ */
+case class ArithmeticOPLessThan(operation: BinaryArithmetic, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the Arithmetic operation evaluates to a value
+ * less than or equal to `value`.
+ *
+ * @since 2.0
+ */
+case class ArithmeticOPLessThanOrEqual(operation: BinaryArithmetic, value: Any) extends Filter

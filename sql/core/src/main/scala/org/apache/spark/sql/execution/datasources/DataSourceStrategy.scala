@@ -480,7 +480,117 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case expressions.Contains(a: Attribute, Literal(v: UTF8String, StringType)) =>
         Some(sources.StringContains(a.name, v.toString))
 
+      case expressions.BinaryComparison(BinaryArithmetic(left, right), Literal(v, t)) =>
+        translateArithemiticOPFilter (predicate)
+      case expressions.BinaryComparison(Literal(v, t), BinaryArithmetic(left, right)) =>
+        translateArithemiticOPFilter (predicate)
+        
       case _ => None
+    }
+  }
+
+  private def translateArithemiticOPFilter(predicate: Expression): Option[Filter] = {
+    predicate match {
+      case expressions.EqualTo(Add(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPEqualTo(Add(left, right), convertToScala(v, t)))
+      case expressions.EqualTo(Literal(v, t), Add(left, right)) =>
+        Some(sources.ArithmeticOPEqualTo(Add(left, right), convertToScala(v, t)))
+
+      case expressions.EqualTo(Subtract(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPEqualTo(Subtract(left, right), convertToScala(v, t)))
+      case expressions.EqualTo(Literal(v, t), Subtract(left, right)) =>
+        Some(sources.ArithmeticOPEqualTo(Subtract(left, right), convertToScala(v, t)))
+
+      case expressions.EqualTo(Multiply(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPEqualTo(Multiply(left, right), convertToScala(v, t)))
+      case expressions.EqualTo(Literal(v, t), Multiply(left, right)) =>
+        Some(sources.ArithmeticOPEqualTo(Multiply(left, right), convertToScala(v, t)))
+
+      case expressions.EqualTo(Divide(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPEqualTo(Divide(left, right), convertToScala(v, t)))
+      case expressions.EqualTo(Literal(v, t), Divide(left, right)) =>
+        Some(sources.ArithmeticOPEqualTo(Divide(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThan(Add(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThan(Add(left, right), convertToScala(v, t)))
+      case expressions.GreaterThan(Literal(v, t), Add(left, right)) =>
+        Some(sources.ArithmeticOPLessThan(Add(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThan(Subtract(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThan(Subtract(left, right), convertToScala(v, t)))
+      case expressions.GreaterThan(Literal(v, t), Subtract(left, right)) =>
+        Some(sources.ArithmeticOPLessThan(Subtract(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThan(Multiply(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThan(Multiply(left, right), convertToScala(v, t)))
+      case expressions.GreaterThan(Literal(v, t), Multiply(left, right)) =>
+        Some(sources.ArithmeticOPLessThan(Multiply(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThan(Divide(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThan(Divide(left, right), convertToScala(v, t)))
+      case expressions.GreaterThan(Literal(v, t), Divide(left, right)) =>
+        Some(sources.ArithmeticOPLessThan(Divide(left, right), convertToScala(v, t)))
+
+      case expressions.LessThan(Add(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThan(Add(left, right), convertToScala(v, t)))
+      case expressions.LessThan(Literal(v, t), Add(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThan(Add(left, right), convertToScala(v, t)))
+
+      case expressions.LessThan(Subtract(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThan(Subtract(left, right), convertToScala(v, t)))
+      case expressions.LessThan(Literal(v, t), Subtract(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThan(Subtract(left, right), convertToScala(v, t)))
+
+      case expressions.LessThan(Multiply(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThan(Multiply(left, right), convertToScala(v, t)))
+      case expressions.LessThan(Literal(v, t), Multiply(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThan(Multiply(left, right), convertToScala(v, t)))
+
+      case expressions.LessThan(Divide(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThan(Divide(left, right), convertToScala(v, t)))
+      case expressions.LessThan(Literal(v, t), Divide(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThan(Divide(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThanOrEqual(Add(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Add(left, right), convertToScala(v, t)))
+      case expressions.GreaterThanOrEqual(Literal(v, t), Add(left, right)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Add(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThanOrEqual(Subtract(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Subtract(left, right), convertToScala(v, t)))
+      case expressions.GreaterThanOrEqual(Literal(v, t), Subtract(left, right)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Subtract(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThanOrEqual(Multiply(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Multiply(left, right), convertToScala(v, t)))
+      case expressions.GreaterThanOrEqual( Literal(v, t), Multiply(left, right)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Multiply(left, right), convertToScala(v, t)))
+
+      case expressions.GreaterThanOrEqual(Divide(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Divide(left, right), convertToScala(v, t)))
+      case expressions.GreaterThanOrEqual(Literal(v, t), Divide(left, right)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Divide(left, right), convertToScala(v, t)))
+
+
+      case expressions.LessThanOrEqual(Add(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Add(left, right), convertToScala(v, t)))
+      case expressions.LessThanOrEqual(Literal(v, t), Add(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Add(left, right), convertToScala(v, t)))
+
+      case expressions.LessThanOrEqual(Subtract(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Subtract(left, right), convertToScala(v, t)))
+      case expressions.LessThanOrEqual(Literal(v, t), Subtract(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Subtract(left, right), convertToScala(v, t)))
+
+      case expressions.LessThanOrEqual(Multiply(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Multiply(left, right), convertToScala(v, t)))
+      case expressions.LessThanOrEqual(Literal(v, t), Multiply(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Multiply(left, right), convertToScala(v, t)))
+
+      case expressions.LessThanOrEqual(Divide(left, right), Literal(v, t)) =>
+        Some(sources.ArithmeticOPLessThanOrEqual(Divide(left, right), convertToScala(v, t)))
+      case expressions.LessThanOrEqual(Literal(v, t), Divide(left, right)) =>
+        Some(sources.ArithmeticOPGreaterThanOrEqual(Divide(left, right), convertToScala(v, t)))
     }
   }
 
