@@ -482,27 +482,6 @@ object HiveTypeCoercion {
     private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
     private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
 
-    private def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
-      CaseKeyWhen(numericExpr, Seq(
-        Literal(trueValues.head), booleanExpr,
-        Literal(falseValues.head), Not(booleanExpr),
-        Literal(false)))
-    }
-
-    private def transform(booleanExpr: Expression, numericExpr: Expression) = {
-      If(Or(IsNull(booleanExpr), IsNull(numericExpr)),
-        Literal.create(null, BooleanType),
-        buildCaseKeyWhen(booleanExpr, numericExpr))
-    }
-
-    private def transformNullSafe(booleanExpr: Expression, numericExpr: Expression) = {
-      CaseWhen(Seq(
-        And(IsNull(booleanExpr), IsNull(numericExpr)), Literal(true),
-        Or(IsNull(booleanExpr), IsNull(numericExpr)), Literal(false),
-        buildCaseKeyWhen(booleanExpr, numericExpr)
-      ))
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
@@ -511,6 +490,7 @@ object HiveTypeCoercion {
       // all other cases are considered as false.
 
       // We may simplify the expression if one side is literal numeric values
+      // TODO: Maybe these rules should go into the optimizer.
       case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
         if trueValues.contains(value) => bool
       case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
@@ -529,13 +509,13 @@ object HiveTypeCoercion {
         if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
 
       case EqualTo(left @ BooleanType(), right @ NumericType()) =>
-        transform(left , right)
+        EqualTo(Cast(left, right.dataType), right)
       case EqualTo(left @ NumericType(), right @ BooleanType()) =>
-        transform(right, left)
+        EqualTo(left, Cast(right, left.dataType))
       case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
-        transformNullSafe(left, right)
+        EqualNullSafe(Cast(left, right.dataType), right)
       case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
-        transformNullSafe(right, left)
+        EqualNullSafe(left, Cast(right, left.dataType))
     }
   }
 
