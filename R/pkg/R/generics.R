@@ -539,7 +539,7 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
 #' @export
 setGeneric("str")
 
-#' @rdname transform
+#' @rdname mutate
 #' @export
 setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
