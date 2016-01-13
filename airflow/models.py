@@ -218,6 +218,7 @@ class DagBag(LoggingMixin):
                     dag.is_subdag = False
                     self.bag_dag(dag, parent_dag=dag, root_dag=dag)
                     found_dags.append(dag)
+                    found_dags += dag.subdags
 
             self.file_last_changed[filepath] = dttm
         return found_dags
