@@ -43,7 +43,7 @@ object ParseDriver extends Logging {
     parser.tableName().getTree
   }
 
-  /* private */ def parse(
+  private def parse(
       command: String,
       conf: ParserConf)(
       toTree: SparkSqlParser => CommonTree): ASTNode = {
