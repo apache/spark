@@ -185,7 +185,11 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     "CASE" + cases + elseCase + " END"
   }
 
-  override def sql: String = prettyString
+  override def sql: String = {
+    val cases = branches.map { case (c, v) => s" WHEN ${c.sql} THEN ${v.sql}" }.mkString
+    val elseCase = elseValue.map(" ELSE " + _.sql).getOrElse("")
+    "CASE" + cases + elseCase + " END"
+  }
 }
 
 /** Factory methods for CaseWhen. */
