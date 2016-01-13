@@ -21,9 +21,9 @@ import java.io.File
 import scala.collection.JavaConverters._
 import scala.util.Try
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.{SQLConf, SQLContext}
 import org.apache.spark.util.{Benchmark, Utils}
-import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * Benchmark to measure parquet read performance.

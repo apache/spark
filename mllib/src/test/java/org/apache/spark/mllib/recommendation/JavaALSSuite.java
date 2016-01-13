@@ -56,10 +56,10 @@ public class JavaALSSuite implements Serializable {
       double matchThreshold,
       boolean implicitPrefs,
       DoubleMatrix truePrefs) {
-    List<Tuple2<Integer, Integer>> localUsersProducts = new ArrayList(users * products);
+    List<Tuple2<Integer, Integer>> localUsersProducts = new ArrayList<>(users * products);
     for (int u=0; u < users; ++u) {
       for (int p=0; p < products; ++p) {
-        localUsersProducts.add(new Tuple2<Integer, Integer>(u, p));
+        localUsersProducts.add(new Tuple2<>(u, p));
       }
     }
     JavaPairRDD<Integer, Integer> usersProducts = sc.parallelizePairs(localUsersProducts);

@@ -881,7 +881,6 @@ Scala code, take a look at the example
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-import com.google.common.base.Optional;
 Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction =
   new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
     @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {

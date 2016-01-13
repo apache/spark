@@ -24,7 +24,6 @@ import java.util.*;
 import scala.Tuple2;
 
 import com.google.common.collect.Iterables;
-import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -38,6 +37,7 @@ import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.util.Utils;
 
