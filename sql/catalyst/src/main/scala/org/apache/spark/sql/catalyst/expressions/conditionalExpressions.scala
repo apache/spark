@@ -147,43 +147,47 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val len = branchesArr.length
-    val got = ctx.freshName("got")
 
-    val cases = (0 until len/2).map { i =>
-      val cond = branchesArr(i * 2).gen(ctx)
-      val res = branchesArr(i * 2 + 1).gen(ctx)
-      s"""
-        if (!$got) {
+    def genBranch(branchIndex: Int): String =
+      if (branchIndex >= branchesArr.length) {
+        ""
+      } else if (branchIndex == len - 1 && len % 2 == 1) {
+        val res = branchesArr(len - 1).gen(ctx)
+        s"""
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.value} = ${res.value};
+        """
+      } else {
+        val cond = branchesArr(branchIndex).gen(ctx)
+        val res = branchesArr(branchIndex + 1).gen(ctx)
+
+        val currentBranch = s"""
           ${cond.code}
           if (!${cond.isNull} && ${cond.value}) {
-            $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};
             ${ev.value} = ${res.value};
           }
-        }
-      """
-    }.mkString("\n")
+        """
 
-    val other = if (len % 2 == 1) {
-      val res = branchesArr(len - 1).gen(ctx)
-      s"""
-        if (!$got) {
-          ${res.code}
-          ${ev.isNull} = ${res.isNull};
-          ${ev.value} = ${res.value};
+        val moreBranch = genBranch(branchIndex + 2)
+        if (moreBranch != "") {
+          s"""
+            $currentBranch
+            else {
+              $moreBranch
+            }
+          """
+        } else {
+          currentBranch
         }
-      """
-    } else {
-      ""
-    }
+      }
 
     s"""
-      boolean $got = false;
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $cases
-      $other
+      ${genBranch(0)}
     """
   }
 
