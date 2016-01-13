@@ -24,11 +24,10 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.Success
 import org.apache.spark.TaskEndReason
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Clock
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
-import org.apache.spark.util.Clock
 
 /**
  * BlacklistTracker is design to track problematic executors and node on application level.
