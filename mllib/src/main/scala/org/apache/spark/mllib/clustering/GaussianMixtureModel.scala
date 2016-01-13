@@ -75,7 +75,7 @@ class GaussianMixtureModel @Since("1.3.0") (
    */
   @Since("1.5.0")
   def predict(point: Vector): Int = {
-    val r = computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
+    val r = predictSoft(point)
     r.indexOf(r.max)
   }
 

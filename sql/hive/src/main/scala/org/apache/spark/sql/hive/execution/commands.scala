@@ -221,7 +221,7 @@ case class CreateMetastoreDataSourceAsSelect(
             optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
           EliminateSubQueries(sqlContext.catalog.lookupRelation(tableIdent)) match {
-            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _) =>
+            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               if (l.relation != createdRelation.relation) {
                 val errorDescription =
                   s"Cannot append to table $tableName because the resolved relation does not " +
