@@ -73,7 +73,7 @@ private[ui] class ExecutorsPage(
           <th>Failed Tasks</th>
           <th>Complete Tasks</th>
           <th>Total Tasks</th>
-          <th>Task Time</th>
+          <th data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</th>
           <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
           <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
           <th>
@@ -114,6 +114,9 @@ private[ui] class ExecutorsPage(
 
   /** Render an HTML row representing an executor */
   private def execRow(info: ExecutorSummary, logsExist: Boolean): Seq[Node] = {
+    // When GCTimePercent is edited change ToolTips.TASK_TIME to match
+    val GCTimePercent = 0.1
+
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -177,14 +180,15 @@ private[ui] class ExecutorsPage(
       }>{info.completedTasks}</td>
       <td>{info.totalTasks}</td>
       <td sorttable_customkey={info.totalDuration.toString} style={
-        // Red if GC time over 10%
-        if (10 * info.totalGCTime > info.totalDuration) {
+        // Red if GC time over GCTimePercent of total time
+        if (info.totalGCTime > GCTimePercent * info.totalDuration) {
           "background:hsla(0, 100%, 50%, " + totalDurationAlpha + ");color:white"
         } else {
           ""
         }
       }>
         {Utils.msDurationToString(info.totalDuration)}
+        ({Utils.msDurationToString(info.totalGCTime)})
       </td>
       <td sorttable_customkey={info.totalInputBytes.toString}>
         {Utils.bytesToString(info.totalInputBytes)}
