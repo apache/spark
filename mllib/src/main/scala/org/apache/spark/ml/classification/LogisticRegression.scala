@@ -340,8 +340,8 @@ class LogisticRegression @Since("1.2.0") (
          }}}
        */
        if (histogram.length >= 2) { // check to make sure indexing into histogram(1) is safe
-         initialCoefficientsWithIntercept.toArray(numFeatures) =
-           math.log(histogram(1) / histogram(0))
+         initialCoefficientsWithIntercept.toArray(numFeatures) = math.log(
+           histogram(1) / histogram(0))
        }
      }
 
