@@ -30,11 +30,7 @@ object Main extends Logging {
   val conf = new SparkConf()
   val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
   val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
-  val s = new Settings()
-  s.processArguments(List("-Yrepl-class-based",
-    "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
-    "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
-  // the creation of SecurityManager has to be lazy so SPARK_YARN_MODE is set if needed
+
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
   var interp = new SparkILoop // this is a public var because tests reset it.
