@@ -119,7 +119,12 @@ private[hive] class ClientWrapper(
         }
         initialConf.set(k, v)
       }
-      val state = new SessionState(initialConf, userName)
+
+      val state = version match {
+        case hive.v12  => new SessionState(initialConf)
+        case _ => new SessionState(initialConf, userName)
+      }
+
       if (clientLoader.cachedHive != null) {
         Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
       }

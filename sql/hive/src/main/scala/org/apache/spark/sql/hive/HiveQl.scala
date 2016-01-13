@@ -128,6 +128,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
     "TOK_GRANT",
     "TOK_GRANT_ROLE",
+    "TOK_REVOKE_ROLE",
 
     "TOK_IMPORT",
 
