@@ -28,10 +28,8 @@ import org.apache.spark.sql.types._
  * When applied on empty data (i.e., count is zero), it returns NULL.
  *
  */
-abstract class Covariance(
-    left: Expression,
-    right: Expression)
-  extends ImperativeAggregate with Serializable {
+abstract class Covariance(left: Expression, right: Expression) extends ImperativeAggregate
+    with Serializable {
   override def children: Seq[Expression] = Seq(left, right)
 
   override def nullable: Boolean = true
