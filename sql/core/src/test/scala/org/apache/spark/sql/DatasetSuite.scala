@@ -135,7 +135,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.select(
         expr("_1").as[String],
-        expr("_2").as[Int]): Dataset[(String, Int)],
+        expr("_2").as[Int]) : Dataset[(String, Int)],
       ("a", 1), ("b", 2), ("c", 3))
   }
 

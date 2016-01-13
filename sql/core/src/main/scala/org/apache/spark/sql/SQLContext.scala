@@ -412,7 +412,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   @Experimental
-  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -428,7 +428,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   @Experimental
-  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -501,7 +501,7 @@ class SQLContext private[sql](
   }
 
 
-  def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
@@ -510,7 +510,7 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
-  def createDataset[T: Encoder](data: RDD[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d))
@@ -519,7 +519,7 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
-  def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
 

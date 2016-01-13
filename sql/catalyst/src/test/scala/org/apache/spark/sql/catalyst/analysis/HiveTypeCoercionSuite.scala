@@ -308,19 +308,44 @@ class HiveTypeCoercionSuite extends PlanTest {
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq(Literal(true), Literal(1.2), Literal.create(1, DecimalType(7, 2)))),
-      CaseWhen(Seq(
-        Literal(true), Literal(1.2), Cast(Literal.create(1, DecimalType(7, 2)), DoubleType)))
+      CaseWhen(Seq((Literal(true), Literal(1.2))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(1.2))),
+        Cast(Literal.create(1, DecimalType(7, 2)), DoubleType))
     )
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq(Literal(true), Literal(100L), Literal.create(1, DecimalType(7, 2)))),
-      CaseWhen(Seq(
-        Literal(true), Cast(Literal(100L), DecimalType(22, 2)),
-        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2))))
+      CaseWhen(Seq((Literal(true), Literal(100L))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
+        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
     )
   }
 
-  test("type coercion simplification for equal to") {
+  test("BooleanEquality type cast") {
+    val be = HiveTypeCoercion.BooleanEquality
+    // Use something more than a literal to avoid triggering the simplification rules.
+    val one = Add(Literal(Decimal(1)), Literal(Decimal(0)))
+
+    ruleTest(be,
+      EqualTo(Literal(true), one),
+      EqualTo(Cast(Literal(true), one.dataType), one)
+    )
+
+    ruleTest(be,
+      EqualTo(one, Literal(true)),
+      EqualTo(one, Cast(Literal(true), one.dataType))
+    )
+
+    ruleTest(be,
+      EqualNullSafe(Literal(true), one),
+      EqualNullSafe(Cast(Literal(true), one.dataType), one)
+    )
+
+    ruleTest(be,
+      EqualNullSafe(one, Literal(true)),
+      EqualNullSafe(one, Cast(Literal(true), one.dataType))
+    )
+  }
+
+  test("BooleanEquality simplification") {
     val be = HiveTypeCoercion.BooleanEquality
 
     ruleTest(be,
@@ -426,7 +451,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     val expectedTypes = Seq(DecimalType(10, 5), DecimalType(10, 5), DecimalType(15, 5),
       DecimalType(25, 5), DoubleType, DoubleType)
 
-    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+    rightTypes.zip(expectedTypes).foreach { case (rType, expectedType) =>
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 

@@ -496,7 +496,7 @@ case class MapPartitions[T, U](
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
-  def apply[T, U: Encoder](
+  def apply[T, U : Encoder](
       func: T => U,
       tEncoder: ExpressionEncoder[T],
       child: LogicalPlan): AppendColumns[T, U] = {
@@ -522,7 +522,7 @@ case class AppendColumns[T, U](
 
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
-  def apply[K, T, U: Encoder](
+  def apply[K, T, U : Encoder](
       func: (K, Iterator[T]) => TraversableOnce[U],
       kEncoder: ExpressionEncoder[K],
       tEncoder: ExpressionEncoder[T],
@@ -557,7 +557,7 @@ case class MapGroups[K, T, U](
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
-  def apply[Key, Left, Right, Result: Encoder](
+  def apply[Key, Left, Right, Result : Encoder](
       func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
       keyEnc: ExpressionEncoder[Key],
       leftEnc: ExpressionEncoder[Left],

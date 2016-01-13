@@ -306,7 +306,47 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply): _*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
+
+  /**
+   * Aggregate function: returns the population covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+  def covar_pop(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovPopulation(column1.expr, column2.expr)
+  }
+
+  /**
+   * Aggregate function: returns the population covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+  def covar_pop(columnName1: String, columnName2: String): Column = {
+    covar_pop(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+  def covar_samp(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovSample(column1.expr, column2.expr)
+  }
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+  def covar_samp(columnName1: String, columnName2: String): Column = {
+    covar_samp(Column(columnName1), Column(columnName2))
+  }
 
   /**
    * Aggregate function: returns the first value in a group.
@@ -768,7 +808,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
-    array((colName +: colNames).map(col): _*)
+    array((colName +: colNames).map(col) : _*)
   }
 
   /**
@@ -977,7 +1017,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
-    struct((colName +: colNames).map(col): _*)
+    struct((colName +: colNames).map(col) : _*)
   }
 
   /**
@@ -1002,7 +1042,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def when(condition: Column, value: Any): Column = withExpr {
-    CaseWhen(Seq(condition.expr, lit(value).expr))
+    CaseWhen(Seq((condition.expr, lit(value).expr)))
   }
 
   /**
