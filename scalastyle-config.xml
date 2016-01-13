@@ -220,7 +220,7 @@ This file is divided into 3 sections:
   <!-- Should turn this on, but we have a few places that need to be fixed first -->
   <check level="warning" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="true">
     <parameters>
-      <parameter name="tokens">COLON, COMMA</parameter>
+      <parameter name="tokens">COMMA</parameter>
     </parameters>
   </check>
 

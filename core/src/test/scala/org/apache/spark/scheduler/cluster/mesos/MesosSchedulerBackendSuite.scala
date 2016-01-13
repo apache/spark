@@ -76,7 +76,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
   test("check spark-class location correctly") {
     val conf = new SparkConf
-    conf.set("spark.mesos.executor.home" , "/mesos-home")
+    conf.set("spark.mesos.executor.home", "/mesos-home")
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
