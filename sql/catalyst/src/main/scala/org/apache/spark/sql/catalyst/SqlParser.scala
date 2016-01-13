@@ -306,7 +306,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
         }
       }
     | CASE ~> whenThenElse ^^
-      { case branches => CaseWhen(branches) }
+      { case branches => CaseWhen.createFromParser(branches) }
     | CASE ~> expression ~ whenThenElse ^^
       { case keyPart ~ branches => CaseKeyWhen(keyPart, branches) }
     )
