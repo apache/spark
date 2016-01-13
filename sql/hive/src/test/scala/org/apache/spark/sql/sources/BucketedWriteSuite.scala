@@ -20,8 +20,8 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
+import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
