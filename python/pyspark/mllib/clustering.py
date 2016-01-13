@@ -184,25 +184,30 @@ class KMeans(object):
           Number of iterations.
           (default: 100)
         :param runs:
-          Number of runs of the algorithm to execute in parallel (deprecated in 1.6.0).
+          Number of runs of the algorithm to execute in parallel
+          (deprecated in 1.6.0).
           (default: 1)
         :param initializationMode:
-          The initialization algorithm. This can be either "random" or "k-means||".
+          The initialization algorithm. This can be either "random" or
+          "k-means||".
           (default: "k-means||")
         :param seed:
-          Random seed for cluster initialization. Set as None to generate seed based on system time.
+          Random seed for cluster initialization. Set as None to generate
+          seed based on system time.
           (default: None)
         :param initializationSteps:
-          Set the number of steps for the k-means|| initialization mode. This is an advanced
-          setting -- the default of 5 is almost always enough.
+          Set the number of steps for the k-means|| initialization mode.
+          This is an advanced setting -- the default of 5 is almost
+          always enough.
           (default: 5)
         :param epsilon:
-          Set the distance threshold within which we've consider centers to have converged.
-          If all centers move less than this Euclidean distance, we stop iterating one run.
+          Set the distance threshold within which we've consider centers
+          to have converged. If all centers move less than this Euclidean
+          distance, we stop iterating one run.
           (default: 1e-4)
         :param initialModel:
-          Initial cluster centers can be provided as a KMeansModel object rather than using the
-          random or k-means|| initializationModel.
+          Initial cluster centers can be provided as a KMeansModel object
+          rather than using the random or k-means|| initializationModel.
           (default: None)
         """
         if runs != 1:
@@ -385,11 +390,12 @@ class GaussianMixture(object):
           Number of iterations.
           (default: 100)
         :param seed:
-          Random seed for initial Gaussian distribution. Set as None to generate seed based on
-          system time.
+          Random seed for initial Gaussian distribution. Set as None to
+          generate seed based on system time.
           (default: None)
         :param initialModel:
-          Set the initial GMM starting point, bypassing the random initialization.
+          Set the initial GMM starting point, bypassing the random
+          initialization.
           (default: None)
         """
         initialModelWeights = None
@@ -493,19 +499,22 @@ class PowerIterationClustering(object):
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
         """
         :param rdd:
-          Train with a RDD of (i, j, s,,ij,,) tuples representing the affinity matrix, which is
-          the matrix A in the PIC paper.  The similarity s,,ij,, must be nonnegative.  This is a
-          symmetric matrix and hence s,,ij,, = s,,ji,,.  For any (i, j) with nonzero similarity,
-          there should be either (i, j, s,,ij,,) or (j, i, s,,ji,,) in the input.  Tuples with
-          i = j are ignored, because we assume s,,ij,, = 0.0.
+          Train with a RDD of (i, j, s,,ij,,) tuples representing the
+          affinity matrix, which is the matrix A in the PIC paper.  The
+          similarity s,,ij,, must be nonnegative.  This is a symmetric
+          matrix and hence s,,ij,, = s,,ji,,.  For any (i, j) with
+          nonzero similarity, there should be either (i, j, s,,ij,,) or
+          (j, i, s,,ji,,) in the input.  Tuples with i = j are ignored,
+          because we assume s,,ij,, = 0.0.
         :param k:
           Number of clusters.
         :param maxIterations:
           Maximum number of iterations of the PIC algorithm.
           (default: 100)
         :param initMode:
-          Set the initialization mode. This can be either "random" to use a random vector as
-          vertex properties, or "degree" to use normalized sum similarities.
+          Set the initialization mode. This can be either "random" to use
+          a random vector as vertex properties, or "degree" to use
+          normalized sum similarities.
           (default: "random")
         """
         model = callMLlibFunc("trainPowerIterationClusteringModel",
@@ -601,8 +610,9 @@ class StreamingKMeansModel(KMeansModel):
         :param decayFactor:
           Forgetfulness of the previous centroids.
         :param timeUnit:
-          Can be "batches" or "points". If points, then the decay factor is raised to the power of
-          number of new points and if batches, then decay factor will be used as is.
+          Can be "batches" or "points". If points, then the decay factor
+          is raised to the power of number of new points and if batches,
+          then decay factor will be used as is.
         """
         if not isinstance(data, RDD):
             raise TypeError("Data should be of an RDD, got %s." % type(data))
@@ -636,8 +646,9 @@ class StreamingKMeans(object):
       Forgetfulness of the previous centroids.
       (default: 1.0)
     :param timeUnit:
-      Can be "batches" or "points". If points, then the decay factor is raised to the power of
-      number of new points and if batches, then decay factor will be used as is.
+      Can be "batches" or "points". If points, then the decay factor is
+      raised to the power of number of new points and if batches, then
+      decay factor will be used as is.
       (default: "batches")
 
     .. versionadded:: 1.5.0
@@ -805,9 +816,9 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
           Maximum number of terms to collect for each topic.
           (default: vocabulary size)
         :return:
-          Array over topics. Each topic is represented as a pair of matching arrays:
-          (term indices, term weights in topic).  Each topic's terms are sorted in order of
-          decreasing weight.
+          Array over topics. Each topic is represented as a pair of
+          matching arrays: (term indices, term weights in topic).
+          Each topic's terms are sorted in order of decreasing weight.
         """
         if maxTermsPerTopic is None:
             topics = self.call("describeTopics")
@@ -847,28 +858,30 @@ class LDA(object):
         :param rdd:
           Train with a RDD of data points.
         :param k:
-          Number of topics to infer, i.e., the number of soft cluster centers.
+          Number of topics to infer, i.e., the number of soft cluster
+          centers.
           (default: 10)
         :param maxIterations:
           Number of iterations.
           (default: 20)
         :param docConcentration:
-          Concentration parameter (commonly named "alpha") for the prior placed on documents'
-          distributions over topics ("theta").
+          Concentration parameter (commonly named "alpha") for the prior
+          placed on documents' distributions over topics ("theta").
           (default: -1.0)
         :param topicConcentration:
-          Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
-          distributions over terms.
+          Concentration parameter (commonly named "beta" or "eta") for
+          the prior placed on topics' distributions over terms.
           (default: -1.0)
         :param seed:
-          Random seed for cluster initialization. Set as None to generate seed based on system time.
+          Random seed for cluster initialization. Set as None to generate
+          seed based on system time.
           (default: None)
         :param checkpointInterval:
           Period (in iterations) between checkpoints.
           (default: 10)
         :param optimizer:
-          LDAOptimizer used to perform the actual calculation.  Currently "em", "online" are
-          supported.
+          LDAOptimizer used to perform the actual calculation. Currently
+          "em", "online" are supported.
           (default: "em")
         """
         model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
