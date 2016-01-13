@@ -25,6 +25,8 @@ import scala.collection.JavaConverters._
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.parser.ParserConf
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -111,6 +113,25 @@ private[spark] object SQLConf {
         } catch {
           case _: NumberFormatException =>
             throw new IllegalArgumentException(s"$key should be long, but was $v")
+        }
+      }, _.toString, doc, isPublic)
+
+    def longMemConf(
+        key: String,
+        defaultValue: Option[Long] = None,
+        doc: String = "",
+        isPublic: Boolean = true): SQLConfEntry[Long] =
+      SQLConfEntry(key, defaultValue, { v =>
+        try {
+          v.toLong
+        } catch {
+          case _: NumberFormatException =>
+            try {
+              Utils.byteStringAsBytes(v)
+            } catch {
+              case _: NumberFormatException =>
+                throw new IllegalArgumentException(s"$key should be long, but was $v")
+            }
         }
       }, _.toString, doc, isPublic)
 
@@ -234,7 +255,7 @@ private[spark] object SQLConf {
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
-    longConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+    longMemConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
       defaultValue = Some(64 * 1024 * 1024),
       doc = "The target post-shuffle input size in bytes of a task.")
 
@@ -451,6 +472,19 @@ private[spark] object SQLConf {
     doc = "When true, we could use `datasource`.`path` as table in SQL query"
   )
 
+  val PARSER_SUPPORT_QUOTEDID = booleanConf("spark.sql.parser.supportQuotedIdentifiers",
+    defaultValue = Some(true),
+    isPublic = false,
+    doc = "Whether to use quoted identifier.\n  false: default(past) behavior. Implies only" +
+      "alphaNumeric and underscore are valid characters in identifiers.\n" +
+      "  true: implies column names can contain any character.")
+
+  val PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS = booleanConf(
+    "spark.sql.parser.supportSQL11ReservedKeywords",
+    defaultValue = Some(false),
+    isPublic = false,
+    doc = "This flag should be set to true to enable support for SQL2011 reserved keywords.")
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -471,7 +505,7 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf {
+private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -568,6 +602,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
+
+  def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
 
   /** ********************** SQLConf functionality methods ************ */
 

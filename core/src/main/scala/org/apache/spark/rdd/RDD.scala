@@ -95,7 +95,7 @@ abstract class RDD[T: ClassTag](
 
   /** Construct an RDD with just a one-to-one dependency on one parent */
   def this(@transient oneParent: RDD[_]) =
-    this(oneParent.context , List(new OneToOneDependency(oneParent)))
+    this(oneParent.context, List(new OneToOneDependency(oneParent)))
 
   private[spark] def conf = sc.conf
   // =======================================================================
@@ -970,6 +970,13 @@ abstract class RDD[T: ClassTag](
    * apply the fold to each element sequentially in some defined ordering. For functions
    * that are not commutative, the result may differ from that of a fold applied to a
    * non-distributed collection.
+   *
+   * @param zeroValue the initial value for the accumulated result of each partition for the `op`
+   *                  operator, and also the initial value for the combine results from different
+   *                  partitions for the `op` operator - this will typically be the neutral
+   *                  element (e.g. `Nil` for list concatenation or `0` for summation)
+   * @param op an operator used to both accumulate results within a partition and combine results
+   *                  from different partitions
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -988,6 +995,13 @@ abstract class RDD[T: ClassTag](
    * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
+   *
+   * @param zeroValue the initial value for the accumulated result of each partition for the
+   *                  `seqOp` operator, and also the initial value for the combine results from
+   *                  different partitions for the `combOp` operator - this will typically be the
+   *                  neutral element (e.g. `Nil` for list concatenation or `0` for summation)
+   * @param seqOp an operator used to accumulate results within a partition
+   * @param combOp an associative operator used to combine results from different partitions
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -1194,7 +1208,7 @@ abstract class RDD[T: ClassTag](
       while (buf.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1
+        var numPartsToTry = 1L
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
@@ -1209,11 +1223,11 @@ abstract class RDD[T: ClassTag](
         }
 
         val left = num - buf.size
-        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))
-        partsScanned += numPartsToTry
+        partsScanned += p.size
       }
 
       buf.toArray

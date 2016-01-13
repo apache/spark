@@ -115,7 +115,7 @@ class StageData private[spark](
     val status: StageStatus,
     val stageId: Int,
     val attemptId: Int,
-    val numActiveTasks: Int ,
+    val numActiveTasks: Int,
     val numCompleteTasks: Int,
     val numFailedTasks: Int,
 

@@ -65,6 +65,8 @@ abstract class DataType extends AbstractDataType {
   /** Readable string representation for the type with truncation */
   private[sql] def simpleString(maxNumberFields: Int): String = simpleString
 
+  def sql: String = simpleString.toUpperCase
+
   /**
    * Check if `this` and `other` are the same data type when ignoring nullability
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
