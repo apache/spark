@@ -75,10 +75,10 @@ class Analyzer(
       ResolvePivot ::
       ResolveUpCast ::
       ResolveSortReferences ::
-      ResolveSubquery ::
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
+      ResolveSubquery ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ExtractWindowExpressions ::
@@ -682,7 +682,7 @@ class Analyzer(
       val equalCond = value match {
         case CreateStruct(columns) =>
           if (columns.length != resolved.output.length) {
-            throw new AnalysisException(s"the number of columns in value (${columns.length}) does" +
+            throw new AnalysisException(s"the number of fields in value (${columns.length}) does" +
               s" not match with the number of columns in subquery (${resolved.output.length})")
           }
           columns.zip(resolved.output).map {
@@ -737,11 +737,11 @@ class Analyzer(
                 val (resolved, joinCondition) = removeUnresolvedPredicates(sub)
                 newChild = Join(newChild, resolved, LeftAnti, joinCondition)
 
-              case In(value, ListSubQuery(sub) :: Nil) =>
+              case In(value, ListSubQuery(sub) :: Nil) if value.resolved =>
                 val (resolved, cond) = rewriteInSubquery(value, sub)
                 newChild = Join(newChild, resolved, LeftSemi, Some(cond))
 
-              case Not(In(value, ListSubQuery(sub) :: Nil)) =>
+              case Not(In(value, ListSubQuery(sub) :: Nil)) if value.resolved =>
                 val (resolved, cond) = rewriteInSubquery(value, sub)
                 if (resolved.output.exists(_.nullable)) {
                   throw new AnalysisException(s"NOT IN with nullable subquery is not supported")
@@ -793,8 +793,12 @@ class Analyzer(
                 newConds += newCond
 
               case other =>
-                throw new AnalysisException(s"EXISTS/IN only be used as top level predicate " +
-                  s"(with AND)")
+                if (other.find(_.isInstanceOf[Exists]).isDefined) {
+                  throw new AnalysisException(s"EXISTS only be used as top level predicate " +
+                    s"(with AND)")
+                }
+                // others could be resolved later
+                newConds += other
             }
 
             if (withoutSubquery.nonEmpty || newConds.nonEmpty) {

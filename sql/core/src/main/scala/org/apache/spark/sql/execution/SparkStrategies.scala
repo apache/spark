@@ -36,7 +36,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(joinType @ (LeftSemi | LeftAnti),
           leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
-        joins.BroadcastSemiJoin(
+        joins.BroadcastLeftSemiJoinHash(
           joinType, leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(

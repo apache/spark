@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * Build the right table's join keys into a HashSet, and iteratively go through the left
  * table, to find the if join keys are in the Hash set.
  */
-case class BroadcastSemiJoin(
+case class BroadcastLeftSemiJoinHash(
     joinType: JoinType,
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],

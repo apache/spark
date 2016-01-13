@@ -815,6 +815,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("select * from (select 1 as a union all select 2 as a) t " +
         "where not exists (select * from (select 1 as b) t2 where b = a and b < 2) ").collect()
     }
+    intercept[AnalysisException] {
+      sql("select * from (select 1 as a union all select 2 as a) t " +
+        "where exists (select * from (select 1 as b) t2 where b = a and b < 2)" +
+        " or not exists (select 1) ").collect()
+    }
   }
 
   test("in subquery") {
@@ -823,8 +828,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         "select * from (select 1 as a union all select 2 as a) t " +
         "where a in (select b as a from t2 where b < 2) ").collect()
     }
-    assertResult(Array(Row(2))) {
+    assertResult(Array(Row(1, 2))) {
       sql("with t2 as (select 1 as b) " +
+        "select * from (select 1 as a, 2 as b) t " +
+        "where struct(a, b) in (select b, b + 1 from t2 where b < 2) ").collect()
+    }
+  }
+
+  test("not in subquery") {
+    assertResult(Array(Row(1))) {
+      sql("with t2 as (select 1 as b) " +
+        "select * from (select 1 as a union all select null as a) t " +
+        "where a not in (select b + 1 from t2 where b < 2) ").collect()
+    }
+    intercept[AnalysisException] {
+      sql("with t2 as (select 1 as b unoin all select null as b) " +
         "select * from (select 1 as a union all select 2 as a) t " +
         "where a not in (select b as a from t2 where b < 2) ").collect()
     }
