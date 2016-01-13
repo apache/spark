@@ -883,6 +883,20 @@ class LogisticRegressionSuite
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
   }
 
+  test("logistic regression with all labels the same") {
+    val lr = new LogisticRegression()
+      .setFitIntercept(true)
+      .setMaxIter(3)
+      .setLabelCol("sameLabel")
+    val sameLabelDataset = dataset.withColumn(lit(0.0), "sameLabel")
+    val model = lr.fit(sameLabelDataset)
+    val predictions = model.transform(sameLabelDataset)
+
+    predictions.show()
+    println(model.weights)
+    println(model.intercept)
+  }
+
   test("read/write") {
     def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
       assert(model.intercept === model2.intercept)

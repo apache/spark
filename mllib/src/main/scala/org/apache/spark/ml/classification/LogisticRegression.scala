@@ -339,9 +339,11 @@ class LogisticRegression @Since("1.2.0") (
          b = \log{P(1) / P(0)} = \log{count_1 / count_0}
          }}}
        */
-      initialCoefficientsWithIntercept.toArray(numFeatures)
-        = math.log(histogram(1) / histogram(0))
-    }
+       if (histogram.length >= 2) { // check to make sure indexing into histogram(1) is safe
+         initialCoefficientsWithIntercept.toArray(numFeatures) =
+           math.log(histogram(1) / histogram(0))
+       }
+     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialCoefficientsWithIntercept.toBreeze.toDenseVector)
