@@ -61,7 +61,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
   protected val COMMENT = Keyword("COMMENT")
   protected val REFRESH = Keyword("REFRESH")
 
-  protected lazy val ddl: Parser[LogicalPlan] = createTable | refreshTable
+  protected lazy val ddl: Parser[LogicalPlan] = createTable
 
   protected def start: Parser[LogicalPlan] = ddl
 

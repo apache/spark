@@ -20,6 +20,7 @@ import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.execution.datasources.RefreshTable
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
   /** Check if a command should not be explained. */
@@ -41,6 +42,10 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         val Some(query) :: _ :: extended :: Nil =
           getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
         ExplainCommand(nodeToPlan(query), extended = extended.isDefined)
+
+      case Token("TOK_REFRESHTABLE", nameParts :: Nil) =>
+        val tableIdent = extractTableIdent(nameParts)
+        RefreshTable(tableIdent)
 
       case Token("TOK_DESCTABLE", describeArgs) =>
         // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL

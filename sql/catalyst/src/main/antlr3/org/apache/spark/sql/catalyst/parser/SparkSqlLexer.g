@@ -324,6 +324,8 @@ KW_ISOLATION: 'ISOLATION';
 KW_LEVEL: 'LEVEL';
 KW_SNAPSHOT: 'SNAPSHOT';
 KW_AUTOCOMMIT: 'AUTOCOMMIT';
+KW_REFRESH: 'REFRESH';
+
 
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.

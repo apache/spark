@@ -368,6 +368,7 @@ TOK_TXN_READ_WRITE;
 TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
+TOK_REFRESHTABLE;
 }
 
 
@@ -759,6 +760,7 @@ ddlStatement
     | truncateTableStatement
     | alterStatement
     | descStatement
+    | refreshStatement
     | showStatement
     | metastoreCheck
     | createViewStatement
@@ -1355,6 +1357,13 @@ tabPartColTypeExpr
 @init { pushMsg("specifying table partitions columnName", state); }
 @after { popMsg(state); }
     :  tableName partitionSpec? extColumnName? -> ^(TOK_TABTYPE tableName partitionSpec? extColumnName?)
+    ;
+
+refreshStatement
+@init { pushMsg("refresh statement", state); }
+@after { popMsg(state); }
+    :
+    KW_REFRESH KW_TABLE tableName -> ^(TOK_REFRESHTABLE tableName)
     ;
 
 descStatement
