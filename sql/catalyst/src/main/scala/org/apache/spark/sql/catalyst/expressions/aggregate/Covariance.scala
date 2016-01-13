@@ -165,7 +165,7 @@ case class CovSample(
           cov
         }
       } else {
-        0.0
+        null
       }
     } else {
       null

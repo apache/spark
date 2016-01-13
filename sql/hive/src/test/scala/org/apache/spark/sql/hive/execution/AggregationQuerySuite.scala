@@ -832,8 +832,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    val cov_samp3 = df3.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
-    assert(cov_samp3 == 0.0)
+    val cov_samp3 = df3.groupBy().agg(covar_samp("a", "b")).collect()(0).get(0)
+    assert(cov_samp3 == null)
 
     val cov_pop3 = df3.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
     assert(cov_pop3 == 0.0)
