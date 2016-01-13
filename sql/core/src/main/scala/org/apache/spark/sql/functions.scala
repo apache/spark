@@ -1042,7 +1042,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def when(condition: Column, value: Any): Column = withExpr {
-    CaseWhen(Seq(condition.expr, lit(value).expr))
+    CaseWhen(Seq((condition.expr, lit(value).expr)))
   }
 
   /**
