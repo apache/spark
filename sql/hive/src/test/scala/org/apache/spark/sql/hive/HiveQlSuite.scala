@@ -18,18 +18,17 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.spark.sql.catalyst.expressions.JsonTuple
-import org.apache.spark.sql.catalyst.plans.logical.Generate
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.plans.logical.Generate
 import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, HiveTable, ManagedTable}
-
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   private def extractTableDesc(sql: String): (HiveTable, Boolean) = {
-    HiveQl.createPlan(sql).collect {
+    HiveQl.parsePlan(sql).collect {
       case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
     }.head
   }

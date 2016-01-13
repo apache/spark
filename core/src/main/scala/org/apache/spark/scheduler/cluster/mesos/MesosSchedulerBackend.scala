@@ -26,6 +26,7 @@ import scala.collection.mutable.{HashMap, HashSet}
 import org.apache.mesos.{Scheduler => MScheduler, _}
 import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.protobuf.ByteString
+
 import org.apache.spark.{SparkContext, SparkException, TaskState}
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._

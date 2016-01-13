@@ -17,22 +17,22 @@
 
 package org.apache.spark.rdd
 
+import java.io.EOFException
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.io.EOFException
 
 import scala.collection.immutable.Map
-import scala.reflect.ClassTag
 import scala.collection.mutable.ListBuffer
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
-import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
 import org.apache.hadoop.mapred.lib.CombineFileSplit
@@ -45,9 +45,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, NextIterator, Utils}
-import org.apache.spark.scheduler.{HostTaskLocation, HDFSCacheTaskLocation}
+import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.

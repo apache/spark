@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.{Since, DeveloperApi}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -40,7 +40,7 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
+import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
   SamplingUtils}
 
 /**
@@ -747,99 +747,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: DeveloperApi ::
-   * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
-   * mapPartitions that also passes the TaskContext into the closure.
-   *
-   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
-   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
-   */
-  @DeveloperApi
-  @deprecated("use TaskContext.get", "1.2.0")
-  def mapPartitionsWithContext[U: ClassTag](
-      f: (TaskContext, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    val cleanF = sc.clean(f)
-    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => cleanF(context, iter)
-    new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
-  }
-
-  /**
-   * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
-   * of the original partition.
-   */
-  @deprecated("use mapPartitionsWithIndex", "0.7.0")
-  def mapPartitionsWithSplit[U: ClassTag](
-      f: (Int, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean = false): RDD[U] = withScope {
-    mapPartitionsWithIndex(f, preservesPartitioning)
-  }
-
-  /**
-   * Maps f over this RDD, where f takes an additional parameter of type A.  This
-   * additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex", "1.0.0")
-  def mapWith[A, U: ClassTag]
-      (constructA: Int => A, preservesPartitioning: Boolean = false)
-      (f: (T, A) => U): RDD[U] = withScope {
-    val cleanF = sc.clean(f)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
-      iter.map(t => cleanF(t, a))
-    }, preservesPartitioning)
-  }
-
-  /**
-   * FlatMaps f over this RDD, where f takes an additional parameter of type A.  This
-   * additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex and flatMap", "1.0.0")
-  def flatMapWith[A, U: ClassTag]
-      (constructA: Int => A, preservesPartitioning: Boolean = false)
-      (f: (T, A) => Seq[U]): RDD[U] = withScope {
-    val cleanF = sc.clean(f)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
-      iter.flatMap(t => cleanF(t, a))
-    }, preservesPartitioning)
-  }
-
-  /**
-   * Applies f to each element of this RDD, where f takes an additional parameter of type A.
-   * This additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
-  def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit): Unit = withScope {
-    val cleanF = sc.clean(f)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex { (index, iter) =>
-      val a = cleanA(index)
-      iter.map(t => {cleanF(t, a); t})
-    }
-  }
-
-  /**
-   * Filters this RDD with p, where p takes an additional parameter of type A.  This
-   * additional parameter is produced by constructA, which is called in each
-   * partition with the index of that partition.
-   */
-  @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
-  def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = withScope {
-    val cleanP = sc.clean(p)
-    val cleanA = sc.clean(constructA)
-    mapPartitionsWithIndex((index, iter) => {
-      val a = cleanA(index)
-      iter.filter(t => cleanP(t, a))
-    }, preservesPartitioning = true)
-  }
-
-  /**
    * Zips this RDD with another one, returning key-value pairs with the first element in each RDD,
    * second element in each RDD, etc. Assumes that the two RDDs have the *same number of
    * partitions* and the *same number of elements in each partition* (e.g. one was made through
@@ -942,14 +849,6 @@ abstract class RDD[T: ClassTag](
       sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p)).head
     }
     (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
-  }
-
-  /**
-   * Return an array that contains all of the elements in this RDD.
-   */
-  @deprecated("use collect", "1.0.0")
-  def toArray(): Array[T] = withScope {
-    collect()
   }
 
   /**
@@ -1071,6 +970,13 @@ abstract class RDD[T: ClassTag](
    * apply the fold to each element sequentially in some defined ordering. For functions
    * that are not commutative, the result may differ from that of a fold applied to a
    * non-distributed collection.
+   *
+   * @param zeroValue the initial value for the accumulated result of each partition for the `op`
+   *                  operator, and also the initial value for the combine results from different
+   *                  partitions for the `op` operator - this will typically be the neutral
+   *                  element (e.g. `Nil` for list concatenation or `0` for summation)
+   * @param op an operator used to both accumulate results within a partition and combine results
+   *                  from different partitions
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -1089,6 +995,13 @@ abstract class RDD[T: ClassTag](
    * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
+   *
+   * @param zeroValue the initial value for the accumulated result of each partition for the
+   *                  `seqOp` operator, and also the initial value for the combine results from
+   *                  different partitions for the `combOp` operator - this will typically be the
+   *                  neutral element (e.g. `Nil` for list concatenation or `0` for summation)
+   * @param seqOp an operator used to accumulate results within a partition
+   * @param combOp an associative operator used to combine results from different partitions
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -1295,7 +1208,7 @@ abstract class RDD[T: ClassTag](
       while (buf.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1
+        var numPartsToTry = 1L
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
@@ -1310,11 +1223,11 @@ abstract class RDD[T: ClassTag](
         }
 
         val left = num - buf.size
-        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))
-        partsScanned += numPartsToTry
+        partsScanned += p.size
       }
 
       buf.toArray

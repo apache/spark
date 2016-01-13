@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.plans.PlanTest
-
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -300,7 +299,7 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("type coercion for CaseKeyWhen") {
-    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )

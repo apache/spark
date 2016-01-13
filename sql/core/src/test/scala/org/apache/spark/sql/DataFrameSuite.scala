@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
@@ -308,6 +308,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       mapData.toDF().limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+
+    // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
+    checkAnswer(
+      sqlContext.range(2).limit(2147483638),
+      Row(0) :: Row(1) :: Nil
+    )
   }
 
   test("except") {

@@ -169,7 +169,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     while (buf.size < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
-      var numPartsToTry = 1
+      var numPartsToTry = 1L
       if (partsScanned > 0) {
         // If we didn't find any rows after the first iteration, just try all partitions next.
         // Otherwise, interpolate the number of partitions we need to try, but overestimate it
@@ -183,13 +183,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
       val left = n - buf.size
-      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+      val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
       val sc = sqlContext.sparkContext
-      val res =
-        sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
+      val res = sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
 
       res.foreach(buf ++= _.take(n - buf.size))
-      partsScanned += numPartsToTry
+      partsScanned += p.size
     }
 
     buf.toArray

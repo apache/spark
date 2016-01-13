@@ -25,9 +25,9 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
+import org.apache.spark.sql.types._
 
 /**
  * Util functions for JDBC tables.

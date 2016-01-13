@@ -20,16 +20,17 @@ package org.apache.spark.sql
 import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
 
 abstract class QueryTest extends PlanTest {
 
@@ -206,7 +207,7 @@ abstract class QueryTest extends PlanTest {
     val jsonString = try {
       logicalPlan.toJSON
     } catch {
-      case e =>
+      case NonFatal(e) =>
         fail(
           s"""
              |Failed to parse logical plan to JSON:
@@ -231,7 +232,7 @@ abstract class QueryTest extends PlanTest {
     val jsonBackPlan = try {
       TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
     } catch {
-      case e =>
+      case NonFatal(e) =>
         fail(
           s"""
              |Failed to rebuild the logical plan from JSON:

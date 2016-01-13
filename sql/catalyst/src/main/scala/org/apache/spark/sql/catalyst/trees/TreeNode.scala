@@ -18,25 +18,26 @@
 package org.apache.spark.sql.catalyst.trees
 
 import java.util.UUID
+
 import scala.collection.Map
 import scala.collection.mutable.Stack
+
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.util.Utils
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.{EmptyRDD, RDD}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.{ScalaReflectionLock, TableIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
-import org.apache.spark.sql.catalyst.{TableIdentifier, ScalaReflectionLock}
+import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{StructType, DataType}
+import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.Utils
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
