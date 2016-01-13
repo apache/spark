@@ -945,7 +945,7 @@ class SQLContext private[sql](
     }
   }
 
-  // Register a succesfully instantiatd context to the singleton. This should be at the end of
+  // Register a successfully instantiated context to the singleton. This should be at the end of
   // the class definition so that the singleton is updated only if there is no exception in the
   // construction of the instance.
   sparkContext.addSparkListener(new SparkListener {

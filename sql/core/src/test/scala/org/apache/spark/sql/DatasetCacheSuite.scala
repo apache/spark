@@ -27,7 +27,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("persist and unpersist") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS().select(expr("_2 + 1").as[Int])
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS().select(expr("_2 + 1").as[Int])
     val cached = ds.cache()
     // count triggers the caching action. It should not throw.
     cached.count()
