@@ -64,6 +64,24 @@ class BLASSuite extends SparkFunSuite {
     assert(dx ~== Vectors.dense(0.1, 0.0, -0.2) absTol 1e-15)
   }
 
+  test("unitedIndices") {
+    val indices1 = Array(0, 2, 4, 4, 7, 8, 15)
+    val indices2 = Array(4, 9, 100)
+
+    val united = unitedIndices(indices1, indices2)
+
+    assert(united.length == 8)
+
+    assert(united(0) == 0)
+    assert(united(1) == 2)
+    assert(united(2) == 4)
+    assert(united(3) == 7)
+    assert(united(4) == 8)
+    assert(united(5) == 9)
+    assert(united(6) == 15)
+    assert(united(7) == 100)
+  }
+
   test("axpy") {
     val alpha = 0.1
     val sx = Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0))
@@ -79,14 +97,22 @@ class BLASSuite extends SparkFunSuite {
     axpy(alpha, dx, dy2)
     assert(dy2 ~== expected absTol 1e-15)
 
-    val sy = Vectors.sparse(4, Array(0, 1), Array(2.0, 1.0))
+    val sy1 = Vectors.dense(dy).toSparse
+    axpy(alpha, sx, sy1)
+    assert(sy1 ~== expected absTol 1e-15)
+
+    val sy2 = Vectors.dense(dy).toSparse
+    axpy(alpha, dx, sy2)
+    assert(sy2 ~== expected absTol 1e-15)
+
+    val largerSy = Vectors.sparse(4, Array(0, 1), Array(2.0, 1.0))
 
     intercept[IllegalArgumentException] {
-      axpy(alpha, sx, sy)
+      axpy(alpha, sx, largerSy)
     }
 
     intercept[IllegalArgumentException] {
-      axpy(alpha, dx, sy)
+      axpy(alpha, dx, largerSy)
     }
 
     withClue("vector sizes must match") {

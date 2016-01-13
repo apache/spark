@@ -38,6 +38,42 @@ private[spark] object BLAS extends Serializable with Logging {
     _f2jBLAS
   }
 
+  // equivalent to xIndices.union(yIndices).distinct.sortBy(i => i)
+  def unitedIndices(xSortedIndices: Array[Int], ySortedIndices: Array[Int]): Array[Int] = {
+    val arr = new Array[Int](xSortedIndices.length + ySortedIndices.length)
+    (0 until arr.length).foreach(i => arr(i) = -1)
+
+    var xj = 0
+    var yj = 0
+    var j = 0
+    var previ = Int.MaxValue
+
+    def getAt(arr: Array[Int], j: Int): Int = if (j < arr.length) arr(j) else Int.MaxValue
+
+    while (xj < xSortedIndices.length || yj < ySortedIndices.length) {
+      val xi = getAt(xSortedIndices, xj)
+      val yi = getAt(ySortedIndices, yj)
+
+      val i = if (xi <= yi) {
+        xj += 1
+        xi
+      }
+      else {
+        yj += 1
+        yi
+      }
+
+      if (previ != i) {
+        arr(j) = i
+        j += 1
+      }
+
+      previ = i
+    }
+
+    arr.filter(_ != -1)
+  }
+
   /**
    * y += a * x
    */
@@ -50,6 +86,16 @@ private[spark] object BLAS extends Serializable with Logging {
             axpy(a, sx, dy)
           case dx: DenseVector =>
             axpy(a, dx, dy)
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"axpy doesn't support x type ${x.getClass}.")
+        }
+      case sy: SparseVector =>
+        x match {
+          case sx: SparseVector =>
+            axpy(a, sx, sy)
+          case dx: DenseVector =>
+            axpy(a, dx, sy)
           case _ =>
             throw new UnsupportedOperationException(
               s"axpy doesn't support x type ${x.getClass}.")
@@ -90,6 +136,34 @@ private[spark] object BLAS extends Serializable with Logging {
         k += 1
       }
     }
+  }
+
+  /**
+    * y += a * x
+    */
+  private def axpy(a: Double, x: DenseVector, y: SparseVector): Unit = {
+    require(x.size == y.size)
+
+    val xIndices = (0 until x.size).filter(i => x(i) != 0.0).toArray
+    val xValues = xIndices.map(i => x(i))
+
+    axpy(a, Vectors.sparse(x.size, xIndices, xValues), y)
+  }
+
+  /**
+    * y += a * x
+    */
+  private def axpy(a: Double, x: SparseVector, y: SparseVector): Unit = {
+    require(x.size == y.size)
+
+    val xIndices = x.indices
+    val yIndices = y.indices
+
+    val newIndices = unitedIndices(xIndices, yIndices)
+    assert(newIndices.size >= yIndices.size)
+
+    val newValues = newIndices.map(i => a*x(i) + y(i))
+    y.reassign(newIndices, newValues)
   }
 
   /** Y += a * x */
