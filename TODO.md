@@ -1,4 +1,6 @@
 #### Roadmap items
+* UI page answering "Why isn't this task instance running?"
+* Attempt removing DagBag caching for the web server
 * Distributed scheduler (supervisors)
     * Get the supervisors to run sensors (as opposed to each sensor taking a slot)
     * Improve DagBag differential refresh
