@@ -523,28 +523,41 @@ class Analyzer(
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ Sort(_, _, child) if !s.resolved && child.resolved =>
-        val (newOrdering, missingAttrs, missingPlans) =
-          collectResolvedMissingAttrs(s.order, child, Seq.empty[LogicalPlan])
+        val (newOrdering, missingResolvableAttrs) = collectResolvedMissingAttrs(s.order, child)
 
-        if (missingAttrs.isEmpty) {
-          logDebug(s"Failed to find $missingAttrs in ${child.output.mkString(", ")}")
+        if (missingResolvableAttrs.isEmpty) {
+          val unresolvableAttrs = s.order.filterNot(_.resolved)
+          logDebug(s"Failed to find $unresolvableAttrs in ${child.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
         }
         else {
-          val missingPlanSet = missingPlans.toSet
+          var stop: Boolean = false
+          var missingAttrs: Seq[Attribute] = missingResolvableAttrs
           val newChild = child transform {
-            case p: Project if missingPlanSet.contains(p) =>
-              p.copy(projectList = p.projectList ++ missingAttrs)
-            case w: Window if missingPlanSet.contains(w) =>
-              w.copy(projectList = w.projectList ++ missingAttrs)
-            case a: Aggregate if missingPlanSet.contains(a) =>
+            case p: Project if !stop && missingAttrs.nonEmpty =>
+              val newList = p.projectList ++ missingAttrs
+              missingAttrs = missingAttrs.filterNot(
+                attr => p.child.outputSet.exists(_.semanticEquals(attr)))
+              p.copy(projectList = newList)
+            case w: Window if !stop && missingAttrs.nonEmpty =>
+              val newList = w.projectList ++ missingAttrs
+              missingAttrs = missingAttrs.filterNot(
+                attr => w.child.outputSet.exists(_.semanticEquals(attr)))
+              w.copy(projectList = newList)
+            case a: Aggregate if !stop && missingAttrs.nonEmpty =>
               // Grouping expressions could already have the missing attributes.
               // Do not add the duplicate attributes.
               val newGroupExpressions = a.groupingExpressions ++ missingAttrs.filterNot(
                 attr => a.groupingExpressions.exists(_.semanticEquals(attr)))
-              a.copy(aggregateExpressions = a.aggregateExpressions ++ missingAttrs,
-                groupingExpressions = newGroupExpressions)
-            case o => o
+              val newAggregateExpressions = a.aggregateExpressions ++ missingAttrs
+              missingAttrs = missingAttrs.filterNot(
+                attr => a.child.outputSet.exists(_.semanticEquals(attr)))
+              a.copy(groupingExpressions = newGroupExpressions,
+                aggregateExpressions = newAggregateExpressions)
+            case s: Subquery if !stop && missingAttrs.nonEmpty => s
+            case o =>
+              stop = true
+              o
           }
 
           // Add missing attributes and then project them away after the sort.
@@ -554,37 +567,33 @@ class Analyzer(
     }
 
     /**
-     * Traverse the tree until resolving the sorting attributes and returns it
-     * with a list of traversed operators that miss the sorting attributes.
+     * Traverse the tree until resolving the sorting attributes.
      */
     @tailrec
     private def collectResolvedMissingAttrs(
         ordering: Seq[SortOrder],
-        plan: LogicalPlan,
-        missingPlans: Seq[LogicalPlan]): (Seq[SortOrder], Seq[Attribute], Seq[LogicalPlan]) = {
+        plan: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
       plan match {
         // Subquery does nothing. We can simply skip it.
-        case s: Subquery =>
-          collectResolvedMissingAttrs(ordering, s.child, missingPlans)
+        case s: Subquery => collectResolvedMissingAttrs(ordering, s.child)
         // Only Windows, Project and Aggregate have projectList-like attribute.
         // TODO: when the other operators have it, we should add a support too.
         case un: UnaryNode
-          if un.isInstanceOf[Project] || un.isInstanceOf[Window] || un.isInstanceOf[Aggregate] =>
+            if un.isInstanceOf[Project] || un.isInstanceOf[Window] || un.isInstanceOf[Aggregate] =>
           val (newOrdering, missingAttrs) = resolveAndFindMissing(ordering, un, un.child)
           // If missingAttrs is non empty, that means we got it and return it;
           // Otherwise, continue to traverse the tree.
-          if (missingAttrs.nonEmpty) (newOrdering, missingAttrs, missingPlans :+ un)
-          else collectResolvedMissingAttrs(ordering, un.child, missingPlans :+ un)
+          if (missingAttrs.nonEmpty) (newOrdering, missingAttrs)
+          else collectResolvedMissingAttrs(ordering, un.child)
         // If hitting the other unsupported operators, we are unable to resolve it
         // and thus stop traversing the plan tree.
-        case other =>
-          (Seq.empty[SortOrder], Seq.empty[Attribute], Seq.empty[LogicalPlan])
+        case other => (Seq.empty[SortOrder], Seq.empty[Attribute])
       }
     }
 
     /**
      * Try to resolve the sort ordering and returns it with a list of attributes that are missing
-     * from the child but are present in the grandchild.
+     * from the plan but are present in the child.
      */
     def resolveAndFindMissing(
         ordering: Seq[SortOrder],
