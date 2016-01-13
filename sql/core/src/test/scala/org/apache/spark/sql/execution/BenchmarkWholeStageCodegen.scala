@@ -24,14 +24,14 @@ import org.apache.spark.{SparkFunSuite, SparkConf, SparkContext}
 /**
   * Benchmark to measure whole stage codegen performance.
   * To run this:
-  *  build/sbt sql/test-only BenchmarkWholeStageCodegen
+  *  build/sbt sql/test-only *BenchmarkWholeStageCodegen
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   val conf = new SparkConf()
   val sc = new SparkContext("local[1]", "test-sql-context", conf)
   val sqlContext = new SQLContext(sc)
 
-  def intScanBenchmark(values: Int): Unit = {
+  def testWholeStage(values: Int): Unit = {
     val benchmark = new Benchmark("Single Int Column Scan", values)
 
     benchmark.addCase("Without whole stage codegen") { iter =>
@@ -48,13 +48,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       Single Int Column Scan:      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
       -------------------------------------------------------------------------
-      Without whole stage codegen       3465.17            30.26         1.00 X
-      With whole stage codegen          1388.39            75.52         2.50 X
+      Without whole stage codegen       6725.52            31.18         1.00 X
+      With whole stage codegen          2233.05            93.91         3.01 X
     */
     benchmark.run()
   }
 
-  ignore("benchmark") {
-    intScanBenchmark(1024 * 1024 * 100)
+  test("benchmark") {
+    testWholeStage(1024 * 1024 * 200)
   }
 }
