@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources.{HadoopFsRelation, HadoopFsRelationProvider, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
@@ -55,4 +56,10 @@ private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFact
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter =
     throw new UnsupportedOperationException("use bucket version")
+}
+
+private[sql] object BucketingUtils {
+  def bucketIdExpression(numBuckets: Int, bucketColumns: Seq[Attribute]): Expression = {
+    Pmod(new Murmur3Hash(bucketColumns), Literal(numBuckets))
+  }
 }

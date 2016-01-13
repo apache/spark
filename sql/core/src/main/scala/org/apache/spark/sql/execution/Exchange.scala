@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.util.MutablePair
 
 /**
@@ -173,8 +174,10 @@ case class Exchange(
           position += 1
           position
         }
-      case HashPartitioning(expressions, _) =>
-        val projection = UnsafeProjection.create(new Murmur3Hash(expressions) :: Nil, child.output)
+      case HashPartitioning(expressions, numPartitions) =>
+        val projection = UnsafeProjection.create(
+          BucketingUtils.bucketIdExpression(numPartitions, child.output) :: Nil,
+          child.output)
         row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
