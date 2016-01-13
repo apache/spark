@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.sql.execution.columnar.MutableUnsafeRow
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -170,6 +169,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     *
     *   SparkPlan A            SparkPlan B          SparkPlan C
     * ===============================================================
+    *
     * -> doExecute()
     *     |
     *  doCodeGen()
@@ -190,6 +190,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     *   consume() (omit the rows)
     *
     * SparkPlan A and B should override doProduce() and doConsume().
+    *
+    * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
+    * used to generated code for BoundReference.
     */
   protected def doCodeGen(): RDD[InternalRow] = {
     val ctx = new CodeGenContext
@@ -252,6 +255,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
     * Generate the Java source code to process, should be overrided by subclass to support codegen.
+    *
+    * doProduce() usually generate the framework, for example, aggregation could generate this:
+    *
+    *   if (!initialized) {
+    *     # create a hash map, then build the aggregation hash map
+    *     # call child.produce()
+    *     initialized = true;
+    *   }
+    *   while (hashmap.hasNext()) {
+    *     row = hashmap.next();
+    *     # build the aggregation results
+    *     # create varialbles for results
+    *     # call consume(), wich will call parent.doConsume()
+    *   }
     */
   protected def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
@@ -306,6 +323,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     * Generate the Java source code to process the rows from child SparkPlan.
     *
     * This should be override by subclass to support codegen.
+    *
+    * For example, Filter will generate the code like this:
+    *
+    *   # code to evaluate the predicate expression, result is isNull1 and value2
+    *   if (isNull1 || value2) {
+    *     # call consume(), which will call parent.doConsume()
+    *   }
     */
   def doConsume(
     ctx: CodeGenContext,

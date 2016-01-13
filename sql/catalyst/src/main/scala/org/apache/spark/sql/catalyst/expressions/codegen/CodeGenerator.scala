@@ -582,14 +582,14 @@ object CodeGenerator extends Logging {
   }
 
   /**
-    * A cache of generated classes.
-    *
-    * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
-    * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
-    * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
-    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
-    * weak keys/values and thus does not respond to memory pressure.
-    */
+   * A cache of generated classes.
+   *
+   * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
+   * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
+   * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
+   * automatically, in order to constrain its memory footprint.  Note that this cache does not use
+   * weak keys/values and thus does not respond to memory pressure.
+   */
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
