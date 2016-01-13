@@ -184,7 +184,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             table.properties("spark.sql.sources.provider"),
             options)
 
-        LogicalRelation(resolvedRelation.relation)
+        LogicalRelation(
+          resolvedRelation.relation,
+          metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
       }
     }
 
@@ -414,8 +416,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => Subquery(table.name, HiveQl.createPlan(viewText))
-        case Some(aliasText) => Subquery(aliasText, HiveQl.createPlan(viewText))
+        case None => Subquery(table.name, HiveQl.parsePlan(viewText))
+        case Some(aliasText) => Subquery(aliasText, HiveQl.parsePlan(viewText))
       }
     } else {
       MetastoreRelation(qualifiedTableName.database, qualifiedTableName.name, alias)(table)(hive)
@@ -447,7 +449,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
       cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => None // Cache miss
-        case logical @ LogicalRelation(parquetRelation: ParquetRelation, _) =>
+        case logical @ LogicalRelation(parquetRelation: ParquetRelation, _, _) =>
           // If we have the same paths, same schema, and same partition spec,
           // we will use the cached Parquet Relation.
           val useCached =
