@@ -175,8 +175,11 @@ case class Exchange(
           position
         }
       case HashPartitioning(expressions, numPartitions) =>
+        // Use bucket id as the hash code of `HashPartitioning`, so that we can guarantee the data
+        // distribution is same between shuffle and bucketing, which enables us to only shuffle one
+        // side when join a bucketed table and a normal one.
         val projection = UnsafeProjection.create(
-          BucketingUtils.bucketIdExpression(numPartitions, child.output) :: Nil,
+          BucketingUtils.bucketIdExpression(numPartitions, expressions) :: Nil,
           child.output)
         row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity

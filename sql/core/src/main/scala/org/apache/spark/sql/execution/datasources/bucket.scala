@@ -59,7 +59,7 @@ private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFact
 }
 
 private[sql] object BucketingUtils {
-  def bucketIdExpression(numBuckets: Int, bucketColumns: Seq[Attribute]): Expression = {
+  def bucketIdExpression(numBuckets: Int, bucketColumns: Seq[Expression]): Expression = {
     Pmod(new Murmur3Hash(bucketColumns), Literal(numBuckets))
   }
 }
