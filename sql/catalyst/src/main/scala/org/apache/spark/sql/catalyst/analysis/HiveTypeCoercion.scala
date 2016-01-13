@@ -490,6 +490,7 @@ object HiveTypeCoercion {
       // all other cases are considered as false.
 
       // We may simplify the expression if one side is literal numeric values
+      // TODO: Maybe these rules should go into the optimizer.
       case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
         if trueValues.contains(value) => bool
       case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
