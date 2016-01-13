@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
+import scala.annotation.tailrec
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
@@ -73,6 +74,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
+      ResolveAggregateFunctions ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -81,7 +83,6 @@ class Analyzer(
       ResolveWindowFrame ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
-      ResolveAggregateFunctions ::
       DistinctAggregationRewriter(conf) ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
@@ -440,7 +441,7 @@ class Analyzer(
         }
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
-      // we still have chance to resolve it based on grandchild
+      // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
         val newOrdering = resolveSortOrders(ordering, child, throws = false)
         Sort(newOrdering, global, child)
@@ -521,53 +522,81 @@ class Analyzer(
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s @ Sort(_, _, p @ Project(_, _)) if !s.resolved && p.resolved =>
-        val (newOrdering, missing, newChild): (Seq[SortOrder], Seq[Attribute], LogicalPlan) =
-          p.child match {
-            // Case 1: when WINDOW functions are used in the SELECT clause.
-            //   Example: SELECT sum(col1) OVER() FROM table1 ORDER BY col2
-            case p1 @ Project(_, w @ Window(_, _, _, _, p2: Project)) =>
-              val (newOrdering, missingAttrs) = resolveAndFindMissing(s.order, p2, p2.child)
-              (newOrdering, missingAttrs,
-                Project(p1.projectList ++ missingAttrs,
-                  Window(w.projectList ++ missingAttrs,
-                    w.windowExpressions, w.partitionSpec, w.orderSpec,
-                    Project(p2.projectList ++ missingAttrs, p2.child))))
-            // Case 2: the other cases
-            //   Example: SELECT col1 FROM table1 ORDER BY col2
-            case _ =>
-              val (newOrdering, missingAttrs) = resolveAndFindMissing(s.order, p, p.child)
-              (newOrdering, missingAttrs, p.child)
-        }
+      case s @ Sort(_, _, child) if !s.resolved && child.resolved =>
+        val (newOrdering, missingAttrs, missingPlans) =
+          collectResolvedMissingAttrs(s.order, child, Seq.empty[LogicalPlan])
 
-        // If this rule was not a no-op, return the transformed plan, otherwise return the original.
-        if (missing.nonEmpty) {
-          // Add missing attributes and then project them away after the sort.
-          Project(p.output,
-            Sort(newOrdering, s.global,
-              Project(p.projectList ++ missing, newChild)))
-        } else {
-          logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
+        if (missingAttrs.isEmpty) {
+          logDebug(s"Failed to find $missingAttrs in ${child.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
+        }
+        else {
+          val missingPlanSet = missingPlans.toSet
+          val newChild = child transform {
+            case p: Project if missingPlanSet.contains(p) =>
+              p.copy(projectList = p.projectList ++ missingAttrs)
+            case w: Window if missingPlanSet.contains(w) =>
+              w.copy(projectList = w.projectList ++ missingAttrs)
+            case a: Aggregate if missingPlanSet.contains(a) =>
+              // Grouping expressions could already have the missing attributes.
+              // Do not add the duplicate attributes.
+              val newGroupExpressions = a.groupingExpressions ++ missingAttrs.filterNot(
+                attr => a.groupingExpressions.exists(_.semanticEquals(attr)))
+              a.copy(aggregateExpressions = a.aggregateExpressions ++ missingAttrs,
+                groupingExpressions = newGroupExpressions)
+            case o => o
+          }
+
+          // Add missing attributes and then project them away after the sort.
+          Project(child.output,
+            Sort(newOrdering, s.global, newChild))
         }
     }
 
     /**
-     * Given a child and a grandchild that are present beneath a sort operator, try to resolve
-     * the sort ordering and returns it with a list of attributes that are missing from the
-     * child but are present in the grandchild.
+     * Traverse the tree until resolving the sorting attributes and returns it
+     * with a list of traversed operators that miss the sorting attributes.
+     */
+    @tailrec
+    private def collectResolvedMissingAttrs(
+        ordering: Seq[SortOrder],
+        plan: LogicalPlan,
+        missingPlans: Seq[LogicalPlan]): (Seq[SortOrder], Seq[Attribute], Seq[LogicalPlan]) = {
+      plan match {
+        // Subquery does nothing. We can simply skip it.
+        case s: Subquery =>
+          collectResolvedMissingAttrs(ordering, s.child, missingPlans)
+        // Only Windows, Project and Aggregate have projectList-like attribute.
+        // TODO: when the other operators have it, we should add a support too.
+        case un: UnaryNode
+          if un.isInstanceOf[Project] || un.isInstanceOf[Window] || un.isInstanceOf[Aggregate] =>
+          val (newOrdering, missingAttrs) = resolveAndFindMissing(ordering, un, un.child)
+          // If missingAttrs is non empty, that means we got it and return it;
+          // Otherwise, continue to traverse the tree.
+          if (missingAttrs.nonEmpty) (newOrdering, missingAttrs, missingPlans :+ un)
+          else collectResolvedMissingAttrs(ordering, un.child, missingPlans :+ un)
+        // If hitting the other unsupported operators, we are unable to resolve it
+        // and thus stop traversing the plan tree.
+        case other =>
+          (Seq.empty[SortOrder], Seq.empty[Attribute], Seq.empty[LogicalPlan])
+      }
+    }
+
+    /**
+     * Try to resolve the sort ordering and returns it with a list of attributes that are missing
+     * from the child but are present in the grandchild.
      */
     def resolveAndFindMissing(
         ordering: Seq[SortOrder],
-        child: LogicalPlan,
-        grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      val newOrdering = resolveSortOrders(ordering, grandchild, throws = true)
+        plan: LogicalPlan,
+        child: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
+      val newOrdering = resolveSortOrders(ordering, child, throws = false)
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
       val requiredAttributes = AttributeSet(newOrdering).filter(_.resolved)
       // Figure out which ones are missing from the projection, so that we can add them and
       // remove them after the sort.
-      val missingInProject = requiredAttributes -- child.output
+      val missingInProject = requiredAttributes -- plan.outputSet
       // It is important to return the new SortOrders here, instead of waiting for the standard
       // resolving process as adding attributes to the project below can actually introduce
       // ambiguity that was not present before.

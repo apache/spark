@@ -1000,6 +1000,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         ("d", 2),
         ("c", 3)
       ).map(i => Row(i._1, i._2)))
+
+    checkAnswer(
+      sql(
+      """
+        |select area, rank() over (partition by area order by month) as c1
+        |from windowData group by product, area, month order by product, area
+      """.stripMargin),
+      Seq(
+        ("a", 1),
+        ("b", 1),
+        ("b", 2),
+        ("c", 1),
+        ("c", 2),
+        ("d", 1)
+      ).map(i => Row(i._1, i._2)))
   }
 
   test("window function: multiple window expressions in a single expression") {
