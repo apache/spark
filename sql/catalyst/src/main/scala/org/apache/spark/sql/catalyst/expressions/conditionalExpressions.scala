@@ -99,9 +99,13 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
   override def dataType: DataType = branches.head._2.dataType
 
-  override def nullable: Boolean = branches.exists(_._2.nullable)
+  override def nullable: Boolean = {
+    // Result is nullable if any of the branch is nullable, or if the else value is nullable
+    branches.exists(_._2.nullable) || elseValue.map(_.nullable).getOrElse(true)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    // Make sure all branch conditions are boolean types.
     if (valueTypesEqual) {
       if (branches.forall(_._1.dataType == BooleanType)) {
         TypeCheckResult.TypeCheckSuccess
