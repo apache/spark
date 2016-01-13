@@ -1473,7 +1473,10 @@ private[spark] object SerDe extends Serializable {
   initialize()
 
   def dumps(obj: AnyRef): Array[Byte] = {
-    new Pickler().dumps(obj)
+    obj match {
+      case array: Array[_] => new Pickler().dumps(array.toSeq.asJava)
+      case _ => new Pickler().dumps(obj)
+    }
   }
 
   def loads(bytes: Array[Byte]): AnyRef = {
