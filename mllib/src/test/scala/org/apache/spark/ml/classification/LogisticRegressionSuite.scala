@@ -303,7 +303,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -339,7 +339,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -378,7 +378,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -402,7 +402,7 @@ class LogisticRegressionSuite
     assert(model1.intercept ~== interceptR1 relTol 1E-2)
     assert(model1.coefficients ~= coefficientsR1 absTol 2E-2)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -437,7 +437,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -462,7 +462,7 @@ class LogisticRegressionSuite
     assert(model1.intercept ~== interceptR1 relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR1 absTol 1E-3)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -497,7 +497,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -521,7 +521,7 @@ class LogisticRegressionSuite
     assert(model1.intercept ~== interceptR1 relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -556,7 +556,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -581,7 +581,7 @@ class LogisticRegressionSuite
     assert(model1.intercept ~== interceptR1 absTol 1E-3)
     assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -616,7 +616,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -640,7 +640,7 @@ class LogisticRegressionSuite
     assert(model1.intercept ~== interceptR1 relTol 6E-3)
     assert(model1.coefficients ~== coefficientsR1 absTol 5E-3)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -675,7 +675,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -700,7 +700,7 @@ class LogisticRegressionSuite
     assert(model1.intercept ~== interceptR1 relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR1 absTol 1E-2)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
@@ -745,7 +745,7 @@ class LogisticRegressionSuite
             classSummarizer1.merge(classSummarizer2)
         }).histogram
 
-    [>
+    /*
        For binary logistic regression with strong L1 regularization, all the coefficients
        will be zeros. As a result,
        {{{
@@ -765,7 +765,7 @@ class LogisticRegressionSuite
     assert(model2.intercept ~== interceptTheory relTol 1E-5)
     assert(model2.coefficients ~= coefficientsTheory absTol 1E-6)
 
-    [>
+    /*
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
