@@ -17,17 +17,15 @@
 
 package org.apache.spark.scheduler
 
+import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar
 
-import org.mockito.Mockito.when
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.SparkConf
-import org.apache.spark.TaskEndReason
-import org.apache.spark.Success
 import org.apache.spark.ExceptionFailure
-import org.apache.spark.SparkContext
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.Success
+import org.apache.spark.TaskEndReason
 import org.apache.spark.util.ManualClock
 
 class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with MockitoSugar {

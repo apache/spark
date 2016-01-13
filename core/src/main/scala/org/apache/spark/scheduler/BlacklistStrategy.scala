@@ -19,9 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 
-import org.apache.spark.Logging
 import org.apache.spark.SparkConf
-import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Clock
 
 /**
