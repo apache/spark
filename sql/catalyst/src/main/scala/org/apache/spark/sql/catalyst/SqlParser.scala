@@ -305,7 +305,8 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           throw new AnalysisException(s"invalid function approximate($s) $udfName")
         }
       }
-    | CASE ~> whenThenElse ^^ CaseWhen
+    | CASE ~> whenThenElse ^^
+      { case branches => CaseWhen.createFromParser(branches) }
     | CASE ~> expression ~ whenThenElse ^^
       { case keyPart ~ branches => CaseKeyWhen(keyPart, branches) }
     )
