@@ -174,7 +174,7 @@ class CatalystQlSuite extends PlanTest {
 
   test("string charset literal") {
     compareExpressions(
-      CatalystQl.parseExpression("'ISO-8859-1' 0x4341464562616265"),
+      parser.parseExpression("'ISO-8859-1' 0x4341464562616265"),
       Literal("CAFEbabe"))
   }
 }

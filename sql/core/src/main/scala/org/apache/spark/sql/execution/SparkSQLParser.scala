@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, ParserDialect, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.StringType
@@ -31,7 +31,12 @@ import org.apache.spark.sql.types.StringType
  *
  * @param fallback A function that parses an input string to a logical plan
  */
-class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLParser {
+class SparkSQLParser(fallback: => ParserDialect) extends AbstractSparkSQLParser {
+
+  override def parseExpression(sql: String): Expression = fallback.parseExpression(sql)
+
+  override def parseTableIdentifier(sql: String): TableIdentifier =
+    fallback.parseTableIdentifier(sql)
 
   // A parser for the key-value part of the "SET [key = [value ]]" syntax
   private object SetCommandParser extends RegexParsers {
@@ -74,7 +79,7 @@ class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLPa
   private lazy val cache: Parser[LogicalPlan] =
     CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
       case isLazy ~ tableName ~ plan =>
-        CacheTableCommand(tableName, plan.map(fallback), isLazy.isDefined)
+        CacheTableCommand(tableName, plan.map(fallback.parsePlan), isLazy.isDefined)
     }
 
   private lazy val uncache: Parser[LogicalPlan] =
@@ -111,7 +116,7 @@ class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLPa
 
   private lazy val others: Parser[LogicalPlan] =
     wholeInput ^^ {
-      case input => fallback(input)
+      case input => fallback.parsePlan(input)
     }
 
 }

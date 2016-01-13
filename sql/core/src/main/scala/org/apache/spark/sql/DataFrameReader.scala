@@ -337,7 +337,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     DataFrame(sqlContext,
-      sqlContext.catalog.lookupRelation(CatalystQl.parseTableIdentifier(tableName)))
+      sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
