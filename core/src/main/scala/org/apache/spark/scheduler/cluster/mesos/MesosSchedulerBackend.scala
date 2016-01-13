@@ -375,8 +375,8 @@ private[spark] class MesosSchedulerBackend(
   override def error(d: SchedulerDriver, message: String) {
     inClassLoader() {
       logError("Mesos error: " + message)
-      scheduler.error(message)
       markErr()
+      scheduler.error(message)
     }
   }
 
