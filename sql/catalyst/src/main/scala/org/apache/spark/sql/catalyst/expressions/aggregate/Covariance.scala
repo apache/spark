@@ -155,17 +155,13 @@ case class CovSample(
 
   override def eval(buffer: InternalRow): Any = {
     val count = buffer.getLong(countOffset)
-    if (count > 0) {
-      if (count > 1) {
-        val Ck = buffer.getDouble(CkOffset)
-        val cov = Ck / (count - 1)
-        if (cov.isNaN) {
-          null
-        } else {
-          cov
-        }
-      } else {
+    if (count > 1) {
+      val Ck = buffer.getDouble(CkOffset)
+      val cov = Ck / (count - 1)
+      if (cov.isNaN) {
         null
+      } else {
+        cov
       }
     } else {
       null
@@ -190,11 +186,10 @@ case class CovPopulation(
     val count = buffer.getLong(countOffset)
     if (count > 0) {
       val Ck = buffer.getDouble(CkOffset)
-      val cov = Ck / count
-      if (cov.isNaN) {
+      if (Ck.isNaN) {
         null
       } else {
-        cov
+        Ck / count
       }
     } else {
       null
