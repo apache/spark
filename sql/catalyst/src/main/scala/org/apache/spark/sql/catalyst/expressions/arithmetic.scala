@@ -201,9 +201,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
-  override def nullable: Boolean = if (right.foldable) {
-    right.eval(null) == 0
-  } else true
+  override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div

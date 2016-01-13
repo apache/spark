@@ -39,23 +39,18 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 
   override def supportCodeGen: Boolean = true
 
-  override def produce(ctx: CodeGenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
-    calledParent = parent
+  protected override def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
     child.produce(ctx, this)
   }
 
-  override def consume(
-    ctx: CodeGenContext,
-    child: SparkPlan,
-    columns: Seq[GeneratedExpressionCode]): String = {
+  override def doConsume(ctx: CodeGenContext, child: SparkPlan): String = {
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     val output = exprs.map(_.gen(ctx))
-    val sources = output.map(_.code).mkString("\n")
     s"""
-       | $sources
+       | ${output.map(_.code).mkString("\n")}
        |
-       | ${genNext(ctx, output)}
+       | ${consume(ctx, output)}
      """.stripMargin
   }
 
@@ -84,22 +79,18 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
 
   override def supportCodeGen: Boolean = true
 
-  override def produce(ctx: CodeGenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
-    calledParent = parent
+  protected override def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
     child.produce(ctx, this)
   }
 
-  override def consume(
-    ctx: CodeGenContext,
-    child: SparkPlan,
-    columns: Seq[GeneratedExpressionCode]): String = {
+  override def doConsume(ctx: CodeGenContext, child: SparkPlan): String = {
     val expr = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(condition, child.output))
     val eval = expr.gen(ctx)
     s"""
        | ${eval.code}
        | if (!${eval.isNull} && ${eval.value}) {
-       |   ${genNext(ctx, columns)}
+       |   ${consume(ctx, ctx.currentVars)}
        | }
      """.stripMargin
   }
@@ -166,9 +157,7 @@ case class Range(
 
   override def supportCodeGen: Boolean = true
 
-  override def produce(ctx: CodeGenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
-    calledParent = parent
-
+  protected override def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
     val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
     val partitionEnd = ctx.freshName("partitionEnd")
@@ -190,7 +179,6 @@ case class Range(
     val rdd = sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
       .map(i => InternalRow(i))
 
-    ctx.currentVars = Array(ev)
     val code = s"""
       | if (!$initTerm) {
       |   if (input.hasNext()) {
@@ -230,7 +218,7 @@ case class Range(
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
-      |  ${genNext(ctx, Seq(ev))}
+      |  ${consume(ctx, Seq(ev))}
       | }
      """.stripMargin
 

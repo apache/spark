@@ -57,11 +57,11 @@ class CodeGenContext {
    */
   val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
 
-  val broadcasts: mutable.ArrayBuffer[Broadcast[_]] = new mutable.ArrayBuffer[Broadcast[_]]()
-
+  /**
+    * Holding a list of generated columns as input of current operator, will be used by
+    * BoundReference to generate code.
+    */
   var currentVars: Array[GeneratedExpressionCode] = null
-
-  var currentRowTerm: String = "i"
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a

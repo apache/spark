@@ -21,6 +21,12 @@ import scala.collection.Iterator;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 
+/**
+ * An iterator interface used to pull the output from generated function for multiple operators
+ * (whole stage codegen).
+ *
+ * TODO: replaced it by batched columnar format.
+ */
 public class BufferedRowIterator {
   protected InternalRow currentRow;
   protected Iterator<InternalRow> input;
@@ -38,6 +44,11 @@ public class BufferedRowIterator {
     return r;
   }
 
+  /**
+   * Processes the input until have a row as output (currentRow).
+   *
+   * After it's called, if currentRow is still null, it means no more rows left.
+   */
   public void process(Iterator<InternalRow> iter) {
     input = iter;
   }
