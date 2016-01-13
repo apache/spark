@@ -320,7 +320,33 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("type coercion simplification for equal to") {
+  test("BooleanEquality type cast") {
+    val be = HiveTypeCoercion.BooleanEquality
+    // Use something more than a literal to avoid triggering the simplification rules.
+    val one = Add(Literal(Decimal(1)), Literal(Decimal(0)))
+
+    ruleTest(be,
+      EqualTo(Literal(true), one),
+      EqualTo(Cast(Literal(true), one.dataType), one)
+    )
+
+    ruleTest(be,
+      EqualTo(one, Literal(true)),
+      EqualTo(one, Cast(Literal(true), one.dataType))
+    )
+
+    ruleTest(be,
+      EqualNullSafe(Literal(true), one),
+      EqualNullSafe(Cast(Literal(true), one.dataType), one)
+    )
+
+    ruleTest(be,
+      EqualNullSafe(one, Literal(true)),
+      EqualNullSafe(one, Cast(Literal(true), one.dataType))
+    )
+  }
+
+  test("BooleanEquality simplification") {
     val be = HiveTypeCoercion.BooleanEquality
 
     ruleTest(be,
