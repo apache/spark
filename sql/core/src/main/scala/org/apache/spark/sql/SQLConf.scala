@@ -374,7 +374,9 @@ private[spark] object SQLConf {
 
   val CANONICAL_NATIVE_VIEW = booleanConf("spark.sql.nativeView.canonical",
     defaultValue = Some(false),
-    doc = "TODO",
+    doc = "When this option and spark.sql.nativeView are both true, Spark SQL tries to handle " +
+          "CREATE VIEW statements using SQL query strings generated from view definition logical " +
+          "plans.",
     isPublic = false)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
