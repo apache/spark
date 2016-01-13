@@ -18,7 +18,6 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.net.URLDecoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
@@ -102,18 +101,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
       val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
-          // SPARK-12708
-          // Due to YARN-2844, "/" in the url will be encoded to "%252F" when
-          // running in yarn mode. `request.getParameter("task.sort")` will return
-          // "%252F". Therefore we need to decode it until we get the real column name.
-          // SPARK-4313 is similar to this issue.
-          var column = sortColumn
-          var decodedColumn = URLDecoder.decode(column, "UTF-8")
-          while (column != decodedColumn) {
-            column = decodedColumn
-            decodedColumn = URLDecoder.decode(column, "UTF-8")
-          }
-          column
+        UIUtils.decodeURLParameter(sortColumn)
       }.getOrElse("Index")
       val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
       val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)

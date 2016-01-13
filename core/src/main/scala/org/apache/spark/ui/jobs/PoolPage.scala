@@ -31,7 +31,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val poolName = request.getParameter("poolname")
+      val poolName = UIUtils.decodeURLParameter(request.getParameter("poolname"))
       require(poolName != null && poolName.nonEmpty, "Missing poolname parameter")
 
       val poolToActiveStages = listener.poolToActiveStages
