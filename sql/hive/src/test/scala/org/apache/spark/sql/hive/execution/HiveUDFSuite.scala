@@ -350,6 +350,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     sqlContext.dropTempTable("testUDF")
   }
 
+  test("Hive UDF in group by") {
+    Seq(Tuple1(1451400761)).toDF("test_date").registerTempTable("tab1")
+    val count = sql("select date(cast(test_date as timestamp))" +
+      " from tab1 group by date(cast(test_date as timestamp))").count()
+    assert(count == 1)
+  }
+
   test("SPARK-11522 select input_file_name from non-parquet table"){
 
     withTempDir { tempDir =>
