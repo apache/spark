@@ -470,7 +470,7 @@ An Identifier can be:
 */
 Identifier
     :
-    (Letter | Digit) (Letter | Digit | '_')*
+    (Letter | Digit | '_')+
     | {allowQuotedId()}? QuotedIdentifier  /* though at the language level we allow all Identifiers to be QuotedIdentifiers; 
                                               at the API level only columns are allowed to be of this form */
     | '`' RegexComponent+ '`'
@@ -480,11 +480,6 @@ fragment
 QuotedIdentifier 
     :
     '`'  ( '``' | ~('`') )* '`' { setText(getText().substring(1, getText().length() -1 ).replaceAll("``", "`")); }
-    ;
-
-CharSetName
-    :
-    '_' (Letter | Digit | '_' | '-' | '.' | ':' )+
     ;
 
 WS  :  (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;}

@@ -108,6 +108,7 @@ class CatalystQlSuite extends PlanTest {
     }
 
     assertRight("9.0e1", 90)
+    assertRight(".9e+2", 90)
     assertRight("0.9e+2", 90)
     assertRight("900e-1", 90)
     assertRight("900.0E-1", 90)
@@ -169,5 +170,11 @@ class CatalystQlSuite extends PlanTest {
       "from windowData")
     parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
+  }
+
+  test("string charset literal") {
+    compareExpressions(
+      CatalystQl.parseExpression("'ISO-8859-1' 0x4341464562616265"),
+      Literal("CAFEbabe"))
   }
 }

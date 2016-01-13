@@ -136,7 +136,7 @@ charSetStringLiteral
 @init { gParent.pushMsg("character string literal", state); }
 @after { gParent.popMsg(state); }
     :
-    csName=CharSetName csLiteral=CharSetLiteral -> ^(TOK_CHARSETLITERAL $csName $csLiteral)
+    csName=StringLiteral csLiteral=CharSetLiteral -> ^(TOK_CHARSETLITERAL $csName $csLiteral)
     ;
 
 dateLiteral
@@ -162,7 +162,6 @@ timestampLiteral
     ;
 
 intervalLiteral
-
     :
     (KW_INTERVAL intervalConstant KW_YEAR KW_TO KW_MONTH) => KW_INTERVAL intervalConstant KW_YEAR KW_TO KW_MONTH
       -> ^(TOK_INTERVAL_YEAR_MONTH_LITERAL intervalConstant)

@@ -33,8 +33,6 @@ public final class ParseUtils {
 
   public static String charSetString(String charSetName, String charSetString)
           throws UnsupportedEncodingException {
-    // The character set name starts with a _, so strip that
-    charSetName = charSetName.substring(1);
     if (charSetString.charAt(0) == '\'') {
       return new String(unescapeSQLString(charSetString).getBytes(), charSetName);
     } else // hex input is also supported

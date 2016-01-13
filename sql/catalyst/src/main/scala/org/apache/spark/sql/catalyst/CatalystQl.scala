@@ -822,27 +822,30 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Literal(Date.valueOf(ast.text.substring(1, ast.text.length - 1)))
 
     case ast if ast.tokenType == SparkSqlParser.TOK_CHARSETLITERAL =>
-      Literal(ParseUtils.charSetString(ast.children.head.text, ast.children(1).text))
+      Literal(ParseUtils.charSetString(unquoteString(ast.children.head.text), ast.children(1).text))
 
     case ast if ast.tokenType == SparkSqlParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
-      Literal(CalendarInterval.fromYearMonthString(ast.text))
+      Literal(CalendarInterval.fromYearMonthString(ast.children.head.text))
 
     case ast if ast.tokenType == SparkSqlParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
-      Literal(CalendarInterval.fromDayTimeString(ast.text))
+      Literal(CalendarInterval.fromDayTimeString(ast.children.head.text))
 
     case Token("TOK_INTERVAL", yr :: month :: wk :: day :: hr :: min :: s :: ms :: mcs :: Nil) =>
-      def extract(ast: ASTNode): Long = ast.children.headOption.map { value =>
-        unquoteString(value.text).toLong
+      var count = 0
+      def extract(ast: ASTNode)(f: String => Long): Long = ast.children.headOption.map { value =>
+        count += 1
+        f(unquoteString(value.text))
       }.getOrElse(0L)
-      val months = extract(yr) * 12 + extract(month)
-      val microseconds = extract(wk) * CalendarInterval.MICROS_PER_WEEK +
-        extract(day) * CalendarInterval.MICROS_PER_DAY +
-        extract(hr) * CalendarInterval.MICROS_PER_HOUR +
-        extract(min) * CalendarInterval.MICROS_PER_MINUTE +
-        extract(s) * CalendarInterval.MICROS_PER_SECOND +
-        extract(ms) * CalendarInterval.MICROS_PER_MILLI +
-        extract(mcs)
-      if (months == 0L && microseconds == 0L) {
+      def extractScaled(ast: ASTNode, scale: Long): Long = extract(ast)(_.toLong * scale)
+      val months = extractScaled(yr, 12L) + extract(month)(_.toLong)
+      val microseconds = extractScaled(wk, CalendarInterval.MICROS_PER_WEEK) +
+        extractScaled(day, CalendarInterval.MICROS_PER_DAY) +
+        extractScaled(hr, CalendarInterval.MICROS_PER_HOUR) +
+        extractScaled(min, CalendarInterval.MICROS_PER_MINUTE) +
+        extract(s)(CalendarInterval.parseSecondNano) +
+        extractScaled(ms, CalendarInterval.MICROS_PER_MILLI) +
+        extract(mcs)(_.toLong)
+      if (count == 0) {
         throw new AnalysisException("at least one time unit should be given for interval literal")
       }
       Literal(new CalendarInterval(months.toInt, microseconds))
