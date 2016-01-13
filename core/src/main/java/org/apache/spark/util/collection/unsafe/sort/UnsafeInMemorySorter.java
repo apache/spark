@@ -107,8 +107,10 @@ public final class UnsafeInMemorySorter {
    * Free the memory used by pointer array.
    */
   public void free() {
-    consumer.freeArray(array);
-    array = null;
+    if (consumer != null) {
+      consumer.freeArray(array);
+      array = null;
+    }
   }
 
   public void reset() {
