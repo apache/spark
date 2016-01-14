@@ -137,45 +137,55 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val got = ctx.freshName("got")
-
-    val cases = branches.map { case (condition, value) =>
-      val cond = condition.gen(ctx)
-      val res = value.gen(ctx)
+    // Generate code that looks like:
+    //
+    // condA = ...
+    // if (condA) {
+    //   valueA
+    // } else {
+    //   condB = ...
+    //   if (condB) {
+    //     valueB
+    //   } else {
+    //     condC = ...
+    //     if (condC) {
+    //       valueC
+    //     } else {
+    //       elseValue
+    //     }
+    //   }
+    // }
+    val cases = branches.map { case (condExpr, valueExpr) =>
+      val cond = condExpr.gen(ctx)
+      val res = valueExpr.gen(ctx)
       s"""
-        if (!$got) {
-          ${cond.code}
-          if (!${cond.isNull} && ${cond.value}) {
-            $got = true;
-            ${res.code}
-            ${ev.isNull} = ${res.isNull};
-            ${ev.value} = ${res.value};
-          }
-        }
-      """
-    }.mkString("\n")
-
-    val elseCase = {
-      if (elseValue.isDefined) {
-        val res = elseValue.get.gen(ctx)
-        s"""
-        if (!$got) {
+        ${cond.code}
+        if (!${cond.isNull} && ${cond.value}) {
           ${res.code}
           ${ev.isNull} = ${res.isNull};
           ${ev.value} = ${res.value};
         }
-        """
-      } else {
-        ""
-      }
+      """
     }
 
+    var generatedCode = cases.mkString("", "\nelse {\n", "\nelse {\n")
+
+    elseValue.foreach { elseExpr =>
+      val res = elseExpr.gen(ctx)
+      generatedCode +=
+        s"""
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.value} = ${res.value};
+        """
+    }
+
+    generatedCode += "}\n" * cases.size
+
     s"""
-      boolean $got = false;
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $cases
-      $elseCase
+      $generatedCode
     """
   }
 
