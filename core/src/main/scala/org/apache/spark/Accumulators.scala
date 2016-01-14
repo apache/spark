@@ -308,6 +308,7 @@ class Accumulator[T] private[spark] (
 }
 
 case class UpdateInfo private[spark](val rddId: Int, splitId: Int)
+
 /**
  * Structure for keeping track of the values being accumulated.
  * When collecting updates from the workers values are accumulated in pending hash map of
@@ -317,7 +318,7 @@ case class UpdateInfo private[spark](val rddId: Int, splitId: Int)
 private[spark] case class UpdateTracking[T](
     pending: mutable.HashMap[UpdateInfo, T],
     processed: mutable.HashMap[Int, mutable.BitSet],
-  var value: T) extends Serializable {
+    var value: T) extends Serializable {
 
   def this(value: T) = {
     this(new mutable.HashMap[UpdateInfo, T](), new mutable.HashMap[Int, mutable.BitSet](), value)
@@ -431,7 +432,7 @@ class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
       accumulatorParam.addAccumulator(_, t._2)
     ).getOrElse(t._2)
     r.pending(t._1) = v
-    r.value = t._2
+    // We don't need to set the value here since we always have a merge with the zero UpdateTracking
     r
   }
 

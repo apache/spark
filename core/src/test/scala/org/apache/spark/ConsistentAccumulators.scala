@@ -29,6 +29,17 @@ import org.apache.spark.scheduler._
 
 class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
+  test("single partition") {
+    sc = new SparkContext("local", "test")
+    val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
+
+    val a = sc.parallelize(1 to 20, 1)
+    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    b.cache()
+    b.count()
+    acc.value should be (210)
+  }
+
   test("map + cache + first + count") {
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
