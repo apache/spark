@@ -268,7 +268,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
       val relation = EliminateSubQueries(catalog.lookupRelation(TableIdentifier(tableName)))
       relation match {
-        case LogicalRelation(r: ParquetRelation, _) =>
+        case LogicalRelation(r: ParquetRelation, _, _) =>
           if (!isDataSourceParquet) {
             fail(
               s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +

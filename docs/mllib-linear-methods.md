@@ -590,7 +590,8 @@ val parsedData = data.map { line =>
 
 // Building the model
 val numIterations = 100
-val model = LinearRegressionWithSGD.train(parsedData, numIterations)
+val stepSize = 0.00000001
+val model = LinearRegressionWithSGD.train(parsedData, numIterations, stepSize)
 
 // Evaluate model on training examples and compute training error
 val valuesAndPreds = parsedData.map { point =>
@@ -655,8 +656,9 @@ public class LinearRegression {
 
     // Building the model
     int numIterations = 100;
+    double stepSize = 0.00000001;
     final LinearRegressionModel model =
-      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
+      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations, stepSize);
 
     // Evaluate model on training examples and compute training error
     JavaRDD<Tuple2<Double, Double>> valuesAndPreds = parsedData.map(
@@ -706,7 +708,7 @@ data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 parsedData = data.map(parsePoint)
 
 # Build the model
-model = LinearRegressionWithSGD.train(parsedData)
+model = LinearRegressionWithSGD.train(parsedData, iterations=100, step=0.00000001)
 
 # Evaluate the model on training data
 valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))

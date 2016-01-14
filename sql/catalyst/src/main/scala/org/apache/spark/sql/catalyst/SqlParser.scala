@@ -203,7 +203,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     )
 
   protected lazy val ordering: Parser[Seq[SortOrder]] =
-    ( rep1sep(expression ~ direction.? , ",") ^^ {
+    ( rep1sep(expression ~ direction.?, ",") ^^ {
         case exps => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
       }
     )
@@ -305,7 +305,8 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           throw new AnalysisException(s"invalid function approximate($s) $udfName")
         }
       }
-    | CASE ~> whenThenElse ^^ CaseWhen
+    | CASE ~> whenThenElse ^^
+      { case branches => CaseWhen.createFromParser(branches) }
     | CASE ~> expression ~ whenThenElse ^^
       { case keyPart ~ branches => CaseKeyWhen(keyPart, branches) }
     )
