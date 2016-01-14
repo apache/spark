@@ -86,18 +86,16 @@ private[sql] case class JDBCRelation(
   with PrunedFilteredScan
   with InsertableRelation {
 
+  // An aggregate information for JDBC data sources.
+  private[sql] var aggregate = Aggregate.empty
+
   override val needConversion: Boolean = false
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    buildScan(requiredColumns, filters, Aggregate.empty)
-  }
-
   override def buildScan(
       requiredColumns: Array[String],
-      filters: Array[Filter],
-      aggregate: Aggregate): RDD[Row] = {
+      filters: Array[Filter]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sqlContext.sparkContext,

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.aggregate.{Utils => AggUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -48,7 +49,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // efficiently. For example, Orc/Parquet could fetch the MIN/MAX value by using statistics data
     // and some databases have efficient aggregation implementations.
     case logical.Aggregate(groupingExpressions, resultExpressions, child) => child match {
-      case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _)) =>
+      case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _, _)) =>
         val aggregateExpressions = resultExpressions.flatMap { expr =>
           expr.collect {
             case agg: AggregateExpression => agg
@@ -112,7 +113,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   private def planScanStrategy(
       plan: LogicalPlan,
       aggregate: Option[Aggregate]): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
       pruneFilterProjectRaw(
         l,
         projects,
@@ -121,12 +122,23 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _, _)) =>
+      val relation = t match {
+        // maropu:
+        // This is workaround to enable aggregate push downs into JDBC data sources.
+        // In a future release, we need to re-design data source APIs for this kind of push-down
+        // optimization.
+        case jdbcRelation: JDBCRelation =>
+          jdbcRelation.aggregate = aggregate.getOrElse(Aggregate.empty)
+          jdbcRelation
+        case _ =>
+          t
+      }
+
       pruneFilterProject(
         l,
         projects,
         filters,
-        (a, f) => toCatalystRDD(
-          l, a, t.buildScan(a.map(_.name).toArray, f, aggregate.getOrElse(Aggregate.empty)))) :: Nil
+        (a, f) => toCatalystRDD(l, a, relation.buildScan(a.map(_.name).toArray, f))) :: Nil
 
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _)) =>
       pruneFilterProject(

@@ -117,11 +117,6 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
     sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
-
-  override def buildScan(
-      requiredColumns: Array[String], filters: Array[Filter], aggregate: Aggregate): RDD[Row] = {
-    buildScan(requiredColumns, filters)
-  }
 }
 
 // A hack for better error messages when filter pushdown fails.
