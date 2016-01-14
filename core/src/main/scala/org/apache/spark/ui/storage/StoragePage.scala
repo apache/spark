@@ -54,7 +54,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Cached Partitions",
     "Fraction Cached",
     "Size in Memory",
-    "Size in ExternalBlockStore",
     "Size on Disk")
 
   /** Render an HTML row representing an RDD */
@@ -103,7 +102,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Executor ID",
     "Address",
     "Total Size in Memory",
-    "Total Size in ExternalBlockStore",
     "Total Size on Disk",
     "Stream Blocks")
 
