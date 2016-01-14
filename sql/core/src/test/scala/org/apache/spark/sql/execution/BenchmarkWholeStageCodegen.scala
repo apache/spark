@@ -27,11 +27,11 @@ import org.apache.spark.util.Benchmark
   *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
-  val conf = new SparkConf()
-  val sc = new SparkContext("local[1]", "test-sql-context", conf)
-  val sqlContext = new SQLContext(sc)
-
   def testWholeStage(values: Int): Unit = {
+    val conf = new SparkConf().setMaster("local[1]")
+    val sc = SparkContext.getOrCreate(conf)
+    val sqlContext = SQLContext.getOrCreate(sc)
+
     val benchmark = new Benchmark("Single Int Column Scan", values)
 
     benchmark.addCase("Without whole stage codegen") { iter =>
