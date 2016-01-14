@@ -340,6 +340,26 @@ setMethod("crc32",
             column(jc)
           })
 
+#' hash
+#'
+#' Calculates the hash code of given columns, and returns the result as a int column.
+#'
+#' @rdname hash
+#' @name hash
+#' @family misc_funcs
+#' @export
+#' @examples \dontrun{hash(df$c)}
+setMethod("hash",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "hash", jcols)
+            column(jc)
+          })
+
 #' dayofmonth
 #'
 #' Extracts the day of the month as an integer from a given date/timestamp/string.

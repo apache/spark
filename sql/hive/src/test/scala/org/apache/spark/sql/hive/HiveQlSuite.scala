@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, HiveTable, M
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   private def extractTableDesc(sql: String): (HiveTable, Boolean) = {
-    HiveQl.createPlan(sql).collect {
+    HiveQl.parsePlan(sql).collect {
       case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
     }.head
   }

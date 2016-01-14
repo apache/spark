@@ -60,6 +60,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
+    super.afterAll()
   }
 
   test("SPARK-4908: concurrent hive native commands") {
@@ -785,6 +786,24 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
     assert(sql("select key from src having key > 490").collect().size < 100)
+  }
+
+  test("union/except/intersect") {
+    assertResult(Array(Row(1), Row(1))) {
+      sql("select 1 as a union all select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a union distinct select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a union select 1 as a").collect()
+    }
+    assertResult(Array()) {
+      sql("select 1 as a except select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a intersect select 1 as a").collect()
+    }
   }
 
   test("SPARK-5383 alias for udfs with multi output columns") {
