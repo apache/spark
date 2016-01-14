@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -27,7 +30,7 @@ import org.apache.spark.sql.types._
 
 
 /**
- * A collection of [[Rule Rules]] that can be used to coerce differing types that
+ * A collection of [[Rule]] that can be used to coerce differing types that
  * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
  * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
  * Catalyst until we have a more standard set of coercions.
@@ -200,41 +203,70 @@ object HiveTypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    private[this] def widenOutputTypes(
-        planName: String,
-        left: LogicalPlan,
-        right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
-      require(left.output.length == right.output.length)
+    private def widenOutputTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+      require(children.forall(_.output.length == children.head.output.length))
 
-      val castedTypes = left.output.zip(right.output).map {
-        case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-          findWiderTypeForTwo(lhs.dataType, rhs.dataType)
-        case other => None
+      // Get a sequence of data types, each of which is the widest type of this specific attribute
+      // in all the children
+      val castedTypes: Seq[DataType] =
+        getCastedTypes(children, attrIndex = 0, mutable.Queue[DataType]())
+
+      // Add extra Project for type promotion if necessary
+      if (castedTypes.isEmpty) children else children.map(castOutput(_, castedTypes))
+    }
+
+    // Add Project if the data types do not match
+    private def castOutput(
+        plan: LogicalPlan,
+        castedTypes: Seq[DataType]): LogicalPlan = {
+      val casted = plan.output.zip(castedTypes).map {
+        case (e, dt) if e.dataType != dt =>
+          Alias(Cast(e, dt), e.name)()
+        case (e, _) => e
       }
+      if (casted.exists(_.isInstanceOf[Alias])) Project(casted, plan) else plan
+    }
 
-      def castOutput(plan: LogicalPlan): LogicalPlan = {
-        val casted = plan.output.zip(castedTypes).map {
-          case (e, Some(dt)) if e.dataType != dt =>
-            Alias(Cast(e, dt), e.name)()
-          case (e, _) => e
+    // Get the widest type for each attribute in all the children
+    @tailrec private def getCastedTypes(
+        children: Seq[LogicalPlan],
+        attrIndex: Int,
+        castedTypes: mutable.Queue[DataType]): Seq[DataType] = {
+      // Return the result after the widen data types have been found for all the children
+      if (attrIndex >= children.head.output.length) return castedTypes.toSeq
+
+      // For the attrIndex-th attribute, find the widest type
+      val initialType = Option(children.head.output(attrIndex).dataType)
+      children.foldLeft(initialType) { (currentOutputDataTypes, child) =>
+        (currentOutputDataTypes, child.output(attrIndex).dataType) match {
+          case (Some(dt1), dt2) if dt1 != dt2 =>
+            findWiderTypeForTwo(dt1, dt2)
+          case (Some(dt1), dt2) if dt1 == dt2 => Option(dt1)
+          case other => None
         }
-        Project(casted, plan)
-      }
-
-      if (castedTypes.exists(_.isDefined)) {
-        (castOutput(left), castOutput(right))
-      } else {
-        (left, right)
+      } match {
+        // If unable to find an appropriate widen type for this column, return an empty Seq
+        case None => Seq.empty[DataType]
+        // Otherwise, record the result in the queue and find the type for the next column
+        case Some(widenType) =>
+          castedTypes.enqueue(widenType)
+          getCastedTypes (children, attrIndex + 1, castedTypes)
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if p.analyzed => p
 
-      case s @ SetOperation(left, right) if s.childrenResolved
-          && left.output.length == right.output.length && !s.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(s.nodeName, left, right)
-        s.makeCopy(Array(newLeft, newRight))
+      case s @ SetOperation(left, right) if s.childrenResolved &&
+          left.output.length == right.output.length && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = widenOutputTypes(left :: right :: Nil)
+        assert(newChildren.length == 2)
+        s.makeCopy(Array(newChildren.head, newChildren.last))
+
+      case s: Union if s.childrenResolved &&
+          s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = widenOutputTypes(s.children)
+        s.makeCopy(Array(newChildren))
     }
   }
 

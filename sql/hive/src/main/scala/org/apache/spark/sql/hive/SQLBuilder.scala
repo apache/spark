@@ -129,10 +129,13 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         conditionSQL = condition.sql
       } yield s"$childSQL $whereOrHaving $conditionSQL"
 
-    case Union(left, right) =>
+    case Union(children) if children.length == 1 =>
+      toSQL(children.head)
+
+    case Union(children) if children.length > 1 =>
       for {
-        leftSQL <- toSQL(left)
-        rightSQL <- toSQL(right)
+        leftSQL <- toSQL(children.head)
+        rightSQL <- toSQL(Union(children.tail))
       } yield s"$leftSQL UNION ALL $rightSQL"
 
     // Persisted data source relation
