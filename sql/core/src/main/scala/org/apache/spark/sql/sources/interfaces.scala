@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.Map
 import scala.collection.mutable
 import scala.util.Try
 
@@ -665,7 +664,8 @@ abstract class HadoopFsRelation private[sql](
     })
   }
 
-  private def groupBucketFiles(files: Array[FileStatus]): Option[Map[Int, Array[FileStatus]]] = {
+  private def groupBucketFiles(
+      files: Array[FileStatus]) : Option[scala.collection.Map[Int, Array[FileStatus]]] = {
     val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
     for (file <- files) {
       val bucketId = BucketingUtils.getBucketId(file.getPath.getName)

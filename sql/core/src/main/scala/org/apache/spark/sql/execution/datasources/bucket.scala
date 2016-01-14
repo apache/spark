@@ -44,9 +44,7 @@ private[sql] trait BucketedHadoopFsRelationProvider extends HadoopFsRelationProv
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation =
-    // TODO: throw exception here as we won't call this method during execution, after bucketed read
-    // support is finished.
-    createRelation(sqlContext, paths, dataSchema, partitionColumns, bucketSpec = None, parameters)
+    throw new UnsupportedOperationException("use bucket version")
 }
 
 private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFactory {
