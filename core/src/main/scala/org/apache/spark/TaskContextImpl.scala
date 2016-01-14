@@ -33,7 +33,6 @@ private[spark] class TaskContextImpl(
     override val taskMemoryManager: TaskMemoryManager,
     @transient private val metricsSystem: MetricsSystem,
     internalAccumulators: Seq[Accumulator[Long]],
-    val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
   with Logging {
@@ -85,7 +84,7 @@ private[spark] class TaskContextImpl(
 
   override def isCompleted(): Boolean = completed
 
-  override def isRunningLocally(): Boolean = runningLocally
+  override def isRunningLocally(): Boolean = false
 
   override def isInterrupted(): Boolean = interrupted
 
