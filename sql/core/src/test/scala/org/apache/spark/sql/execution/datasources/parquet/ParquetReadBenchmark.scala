@@ -59,7 +59,10 @@ object ParquetReadBenchmark {
   }
 
   def intScanBenchmark(values: Int): Unit = {
-    val benchmark = new Benchmark("Single Int Column Scan", values)
+    // Benchmarks running through spark sql.
+    val sqlBenchmark = new Benchmark("SQL Single Int Column Scan", values)
+    // Benchmarks driving reader component directly.
+    val parquetReaderBenchmark = new Benchmark("Parquet Reader Single Int Column Scan", values)
 
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
@@ -68,11 +71,11 @@ object ParquetReadBenchmark {
             .write.parquet(dir.getCanonicalPath)
         sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
 
-        benchmark.addCase("SQL Parquet Reader") { iter =>
+        sqlBenchmark.addCase("SQL Parquet Reader") { iter =>
           sqlContext.sql("select sum(id) from tempTable").collect()
         }
 
-        benchmark.addCase("SQL Parquet MR") { iter =>
+        sqlBenchmark.addCase("SQL Parquet MR") { iter =>
           withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
             sqlContext.sql("select sum(id) from tempTable").collect()
           }
@@ -80,7 +83,7 @@ object ParquetReadBenchmark {
 
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
         // Driving the parquet reader directly without Spark.
-        benchmark.addCase("ParquetReader") { num =>
+        parquetReaderBenchmark.addCase("ParquetReader") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new UnsafeRowParquetRecordReader
@@ -95,7 +98,7 @@ object ParquetReadBenchmark {
         }
 
         // Driving the parquet reader in batch mode directly.
-        benchmark.addCase("ParquetReader(Batched)") { num =>
+        parquetReaderBenchmark.addCase("ParquetReader(Batched)") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new UnsafeRowParquetRecordReader
@@ -118,7 +121,7 @@ object ParquetReadBenchmark {
         }
 
         // Decoding in vectorized but having the reader return rows.
-        benchmark.addCase("ParquetReader(Batch -> Row)") { num =>
+        parquetReaderBenchmark.addCase("ParquetReader(Batch -> Row)") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new UnsafeRowParquetRecordReader
@@ -144,11 +147,18 @@ object ParquetReadBenchmark {
         -------------------------------------------------------------------------------
         SQL Parquet Reader                       1682.6            15.58         1.00 X
         SQL Parquet MR                           2379.6            11.02         0.71 X
-        ParquetReader                            1033.0            25.38         1.63 X
-        ParquetReader(Batched)                    302.6            86.63         5.56 X
-        ParquetReader(Batch -> Row)               360.0            72.82         4.67 X
         */
-        benchmark.run()
+        sqlBenchmark.run()
+
+        /*
+        Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+        Parquet Reader Single Int Column Scan:     Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+        -------------------------------------------------------------------------------
+        ParquetReader                            610.40            25.77         1.00 X
+        ParquetReader(Batched)                   172.66            91.10         3.54 X
+        ParquetReader(Batch -> Row)              192.28            81.80         3.17 X
+        */
+        parquetReaderBenchmark.run()
       }
     }
   }
