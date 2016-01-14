@@ -715,7 +715,6 @@ abstract class HadoopFsRelation private[sql](
         }
 
         new UnionRDD(sqlContext.sparkContext, perBucketRows)
-
       }.getOrElse {
         buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
       }

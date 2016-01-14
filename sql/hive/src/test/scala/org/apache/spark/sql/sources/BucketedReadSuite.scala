@@ -100,18 +100,18 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     testBucketing(bucketing, bucketing, Seq("i", "j"), shuffleLeft = false, shuffleRight = false)
   }
 
-  ignore("only shuffle one side when join bucketed table and non-bucketed table") {
+  test("only shuffle one side when join bucketed table and non-bucketed table") {
     val bucketing = (writer: DataFrameWriter) => writer.bucketBy(8, "i", "j")
     testBucketing(bucketing, identity, Seq("i", "j"), shuffleLeft = false, shuffleRight = true)
   }
 
-  ignore("only shuffle one side when 2 bucketed tables have different bucket number") {
+  test("only shuffle one side when 2 bucketed tables have different bucket number") {
     val bucketing1 = (writer: DataFrameWriter) => writer.bucketBy(8, "i", "j")
     val bucketing2 = (writer: DataFrameWriter) => writer.bucketBy(5, "i", "j")
     testBucketing(bucketing1, bucketing2, Seq("i", "j"), shuffleLeft = false, shuffleRight = true)
   }
 
-  ignore("only shuffle one side when 2 bucketed tables have different bucket keys") {
+  test("only shuffle one side when 2 bucketed tables have different bucket keys") {
     val bucketing1 = (writer: DataFrameWriter) => writer.bucketBy(8, "i")
     val bucketing2 = (writer: DataFrameWriter) => writer.bucketBy(8, "j")
     testBucketing(bucketing1, bucketing2, Seq("i"), shuffleLeft = false, shuffleRight = true)
