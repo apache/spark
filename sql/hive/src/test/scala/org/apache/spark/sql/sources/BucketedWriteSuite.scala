@@ -20,12 +20,12 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.Utils
 
 class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
@@ -90,11 +90,12 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         val qe = readBack.select(bucketCols.map(col): _*).queryExecution
         val rows = qe.toRdd.map(_.copy()).collect()
-        val getHashCode =
-          UnsafeProjection.create(new Murmur3Hash(qe.analyzed.output) :: Nil, qe.analyzed.output)
+        val getBucketId = UnsafeProjection.create(
+          HashPartitioning(qe.analyzed.output, 8).partitionIdExpression :: Nil,
+          qe.analyzed.output)
 
         for (row <- rows) {
-          val actualBucketId = Utils.nonNegativeMod(getHashCode(row).getInt(0), 8)
+          val actualBucketId = getBucketId(row).getInt(0)
           assert(actualBucketId == bucketId)
         }
       }
