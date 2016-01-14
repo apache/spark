@@ -806,7 +806,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
       .limit(2)
       .registerTempTable("subset1")
-    sql("SELECT DISTINCT n FROM lowerCaseData")
+    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n ASC")
       .limit(2)
       .registerTempTable("subset2")
     checkAnswer(

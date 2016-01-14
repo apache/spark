@@ -67,8 +67,7 @@ private[spark] abstract class Task[T](
       attemptNumber,
       taskMemoryManager,
       metricsSystem,
-      initialAccumulators,
-      runningLocally = false)
+      initialAccumulators)
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
     if (_killed) {

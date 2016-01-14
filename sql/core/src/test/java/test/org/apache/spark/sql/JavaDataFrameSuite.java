@@ -237,8 +237,8 @@ public class JavaDataFrameSuite {
     DataFrame crosstab = df.stat().crosstab("a", "b");
     String[] columnNames = crosstab.schema().fieldNames();
     Assert.assertEquals("a_b", columnNames[0]);
-    Assert.assertEquals("1", columnNames[1]);
-    Assert.assertEquals("2", columnNames[2]);
+    Assert.assertEquals("2", columnNames[1]);
+    Assert.assertEquals("1", columnNames[2]);
     Row[] rows = crosstab.collect();
     Arrays.sort(rows, crosstabRowComparator);
     Integer count = 1;
