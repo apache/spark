@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources
 
+import scala.collection.Map
 import scala.collection.mutable
 import scala.util.Try
 
@@ -664,14 +665,27 @@ abstract class HadoopFsRelation private[sql](
     })
   }
 
-  private def getBucketId(f: FileStatus): Int = BucketingUtils.getBucketId(f.getPath.getName)
+  private def groupBucketFiles(files: Array[FileStatus]): Option[Map[Int, Array[FileStatus]]] = {
+    val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
+    for (file <- files) {
+      val bucketId = BucketingUtils.getBucketId(file.getPath.getName)
+      if (bucketId.isEmpty) {
+        logError(s"File ${file.getPath} is supposed to be a bucket file, but there is no " +
+          "bucket id information in file name.")
+        return None
+      } else {
+        groupedBucketFiles.getOrElseUpdate(bucketId.get, mutable.ArrayBuffer.empty) += file
+      }
+    }
+    Some(groupedBucketFiles.mapValues(_.toArray))
+  }
 
   final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val allInputFiles = inputPaths.flatMap { input =>
+    val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
       // First assumes `input` is a directory path, and tries to get all files contained in it.
@@ -686,23 +700,27 @@ abstract class HadoopFsRelation private[sql](
     }
 
     if (bucketSpec.isDefined && sqlContext.conf.bucketingEnabled()) {
-      val inputFilesWithBucketId = allInputFiles.groupBy(getBucketId)
-      // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket id
-      // from file name. Then read these files into a RDD(use one-partition empty RDD for empty
-      // bucket), and coalesce it to one partition. Finally union all bucket RDDs to final result.
-      val perBucketRows = (0 until bucketSpec.get.numBuckets).map { bucketId =>
-        val inputStatuses = inputFilesWithBucketId.get(bucketId)
-        if (inputStatuses.isEmpty) {
-          sqlContext.emptyResult
-        } else {
-          buildInternalScan(
-            requiredColumns, filters, inputStatuses.get, broadcastedConf).coalesce(1)
+      groupBucketFiles(inputStatuses).map { groupedBucketFiles =>
+        // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket
+        // id from file name. Then read these files into a RDD(use one-partition empty RDD for empty
+        // bucket), and coalesce it to one partition. Finally union all bucket RDDs to final result.
+        val perBucketRows = (0 until bucketSpec.get.numBuckets).map { bucketId =>
+          val inputStatuses = groupedBucketFiles.get(bucketId)
+          if (inputStatuses.isEmpty) {
+            sqlContext.emptyResult
+          } else {
+            buildInternalScan(
+              requiredColumns, filters, inputStatuses.get, broadcastedConf).coalesce(1)
+          }
         }
-      }
 
-      new UnionRDD(sqlContext.sparkContext, perBucketRows)
+        new UnionRDD(sqlContext.sparkContext, perBucketRows)
+
+      }.getOrElse {
+        buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+      }
     } else {
-      buildInternalScan(requiredColumns, filters, allInputFiles, broadcastedConf)
+      buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
     }
   }
 

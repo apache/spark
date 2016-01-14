@@ -58,9 +58,14 @@ private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFact
 }
 
 private[sql] object BucketingUtils {
+  // The file name of bucketed data should have 3 parts:
+  //   1. some other information in the head of file name, ends with `-`
+  //   2. bucket id part, some numbers
+  //   3. optional file extension part, in the tail of file name, starts with `.`
   private val bucketedFileName = """.*-(\d+)(?:\..*)?$""".r
 
-  def getBucketId(fileName: String): Int = fileName match {
-    case bucketedFileName(bucketId) => bucketId.toInt
+  def getBucketId(fileName: String): Option[Int] = fileName match {
+    case bucketedFileName(bucketId) => Some(bucketId.toInt)
+    case other => None
   }
 }
