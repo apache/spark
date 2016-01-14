@@ -137,45 +137,59 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val got = ctx.freshName("got")
+    val firstCase = {
+      val cond = branches.head._1.gen(ctx)
+      val res = branches.head._2.gen(ctx)
+      s"""
+        ${cond.code}
+        if (!${cond.isNull} && ${cond.value}) {
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.value} = ${res.value};
+        }
+      """
+    }
 
-    val cases = branches.map { case (condition, value) =>
+    val otherCases = branches.tail.map { case (condition, value) =>
       val cond = condition.gen(ctx)
       val res = value.gen(ctx)
+
       s"""
-        if (!$got) {
+        else {
           ${cond.code}
           if (!${cond.isNull} && ${cond.value}) {
-            $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};
             ${ev.value} = ${res.value};
           }
-        }
       """
-    }.mkString("\n")
+    }
+
+    val cases = firstCase + otherCases.mkString("\n")
 
     val elseCase = {
       if (elseValue.isDefined) {
         val res = elseValue.get.gen(ctx)
         s"""
-        if (!$got) {
-          ${res.code}
-          ${ev.isNull} = ${res.isNull};
-          ${ev.value} = ${res.value};
-        }
+          else {
+            ${res.code}
+            ${ev.isNull} = ${res.isNull};
+            ${ev.value} = ${res.value};
+          }
         """
       } else {
         ""
       }
     }
 
+    val leftBrackets = "}\n" * otherCases.length
+
     s"""
-      boolean $got = false;
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       $cases
       $elseCase
+      $leftBrackets
     """
   }
 
