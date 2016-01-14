@@ -137,50 +137,59 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val len = branches.length
-
-    def genBranch(branchIndex: Int): String =
-      if (branchIndex >= len) {
-        if (elseValue.isDefined) {
-          val res = elseValue.get.gen(ctx)
-          s"""
-            ${res.code}
-            ${ev.isNull} = ${res.isNull};
-            ${ev.value} = ${res.value};
-          """
-        } else {
-          ""
+    val firstCase = {
+      val cond = branches.head._1.gen(ctx)
+      val res = branches.head._2.gen(ctx)
+      s"""
+        ${cond.code}
+        if (!${cond.isNull} && ${cond.value}) {
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.value} = ${res.value};
         }
-      } else {
-        val cond = branches(branchIndex)._1.gen(ctx)
-        val res = branches(branchIndex)._2.gen(ctx)
+      """
+    }
 
-        val currentBranch = s"""
+    val otherCases = branches.tail.map { case (condition, value) =>
+      val cond = condition.gen(ctx)
+      val res = value.gen(ctx)
+
+      s"""
+        else {
           ${cond.code}
           if (!${cond.isNull} && ${cond.value}) {
             ${res.code}
             ${ev.isNull} = ${res.isNull};
             ${ev.value} = ${res.value};
           }
-        """
+      """
+    }
 
-        val moreBranch = genBranch(branchIndex + 1)
-        if (moreBranch != "") {
-          s"""
-            $currentBranch
-            else {
-              $moreBranch
-            }
-          """
-        } else {
-          currentBranch
-        }
+    val cases = firstCase + otherCases.mkString("\n")
+
+    val elseCase = {
+      if (elseValue.isDefined) {
+        val res = elseValue.get.gen(ctx)
+        s"""
+          else {
+            ${res.code}
+            ${ev.isNull} = ${res.isNull};
+            ${ev.value} = ${res.value};
+          }
+        """
+      } else {
+        ""
       }
+    }
+
+    val leftBrackets = (0 until otherCases.length).map("}").mkString("\n")
 
     s"""
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${genBranch(0)}
+      $cases
+      $elseCase
+      $leftBrackets
     """
   }
 
