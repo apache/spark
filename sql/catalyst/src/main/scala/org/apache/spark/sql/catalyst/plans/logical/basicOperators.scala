@@ -180,6 +180,62 @@ case class Join(
   }
 }
 
+case class NaturalJoin(
+  left: LogicalPlan,
+  right: LogicalPlan,
+  joinType: JoinType,
+  condition: Option[Expression]) extends BinaryNode {
+
+  override def output: Seq[Attribute] = {
+    val lUniqueOutput = left.output.filterNot(att => commonNames.contains(att.name))
+    val rUniqueOutput = right.output.filterNot(att => commonNames.contains(att.name))
+    joinType match {
+      case LeftOuter =>
+        commonOutputFromLeft ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
+      case RightOuter =>
+        val commonOutputFromRight =
+          commonNames.map(cn => right.output.find(att => att.name == cn).get)
+        commonOutputFromRight ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
+      case FullOuter =>
+        // here use left as a place holder
+        commonOutputFromLeft ++ (lUniqueOutput ++ rUniqueOutput).map(_.withNullability(true))
+      case _ =>
+        commonOutputFromLeft ++ lUniqueOutput ++ rUniqueOutput
+    }
+  }
+
+  @transient private val leftNames = left.output.map(_.name)
+  @transient private val rightNames = right.output.map(_.name)
+  @transient private val commonNames = leftNames.intersect(rightNames)
+  @transient
+  private val commonOutputFromLeft = left.output.filter(att => commonNames.contains(att.name))
+
+  def outerProjectList: Seq[NamedExpression] = {
+    if (joinType == FullOuter) {
+      val commonOutputFromRight =
+        commonNames.map(cn => right.output.find(att => att.name == cn).get)
+      val commonPairs = commonOutputFromLeft.zip(commonOutputFromRight)
+      val commonOutputExp = commonPairs.map {
+        case (l: Attribute, r: Attribute) => Alias(CaseWhen(Seq((IsNull(l), r)), l), l.name)()
+      }
+      commonOutputExp ++ output.takeRight(output.size - commonOutputExp.size)
+    } else {
+      output
+    }
+  }
+
+
+  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
+  // Joins are only resolved if they don't introduce ambiguous expression ids.
+  override lazy val resolved: Boolean = {
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      selfJoinResolved &&
+      condition.forall(_.dataType == BooleanType)
+  }
+}
+
 /**
  * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
  */

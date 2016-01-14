@@ -80,6 +80,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
+      ResolveNaturalJoin ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -1157,6 +1158,25 @@ class Analyzer(
           val order = spec.orderSpec.map(_.child)
           WindowExpression(rank.withOrder(order), spec)
       }
+    }
+  }
+ 
+  /**
+   * Removes natural joins.
+   */
+  object ResolveNaturalJoin extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.resolved => p // Skip unresolved nodes.
+
+      case j @ NaturalJoin(left, right, joinType, condition) =>
+        val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
+        val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
+        val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
+        val joinPairs = leftKeys.zip(rightKeys)
+        val newCondition = (condition ++ joinPairs.map {
+          case (l, r) => EqualTo(l, r)
+        }).reduceLeftOption(And)
+        Project(j.outerProjectList, Join(left, right, joinType, newCondition))
     }
   }
 }
