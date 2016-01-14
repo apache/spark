@@ -308,7 +308,6 @@ private[spark] class BlockManager(
     blockInfo.asScala.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
       val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
-      // Assume that block is not in external block store
       BlockStatus(info.level, memSize = memSize, diskSize = diskSize)
     }
   }
