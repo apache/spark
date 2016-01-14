@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-
-import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -179,20 +179,21 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
  */
 object Unions {
   def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
-    case u: Union => Some(collectUnionChildren(ArrayBuffer(u), Seq.empty[LogicalPlan]))
+    case u: Union => Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan]))
     case _ => None
   }
 
   @tailrec
   private def collectUnionChildren(
-      plan: ArrayBuffer[LogicalPlan],
+      plans: mutable.Stack[LogicalPlan],
       children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
-    if (plan.isEmpty) children
+    if (plans.isEmpty) children
     else {
-      plan.head match {
+      plans.pop match {
         case Union(grandchildren) =>
-          collectUnionChildren(grandchildren.to[ArrayBuffer] ++ plan.tail, children)
-        case other => collectUnionChildren(plan.tail, children :+ other)
+          grandchildren.reverseMap(plans.push(_))
+          collectUnionChildren(plans, children)
+        case other => collectUnionChildren(plans, children :+ other)
       }
     }
   }

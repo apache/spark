@@ -130,6 +130,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
       attrs.head.withNullability(attrs.exists(_.nullable)))
 
   override lazy val resolved: Boolean = {
+    // allChildrenCompatible needs to be evaluated after childrenResolved
     lazy val allChildrenCompatible: Boolean =
       children.tail.forall( child =>
         // compare the attribute number with the first child
@@ -139,7 +140,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
           case (l, r) => l.dataType == r.dataType }
       )
 
-    childrenResolved && allChildrenCompatible
+    children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
   override def statistics: Statistics = {

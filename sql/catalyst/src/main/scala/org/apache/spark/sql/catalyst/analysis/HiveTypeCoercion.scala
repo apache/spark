@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -205,39 +208,49 @@ object HiveTypeCoercion {
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
       // in all the children
-      val castedTypes: Seq[Option[DataType]] = {
-        val initialTypeSeq = children.head.output.map(a => Option(a.dataType))
-        children.tail.foldLeft(initialTypeSeq) { (currentOutputDataTypes, child) =>
-          // Find the wider type if the data type of this child do not match with
-          // the casted data types of the already processed children
-          getCastedTypes(currentOutputDataTypes, child.output)
-        }
-      }
+      val castedTypes: Seq[DataType] =
+        getCastedTypes(children, attrIndex = 0, mutable.Queue[DataType]())
 
       // Add extra Project for type promotion if necessary
-      children.map(castOutput(_, castedTypes))
+      if (castedTypes.isEmpty) children else children.map(castOutput(_, castedTypes))
     }
 
     // Add Project if the data types do not match
     private def castOutput(
         plan: LogicalPlan,
-        castedTypes: Seq[Option[DataType]]): LogicalPlan = {
+        castedTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(castedTypes).map {
-        case (e, Some(dt)) if e.dataType != dt =>
+        case (e, dt) if e.dataType != dt =>
           Alias(Cast(e, dt), e.name)()
         case (e, _) => e
       }
       if (casted.exists(_.isInstanceOf[Alias])) Project(casted, plan) else plan
     }
 
-    private def getCastedTypes(
-        typeSeq: Seq[Option[DataType]],
-        attrSeq: Seq[Attribute]): Seq[Option[DataType]] = {
-      typeSeq.zip(attrSeq).map {
-        case (Some(dt), ar) if dt != ar.dataType =>
-          findWiderTypeForTwo(dt, ar.dataType)
-        case (Some(dt), ar) if dt == ar.dataType => Option(dt)
-        case other => None
+    // Get the widest type for each attribute in all the children
+    @tailrec private def getCastedTypes(
+        children: Seq[LogicalPlan],
+        attrIndex: Int,
+        castedTypes: mutable.Queue[DataType]): Seq[DataType] = {
+      // Return the result after the widen data types have been found for all the children
+      if (attrIndex >= children.head.output.length) return castedTypes.toSeq
+
+      // For the attrIndex-th attribute, find the widest type
+      val initialType = Option(children.head.output(attrIndex).dataType)
+      children.foldLeft(initialType) { (currentOutputDataTypes, child) =>
+        (currentOutputDataTypes, child.output(attrIndex).dataType) match {
+          case (Some(dt1), dt2) if dt1 != dt2 =>
+            findWiderTypeForTwo(dt1, dt2)
+          case (Some(dt1), dt2) if dt1 == dt2 => Option(dt1)
+          case other => None
+        }
+      } match {
+        // If unable to find an appropriate widen type for this column, return an empty Seq
+        case None => Seq.empty[DataType]
+        // Otherwise, record the result in the queue and find the type for the next column
+        case Some(widenType) =>
+          castedTypes.enqueue(widenType)
+          getCastedTypes (children, attrIndex + 1, castedTypes)
       }
     }
 

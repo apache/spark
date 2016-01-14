@@ -190,13 +190,12 @@ trait CheckAnalysis {
                s"${right.output.length}")
 
           case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
-            s.children.filter(_.output.length != s.children.head.output.length).exists { child =>
-              failAnalysis(
-                s"""
-                  |Unions can only be performed on tables with the same number of columns,
-                  | but one table has '${child.output.length}' columns and another table has
-                  | '${s.children.head.output.length}' columns""".stripMargin)
-            }
+            val firstError = s.children.find(_.output.length != s.children.head.output.length).get
+            failAnalysis(
+              s"""
+                |Unions can only be performed on tables with the same number of columns,
+                | but one table has '${firstError.output.length}' columns and another table has
+                | '${s.children.head.output.length}' columns""".stripMargin)
 
           case _ => // Fallbacks to the following checks
         }
