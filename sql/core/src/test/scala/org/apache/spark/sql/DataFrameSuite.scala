@@ -59,8 +59,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("dataframe toString") {
     assert(testData.toString === "[key: int, value: string]")
-    assert(testData("key").toString === "key")
-    assert($"test".toString === "test")
+    assert(testData("key").toString === "`key`")
+    assert($"test".toString === "`test`")
   }
 
   test("rename nested groupby") {
@@ -542,7 +542,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     val describeAllCols = describeTestData.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "`age`", "`height`"))
     checkAnswer(describeAllCols, describeResult)
 
     val describeOneCol = describeTestData.describe("age")
@@ -554,7 +554,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
 
     val emptyDescription = describeTestData.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "`age`", "`height`"))
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
