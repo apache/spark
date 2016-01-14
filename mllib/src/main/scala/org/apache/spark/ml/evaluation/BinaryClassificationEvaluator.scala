@@ -29,7 +29,8 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
- * The rawPrediction column can be of type double or vector.
+ * The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label 1)
+ * or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
  */
 @Since("1.2.0")
 @Experimental
