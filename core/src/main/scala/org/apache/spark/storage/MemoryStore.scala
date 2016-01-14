@@ -122,23 +122,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     PutResult(size, data, droppedBlocks)
   }
 
-  private def putArray(
-      blockId: BlockId,
-      values: Array[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-    if (level.deserialized) {
-      val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
-      tryToPut(blockId, values, sizeEstimate, deserialized = true, droppedBlocks)
-      PutResult(sizeEstimate, Left(values.iterator), droppedBlocks)
-    } else {
-      val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
-    }
-  }
-
   override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
@@ -170,7 +153,18 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     unrolledValues match {
       case Left(arrayValues) =>
         // Values are fully unrolled in memory, so store them as an array
-        val res = putArray(blockId, arrayValues, level, returnValues)
+        val res = {
+          val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+          if (level.deserialized) {
+            val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
+            tryToPut(blockId, arrayValues, sizeEstimate, deserialized = true, droppedBlocks)
+            PutResult(sizeEstimate, Left(arrayValues.iterator), droppedBlocks)
+          } else {
+            val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
+            tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
+            PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
+          }
+        }
         droppedBlocks ++= res.droppedBlocks
         PutResult(res.size, res.data, droppedBlocks)
       case Right(iteratorValues) =>
