@@ -41,7 +41,6 @@ private[spark] object BLAS extends Serializable with Logging {
   // equivalent to xIndices.union(yIndices).distinct.sortBy(i => i)
   def unitedIndices(xSortedIndices: Array[Int], ySortedIndices: Array[Int]): Array[Int] = {
     val arr = new Array[Int](xSortedIndices.length + ySortedIndices.length)
-    (0 until arr.length).foreach(i => arr(i) = -1)
 
     var xj = 0
     var yj = 0
@@ -71,7 +70,7 @@ private[spark] object BLAS extends Serializable with Logging {
       previ = i
     }
 
-    arr.filter(_ != -1)
+    arr.slice(0, j)
   }
 
   /**
