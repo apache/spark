@@ -114,13 +114,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("map with type change") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
     checkAnswer(
       ds.map(identity[(String, Int)])
         .as[OtherTuple]
         .map(identity[OtherTuple]),
-      OtherTuple("a", 1) , OtherTuple("b", 2), OtherTuple("c", 3))
+      OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
   }
 
   test("map and group by with class data") {
