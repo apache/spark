@@ -182,7 +182,13 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
       }
     }
 
-    val leftBrackets = (0 until otherCases.length).map("}").mkString("\n")
+    val leftBrackets = {
+      if (otherCases.length > 0) {
+        (0 until otherCases.length).map("}").mkString("\n")
+      } else {
+        ""
+      }
+    }
 
     s"""
       boolean ${ev.isNull} = true;
