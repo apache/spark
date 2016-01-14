@@ -474,7 +474,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("SPARK-9591: getRemoteBytes from another location when Exception throw") {
-    conf.set("spark.network.timeout", "2s")
+    conf.set("spark.shuffle.io.maxRetries", "0")
     store = makeBlockManager(8000, "executor1")
     store2 = makeBlockManager(8000, "executor2")
     store3 = makeBlockManager(8000, "executor3")
