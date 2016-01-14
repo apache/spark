@@ -668,6 +668,10 @@ private[spark] class BlockManager(
     referenceCounts.release(blockId)
   }
 
+  def releaseAllReferencesForTask(taskAttemptId: Long) = {
+    referenceCounts.releaseAllReferencesForTask(taskAttemptId)
+  }
+
   private[storage] def getReferenceCount(blockId: BlockId): Int = {
     referenceCounts.getReferenceCount(blockId)
   }
