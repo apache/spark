@@ -1781,11 +1781,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |left outer join db2.test1 as t2 on (t1.a = t2.a)""".stripMargin),
       Row(1, null) :: Nil)
 
+    // Special cases
+    sql("create database a")
+    sql("use a")
+    sqlContext.read.json(
+      sparkContext.makeRDD("""{"b": {"c": 1}}""" :: Nil)).write.saveAsTable("a.a")
+    sqlContext.read.json(
+      sparkContext.makeRDD("""{"c": 2}""" :: Nil)).write.saveAsTable("a.b")
+    checkAnswer(sql("select a.b.c from a, b"), Row(2) :: Nil)
+    checkAnswer(sql("select a.b from a, b"), Row(Row(1)) :: Nil)
+
     sql("drop table db1.test1")
     sql("drop table db1.tmp")
     sql("drop table db2.test1")
     sql("drop table db2.tmp")
     sql("drop database db1")
     sql("drop database db2")
+    sql("drop table a.a")
+    sql("drop table a.b")
+    sql("drop database a")
   }
 }
