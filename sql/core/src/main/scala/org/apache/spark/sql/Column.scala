@@ -131,7 +131,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(func.prettyString))
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(func.sql))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
@@ -139,13 +139,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
     } match {
       case ne: NamedExpression => ne
-      case other => Alias(expr, expr.prettyString)()
+      case other => Alias(expr, expr.sql)()
     }
 
-    case expr: Expression => Alias(expr, expr.prettyString)()
+    case expr: Expression => Alias(expr, expr.sql)()
   }
 
-  override def toString: String = expr.prettyString
+  override def toString: String = expr.sql
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
@@ -987,7 +987,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     if (extended) {
       println(expr)
     } else {
-      println(expr.prettyString)
+      println(expr.sql)
     }
     // scalastyle:on println
   }

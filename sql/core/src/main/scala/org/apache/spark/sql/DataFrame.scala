@@ -1359,7 +1359,7 @@ class DataFrame private[sql](
       "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
-    val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
+    val outputCols = (if (cols.isEmpty) numericColumns.map(_.sql) else cols).toList
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>

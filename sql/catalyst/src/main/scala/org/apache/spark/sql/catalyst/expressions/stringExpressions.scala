@@ -62,8 +62,6 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       }
     """
   }
-
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 
@@ -156,8 +154,6 @@ case class ConcatWs(children: Seq[Expression])
       """
     }
   }
-
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 trait String2StringExpression extends ImplicitCastInputTypes {

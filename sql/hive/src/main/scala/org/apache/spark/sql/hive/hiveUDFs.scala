@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types._
@@ -233,7 +232,7 @@ private[hive] case class HiveGenericUDF(
   }
 
   @transient
-  private lazy val deferedObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
+  private lazy val deferredObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
     new DeferredObjectAdapter(inspect, child.dataType)
   }.toArray[DeferredObject]
 
@@ -245,20 +244,20 @@ private[hive] case class HiveGenericUDF(
     var i = 0
     while (i < children.length) {
       val idx = i
-      deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(
+      deferredObjects(i).asInstanceOf[DeferredObjectAdapter].set(
         () => {
           children(idx).eval(input)
         })
       i += 1
     }
-    unwrap(function.evaluate(deferedObjects), returnInspector)
+    unwrap(function.evaluate(deferredObjects), returnInspector)
   }
+
+  override def prettyName: String = name
 
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
-
-  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 /**
@@ -340,7 +339,7 @@ private[hive] case class HiveGenericUDTF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
+  override def prettyName: String = name
 }
 
 /**
@@ -433,6 +432,8 @@ private[hive] case class HiveUDAFFunction(
   override def supportsPartial: Boolean = false
 
   override val dataType: DataType = inspectorToDataType(returnInspector)
+
+  override def prettyName: String = name
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else " "

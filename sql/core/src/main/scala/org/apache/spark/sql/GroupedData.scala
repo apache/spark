@@ -74,7 +74,7 @@ class GroupedData protected[sql](
   private[this] def alias(expr: Expression): NamedExpression = expr match {
     case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
-    case expr: Expression => Alias(expr, expr.prettyString)()
+    case expr: Expression => Alias(expr, expr.sql)()
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)

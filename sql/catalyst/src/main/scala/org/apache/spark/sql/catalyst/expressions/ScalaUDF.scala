@@ -39,7 +39,7 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
   override def nullable: Boolean = true
 
