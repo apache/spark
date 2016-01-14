@@ -56,9 +56,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
   val shuffleManager = new HashShuffleManager(conf)
 
-  // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   conf.set("spark.kryoserializer.buffer", "1m")
-  val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
@@ -68,6 +66,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER,
       master: BlockManagerMaster = this.master): BlockManager = {
+    val serializer = new KryoSerializer(conf)
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
     val blockManager = new BlockManager(name, rpcEnv, master, serializer, conf,
@@ -498,19 +497,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val list1 = List(new Array[Byte](4000))
       store2.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
       store3.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-      var list1Get = store.getRemoteBytes("list1")
-      assert(list1Get.isDefined, "list1Get expected to be fetched")
+      assert(store.getRemoteBytes("list1").isDefined, "list1Get expected to be fetched")
       // block manager exit
       store2.stop()
       store2 = null
-      list1Get = store.getRemoteBytes("list1")
-      // get `list1` block
-      assert(list1Get.isDefined, "list1Get expected to be fetched")
+      assert(store.getRemoteBytes("list1").isDefined, "list1Get expected to be fetched")
       store3.stop()
       store3 = null
       // exception throw because there is no locations
       intercept[BlockFetchException] {
-        list1Get = store.getRemoteBytes("list1")
+        store.getRemoteBytes("list1")
       }
     } finally {
       origTimeoutOpt match {
@@ -1341,5 +1337,30 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(result.size === 10000)
     assert(result.data === Right(bytes))
     assert(result.droppedBlocks === Nil)
+  }
+
+  test("blocks with non-zero reference counts cannot be evicted from the MemoryStore") {
+    store = makeBlockManager(12000)
+    val arr = new Array[Byte](4000)
+    // First store a1 and a2, both in memory, and a3, on disk only
+    store.putSingle("a1", arr, StorageLevel.MEMORY_ONLY_SER)
+    store.putSingle("a2", arr, StorageLevel.MEMORY_ONLY_SER)
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    // This put should fail because both a1 and a2 have non-zero reference counts:
+    store.putSingle("a3", arr, StorageLevel.MEMORY_ONLY_SER)
+    assert(store.getSingle("a3").isEmpty, "a3 was in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    // Release both references to block a2:
+    store.release("a2")
+    store.release("a2")
+    assert(store.getReferenceCount("a2") === 0)
+    // Block a1 is the least-recently accessed, so an LRU eviction policy would evict it before
+    // block a2. However, a1 still has references, so this put of a3 should evict a2 instead:
+    store.putSingle("a3", arr, StorageLevel.MEMORY_ONLY_SER)
+    assert(store.getSingle("a2").isEmpty, "a2 was in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
   }
 }
