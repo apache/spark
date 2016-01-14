@@ -140,15 +140,13 @@ private[sql] object PhysicalRDD {
 
     def toAttribute(colName: String): Attribute = output.find(_.name == colName).get
 
-    val bucketedPhysicalRDD = bucketSpec.map { spec =>
+    bucketSpec.map { spec =>
       val numBuckets = spec.numBuckets
       val bucketColumns = spec.bucketColumnNames.map(toAttribute)
       val partitioning = HashPartitioning(bucketColumns, numBuckets)
       PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
-    }
-
-    bucketedPhysicalRDD.getOrElse(
+    }.getOrElse {
       PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
-    )
+    }
   }
 }
