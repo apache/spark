@@ -456,8 +456,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
 
-    assert(ds.groupBy(p => p).count().collect().toSeq ==
-      Seq((KryoData(1), 1L), (KryoData(2), 1L)))
+    assert(ds.groupBy(p => p).count().collect().toSet ==
+      Set((KryoData(1), 1L), (KryoData(2), 1L)))
   }
 
   test("Kryo encoder self join") {
