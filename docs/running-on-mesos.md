@@ -202,7 +202,7 @@ where each application gets more or fewer machines as it ramps up and down, but 
 additional overhead in launching each task. This mode may be inappropriate for low-latency
 requirements like interactive queries or serving web requests.
 
-To run in coarse-grained mode, set the `spark.mesos.coarse` property to false in your
+To run in fine-grained mode, set the `spark.mesos.coarse` property to false in your
 [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
@@ -266,13 +266,11 @@ See the [configuration page](configuration.html) for information on Spark config
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.mesos.coarse</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
-    If set to <code>true</code>, runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
-    Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
-    for the whole duration of the Spark job.
+    If set to <code>true</code>, runs over Mesos clusters in "coarse-grained" sharing mode, where Spark acquires one long-lived Mesos task on each machine.
+    If set to <code>false</code>, runs over Mesos cluster in "fine-grained" sharing mode, where one Mesos task is created per Spark task.
+    Detailed information in <a href="running-on-mesos.html#mesos-run-modes">'Mesos Run Modes'</a>.
   </td>
 </tr>
 <tr>

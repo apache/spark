@@ -71,7 +71,7 @@ object SparkTachyonHdfsLR {
     val conf = new Configuration()
     val sc = new SparkContext(sparkConf)
     val lines = sc.textFile(inputPath)
-    val points = lines.map(parsePoint _).persist(StorageLevel.OFF_HEAP)
+    val points = lines.map(parsePoint).persist(StorageLevel.OFF_HEAP)
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
