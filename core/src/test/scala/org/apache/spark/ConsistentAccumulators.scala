@@ -111,7 +111,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val a = sc.parallelize(1 to 100, 10)
     val b = a.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
     // This depends on toLocalIterators per-partition fetch behaviour
-    println(b.toLocalIterator.take(2).toList)
+    b.toLocalIterator.take(2).toList
     acc.value should be > (0)
     b.count()
     acc.value should be (5050)
@@ -120,7 +120,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
     val c = b.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
     c.cache()
-    println(c.toLocalIterator.take(2).toList)
+    c.toLocalIterator.take(2).toList
     acc.value should be > (5050)
     c.count()
     acc.value should be (10100)
