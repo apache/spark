@@ -32,14 +32,7 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
-
-  import InternalAccumulator._
-
-  val jobSubmissionTime = 1421191042750L
-  val jobCompletionTime = 1421191296660L
-
-  val executorAddedTime = 1421458410000L
-  val executorRemovedTime = 1421458922000L
+  import JsonProtocolSuite._
 
   test("SparkListenerEvent") {
     val stageSubmitted =
@@ -378,6 +371,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
     assert(false === oldInfo.internal)
   }
+}
+
+// These helper methods are moved into an object so other test suites can reuse them.
+// This extends SparkFunSuite only because we want to use scalatest asserts.
+private[spark] object JsonProtocolSuite extends SparkFunSuite {
+  import InternalAccumulator._
+
+  val jobSubmissionTime = 1421191042750L
+  val jobCompletionTime = 1421191296660L
+
+  val executorAddedTime = 1421458410000L
+  val executorRemovedTime = 1421458922000L
 
   /** -------------------------- *
    | Helper test running methods |
@@ -444,7 +449,7 @@ class JsonProtocolSuite extends SparkFunSuite {
    | Util methods for comparing events |
    * --------------------------------- */
 
-  private def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
+  private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
     (event1, event2) match {
       case (e1: SparkListenerStageSubmitted, e2: SparkListenerStageSubmitted) =>
         assert(e1.properties === e2.properties)
