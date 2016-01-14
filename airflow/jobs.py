@@ -327,6 +327,9 @@ class SchedulerJob(BaseJob):
                         if email not in emails:
                             emails.append(email)
             if emails and len(slas):
+                if dag.sla_miss_callback:
+                    dag.sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis)
+                # Send email
                 utils.send_email(
                     emails,
                     "[airflow] SLA miss on DAG=" + dag.dag_id,
