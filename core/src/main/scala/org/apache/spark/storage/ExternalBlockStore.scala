@@ -51,25 +51,10 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
     putIntoExternalBlockStore(blockId, bytes, returnValues = true)
   }
 
-  override def putArray(
-      blockId: BlockId,
-      values: Array[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    putIntoExternalBlockStore(blockId, values.toIterator, returnValues)
-  }
-
   override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    putIntoExternalBlockStore(blockId, values, returnValues)
-  }
-
-  private def putIntoExternalBlockStore(
-      blockId: BlockId,
-      values: Iterator[_],
       returnValues: Boolean): PutResult = {
     logTrace(s"Attempting to put block $blockId into ExternalBlockStore")
     // we should never hit here if externalBlockManager is None. Handle it anyway for safety.

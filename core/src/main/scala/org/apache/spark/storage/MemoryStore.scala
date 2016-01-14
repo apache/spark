@@ -122,7 +122,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     PutResult(size, data, droppedBlocks)
   }
 
-  override def putArray(
+  private def putArray(
       blockId: BlockId,
       values: Array[Any],
       level: StorageLevel,
@@ -246,7 +246,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * This method returns either an array with the contents of the entire block or an iterator
    * containing the values of the block (if the array would have exceeded available memory).
    */
-  def unrollSafely(
+  private[storage] def unrollSafely(
       blockId: BlockId,
       values: Iterator[Any],
       droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)])
