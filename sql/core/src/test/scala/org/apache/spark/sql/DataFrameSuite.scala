@@ -308,6 +308,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       mapData.toDF().limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+
+    // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
+    checkAnswer(
+      sqlContext.range(2).limit(2147483638),
+      Row(0) :: Row(1) :: Nil
+    )
   }
 
   test("except") {
@@ -1077,17 +1083,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // Walk each partition and verify that it is sorted descending and does not contain all
     // the values.
     df4.rdd.foreachPartition { p =>
-      var previousValue: Int = -1
-      var allSequential: Boolean = true
-      p.foreach { r =>
-        val v: Int = r.getInt(1)
-        if (previousValue != -1) {
-          if (previousValue < v) throw new SparkException("Partition is not ordered.")
-          if (v + 1 != previousValue) allSequential = false
+      // Skip empty partition
+      if (p.hasNext) {
+        var previousValue: Int = -1
+        var allSequential: Boolean = true
+        p.foreach { r =>
+          val v: Int = r.getInt(1)
+          if (previousValue != -1) {
+            if (previousValue < v) throw new SparkException("Partition is not ordered.")
+            if (v + 1 != previousValue) allSequential = false
+          }
+          previousValue = v
         }
-        previousValue = v
+        if (allSequential) throw new SparkException("Partition should not be globally ordered")
       }
-      if (allSequential) throw new SparkException("Partition should not be globally ordered")
     }
 
     // Distribute and order by with multiple order bys
