@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
@@ -202,7 +202,7 @@ class SQLContext private[sql](
     }
 
   @transient
-  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
+  protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
   protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
@@ -409,7 +409,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   @Experimental
-  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -425,7 +425,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   @Experimental
-  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -498,7 +498,7 @@ class SQLContext private[sql](
   }
 
 
-  def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
@@ -507,7 +507,7 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
-  def createDataset[T: Encoder](data: RDD[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d))
@@ -516,7 +516,7 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
-  def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
 
