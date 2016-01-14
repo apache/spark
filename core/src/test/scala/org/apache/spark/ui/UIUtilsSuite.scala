@@ -73,12 +73,12 @@ class UIUtilsSuite extends SparkFunSuite {
     val encoded2 = "%253Cdriver%253E"
     val decoded2 = "<driver>"
 
-    assert(decoded1.sameElements(decodeURLParameter(encoded1)))
-    assert(decoded2.sameElements(decodeURLParameter(encoded2)))
+    assert(decoded1 === decodeURLParameter(encoded1))
+    assert(decoded2 === decodeURLParameter(encoded2))
 
     // verify that no affect to decoded URL.
-    assert(decoded1.sameElements(decodeURLParameter(decoded1)))
-    assert(decoded2.sameElements(decodeURLParameter(decoded2)))
+    assert(decoded1 === decodeURLParameter(decoded1))
+    assert(decoded2 === decodeURLParameter(decoded2))
   }
 
   private def verify(

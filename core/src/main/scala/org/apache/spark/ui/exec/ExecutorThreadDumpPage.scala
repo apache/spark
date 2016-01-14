@@ -29,7 +29,9 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
   private val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val executorId = Option(request.getParameter("executorId")).getOrElse {
+    val executorId = Option(request.getParameter("executorId")).map { executorId =>
+      UIUtils.decodeURLParameter(executorId)
+    }.getOrElse {
       throw new IllegalArgumentException(s"Missing executorId parameter")
     }
     val time = System.currentTimeMillis()
