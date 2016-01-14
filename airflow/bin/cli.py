@@ -120,10 +120,13 @@ def run(args):
         old_log = None
 
     subdir = process_subdir(args.subdir)
+
+    logging.root.handlers=[]
     logging.basicConfig(
         filename=filename,
         level=settings.LOGGING_LEVEL,
         format=settings.LOG_FORMAT)
+
     if not args.pickle:
         dagbag = DagBag(subdir)
         if args.dag_id not in dagbag.dags:
