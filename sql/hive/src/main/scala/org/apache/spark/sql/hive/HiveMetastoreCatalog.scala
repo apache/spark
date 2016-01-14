@@ -420,7 +420,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     if (table.properties.get("spark.sql.sources.provider").isDefined) {
       val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
-      val tableWithQualifiers = SubqueryAlias(qualifiedTableName.name, dataSourceTable)
+      val tableWithQualifiers = SubqueryAlias(qualifiedTableName.name, dataSourceTable,
+        Some(qualifiedTableName.database))
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
       alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
@@ -897,7 +898,7 @@ private[hive] case class MetastoreRelation(
       HiveMetastoreTypes.toDataType(f.dataType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifiers = Seq(alias.getOrElse(tableName)))
+    )(qualifiers = if (alias.isEmpty) Seq(databaseName, tableName) else Seq(alias.get))
   }
 
   /** PartitionKey attributes */

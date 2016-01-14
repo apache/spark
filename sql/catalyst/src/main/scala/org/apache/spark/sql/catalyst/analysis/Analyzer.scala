@@ -1374,9 +1374,10 @@ class Analyzer(
  * Removes [[SubqueryAlias]] operators from the plan. Subqueries are only required to provide
  * scoping information for attributes and can be removed once analysis is complete.
  */
+
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case SubqueryAlias(_, child, _) => child
   }
 }
 
