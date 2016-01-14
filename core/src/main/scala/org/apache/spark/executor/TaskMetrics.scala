@@ -393,11 +393,16 @@ private[spark] object TaskMetrics extends Logging {
     // maintain a snapshot of their local task values when we post them to listeners downstream.
     val otherAccums = otherAccumInfos.flatMap { info =>
       val id = info.id
-      Accumulators.get(id).map(_.copy(info.update.get)).orElse {
+      val acc = Accumulators.get(id).map { a =>
+        val newAcc = a.copy()
+        newAcc.setValueAny(info.update.get)
+        newAcc
+      }
+      if (acc.isEmpty) {
         logWarning(s"encountered unregistered accumulator $id " +
           s"when reconstructing metrics for task $taskId.")
-        None
       }
+      acc
     }
     val metrics = new TaskMetrics(initialAccums)
     otherAccums.foreach(metrics.registerAccumulator)

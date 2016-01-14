@@ -43,6 +43,7 @@ import org.apache.spark.util.Utils
  *
  * Operations are not thread-safe.
  *
+ * @param id ID of this accumulator; for internal use only.
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
@@ -56,26 +57,36 @@ import org.apache.spark.util.Utils
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
-class Accumulable[R, T] private[spark] (
+class Accumulable[R, T] private (
+    val id: Long,
     @transient initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean,
-    val countFailedValues: Boolean = false)
+    val countFailedValues: Boolean)
   extends Serializable {
 
   private[spark] def this(
-      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
-    this(initialValue, param, None, internal)
+      initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean,
+      countFailedValues: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues)
   }
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
+  private[spark] def this(
+      initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean) = {
+    this(initialValue, param, name, internal, false /* countFailedValues */)
+  }
+
+  def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
     this(initialValue, param, name, false)
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None)
-
-  val id: Long = Accumulators.newId()
+  def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
   @volatile @transient private var value_ : R = initialValue // Current value on driver
   val zero = param.zero(initialValue)  // Zero value to be passed to executors
@@ -96,12 +107,10 @@ class Accumulable[R, T] private[spark] (
   private[spark] def isInternal: Boolean = internal
 
   /**
-   * Return a copy of this [[Accumulable]] with a new value.
+   * Return a copy of this [[Accumulable]].
    */
-  private[spark] def copy(newValue: Any): Accumulable[R, T] = {
-    val a = new Accumulable[R, T](initialValue, param, name, internal, countFailedValues)
-    a.setValue(newValue.asInstanceOf[R])
-    a
+  private[spark] def copy(): Accumulable[R, T] = {
+    new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues)
   }
 
   /**
@@ -290,15 +299,6 @@ class Accumulator[T] private[spark] (
     internal: Boolean,
     override val countFailedValues: Boolean = false)
   extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
-
-  /**
-   * Return a copy of this [[Accumulator]] with a new value.
-   */
-  private[spark] override def copy(newValue: Any): Accumulator[T] = {
-    val a = new Accumulator[T](initialValue, param, name, internal, countFailedValues)
-    a.setValue(newValue.asInstanceOf[T])
-    a
-  }
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(initialValue, param, name, false)
