@@ -548,7 +548,7 @@ class HiveContext private[hive](
 
   protected[sql] override def getSQLDialect(): ParserDialect = {
     if (conf.dialect == "hiveql") {
-      new ExtendedHiveQlParser(conf)
+      new ExtendedHiveQlParser(this)
     } else {
       super.getSQLDialect()
     }

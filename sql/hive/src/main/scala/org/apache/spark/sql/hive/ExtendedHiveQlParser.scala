@@ -21,16 +21,15 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.hive.execution.{AddFile, AddJar, HiveNativeCommand}
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
  */
-private[hive] class ExtendedHiveQlParser(conf: ParserConf) extends AbstractSparkSQLParser {
+private[hive] class ExtendedHiveQlParser(sqlContext: HiveContext) extends AbstractSparkSQLParser {
 
-  val parser = new HiveQl(conf)
+  val parser = new HiveQl(sqlContext.conf)
 
   override def parseExpression(sql: String): Expression = parser.parseExpression(sql)
 
@@ -48,7 +47,10 @@ private[hive] class ExtendedHiveQlParser(conf: ParserConf) extends AbstractSpark
 
   protected lazy val hiveQl: Parser[LogicalPlan] =
     restInput ^^ {
-      case statement => parser.parsePlan(statement.trim)
+      case statement =>
+        sqlContext.executionHive.withHiveState {
+          parser.parsePlan(statement.trim)
+        }
     }
 
   protected lazy val dfs: Parser[LogicalPlan] =

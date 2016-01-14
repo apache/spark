@@ -513,7 +513,6 @@ import java.util.HashMap;
     xlateMap.put("KW_UPDATE", "UPDATE");
     xlateMap.put("KW_VALUES", "VALUES");
     xlateMap.put("KW_PURGE", "PURGE");
-    xlateMap.put("KW_CLEAR", "CLEAR");
     xlateMap.put("KW_WEEK", "WEEK");
     xlateMap.put("KW_MILLISECOND", "MILLISECOND");
     xlateMap.put("KW_MICROSECOND", "MICROSECOND");
