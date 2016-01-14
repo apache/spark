@@ -218,7 +218,8 @@ abstract class Expression extends TreeNode[Expression] {
     .replace("\\u", "\\\\u")
 
   /**
-   * Returns SQL representation of this expression.
+   * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
+   * this method may return an arbitrary user facing string.
    */
   def sql: String = {
     val childrenSQL = children.map(_.sql).mkString(", ")
