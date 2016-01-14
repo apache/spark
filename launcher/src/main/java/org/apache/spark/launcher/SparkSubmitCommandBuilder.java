@@ -231,11 +231,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // the pyspark command line, then run it using spark-submit.
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".py")) {
       System.err.println(
-        "WARNING: Running python applications through 'pyspark' is deprecated as of Spark 1.0.\n" +
+        "Running python applications through 'pyspark' is not supported as of Spark 2.0.\n" +
         "Use ./bin/spark-submit <python file>");
-      appResource = appArgs.get(0);
-      appArgs.remove(0);
-      return buildCommand(env);
+      System.exit(-1);
     }
 
     checkArgument(appArgs.isEmpty(), "pyspark does not support any application options.");
@@ -258,9 +256,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
-      appResource = appArgs.get(0);
-      appArgs.remove(0);
-      return buildCommand(env);
+      System.err.println(
+        "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
+        "Use ./bin/spark-submit <R file>");
+      System.exit(-1);
     }
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
     // env variable.
