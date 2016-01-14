@@ -45,20 +45,18 @@ import org.apache.spark.util._
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with ResetSystemProperties {
 
-  private val conf = new SparkConf(false).set("spark.app.id", "test")
+  var conf: SparkConf = null
   var store: BlockManager = null
   var store2: BlockManager = null
   var store3: BlockManager = null
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
-  conf.set("spark.authenticate", "false")
-  val securityMgr = new SecurityManager(conf)
-  val mapOutputTracker = new MapOutputTrackerMaster(conf)
-  val shuffleManager = new HashShuffleManager(conf)
+  val securityMgr = new SecurityManager(new SparkConf(false))
+  val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false))
+  val shuffleManager = new HashShuffleManager(new SparkConf(false))
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
-  conf.set("spark.kryoserializer.buffer", "1m")
-  val serializer = new KryoSerializer(conf)
+  val serializer = new KryoSerializer(new SparkConf(false).set("spark.kryoserializer.buffer", "1m"))
 
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
@@ -79,15 +77,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
-
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
-    conf.set("os.arch", "amd64")
-    conf.set("spark.test.useCompressedOops", "true")
+    conf = new SparkConf(false)
+      .set("spark.app.id", "test")
+      .set("spark.kryoserializer.buffer", "1m")
+      .set("spark.test.useCompressedOops", "true")
+      .set("spark.storage.unrollFraction", "0.4")
+      .set("spark.storage.unrollMemoryThreshold", "512")
+
+    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
-    conf.set("spark.storage.unrollFraction", "0.4")
-    conf.set("spark.storage.unrollMemoryThreshold", "512")
 
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
@@ -98,6 +98,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   override def afterEach(): Unit = {
     try {
+      conf = null
       if (store != null) {
         store.stop()
         store = null
