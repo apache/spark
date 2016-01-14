@@ -18,6 +18,8 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.generic.Growable
 import scala.collection.mutable
@@ -379,14 +381,16 @@ private[spark] object Accumulators extends Logging {
    * once the RDDs and user-code that reference them are cleaned up.
    * TODO: Don't use a global map; these should be tied to a SparkContext at the very least.
    */
+  @GuardedBy("Accumulators")
   val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
-  private var lastId: Long = 0
+  private val nextId = new AtomicLong(0L)
 
-  def newId(): Long = synchronized {
-    lastId += 1
-    lastId
-  }
+  /**
+   * Return a new globally unique ID for a new [[Accumulable]].
+   * Note: Once you copy the [[Accumulable]] the ID is no longer unique.
+   */
+  def newId(): Long = nextId.getAndIncrement
 
   /**
    * Register an accumulator created on the driver such that it can be used on the executors.
@@ -406,16 +410,17 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
-  def remove(accId: Long) {
-    synchronized {
-      originals.remove(accId)
-    }
+  /**
+   * Unregister the [[Accumulable]] with the given ID, if any.
+   */
+  def remove(accId: Long): Unit = synchronized {
+    originals.remove(accId)
   }
 
   /**
-   * Return the accumulator registered with the given ID, if any.
+   * Return the [[Accumulable]] registered with the given ID, if any.
    */
-  def get(id: Long): Option[Accumulable[_, _]] = {
+  def get(id: Long): Option[Accumulable[_, _]] = synchronized {
     originals.get(id).map { weakRef =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       weakRef.get match {
@@ -427,7 +432,7 @@ private[spark] object Accumulators extends Logging {
   }
 
   /**
-   * Clear all registered accumulators; for testing only.
+   * Clear all registered [[Accumulable]]s; for testing only.
    */
   def clear(): Unit = synchronized {
     originals.clear()

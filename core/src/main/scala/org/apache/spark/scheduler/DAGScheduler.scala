@@ -1075,6 +1075,12 @@ class DAGScheduler(
   /**
    * Merge local values from a task into the corresponding accumulators previously registered
    * here on the driver.
+   *
+   * Although accumulators themselves are not thread-safe, this method is called only from one
+   * thread, the one that runs the scheduling loop. This means we only handle one task
+   * completion event at a time so we don't need to worry about locking the accumulators.
+   * This still doesn't stop the caller from updating the accumulator outside the scheduler,
+   * but that's not our problem since there's nothing we can do about that.
    */
   private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
