@@ -324,7 +324,7 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
     var (hasShuffleRead, hasShuffleWrite, hasInput, hasOutput) = (false, false, false, false)
     initialAccums
       .filter { a => a.localValue != a.zero }
-      .map { a =>
+      .foreach { a =>
         a.name.get match {
           case sr if sr.startsWith(SHUFFLE_READ_METRICS_PREFIX) => hasShuffleRead = true
           case sw if sw.startsWith(SHUFFLE_WRITE_METRICS_PREFIX) => hasShuffleWrite = true
@@ -364,36 +364,42 @@ private[spark] object TaskMetrics extends Logging {
   }
 
   /**
-   * Construct a [[TaskMetrics]] object from a list of accumulator updates.
+   * Construct a [[TaskMetrics]] object from a list of accumulator updates, called on driver only.
    *
-   * Executors only send accumulator updates back to the driver, not [[TaskMetrics]]. However,
-   * we need the latter to post task end events to listeners, so we need to reconstruct the
-   * metrics on the driver.
+   * Executors only send accumulator updates back to the driver, not [[TaskMetrics]]. However, we
+   * need the latter to post task end events to listeners, so we need to reconstruct the metrics
+   * on the driver.
    *
    * Note: If the task failed, we may return null after attempting to reconstruct the
    * [[TaskMetrics]] in vain.
    */
   def fromAccumulatorUpdates(taskId: Long, accumUpdates: Seq[AccumulableInfo]): TaskMetrics = {
-    // Note: it is important that we copy the accumulators here since they are used across
-    // many tasks and we want to maintain a snapshot of their local task values when we post
-    // them to listeners downstream. Otherwise, when a new task comes in the listener may get
-    // a different value for an old task.
-    val accums = accumUpdates
-      .filter { info => info.update.isDefined }
-      .flatMap { info =>
-        Accumulators.get(info.id).map(_.copy(info.update.get)).orElse {
-          logWarning(s"encountered unregistered accumulator ${info.id} " +
-            s"when reconstructing metrics for task $taskId.")
-          None
-        }
-      }
     // Initial accumulators are passed into the TaskMetrics constructor first because these
     // are required to be uniquely named. The rest of the accumulators from this task are
     // registered later because they need not satisfy this requirement.
-    val (initialAccums, otherAccums) = accums.partition { a =>
-      a.name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
+    val (initialAccumInfos, otherAccumInfos) = accumUpdates
+      .filter { info => info.update.isDefined }
+      .partition { info =>
+        info.name != null && info.name.startsWith(InternalAccumulator.METRICS_PREFIX)
+      }
+    val initialAccums = initialAccumInfos.map { info =>
+      val accum = InternalAccumulator.create(info.name)
+      accum.setValueAny(info.update.get)
+      accum
     }
-    val metrics = new TaskMetrics(initialAccums.map(_.asInstanceOf[Accumulator[_]]))
+    // We don't know the types of the rest of the accumulators, so we try to find the same ones
+    // that were previously registered here on the driver and make copies of them. It is important
+    // that we copy the accumulators here since they are used across many tasks and we want to
+    // maintain a snapshot of their local task values when we post them to listeners downstream.
+    val otherAccums = otherAccumInfos.flatMap { info =>
+      val id = info.id
+      Accumulators.get(id).map(_.copy(info.update.get)).orElse {
+        logWarning(s"encountered unregistered accumulator $id " +
+          s"when reconstructing metrics for task $taskId.")
+        None
+      }
+    }
+    val metrics = new TaskMetrics(initialAccums)
     otherAccums.foreach(metrics.registerAccumulator)
     metrics
   }

@@ -1630,7 +1630,6 @@ private[spark] object Utils extends Logging {
 
   /** Return an option that translates JNothing to None */
   def jsonOption(json: JValue): Option[JValue] = {
-    // TODO: this is useless; we can just use extractOpt, which looks cleaner.
     json match {
       case JNothing => None
       case value: JValue => Some(value)

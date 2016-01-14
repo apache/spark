@@ -1681,7 +1681,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |}
     """
 
-  // scalastyle:off
   private val executorMetricsUpdateJsonString =
     s"""
       |{
@@ -1696,109 +1695,125 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "ID": 82,
       |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
-      |          "Update": "300",
+      |          "Update": 300,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 83,
       |          "Name": "$EXECUTOR_RUN_TIME",
-      |          "Update": "400",
+      |          "Update": 400,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 84,
       |          "Name": "$RESULT_SIZE",
-      |          "Update": "500",
+      |          "Update": 500,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 85,
       |          "Name": "$JVM_GC_TIME",
-      |          "Update": "600",
+      |          "Update": 600,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 86,
       |          "Name": "$RESULT_SERIALIZATION_TIME",
-      |          "Update": "700",
+      |          "Update": 700,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 87,
       |          "Name": "$MEMORY_BYTES_SPILLED",
-      |          "Update": "800",
+      |          "Update": 800,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 88,
       |          "Name": "$DISK_BYTES_SPILLED",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 89,
       |          "Name": "$PEAK_EXECUTION_MEMORY",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 90,
       |          "Name": "$UPDATED_BLOCK_STATUSES",
-      |          "Update": "Vector((rdd_0_0,BlockStatus(StorageLevel(true, true, false, false, 2),0,0,0)))",
+      |          "Update": [
+      |            {
+      |              "BlockID": "rdd_0_0",
+      |              "Status": {
+      |                "StorageLevel": {
+      |                  "UseDisk": true,
+      |                  "UseMemory": true,
+      |                  "UseExternalBlockStore": false,
+      |                  "Deserialized": false,
+      |                  "Replication": 2
+      |                },
+      |                "MemorySize": 0,
+      |                "ExternalBlockStoreSize": 0,
+      |                "DiskSize": 0
+      |              }
+      |            }
+      |          ],
       |          "Internal": true
       |        },
       |        {
       |          "ID": 91,
       |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 92,
       |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 93,
       |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 94,
       |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 95,
       |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 96,
       |          "Name": "${shuffleRead.RECORDS_READ}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 97,
       |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 98,
       |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 99,
       |          "Name": "${shuffleWrite.WRITE_TIME}",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        },
       |        {
@@ -1810,13 +1825,13 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "ID": 101,
       |          "Name": "${input.BYTES_READ}",
-      |          "Update": "2100",
+      |          "Update": 2100,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 102,
       |          "Name": "${input.RECORDS_READ}",
-      |          "Update": "21",
+      |          "Update": 21,
       |          "Internal": true
       |        },
       |        {
@@ -1828,19 +1843,19 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "ID": 104,
       |          "Name": "${output.BYTES_WRITTEN}",
-      |          "Update": "1200",
+      |          "Update": 1200,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 105,
       |          "Name": "${output.RECORDS_WRITTEN}",
-      |          "Update": "12",
+      |          "Update": 12,
       |          "Internal": true
       |        },
       |        {
       |          "ID": 106,
       |          "Name": "$TEST_ACCUM",
-      |          "Update": "0",
+      |          "Update": 0,
       |          "Internal": true
       |        }
       |      ]
@@ -1848,5 +1863,5 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  ]
       |}
     """.stripMargin
-  // scalastyle:on
+
 }

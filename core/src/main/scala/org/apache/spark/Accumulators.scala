@@ -170,6 +170,12 @@ class Accumulable[R, T] private[spark] (
    */
   private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
 
+  /**
+   * Set the accumulator's value.
+   * This is used to reconstruct [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
+   */
+  private[spark] def setValueAny(newValue: Any): Unit = { setValue(newValue.asInstanceOf[R]) }
+
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
@@ -358,6 +364,10 @@ object AccumulatorParam {
     def zero(initialValue: Seq[T]): Seq[T] = Seq.empty[T]
   }
 
+  // For the internal metric that records what blocks are updated in a particular task
+  private[spark] object UpdatedBlockStatusesAccumulatorParam
+    extends ListAccumulatorParam[(BlockId, BlockStatus)]
+
 }
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
@@ -478,70 +488,101 @@ private[spark] object InternalAccumulator {
   // scalastyle:on
 
   /**
+   * Create an internal [[Accumulator]] by name, which must begin with [[METRICS_PREFIX]].
+   */
+  def create(name: String): Accumulator[_] = {
+    assert(name.startsWith(METRICS_PREFIX),
+      s"internal accumulator name must start with '$METRICS_PREFIX': $name")
+    getParam(name) match {
+      case p @ LongAccumulatorParam => newMetric[Long](0L, name, p)
+      case p @ IntAccumulatorParam => newMetric[Int](0, name, p)
+      case p @ StringAccumulatorParam => newMetric[String]("", name, p)
+      case p @ UpdatedBlockStatusesAccumulatorParam =>
+        newMetric[Seq[(BlockId, BlockStatus)]](Seq(), name, p)
+      case p => throw new IllegalArgumentException(
+        s"unsupported accumulator param '${p.getClass.getSimpleName}' for internal metrics.")
+    }
+  }
+
+  /**
+   * Get the [[AccumulatorParam]] associated with the internal metric name,
+   * which must begin with [[METRICS_PREFIX]].
+   */
+  def getParam(name: String): AccumulatorParam[_] = {
+    assert(name.startsWith(METRICS_PREFIX),
+      s"internal accumulator name must start with '$METRICS_PREFIX': $name")
+    name match {
+      case UPDATED_BLOCK_STATUSES => UpdatedBlockStatusesAccumulatorParam
+      case shuffleRead.LOCAL_BLOCKS_FETCHED => IntAccumulatorParam
+      case shuffleRead.REMOTE_BLOCKS_FETCHED => IntAccumulatorParam
+      case input.READ_METHOD => StringAccumulatorParam
+      case output.WRITE_METHOD => StringAccumulatorParam
+      case _ => LongAccumulatorParam
+    }
+  }
+
+  /**
    * Accumulators for tracking internal metrics.
    */
   def create(): Seq[Accumulator[_]] = {
-    Seq[Accumulator[_]](
-      newLongMetric(EXECUTOR_DESERIALIZE_TIME),
-      newLongMetric(EXECUTOR_RUN_TIME),
-      newLongMetric(RESULT_SIZE),
-      newLongMetric(JVM_GC_TIME),
-      newLongMetric(RESULT_SERIALIZATION_TIME),
-      newLongMetric(MEMORY_BYTES_SPILLED),
-      newLongMetric(DISK_BYTES_SPILLED),
-      newLongMetric(PEAK_EXECUTION_MEMORY),
-      newMetric(
-        Seq.empty[(BlockId, BlockStatus)],
-        UPDATED_BLOCK_STATUSES,
-        new ListAccumulatorParam[(BlockId, BlockStatus)])) ++
+    Seq[String](
+      EXECUTOR_DESERIALIZE_TIME,
+      EXECUTOR_RUN_TIME,
+      RESULT_SIZE,
+      JVM_GC_TIME,
+      RESULT_SERIALIZATION_TIME,
+      MEMORY_BYTES_SPILLED,
+      DISK_BYTES_SPILLED,
+      PEAK_EXECUTION_MEMORY,
+      UPDATED_BLOCK_STATUSES).map(create) ++
     createShuffleReadAccums() ++
     createShuffleWriteAccums() ++
     createInputAccums() ++
     createOutputAccums() ++
-    sys.props.get("spark.testing").map(_ => newLongMetric(TEST_ACCUM)).toSeq
+    sys.props.get("spark.testing").map(_ => create(TEST_ACCUM)).toSeq
   }
 
   /**
    * Accumulators for tracking shuffle read metrics.
    */
   def createShuffleReadAccums(): Seq[Accumulator[_]] = {
-    Seq[Accumulator[_]](
-      newIntMetric(shuffleRead.REMOTE_BLOCKS_FETCHED),
-      newIntMetric(shuffleRead.LOCAL_BLOCKS_FETCHED),
-      newLongMetric(shuffleRead.REMOTE_BYTES_READ),
-      newLongMetric(shuffleRead.LOCAL_BYTES_READ),
-      newLongMetric(shuffleRead.FETCH_WAIT_TIME),
-      newLongMetric(shuffleRead.RECORDS_READ))
+    Seq[String](
+      shuffleRead.REMOTE_BLOCKS_FETCHED,
+      shuffleRead.LOCAL_BLOCKS_FETCHED,
+      shuffleRead.REMOTE_BYTES_READ,
+      shuffleRead.LOCAL_BYTES_READ,
+      shuffleRead.FETCH_WAIT_TIME,
+      shuffleRead.RECORDS_READ).map(create)
   }
 
   /**
    * Accumulators for tracking shuffle write metrics.
    */
   def createShuffleWriteAccums(): Seq[Accumulator[_]] = {
-    Seq[Accumulator[_]](
-      newLongMetric(shuffleWrite.BYTES_WRITTEN),
-      newLongMetric(shuffleWrite.RECORDS_WRITTEN),
-      newLongMetric(shuffleWrite.WRITE_TIME))
+    Seq[String](
+      shuffleWrite.BYTES_WRITTEN,
+      shuffleWrite.RECORDS_WRITTEN,
+      shuffleWrite.WRITE_TIME).map(create)
   }
 
   /**
    * Accumulators for tracking input metrics.
    */
   def createInputAccums(): Seq[Accumulator[_]] = {
-    Seq[Accumulator[_]](
-      newStringMetric(input.READ_METHOD),
-      newLongMetric(input.BYTES_READ),
-      newLongMetric(input.RECORDS_READ))
+    Seq[String](
+      input.READ_METHOD,
+      input.BYTES_READ,
+      input.RECORDS_READ).map(create)
   }
 
   /**
    * Accumulators for tracking output metrics.
    */
   private def createOutputAccums(): Seq[Accumulator[_]] = {
-    Seq[Accumulator[_]](
-      newStringMetric(output.WRITE_METHOD),
-      newLongMetric(output.BYTES_WRITTEN),
-      newLongMetric(output.RECORDS_WRITTEN))
+    Seq[String](
+      output.WRITE_METHOD,
+      output.BYTES_WRITTEN,
+      output.RECORDS_WRITTEN).map(create)
   }
 
   /**
