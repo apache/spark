@@ -278,17 +278,16 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
    * This is expected to be called on executor heartbeat and at the end of a task.
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
-    val agg = _shuffleReadMetrics.getOrElse {
+    if (tempShuffleReadMetrics.nonEmpty) {
       val metrics = new ShuffleReadMetrics(initialAccumsMap.toMap)
+      metrics.setRemoteBlocksFetched(tempShuffleReadMetrics.map(_.remoteBlocksFetched).sum)
+      metrics.setLocalBlocksFetched(tempShuffleReadMetrics.map(_.localBlocksFetched).sum)
+      metrics.setFetchWaitTime(tempShuffleReadMetrics.map(_.fetchWaitTime).sum)
+      metrics.setRemoteBytesRead(tempShuffleReadMetrics.map(_.remoteBytesRead).sum)
+      metrics.setLocalBytesRead(tempShuffleReadMetrics.map(_.localBytesRead).sum)
+      metrics.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
       _shuffleReadMetrics = Some(metrics)
-      metrics
     }
-    agg.setRemoteBlocksFetched(tempShuffleReadMetrics.map(_.remoteBlocksFetched).sum)
-    agg.setLocalBlocksFetched(tempShuffleReadMetrics.map(_.localBlocksFetched).sum)
-    agg.setFetchWaitTime(tempShuffleReadMetrics.map(_.fetchWaitTime).sum)
-    agg.setRemoteBytesRead(tempShuffleReadMetrics.map(_.remoteBytesRead).sum)
-    agg.setLocalBytesRead(tempShuffleReadMetrics.map(_.localBytesRead).sum)
-    agg.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
   }
 
 
