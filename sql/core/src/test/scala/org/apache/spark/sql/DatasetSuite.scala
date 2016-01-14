@@ -32,7 +32,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("toDS") {
-    val data = Seq(("a", 1) , ("b", 2), ("c", 3))
+    val data = Seq(("a", 1), ("b", 2), ("c", 3))
     checkAnswer(
       data.toDS(),
       data: _*)
@@ -89,7 +89,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("as case class / collect") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDF("a", "b").as[ClassData]
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b").as[ClassData]
     checkAnswer(
       ds,
       ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
@@ -107,7 +107,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("map") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.map(v => (v._1, v._2 + 1)),
       ("a", 2), ("b", 3), ("c", 4))
@@ -136,14 +136,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(expr("_2 + 1").as[Int]),
       2, 3, 4)
   }
 
   test("select 2") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(
         expr("_1").as[String],
@@ -152,7 +152,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select 2, primitive and tuple") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(
         expr("_1").as[String],
@@ -161,7 +161,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select 2, primitive and class") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(
         expr("_1").as[String],
@@ -170,7 +170,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select 2, primitive and class, fields reordered") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDecoding(
       ds.select(
         expr("_1").as[String],
@@ -179,28 +179,28 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("filter") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.filter(_._1 == "b"),
       ("b", 2))
   }
 
   test("foreach") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.accumulator(0)
     ds.foreach(v => acc += v._2)
     assert(acc.value == 6)
   }
 
   test("foreachPartition") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.accumulator(0)
     ds.foreachPartition(_.foreach(v => acc += v._2))
     assert(acc.value == 6)
   }
 
   test("reduce") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
   }
 
