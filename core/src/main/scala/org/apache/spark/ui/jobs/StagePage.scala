@@ -885,11 +885,9 @@ private[ui] class TaskDataSource(
     val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
     val gettingResultTime = getGettingResultTime(info, currentTime)
 
-    val (_, taskExternalAccumulables) =
-      info.accumulables.partition(_.internal)
-    val externalAccumulableReadable = taskExternalAccumulables.map { acc =>
-      StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")
-    }
+    val externalAccumulableReadable = info.accumulables
+      .filterNot(_.internal)
+      .map { acc => StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}") }
     val peakExecutionMemoryUsed = metrics.map(_.peakExecutionMemory).getOrElse(0L)
 
     val maybeInput = metrics.flatMap(_.inputMetrics)
