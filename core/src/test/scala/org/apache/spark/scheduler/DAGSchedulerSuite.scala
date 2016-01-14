@@ -351,7 +351,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val accInfo1 = new AccumulableInfo(
       1, "Accumulable1", Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
     val accInfo2 = new AccumulableInfo(
-      1, "Accumulable1", Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
+      1, "Accumulable1", Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     val accInfo3 = new AccumulableInfo(
       1, "Accumulable1", Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     assert(accInfo1 !== accInfo2)
