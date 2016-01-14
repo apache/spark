@@ -67,6 +67,8 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
 
   override def toString: String = s"'$name"
+
+  override def sql: String = s"`$name`"
 }
 
 object UnresolvedAttribute {
