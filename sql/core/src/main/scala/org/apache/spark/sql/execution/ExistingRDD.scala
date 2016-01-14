@@ -134,7 +134,7 @@ private[sql] object PhysicalRDD {
     val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
 
     val bucketSpec = relation match {
-      case r: HadoopFsRelation if relation.sqlContext.conf.bucketingEnabled() => r.bucketSpec
+      case r: HadoopFsRelation => r.getBucketSpec
       case _ => None
     }
 
