@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{ExceptionFailure, Resubmitted, SparkContext}
+import org.apache.spark.{SparkConf, ExceptionFailure, Resubmitted, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -43,8 +43,9 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
-class ExecutorsListener(storageStatusListener: StorageStatusListener) extends SparkListener {
-  val executorToTotalCores = HashMap[String, Int]()
+class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
+    extends SparkListener {
+  val executorToTasksMax = HashMap[String, Int]()
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
@@ -64,7 +65,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
-    executorToTotalCores(eid) = executorAdded.executorInfo.totalCores
+    executorToTasksMax(eid) =
+      executorAdded.executorInfo.totalCores / conf.getInt("spark.task.cpus", 1)
     executorIdToData(eid) = ExecutorUIData(executorAdded.time)
   }
 

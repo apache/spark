@@ -124,8 +124,8 @@ private[ui] class ExecutorsPage(
     // Determine Color Opacity from 0.5-1
     // activeTasks range from 0 to all cores
     val activeTasksAlpha =
-      if (info.totalCores > 0) {
-        (info.activeTasks.toDouble / info.totalCores) * 0.5 + 0.5
+      if (info.maxTasks > 0) {
+        (info.activeTasks.toDouble / info.maxTasks) * 0.5 + 0.5
       } else {
         1
       }
@@ -239,7 +239,7 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
-    val totalCores = listener.executorToTotalCores.getOrElse(execId, 0)
+    val maxTasks = listener.executorToTasksMax.getOrElse(execId, 0)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
@@ -257,7 +257,7 @@ private[spark] object ExecutorsPage {
       rddBlocks,
       memUsed,
       diskUsed,
-      totalCores,
+      maxTasks,
       activeTasks,
       failedTasks,
       completedTasks,
