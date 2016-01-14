@@ -96,7 +96,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       putIterator(blockId, values, level, returnValues = true)
     } else {
       val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
+      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false, droppedBlocks)
       PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
     }
   }
@@ -155,11 +155,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         // Values are fully unrolled in memory, so store them as an array
         if (level.deserialized) {
           val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-          tryToPut(blockId, arrayValues, sizeEstimate, deserialized = true, droppedBlocks)
+          tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true, droppedBlocks)
           PutResult(sizeEstimate, Left(arrayValues.iterator), droppedBlocks)
         } else {
           val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-          tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
+          tryToPut(blockId, () => bytes, bytes.limit, deserialized = false, droppedBlocks)
           PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
         }
       case Right(iteratorValues) =>
@@ -320,15 +320,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    */
   private def getRddId(blockId: BlockId): Option[Int] = {
     blockId.asRDDId.map(_.rddId)
-  }
-
-  private def tryToPut(
-      blockId: BlockId,
-      value: Any,
-      size: Long,
-      deserialized: Boolean,
-      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    tryToPut(blockId, () => value, size, deserialized, droppedBlocks)
   }
 
   /**
