@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
@@ -202,7 +202,7 @@ class SQLContext private[sql](
     }
 
   @transient
-  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
+  protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
   protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
@@ -945,7 +945,7 @@ class SQLContext private[sql](
     }
   }
 
-  // Register a succesfully instantiatd context to the singleton. This should be at the end of
+  // Register a successfully instantiated context to the singleton. This should be at the end of
   // the class definition so that the singleton is updated only if there is no exception in the
   // construction of the instance.
   sparkContext.addSparkListener(new SparkListener {
