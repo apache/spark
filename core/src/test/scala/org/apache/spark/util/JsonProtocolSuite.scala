@@ -753,7 +753,8 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
-    new AccumulableInfo(id, "Accumulable" + id, Some("delta" + id), Some("val" + id), internal)
+    new AccumulableInfo(id, s"Accumulable$id", Some(s"delta$id"), Some(s"val$id"),
+      internal, countFailedValues = false)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is

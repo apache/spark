@@ -314,7 +314,8 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
    * Return a map from accumulator ID to the accumulator's latest value in this task.
    */
   def accumulatorUpdates(): Seq[AccumulableInfo] = accums.map { a =>
-    new AccumulableInfo(a.id, a.name.orNull, Some(a.localValue), None, a.isInternal)
+    new AccumulableInfo(
+      a.id, a.name.orNull, Some(a.localValue), None, a.isInternal, a.countFailedValues)
   }
 
   // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.

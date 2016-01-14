@@ -270,7 +270,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           taskSet.tasks(i),
           result._1,
           result._2,
-          Seq(new AccumulableInfo(accumId, "", Some(1), None, internal = false))))
+          Seq(new AccumulableInfo(
+            accumId, "", Some(1), None, internal = false, countFailedValues = false))))
       }
     }
   }
@@ -347,9 +348,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("equals and hashCode AccumulableInfo") {
-    val accInfo1 = new AccumulableInfo(1, "Accumulable1", Some("delta1"), Some("val1"), true)
-    val accInfo2 = new AccumulableInfo(1, "Accumulable1", Some("delta1"), Some("val1"), false)
-    val accInfo3 = new AccumulableInfo(1, "Accumulable1", Some("delta1"), Some("val1"), false)
+    val accInfo1 = new AccumulableInfo(
+      1, "Accumulable1", Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
+    val accInfo2 = new AccumulableInfo(
+      1, "Accumulable1", Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
+    val accInfo3 = new AccumulableInfo(
+      1, "Accumulable1", Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     assert(accInfo1 !== accInfo2)
     assert(accInfo2 === accInfo3)
     assert(accInfo2.hashCode() === accInfo3.hashCode())
@@ -1927,8 +1931,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       result: Any,
       extraAccumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo],
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
-    val accumUpdates = task.initialAccumulators.map {
-      a => new AccumulableInfo(a.id, a.name.get, Some(a.zero), None, a.isInternal)
+    val accumUpdates = task.initialAccumulators.map { a =>
+      new AccumulableInfo(a.id, a.name.get, Some(a.zero), None, a.isInternal, a.countFailedValues)
     } ++ extraAccumUpdates
     CompletionEvent(task, reason, result, accumUpdates, taskInfo)
   }

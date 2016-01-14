@@ -611,11 +611,4 @@ private[spark] object InternalAccumulator {
     new Accumulator[T](initialValue, param, Some(name), internal = true, countFailedValues = true)
   }
 
-  private def newIntMetric(name: String): Accumulator[Int] =
-    newMetric[Int](0, name, IntAccumulatorParam)
-  private def newLongMetric(name: String): Accumulator[Long] =
-    newMetric[Long](0L, name, LongAccumulatorParam)
-  private def newStringMetric(name: String): Accumulator[String] =
-    newMetric[String]("", name, StringAccumulatorParam)
-
 }

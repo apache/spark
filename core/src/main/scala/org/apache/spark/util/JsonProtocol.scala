@@ -290,7 +290,8 @@ private[spark] object JsonProtocol {
     ("Name" -> name) ~
     ("Update" -> accumulableInfo.update.map { v => accumValueToJson(name, v) }) ~
     ("Value" -> accumulableInfo.value.map { v => accumValueToJson(name, v) }) ~
-    ("Internal" -> accumulableInfo.internal)
+    ("Internal" -> accumulableInfo.internal) ~
+    ("Count Failed Values" -> accumulableInfo.countFailedValues)
   }
 
   /**
@@ -728,7 +729,8 @@ private[spark] object JsonProtocol {
     val update = Utils.jsonOption(json \ "Update").map { v => accumValueFromJson(name, v) }
     val value = Utils.jsonOption(json \ "Value").map { v => accumValueFromJson(name, v) }
     val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
-    new AccumulableInfo(id, name, update, value, internal)
+    val countFailedValues = (json \ "Count Failed Values").extractOpt[Boolean].getOrElse(false)
+    new AccumulableInfo(id, name, update, value, internal, countFailedValues)
   }
 
   /**
