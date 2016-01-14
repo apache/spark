@@ -395,9 +395,15 @@ private[spark] object Accumulators extends Logging {
    * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
    * Note: if an accumulator is registered here, it should also be registered with the active
    * context cleaner for cleanup so as to avoid memory leaks.
+   *
+   * If an [[Accumulable]] with the same ID was already registered, do nothing instead of
+   * overwriting it. This can happen when we copy accumulators, e.g. when we reconstruct
+   * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
    */
   def register(a: Accumulable[_, _]): Unit = synchronized {
-    originals(a.id) = new WeakReference[Accumulable[_, _]](a)
+    if (!originals.contains(a.id)) {
+      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
+    }
   }
 
   def remove(accId: Long) {
