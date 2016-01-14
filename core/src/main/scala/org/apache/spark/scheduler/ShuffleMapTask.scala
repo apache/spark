@@ -33,10 +33,14 @@ import org.apache.spark.shuffle.ShuffleWriter
  * See [[org.apache.spark.scheduler.Task]] for more information.
  *
  * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
  * @param taskBinary broadcast version of the RDD and the ShuffleDependency. Once deserialized,
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
+ * @param initialAccumulators initial set of accumulators to be used in this task for tracking
+ *                            internal metrics. Other accumulators will be registered later when
+ *                            they are deserialized on the executors.
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,

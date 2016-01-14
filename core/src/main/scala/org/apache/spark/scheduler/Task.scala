@@ -41,7 +41,11 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * and divides the task output to multiple buckets (based on the task's partitioner).
  *
  * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
+ * @param initialAccumulators initial set of accumulators to be used in this task for tracking
+ *                            internal metrics. Other accumulators will be registered later when
+ *                            they are deserialized on the executors.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
