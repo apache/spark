@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.util.MutablePair
 
 /**
@@ -144,7 +143,13 @@ case class Exchange(
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
-      case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
+      case HashPartitioning(_, n) =>
+        new Partitioner {
+          override def numPartitions: Int = n
+          // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
+          // `HashPartitioning.partitionIdExpression` to produce partitioning key.
+          override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+        }
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
@@ -174,13 +179,8 @@ case class Exchange(
           position += 1
           position
         }
-      case HashPartitioning(expressions, numPartitions) =>
-        // Use bucket id as the hash code of `HashPartitioning`, so that we can guarantee the data
-        // distribution is same between shuffle and bucketing, which enables us to only shuffle one
-        // side when join a bucketed table and a normal one.
-        val projection = UnsafeProjection.create(
-          BucketingUtils.bucketIdExpression(numPartitions, expressions) :: Nil,
-          child.output)
+      case h: HashPartitioning =>
+        val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, child.output)
         row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
