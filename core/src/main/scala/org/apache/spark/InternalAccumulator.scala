@@ -173,7 +173,7 @@ private[spark] object InternalAccumulator {
   /**
    * Accumulators for tracking output metrics.
    */
-  private def createOutputAccums(): Seq[Accumulator[_]] = {
+  def createOutputAccums(): Seq[Accumulator[_]] = {
     Seq[String](
       output.WRITE_METHOD,
       output.BYTES_WRITTEN,
