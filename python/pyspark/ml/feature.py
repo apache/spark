@@ -2183,9 +2183,9 @@ class ChiSqSelectorModel(JavaModel):
     @since("2.0.0")
     def selectedFeatures(self):
         """
-        Standard deviation of the StandardScalerModel.
+        list of indices to select (filter). Must be ordered asc.
         """
-        return self._call_java("javaSelectedFeatures")
+        return list(self._java_obj.selectedFeatures())
 
 
 if __name__ == "__main__":
