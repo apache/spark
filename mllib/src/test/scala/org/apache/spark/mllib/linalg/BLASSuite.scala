@@ -64,22 +64,17 @@ class BLASSuite extends SparkFunSuite {
     assert(dx ~== Vectors.dense(0.1, 0.0, -0.2) absTol 1e-15)
   }
 
-  test("unitedIndices") {
-    val indices1 = Array(0, 2, 4, 4, 7, 8, 15)
-    val indices2 = Array(4, 9, 100)
+  test("axpy(a: Double, x: SparseVector, y: SparseVector)") {
+    val x = new SparseVector(25, Array(0, 2, 4, 7, 8, 15), Array(0.0, 2.0, 4.0, 7.0, 8.0, 15.0))
+    val y = new SparseVector(25, Array(4, 9, 20), Array(4.0, 9.0, 20.0))
 
-    val united = unitedIndices(indices1, indices2)
+    axpy(0.5, x, y)
 
-    assert(united.length == 8)
+    val expected = Vectors.sparse(25,
+      Array(0, 2, 4, 7, 8, 9, 15, 20),
+      Array(0.0, 1.0, 6.0, 3.5, 4.0, 9.0, 7.5, 20.0))
 
-    assert(united(0) == 0)
-    assert(united(1) == 2)
-    assert(united(2) == 4)
-    assert(united(3) == 7)
-    assert(united(4) == 8)
-    assert(united(5) == 9)
-    assert(united(6) == 15)
-    assert(united(7) == 100)
+    assert(expected ~== y absTol 1e-15)
   }
 
   test("axpy") {

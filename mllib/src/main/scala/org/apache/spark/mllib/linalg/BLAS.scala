@@ -38,41 +38,6 @@ private[spark] object BLAS extends Serializable with Logging {
     _f2jBLAS
   }
 
-  // equivalent to xIndices.union(yIndices).distinct.sortBy(i => i)
-  def unitedIndices(xSortedIndices: Array[Int], ySortedIndices: Array[Int]): Array[Int] = {
-    val arr = new Array[Int](xSortedIndices.length + ySortedIndices.length)
-
-    var xj = 0
-    var yj = 0
-    var j = 0
-    var previ = Int.MaxValue
-
-    def getAt(arr: Array[Int], j: Int): Int = if (j < arr.length) arr(j) else Int.MaxValue
-
-    while (xj < xSortedIndices.length || yj < ySortedIndices.length) {
-      val xi = getAt(xSortedIndices, xj)
-      val yi = getAt(ySortedIndices, yj)
-
-      val i = if (xi <= yi) {
-        xj += 1
-        xi
-      }
-      else {
-        yj += 1
-        yi
-      }
-
-      if (previ != i) {
-        arr(j) = i
-        j += 1
-      }
-
-      previ = i
-    }
-
-    arr.slice(0, j)
-  }
-
   /**
    * y += a * x
    */
@@ -153,16 +118,56 @@ private[spark] object BLAS extends Serializable with Logging {
     * y += a * x
     */
   private def axpy(a: Double, x: SparseVector, y: SparseVector): Unit = {
-    require(x.size == y.size)
+    val xSortedIndices = x.indices
+    val xValues = x.values
 
-    val xIndices = x.indices
-    val yIndices = y.indices
+    val ySortedIndices = y.indices
+    val yValues = y.values
 
-    val newIndices = unitedIndices(xIndices, yIndices)
-    assert(newIndices.size >= yIndices.size)
+    val newIndices = new Array[Int](xSortedIndices.length + ySortedIndices.length)
+    val newValues = new Array[Double](xValues.length + yValues.length)
 
-    val newValues = newIndices.map(i => a*x(i) + y(i))
-    y.reassign(newIndices, newValues)
+    assert(newIndices.length == newValues.length)
+
+    var xj = 0
+    var yj = 0
+    var j = 0
+    var previ = Int.MinValue
+
+    def getAt(indices: Array[Int], j: Int): Int =
+      if (j < indices.length) indices(j) else Int.MaxValue
+
+    while (xj < xSortedIndices.length || yj < ySortedIndices.length) {
+      val xi = getAt(xSortedIndices, xj)
+      val yi = getAt(ySortedIndices, yj)
+
+      val (i, value) = if (xi <= yi) {
+        val vv = a*xValues(xj)
+        xj += 1
+        (xi, vv)
+      }
+      else {
+        val vv = yValues(yj)
+        yj += 1
+        (yi, vv)
+      }
+
+      assert(i >= previ)
+
+      if (previ != i) {
+        newIndices(j) = i
+        newValues(j) = value
+        j += 1
+      }
+      else {
+        assert(newIndices(j - 1) == i)
+        newValues(j - 1) += value
+      }
+
+      previ = i
+    }
+
+    y.reassign(newIndices.slice(0, j), newValues.slice(0, j))
   }
 
   /** Y += a * x */
