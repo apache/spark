@@ -99,7 +99,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterTaskPageSize = request.getParameter("task.pageSize")
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
-      val taskSortColumn = Option(parameterTaskSortColumn).getOrElse("Index")
+      val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
+        UIUtils.decodeURLParameter(sortColumn)
+      }.getOrElse("Index")
       val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
       val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
 
