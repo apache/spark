@@ -1214,6 +1214,10 @@ object CleanupAliases extends Rule[LogicalPlan] {
       Window(projectList, cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
+    // Operators that operate on objects should only have expressions from encoders, which should
+    // never have extra aliases.
+    case o: ObjectOperator => o
+
     case other =>
       var stop = false
       other transformExpressionsDown {

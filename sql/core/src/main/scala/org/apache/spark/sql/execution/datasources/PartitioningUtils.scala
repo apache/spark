@@ -102,11 +102,11 @@ private[sql] object PartitioningUtils {
       // It will be recognised as conflicting directory structure:
       //   "hdfs://host:9000/invalidPath"
       //   "hdfs://host:9000/path"
-      val disvoeredBasePaths = optDiscoveredBasePaths.flatMap(x => x)
+      val discoveredBasePaths = optDiscoveredBasePaths.flatMap(x => x)
       assert(
-        disvoeredBasePaths.distinct.size == 1,
+        discoveredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
-          disvoeredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
+          discoveredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
           "If provided paths are partition directories, please set " +
           "\"basePath\" in the options of the data source to specify the " +
           "root directory of the table. If there are multiple root directories, " +
