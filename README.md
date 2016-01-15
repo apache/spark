@@ -79,6 +79,7 @@ Currently **officially** using Airflow:
 * [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow)
 * [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
 * [Hadoop Summit Airflow Video](https://www.youtube.com/watch?v=oYp49mBwH60)
+* [Best practices with Airflow (Max) nov 2015](https://youtu.be/dgaoqOZlvEA)
 * [Docker Airflow (externally maintained)](https://github.com/puckel/docker-airflow)
 * [Airflow: Tips, Tricks, and Pitfalls @ Handy](https://medium.com/handy-tech/airflow-tips-tricks-and-pitfalls-9ba53fba14eb#.o2snqeoz7)
 * [Airflow at Agari Blog Post](http://agari.com/blog/airflow-agari)
