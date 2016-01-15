@@ -675,10 +675,10 @@ abstract class HadoopFsRelation private[sql](
    */
   private def groupBucketFiles(
       files: Array[FileStatus]): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
+    malformedBucketFile = false
     if (getBucketSpec.isDefined) {
       val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
       var i = 0
-      malformedBucketFile = false
       while (!malformedBucketFile && i < files.length) {
         val bucketId = BucketingUtils.getBucketId(files(i).getPath.getName)
         if (bucketId.isEmpty) {
@@ -692,7 +692,7 @@ abstract class HadoopFsRelation private[sql](
         }
         i += 1
       }
-      Some(groupedBucketFiles.mapValues(_.toArray))
+      if (malformedBucketFile) None else Some(groupedBucketFiles.mapValues(_.toArray))
     } else {
       None
     }
