@@ -17,9 +17,8 @@
 
 package org.apache.spark
 
-
-import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
