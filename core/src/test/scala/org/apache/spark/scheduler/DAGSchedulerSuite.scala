@@ -27,7 +27,6 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
@@ -191,7 +190,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    sc = new SparkContext("local", "DAGSchedulerSuite")
+    // This means use 1 core and allow up to 4 failed tasks
+    sc = new SparkContext("local[1, 4]", "DAGSchedulerSuite")
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
@@ -1574,6 +1574,48 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assertDataStructuresEmpty()
   }
 
+  test("accumulators are updated on exception failures") {
+    val acc1 = sc.accumulator(0L, "ingenieur")
+    val acc2 = sc.accumulator(0L, "boulangere")
+    val acc3 = sc.accumulator(0L, "agriculteur")
+    assert(Accumulators.get(acc1.id).isDefined)
+    assert(Accumulators.get(acc2.id).isDefined)
+    assert(Accumulators.get(acc3.id).isDefined)
+    val accInfo1 = new AccumulableInfo(acc1.id, acc1.name.get, Some(15L), None)
+    val accInfo2 = new AccumulableInfo(acc2.id, acc2.name.get, Some(13L), None)
+    val accInfo3 = new AccumulableInfo(acc3.id, acc3.name.get, Some(18L), None)
+    val accumUpdates = Seq(accInfo1, accInfo2, accInfo3)
+    val exceptionFailure = new ExceptionFailure(new SparkException("fondue?"), accumUpdates)
+    submit(new MyRDD(sc, 1, Nil), Array(0))
+    runEvent(makeCompletionEvent(taskSets.head.tasks.head, exceptionFailure, "result"))
+    assert(Accumulators.get(acc1.id).get.value === 15L)
+    assert(Accumulators.get(acc2.id).get.value === 13L)
+    assert(Accumulators.get(acc3.id).get.value === 18L)
+  }
+
+  test("accumulators are updated on exception failures (end-to-end)") {
+    import AccumulatorParam._
+    // Create 2 accumulators, one that counts failed values and another that doesn't
+    val acc1 = new Accumulator(
+      0L, LongAccumulatorParam, Some("ingenieur"), internal = false, countFailedValues = true)
+    val acc2 = new Accumulator(
+      0L, LongAccumulatorParam, Some("boulangere"), internal = false, countFailedValues = false)
+    // Fail first 3 attempts of every task. This means each task should be run 4 times.
+    sc.parallelize(1 to 10, 10).map { i =>
+      acc1 += 1
+      acc2 += 1
+      if (TaskContext.get.attemptNumber() <= 2) {
+        throw new Exception("you did something wrong")
+      } else {
+        0
+      }
+    }.count()
+    // The one that counts failed values should be 4x the one that didn't,
+    // since we ran each task 4 times
+    assert(Accumulators.get(acc1.id).get.value === 40L)
+    assert(Accumulators.get(acc2.id).get.value === 10L)
+  }
+
   test("reduce tasks should be placed locally with map output") {
     // Create an shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
@@ -1931,10 +1973,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       result: Any,
       extraAccumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo],
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
-    val accumUpdates = task.initialAccumulators.map { a =>
-      new AccumulableInfo(a.id, a.name.get, Some(a.zero), None, a.isInternal, a.countFailedValues)
-    } ++ extraAccumUpdates
-    CompletionEvent(task, reason, result, accumUpdates, taskInfo)
+    val accumUpdates = reason match {
+      case Success =>
+        task.initialAccumulators.map { a =>
+          new AccumulableInfo(
+            a.id, a.name.get, Some(a.zero), None, a.isInternal, a.countFailedValues)
+        }
+      case ef: ExceptionFailure => ef.accumUpdates
+      case _ => Seq.empty[AccumulableInfo]
+    }
+    CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo)
   }
 
 }

@@ -1301,7 +1301,7 @@ class DAGScheduler(
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case exceptionFailure: ExceptionFailure =>
-        // Tasks failed with exceptions might still have accumulator updates. TODO: write a test.
+        // Tasks failed with exceptions might still have accumulator updates.
         updateAccumulators(event)
 
       case TaskResultLost =>

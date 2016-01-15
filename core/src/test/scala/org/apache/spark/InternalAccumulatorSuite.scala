@@ -65,14 +65,14 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val updatedBlockStatuses = create(UPDATED_BLOCK_STATUSES)
     val shuffleRemoteBlocksRead = create(shuffleRead.REMOTE_BLOCKS_FETCHED)
     val inputReadMethod = create(input.READ_METHOD)
-    assert(executorRunTime.isInstanceOf[Accumulator[Long]])
     assert(executorRunTime.name === Some(EXECUTOR_RUN_TIME))
-    assert(updatedBlockStatuses.isInstanceOf[Accumulator[Seq[(BlockId, BlockStatus)]]])
     assert(updatedBlockStatuses.name === Some(UPDATED_BLOCK_STATUSES))
-    assert(shuffleRemoteBlocksRead.isInstanceOf[Accumulator[Int]])
     assert(shuffleRemoteBlocksRead.name === Some(shuffleRead.REMOTE_BLOCKS_FETCHED))
-    assert(inputReadMethod.isInstanceOf[Accumulator[String]])
     assert(inputReadMethod.name === Some(input.READ_METHOD))
+    assert(executorRunTime.value.isInstanceOf[Long])
+    assert(updatedBlockStatuses.value.isInstanceOf[Seq[(BlockId, BlockStatus)]])
+    assert(shuffleRemoteBlocksRead.value.isInstanceOf[Int])
+    assert(inputReadMethod.value.isInstanceOf[String])
   }
 
   test("create") {
