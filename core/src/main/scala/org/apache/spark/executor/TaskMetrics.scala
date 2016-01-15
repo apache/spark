@@ -42,8 +42,9 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * be sent to the driver directly.
  *
  * @param initialAccums the initial set of accumulators that this [[TaskMetrics]] depends on.
- *                      Each accumulator in this initial set must be named and marked as internal.
- *                      Additional accumulators registered here have no such requirements.
+ *                      Each accumulator in this initial set must be uniquely named and marked
+ *                      as internal. Additional accumulators registered later need not satisfy
+ *                      these requirements.
  */
 @DeveloperApi
 class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Serializable {
@@ -138,17 +139,19 @@ class TaskMetrics private[spark](initialAccums: Seq[Accumulator[_]]) extends Ser
    */
   def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = _updatedBlockStatuses.localValue
 
-  private[spark] def setExecutorDeserializeTime(v: Long) = _executorDeserializeTime.setValue(v)
-  private[spark] def setExecutorRunTime(v: Long) = _executorRunTime.setValue(v)
-  private[spark] def setResultSize(v: Long) = _resultSize.setValue(v)
-  private[spark] def setJvmGCTime(v: Long) = _jvmGCTime.setValue(v)
-  private[spark] def setResultSerializationTime(v: Long) = _resultSerializationTime.setValue(v)
-  private[spark] def incMemoryBytesSpilled(v: Long) = _memoryBytesSpilled.add(v)
-  private[spark] def incDiskBytesSpilled(v: Long) = _diskBytesSpilled.add(v)
-  private[spark] def incPeakExecutionMemory(v: Long) = _peakExecutionMemory.add(v)
-  private[spark] def incUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]) =
+  private[spark] def setExecutorDeserializeTime(v: Long): Unit =
+    _executorDeserializeTime.setValue(v)
+  private[spark] def setExecutorRunTime(v: Long): Unit = _executorRunTime.setValue(v)
+  private[spark] def setResultSize(v: Long): Unit = _resultSize.setValue(v)
+  private[spark] def setJvmGCTime(v: Long): Unit = _jvmGCTime.setValue(v)
+  private[spark] def setResultSerializationTime(v: Long): Unit =
+    _resultSerializationTime.setValue(v)
+  private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
+  private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
+  private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
+  private[spark] def incUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.add(v)
-  private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]) =
+  private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v)
 
 
