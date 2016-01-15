@@ -47,7 +47,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
       s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
@@ -100,7 +100,7 @@ case class Sha2(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
@@ -145,7 +145,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
       s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
     )
@@ -171,7 +171,7 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
     checksum.getValue
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val CRC32 = "java.util.zip.CRC32"
     nullSafeCodeGen(ctx, ev, value => {
       s"""
@@ -323,7 +323,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
   }
 
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
     val childrenHash = children.zipWithIndex.map {
       case (child, dt) =>
@@ -347,12 +347,12 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
       input: String,
       dataType: DataType,
       seed: String,
-      ctx: CodeGenContext): GeneratedExpressionCode = {
+      ctx: CodegenContext): ExprCode = {
     val hasher = classOf[Murmur3_x86_32].getName
-    def hashInt(i: String): GeneratedExpressionCode = inlineValue(s"$hasher.hashInt($i, $seed)")
-    def hashLong(l: String): GeneratedExpressionCode = inlineValue(s"$hasher.hashLong($l, $seed)")
-    def inlineValue(v: String): GeneratedExpressionCode =
-      GeneratedExpressionCode(code = "", isNull = "false", value = v)
+    def hashInt(i: String): ExprCode = inlineValue(s"$hasher.hashInt($i, $seed)")
+    def hashLong(l: String): ExprCode = inlineValue(s"$hasher.hashLong($l, $seed)")
+    def inlineValue(v: String): ExprCode =
+      ExprCode(code = "", isNull = "false", value = v)
 
     dataType match {
       case NullType => inlineValue(seed)
@@ -369,7 +369,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
           val code = s"byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();"
           val offset = "Platform.BYTE_ARRAY_OFFSET"
           val result = s"$hasher.hashUnsafeBytes($bytes, $offset, $bytes.length, $seed)"
-          GeneratedExpressionCode(code, "false", result)
+          ExprCode(code, "false", result)
         }
       case CalendarIntervalType =>
         val microsecondsHash = s"$hasher.hashLong($input.microseconds, $seed)"
@@ -400,7 +400,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
               }
             }
           """
-        GeneratedExpressionCode(code, "false", result)
+        ExprCode(code, "false", result)
 
       case MapType(kt, vt, _) =>
         val result = ctx.freshName("result")
@@ -427,7 +427,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
               }
             }
           """
-        GeneratedExpressionCode(code, "false", result)
+        ExprCode(code, "false", result)
 
       case StructType(fields) =>
         val result = ctx.freshName("result")
@@ -448,7 +448,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
             int $result = $seed;
             $fieldsHash
           """
-        GeneratedExpressionCode(code, "false", result)
+        ExprCode(code, "false", result)
 
       case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, seed, ctx)
     }
