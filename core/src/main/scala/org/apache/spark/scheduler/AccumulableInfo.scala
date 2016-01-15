@@ -45,6 +45,6 @@ case class AccumulableInfo private[spark] (
     private[spark] val countFailedValues: Boolean) {
 
   def this(id: Long, name: String, update: Option[Any], value: Option[Any]) {
-    this(id, name, update, value, true /* internal */, false /* countFailedValues */)
+    this(id, name, update, value, false, false)
   }
 }

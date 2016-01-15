@@ -110,6 +110,10 @@ class Accumulable[R, T] private (
 
   /**
    * Return a copy of this [[Accumulable]].
+   *
+   * The copy will have the same ID as the original and will not be registered with
+   * [[Accumulators]] again. This method exists so that the caller can avoid passing the
+   * same mutable instance around.
    */
   private[spark] def copy(): Accumulable[R, T] = {
     new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues)
@@ -193,6 +197,8 @@ class Accumulable[R, T] private (
     value_ = zero
     deserialized = true
     // Automatically register the accumulator when it is deserialized with the task closure.
+    // This is for external accumulators and internal ones that do not represent task level
+    // metrics, e.g. internal SQL metrics, which are per-operator.
     val taskContext = TaskContext.get()
     if (taskContext != null) {
       taskContext.registerAccumulator(this)
@@ -387,7 +393,7 @@ private[spark] object Accumulators extends Logging {
   private val nextId = new AtomicLong(0L)
 
   /**
-   * Return a new globally unique ID for a new [[Accumulable]].
+   * Return a globally unique ID for a new [[Accumulable]].
    * Note: Once you copy the [[Accumulable]] the ID is no longer unique.
    */
   def newId(): Long = nextId.getAndIncrement
@@ -401,7 +407,7 @@ private[spark] object Accumulators extends Logging {
    * context cleaner for cleanup so as to avoid memory leaks.
    *
    * If an [[Accumulable]] with the same ID was already registered, do nothing instead of
-   * overwriting it. This can happen when we copy accumulators, e.g. when we reconstruct
+   * overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
    * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
    */
   def register(a: Accumulable[_, _]): Unit = synchronized {
