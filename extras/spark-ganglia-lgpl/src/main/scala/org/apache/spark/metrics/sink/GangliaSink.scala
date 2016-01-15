@@ -33,26 +33,26 @@ class GangliaSink(
   securityMgr: SecurityManager
 ) extends Sink with HasPollingPeriod {
 
-  val GANGLIA_KEY_MODE = "mode"
-  val GANGLIA_DEFAULT_MODE: UDPAddressingMode = GMetric.UDPAddressingMode.MULTICAST
+  val MODE_KEY = "mode"
+  val DEFAULT_MODE = GMetric.UDPAddressingMode.MULTICAST
 
   // TTL for multicast messages. If listeners are X hops away in network, must be at least X.
-  val GANGLIA_KEY_TTL = "ttl"
-  val GANGLIA_DEFAULT_TTL = 1
+  val TTL_KEY = "ttl"
+  val DEFAULT_TTL = 1
 
-  val GANGLIA_KEY_HOST = "host"
-  val GANGLIA_KEY_PORT = "port"
+  val HOST_KEY = "host"
+  val PORT_KEY = "port"
 
   def propertyToOption(prop: String): Option[String] = Option(properties.getProperty(prop))
 
-  require(propertyToOption(GANGLIA_KEY_HOST).isDefined, "Ganglia sink requires 'host' property.")
-  require(propertyToOption(GANGLIA_KEY_PORT).isDefined, "Ganglia sink requires 'port' property.")
+  require(propertyToOption(HOST_KEY).isDefined, "Ganglia sink requires 'host' property.")
+  require(propertyToOption(PORT_KEY).isDefined, "Ganglia sink requires 'port' property.")
 
-  val host = propertyToOption(GANGLIA_KEY_HOST).get
-  val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
-  val ttl = propertyToOption(GANGLIA_KEY_TTL).map(_.toInt).getOrElse(GANGLIA_DEFAULT_TTL)
-  val mode: UDPAddressingMode = propertyToOption(GANGLIA_KEY_MODE)
-    .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(GANGLIA_DEFAULT_MODE)
+  val host = propertyToOption(HOST_KEY).get
+  val port = propertyToOption(PORT_KEY).get.toInt
+  val ttl = propertyToOption(TTL_KEY).map(_.toInt).getOrElse(DEFAULT_TTL)
+  val mode: UDPAddressingMode = propertyToOption(MODE_KEY)
+    .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(DEFAULT_MODE)
 
   val ganglia = new GMetric(host, port, mode, ttl)
   val reporter: GangliaReporter = GangliaReporter.forRegistry(registry)

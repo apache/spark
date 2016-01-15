@@ -30,12 +30,13 @@ private[spark] class CsvSink(
   val registry: MetricRegistry,
   securityMgr: SecurityManager
 ) extends Sink with HasPollingPeriod {
-  val CSV_KEY_DIR = "directory"
-  val CSV_DEFAULT_DIR = "/tmp/"
 
-  val pollDir = Option(properties.getProperty(CSV_KEY_DIR)) match {
+  val DIR_KEY = "directory"
+  val DEFAULT_DIR = "/tmp/"
+
+  val pollDir = Option(properties.getProperty(DIR_KEY)) match {
     case Some(s) => s
-    case None => CSV_DEFAULT_DIR
+    case None => DEFAULT_DIR
   }
 
   val reporter: CsvReporter = CsvReporter.forRegistry(registry)

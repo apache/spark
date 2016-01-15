@@ -31,24 +31,24 @@ private[spark] class GraphiteSink(
   val registry: MetricRegistry,
   securityMgr: SecurityManager
 ) extends Sink with HasPollingPeriod {
-  val GRAPHITE_DEFAULT_PREFIX = ""
+  val PREFIX_KEY = "prefix"
+  val DEFAULT_PREFIX = ""
 
-  val GRAPHITE_KEY_HOST = "host"
-  val GRAPHITE_KEY_PORT = "port"
-  val GRAPHITE_KEY_PREFIX = "prefix"
-  val GRAPHITE_KEY_PROTOCOL = "protocol"
+  val HOST_KEY = "host"
+  val PORT_KEY = "port"
+  val PROTOCOL_KEY = "protocol"
 
   def propertyToOption(prop: String): Option[String] = Option(properties.getProperty(prop))
 
-  require(propertyToOption(GRAPHITE_KEY_HOST).isDefined, "Graphite sink requires 'host' property.")
-  require(propertyToOption(GRAPHITE_KEY_PORT).isDefined, "Graphite sink requires 'port' property.")
+  require(propertyToOption(HOST_KEY).isDefined, "Graphite sink requires 'host' property.")
+  require(propertyToOption(PORT_KEY).isDefined, "Graphite sink requires 'port' property.")
 
-  val host = propertyToOption(GRAPHITE_KEY_HOST).get
-  val port = propertyToOption(GRAPHITE_KEY_PORT).get.toInt
+  val host = propertyToOption(HOST_KEY).get
+  val port = propertyToOption(PORT_KEY).get.toInt
 
-  val prefix = propertyToOption(GRAPHITE_KEY_PREFIX).getOrElse(GRAPHITE_DEFAULT_PREFIX)
+  val prefix = propertyToOption(PREFIX_KEY).getOrElse(DEFAULT_PREFIX)
 
-  val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase) match {
+  val graphite = propertyToOption(PROTOCOL_KEY).map(_.toLowerCase) match {
     case Some("udp") => new GraphiteUDP(new InetSocketAddress(host, port))
     case Some("tcp") | None => new Graphite(new InetSocketAddress(host, port))
     case Some(p) => throw new Exception(s"Invalid Graphite protocol: $p")
