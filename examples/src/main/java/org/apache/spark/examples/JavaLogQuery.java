@@ -35,7 +35,7 @@ import java.util.regex.Pattern;
 
 /**
  * Executes a roll up-style query against Apache logs.
- *  
+ *
  * Usage: JavaLogQuery [logFile]
  */
 public final class JavaLogQuery {
