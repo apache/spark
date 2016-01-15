@@ -183,6 +183,7 @@ object Unions {
     case _ => None
   }
 
+  // Doing a depth-first tree traversal to combine all the union children.
   @tailrec
   private def collectUnionChildren(
       plans: mutable.Stack[LogicalPlan],
