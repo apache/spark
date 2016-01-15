@@ -1312,7 +1312,7 @@ class StringIndexerModel(JavaModel):
         """
         Ordered list of labels, corresponding to indices to be assigned.
         """
-        return self._call_java("labels")
+        return list(self._java_obj.labels())
 
 
 @inherit_doc

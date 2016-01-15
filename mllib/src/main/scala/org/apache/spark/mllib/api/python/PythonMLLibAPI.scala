@@ -1473,11 +1473,7 @@ private[spark] object SerDe extends Serializable {
   initialize()
 
   def dumps(obj: AnyRef): Array[Byte] = {
-    obj match {
-      // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12780.
-      case array: Array[_] => new Pickler().dumps(array.toSeq.asJava)
-      case _ => new Pickler().dumps(obj)
-    }
+    new Pickler().dumps(obj)
   }
 
   def loads(bytes: Array[Byte]): AnyRef = {
