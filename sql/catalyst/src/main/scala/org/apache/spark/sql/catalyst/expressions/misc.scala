@@ -246,7 +246,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
     hash
   }
-  
+
   private def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
     def hashInt(i: Int): Int = Murmur3_x86_32.hashInt(i, seed)
     def hashLong(l: Long): Int = Murmur3_x86_32.hashLong(l, seed)

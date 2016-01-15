@@ -60,7 +60,11 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
     plan.output.length < 200
   }
 
-  private def collape(plan: SparkPlan): SparkPlan = plan transform {
+  /**
+    * Collapse multiple chained plans into WholeStageCodegen to compile them into a single Java
+    * function for better performance.
+    */
+  private def collapse(plan: SparkPlan): SparkPlan = plan transform {
     case plan if shouldCodegen(plan) &&
       // Whole stage codegen is only useful when there are at least two levels of operators that
       // support it (save at least one projection/iterator).
@@ -80,7 +84,7 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   lazy val executedPlan: SparkPlan = {
     val plan = sqlContext.prepareForExecution.execute(sparkPlan)
     if (sqlContext.conf.wholeStageEnabled) {
-      collape(plan)
+      collapse(plan)
     } else {
       plan
     }
