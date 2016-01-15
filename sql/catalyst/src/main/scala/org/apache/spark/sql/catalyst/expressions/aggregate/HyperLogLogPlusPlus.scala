@@ -447,6 +447,7 @@ object HyperLogLogPlusPlus {
 
   private def validateDoubleLiteral(exp: Expression): Double = exp match {
     case Literal(d: Double, DoubleType) => d
+    case Literal(dec: Decimal, _) => dec.toDouble
     case _ =>
       throw new AnalysisException("The second argument should be a double literal.")
   }

@@ -212,7 +212,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
 
-    val pi = 3.1415
+    val pi = "3.1415BD"
     checkAnswer(
       sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
         s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),

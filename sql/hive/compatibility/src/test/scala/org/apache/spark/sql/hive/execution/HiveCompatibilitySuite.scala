@@ -296,6 +296,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Odd changes to output
     "merge4",
 
+    // Unsupported underscore syntax.
+    "inputddl5",
+
     // Thift is broken...
     "inputddl8",
 
@@ -603,7 +606,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl2",
     "inputddl3",
     "inputddl4",
-    "inputddl5",
     "inputddl6",
     "inputddl7",
     "inputddl8",

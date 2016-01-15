@@ -22,12 +22,14 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{DefaultParserDialect, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, FunctionRegistry}
 import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst.parser.ParserConf
+import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
+import org.apache.spark.sql.hive.{ExtendedHiveQlParser, HiveContext, HiveQl, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -56,7 +58,7 @@ case class WindowData(
     area: String,
     product: Int)
 /** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect extends DefaultParserDialect
+class MyDialect(conf: ParserConf) extends HiveQl(conf)
 
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
@@ -339,20 +341,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val hiveContext = new HiveContext(sqlContext.sparkContext)
     val dialectConf = "spark.sql.dialect"
     checkAnswer(hiveContext.sql(s"set $dialectConf"), Row(dialectConf, "hiveql"))
-    assert(hiveContext.getSQLDialect().getClass === classOf[HiveQLDialect])
+    assert(hiveContext.getSQLDialect().getClass === classOf[ExtendedHiveQlParser])
   }
 
   test("SQL Dialect Switching") {
-    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
+    assert(getSQLDialect().getClass === classOf[ExtendedHiveQlParser])
     setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
     assert(getSQLDialect().getClass === classOf[MyDialect])
     assert(sql("SELECT 1").collect() === Array(Row(1)))
 
     // set the dialect back to the DefaultSQLDialect
     sql("SET spark.sql.dialect=sql")
-    assert(getSQLDialect().getClass === classOf[DefaultParserDialect])
+    assert(getSQLDialect().getClass === classOf[SparkQl])
     sql("SET spark.sql.dialect=hiveql")
-    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
+    assert(getSQLDialect().getClass === classOf[ExtendedHiveQlParser])
 
     // set invalid dialect
     sql("SET spark.sql.dialect.abc=MyTestClass")
@@ -361,14 +363,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("SELECT 1")
     }
     // test if the dialect set back to HiveQLDialect
-    getSQLDialect().getClass === classOf[HiveQLDialect]
+    getSQLDialect().getClass === classOf[ExtendedHiveQlParser]
 
     sql("SET spark.sql.dialect=MyTestClass")
     intercept[DialectException] {
       sql("SELECT 1")
     }
     // test if the dialect set back to HiveQLDialect
-    assert(getSQLDialect().getClass === classOf[HiveQLDialect])
+    assert(getSQLDialect().getClass === classOf[ExtendedHiveQlParser])
   }
 
   test("CTAS with serde") {

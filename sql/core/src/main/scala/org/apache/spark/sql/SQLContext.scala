@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
@@ -205,15 +206,17 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
+  protected[sql] val ddlParser = new DDLParser(sqlParser)
 
   @transient
-  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
+  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect())
 
   protected[sql] def getSQLDialect(): ParserDialect = {
     try {
       val clazz = Utils.classForName(dialectClassName)
-      clazz.newInstance().asInstanceOf[ParserDialect]
+      clazz.getConstructor(classOf[ParserConf])
+        .newInstance(conf)
+        .asInstanceOf[ParserDialect]
     } catch {
       case NonFatal(e) =>
         // Since we didn't find the available SQL Dialect, it will fail even for SET command:
@@ -237,7 +240,7 @@ class SQLContext private[sql](
     new sparkexecution.QueryExecution(this, plan)
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
-    classOf[DefaultParserDialect].getCanonicalName
+    classOf[SparkQl].getCanonicalName
   } else {
     conf.dialect
   }
@@ -682,7 +685,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -728,7 +731,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -833,7 +836,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(SqlParser.parseTableIdentifier(tableName))
+    table(sqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {

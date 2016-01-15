@@ -416,8 +416,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => Subquery(table.name, HiveQl.parsePlan(viewText))
-        case Some(aliasText) => Subquery(aliasText, HiveQl.parsePlan(viewText))
+        case None => Subquery(table.name, hive.parseSql(viewText))
+        case Some(aliasText) => Subquery(aliasText, hive.parseSql(viewText))
       }
     } else {
       MetastoreRelation(qualifiedTableName.database, qualifiedTableName.name, alias)(table)(hive)

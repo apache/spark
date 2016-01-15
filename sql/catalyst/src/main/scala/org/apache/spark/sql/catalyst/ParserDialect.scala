@@ -18,52 +18,22 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
  * Root class of SQL Parser Dialect, and we don't guarantee the binary
  * compatibility for the future release, let's keep it as the internal
  * interface for advanced user.
- *
  */
 @DeveloperApi
-abstract class ParserDialect {
-  // this is the main function that will be implemented by sql parser.
-  def parse(sqlText: String): LogicalPlan
-}
+trait ParserDialect {
+  /** Creates LogicalPlan for a given SQL string. */
+  def parsePlan(sqlText: String): LogicalPlan
 
-/**
- * Currently we support the default dialect named "sql", associated with the class
- * [[DefaultParserDialect]]
- *
- * And we can also provide custom SQL Dialect, for example in Spark SQL CLI:
- * {{{
- *-- switch to "hiveql" dialect
- *   spark-sql>SET spark.sql.dialect=hiveql;
- *   spark-sql>SELECT * FROM src LIMIT 1;
- *
- *-- switch to "sql" dialect
- *   spark-sql>SET spark.sql.dialect=sql;
- *   spark-sql>SELECT * FROM src LIMIT 1;
- *
- *-- register the new SQL dialect
- *   spark-sql> SET spark.sql.dialect=com.xxx.xxx.SQL99Dialect;
- *   spark-sql> SELECT * FROM src LIMIT 1;
- *
- *-- register the non-exist SQL dialect
- *   spark-sql> SET spark.sql.dialect=NotExistedClass;
- *   spark-sql> SELECT * FROM src LIMIT 1;
- *
- *-- Exception will be thrown and switch to dialect
- *-- "sql" (for SQLContext) or
- *-- "hiveql" (for HiveContext)
- * }}}
- */
-private[spark] class DefaultParserDialect extends ParserDialect {
-  @transient
-  protected val sqlParser = SqlParser
+  /** Creates Expression for a given SQL string. */
+  def parseExpression(sqlText: String): Expression
 
-  override def parse(sqlText: String): LogicalPlan = {
-    sqlParser.parse(sqlText)
-  }
+  /** Creates TableIdentifier for a given SQL string. */
+  def parseTableIdentifier(sqlText: String): TableIdentifier
 }
