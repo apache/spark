@@ -30,23 +30,23 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ui.JettyUtils._
 
 private[spark] class MetricsServlet(
-    val property: Properties,
-    val registry: MetricRegistry,
-    securityMgr: SecurityManager)
-  extends Sink {
+  val properties: Properties,
+  val registry: MetricRegistry,
+  securityMgr: SecurityManager
+) extends Sink {
 
   val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"
 
   val SERVLET_DEFAULT_SAMPLE = false
 
-  val servletPath = property.getProperty(SERVLET_KEY_PATH)
+  val servletPath = properties.getProperty(SERVLET_KEY_PATH)
 
-  val servletShowSample = Option(property.getProperty(SERVLET_KEY_SAMPLE)).map(_.toBoolean)
+  val servletShowSample = Option(properties.getProperty(SERVLET_KEY_SAMPLE)).map(_.toBoolean)
     .getOrElse(SERVLET_DEFAULT_SAMPLE)
 
-  val mapper = new ObjectMapper().registerModule(
-    new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))
+  val mapper = new ObjectMapper()
+    .registerModule(new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))
 
   def getHandlers(conf: SparkConf): Array[ServletContextHandler] = {
     Array[ServletContextHandler](

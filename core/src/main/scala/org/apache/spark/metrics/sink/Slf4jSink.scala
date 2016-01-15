@@ -26,27 +26,10 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
 private[spark] class Slf4jSink(
-    val property: Properties,
-    val registry: MetricRegistry,
-    securityMgr: SecurityManager)
-  extends Sink {
-  val SLF4J_DEFAULT_PERIOD = 10
-  val SLF4J_DEFAULT_UNIT = "SECONDS"
-
-  val SLF4J_KEY_PERIOD = "period"
-  val SLF4J_KEY_UNIT = "unit"
-
-  val pollPeriod = Option(property.getProperty(SLF4J_KEY_PERIOD)) match {
-    case Some(s) => s.toInt
-    case None => SLF4J_DEFAULT_PERIOD
-  }
-
-  val pollUnit: TimeUnit = Option(property.getProperty(SLF4J_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
-    case None => TimeUnit.valueOf(SLF4J_DEFAULT_UNIT)
-  }
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
+  override val properties: Properties,
+  val registry: MetricRegistry,
+  securityMgr: SecurityManager
+) extends Sink with HasPollingPeriod {
 
   val reporter: Slf4jReporter = Slf4jReporter.forRegistry(registry)
     .convertDurationsTo(TimeUnit.MILLISECONDS)
