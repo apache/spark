@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -30,11 +31,11 @@ import org.apache.spark.sql.types.DataType;
  * valid to call put APIs after reads until reset() is called.
  */
 public abstract class ColumnVector {
-  /**
+    /**
    * Allocates a column with each element of size `width` either on or off heap.
    */
-  public static ColumnVector allocate(int capacity, DataType type, boolean offHeap) {
-    if (offHeap) {
+  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
+    if (mode == MemoryMode.OFF_HEAP) {
       return new OffHeapColumnVector(capacity, type);
     } else {
       return new OnHeapColumnVector(capacity, type);

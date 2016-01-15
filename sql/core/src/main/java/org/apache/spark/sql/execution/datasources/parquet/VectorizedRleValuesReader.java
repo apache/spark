@@ -36,7 +36,10 @@ import org.apache.spark.sql.execution.vectorized.ColumnVector;
  *  - Dictionary ids.
  */
 public final class VectorizedRleValuesReader extends ValuesReader {
-  // Current decoding mode.
+  // Current decoding mode. The encoded data contains groups of either run length encoded data
+  // (RLE) or bit packed data. Each group contains a header that indicates which group it is and
+  // the number of values in the group.
+  // More details here: https://github.com/Parquet/parquet-format/blob/master/Encodings.md
   private enum MODE {
     RLE,
     PACKED
@@ -122,7 +125,7 @@ public final class VectorizedRleValuesReader extends ValuesReader {
   public int readInteger() {
     if (this.currentCount == 0) { this.readNextGroup(); }
 
-    --this.currentCount;
+    this.currentCount--;
     switch (mode) {
       case RLE:
         return this.currentValue;

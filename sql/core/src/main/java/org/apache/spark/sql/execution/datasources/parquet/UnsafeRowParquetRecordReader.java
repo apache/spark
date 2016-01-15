@@ -35,6 +35,7 @@ import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
@@ -121,7 +122,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   /**
    * The default config on whether columnarBatch should be offheap.
    */
-  private static final boolean DEFAULT_OFFHEAP = false;
+  private static final MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
 
   /**
    * Tries to initialize the reader for this split. Returns true if this reader supports reading
@@ -186,15 +187,16 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
   /**
    * Returns the ColumnarBatch object that will be used for all rows returned by this reader.
-   * This object is reused. Calling this enables the vectorized reader. It is not valid to
-   * call nextKeyValue/nextBatch before calling this.
+   * This object is reused. Calling this enables the vectorized reader. This should be called
+   * before any calls to nextKeyValue/nextBatch.
    */
   public ColumnarBatch resultBatch() {
-    return resultBatch(DEFAULT_OFFHEAP);
+    return resultBatch(DEFAULT_MEMORY_MODE);
   }
-  public ColumnarBatch resultBatch(boolean offHeap) {
+
+  public ColumnarBatch resultBatch(MemoryMode memMode) {
     if (columnarBatch == null) {
-      columnarBatch = ColumnarBatch.allocate(sparkSchema, offHeap);
+      columnarBatch = ColumnarBatch.allocate(sparkSchema, memMode);
     }
     return columnarBatch;
   }
