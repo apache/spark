@@ -42,14 +42,14 @@ import org.apache.spark.util.Utils
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
  */
-case class GeneratedExpressionCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(var code: String, var isNull: String, var value: String)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
  * by codegen, then they are evaluated directly. The unsupported expression is appended at the
  * end of `references`, the position of it is kept in the code, used to access and evaluate it.
  */
-class CodeGenContext {
+class CodegenContext {
 
   /**
    * Holding all the expressions those do not support codegen, will be evaluated directly.
@@ -454,7 +454,7 @@ class CodeGenContext {
    * expression will be combined in the `expressions` order.
    */
   def generateExpressions(expressions: Seq[Expression],
-      doSubexpressionElimination: Boolean = false): Seq[GeneratedExpressionCode] = {
+      doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.gen(this))
   }
@@ -479,17 +479,17 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
-  protected def declareMutableStates(ctx: CodeGenContext): String = {
+  protected def declareMutableStates(ctx: CodegenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
     }.mkString("\n")
   }
 
-  protected def initMutableStates(ctx: CodeGenContext): String = {
+  protected def initMutableStates(ctx: CodegenContext): String = {
     ctx.mutableStates.map(_._3).mkString("\n")
   }
 
-  protected def declareAddedFunctions(ctx: CodeGenContext): String = {
+  protected def declareAddedFunctions(ctx: CodegenContext): String = {
     ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n").trim
   }
 
@@ -591,7 +591,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * Create a new codegen context for expression evaluator, used to store those
    * expressions that don't support codegen
    */
-  def newCodeGenContext(): CodeGenContext = {
-    new CodeGenContext
+  def newCodeGenContext(): CodegenContext = {
+    new CodegenContext
   }
 }

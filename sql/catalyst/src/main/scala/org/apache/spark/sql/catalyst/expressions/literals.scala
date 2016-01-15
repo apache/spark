@@ -171,7 +171,7 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override def eval(input: InternalRow): Any = value
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"

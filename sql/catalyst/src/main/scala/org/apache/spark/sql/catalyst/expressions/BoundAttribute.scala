@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -68,7 +68,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def newInstance(): NamedExpression = this
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     if (nullable) {
