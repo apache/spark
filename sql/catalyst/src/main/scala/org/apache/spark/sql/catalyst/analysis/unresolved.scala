@@ -210,10 +210,9 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
             Alias(extract, f.name)()
         }
 
-        case _ => {
+        case _ =>
           throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
             target.get + "`")
-        }
       }
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
@@ -286,13 +285,14 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override lazy val resolved = false
 
   override def toString: String = s"$child[$extraction]"
+  override def sql: String = s"${child.sql}[${extraction.sql}]"
 }
 
 /**
  * Holds the expression that has yet to be aliased.
  *
  * @param child The computation that is needs to be resolved during analysis.
- * @param aliasName The name if specified to be asoosicated with the result of computing [[child]]
+ * @param aliasName The name if specified to be associated with the result of computing [[child]]
  *
  */
 case class UnresolvedAlias(child: Expression, aliasName: Option[String] = None)
