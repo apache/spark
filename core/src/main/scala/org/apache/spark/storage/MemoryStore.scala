@@ -96,7 +96,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       putIterator(blockId, values, level, returnValues = true)
     } else {
       val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
+      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false, droppedBlocks)
       PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
     }
   }
@@ -120,23 +120,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         null
       }
     PutResult(size, data, droppedBlocks)
-  }
-
-  override def putArray(
-      blockId: BlockId,
-      values: Array[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-    if (level.deserialized) {
-      val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
-      tryToPut(blockId, values, sizeEstimate, deserialized = true, droppedBlocks)
-      PutResult(sizeEstimate, Left(values.iterator), droppedBlocks)
-    } else {
-      val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false, droppedBlocks)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
-    }
   }
 
   override def putIterator(
@@ -170,9 +153,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     unrolledValues match {
       case Left(arrayValues) =>
         // Values are fully unrolled in memory, so store them as an array
-        val res = putArray(blockId, arrayValues, level, returnValues)
-        droppedBlocks ++= res.droppedBlocks
-        PutResult(res.size, res.data, droppedBlocks)
+        if (level.deserialized) {
+          val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
+          tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true, droppedBlocks)
+          PutResult(sizeEstimate, Left(arrayValues.iterator), droppedBlocks)
+        } else {
+          val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
+          tryToPut(blockId, () => bytes, bytes.limit, deserialized = false, droppedBlocks)
+          PutResult(bytes.limit(), Right(bytes.duplicate()), droppedBlocks)
+        }
       case Right(iteratorValues) =>
         // Not enough space to unroll this block; drop to disk if applicable
         if (level.useDisk && allowPersistToDisk) {
@@ -246,7 +235,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * This method returns either an array with the contents of the entire block or an iterator
    * containing the values of the block (if the array would have exceeded available memory).
    */
-  def unrollSafely(
+  private[storage] def unrollSafely(
       blockId: BlockId,
       values: Iterator[Any],
       droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)])
@@ -331,15 +320,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    */
   private def getRddId(blockId: BlockId): Option[Int] = {
     blockId.asRDDId.map(_.rddId)
-  }
-
-  private def tryToPut(
-      blockId: BlockId,
-      value: Any,
-      size: Long,
-      deserialized: Boolean,
-      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    tryToPut(blockId, () => value, size, deserialized, droppedBlocks)
   }
 
   /**
