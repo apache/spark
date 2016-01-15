@@ -130,9 +130,10 @@ class BisectingKMeans(object):
     clusters on the bottom level would result more than `k` leaf
     clusters, larger clusters get higher priority.
 
-    Based on U{http://bit.ly/1OTnFP1} Steinbach, Karypis, and Kumar, A
-    comparison of document clustering techniques, KDD Workshop on Text
-    Mining, 2000.
+    Based on
+    U{http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf}
+    Steinbach, Karypis, and Kumar, A comparison of document clustering
+    techniques, KDD Workshop on Text Mining, 2000.
 
     .. versionadded:: 2.0.0
     """
