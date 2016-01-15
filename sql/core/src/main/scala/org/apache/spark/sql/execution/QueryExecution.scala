@@ -51,13 +51,16 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
     sqlContext.planner.plan(optimizedPlan).next()
   }
 
-  private def shouldCodegen(plan: SparkPlan): Boolean = {
-    plan.supportCodegen &&
-    // Non-leaf with CodegenFallback does not work with whole stage codegen
-    !plan.expressions.exists(
-      _.find(e => e.isInstanceOf[CodegenFallback] && !e.isInstanceOf[LeafExpression]).isDefined) &&
-    // the generated code will be huge if there are too many columns
-    plan.output.length < 200
+  private def supportCodegen(plan: SparkPlan): Boolean = plan match {
+    case plan: SupportCodegen if plan.supportCodegen =>
+      // Non-leaf with CodegenFallback does not work with whole stage codegen
+      val willFallback = plan.expressions.exists(
+        _.find(e => e.isInstanceOf[CodegenFallback] && !e.isInstanceOf[LeafExpression]).isDefined
+      )
+      // the generated code will be huge if there are too many columns
+      val haveManyColumns = plan.output.length > 200
+      !willFallback && !haveManyColumns
+    case _ => false
   }
 
   /**
@@ -65,17 +68,17 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
     * function for better performance.
     */
   private def collapse(plan: SparkPlan): SparkPlan = plan transform {
-    case plan if shouldCodegen(plan) &&
+    case plan: SupportCodegen if supportCodegen(plan) &&
       // Whole stage codegen is only useful when there are at least two levels of operators that
       // support it (save at least one projection/iterator).
-      plan.children.exists(shouldCodegen) =>
+      plan.children.exists(supportCodegen) =>
 
       var inputs = ArrayBuffer[SparkPlan]()
       val combined = plan.transform {
-        case p if !shouldCodegen(p) =>
+        case p if !supportCodegen(p) =>
           inputs += p
-          FakeInput(p)
-      }
+          InputAdapter(p)
+      }.asInstanceOf[SupportCodegen]
       WholeStageCodegen(combined, inputs)
   }
 

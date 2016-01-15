@@ -29,17 +29,16 @@ import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
 
-case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
+case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
+  extends UnaryNode with SupportCodegen {
 
   override private[sql] lazy val metrics = Map(
     "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def supportCodegen: Boolean = true
-
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
-    child.produce(ctx, this)
+    child.asInstanceOf[SupportCodegen].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
@@ -70,7 +69,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 }
 
 
-case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
+case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode with SupportCodegen {
   override def output: Seq[Attribute] = child.output
 
   private[sql] override lazy val metrics = Map(
@@ -80,7 +79,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def supportCodegen: Boolean = true
 
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
-    child.produce(ctx, this)
+    child.asInstanceOf[SupportCodegen].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
@@ -154,9 +153,7 @@ case class Range(
     numSlices: Int,
     numElements: BigInt,
     output: Seq[Attribute])
-  extends LeafNode {
-
-  override def supportCodegen: Boolean = true
+  extends LeafNode with SupportCodegen {
 
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
     val initTerm = ctx.freshName("range_initRange")
@@ -225,6 +222,10 @@ case class Range(
      """.stripMargin
 
     (rdd, code)
+  }
+
+  def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+    throw new UnsupportedOperationException
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

@@ -22,11 +22,80 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 
+/**
+  * An interface for those physical operators that support codegen.
+  */
+trait SupportCodegen extends SparkPlan {
+
+  /**
+    * Whether this SparkPlan support whole stage codegen or not.
+    */
+  def supportCodegen: Boolean = true
+
+  /**
+    * Which SparkPlan is calling produce() of this one. It's itself for the first SparkPlan.
+    */
+  private var parent: SupportCodegen = null
+
+  /**
+    * Returns an input RDD of InternalRow and Java source code to process them.
+    */
+  def produce(ctx: CodegenContext, parent: SupportCodegen): (RDD[InternalRow], String) = {
+    this.parent = parent
+    doProduce(ctx)
+  }
+
+  /**
+    * Generate the Java source code to process, should be overrided by subclass to support codegen.
+    *
+    * doProduce() usually generate the framework, for example, aggregation could generate this:
+    *
+    *   if (!initialized) {
+    *     # create a hash map, then build the aggregation hash map
+    *     # call child.produce()
+    *     initialized = true;
+    *   }
+    *   while (hashmap.hasNext()) {
+    *     row = hashmap.next();
+    *     # build the aggregation results
+    *     # create varialbles for results
+    *     # call consume(), wich will call parent.doConsume()
+    *   }
+    */
+  protected def doProduce(ctx: CodegenContext): (RDD[InternalRow], String)
+
+  /**
+    * Consume the columns generated from current SparkPlan, call it's parent or create an iterator.
+    */
+  protected def consume(ctx: CodegenContext, columns: Seq[ExprCode]): String = {
+    assert(columns.length == output.length)
+    parent.doConsume(ctx, this, columns)
+  }
+
+
+  /**
+    * Generate the Java source code to process the rows from child SparkPlan.
+    *
+    * This should be override by subclass to support codegen.
+    *
+    * For example, Filter will generate the code like this:
+    *
+    *   # code to evaluate the predicate expression, result is isNull1 and value2
+    *   if (isNull1 || value2) {
+    *     # call consume(), which will call parent.doConsume()
+    *   }
+    */
+  def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String
+}
+
 
 /**
-  * FakeInput is used to hide a SparkPlan from a subtree that support codegen.
+  * InputAdapter is used to hide a SparkPlan from a subtree that support codegen.
+  *
+  * This is the leaf node of a tree with WholeStageCodegen, is used to generate code that consumes
+  * an RDD iterator of InternalRow.
   */
-case class FakeInput(child: SparkPlan) extends LeafNode {
+case class InputAdapter(child: SparkPlan) extends LeafNode with SupportCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -46,6 +115,10 @@ case class FakeInput(child: SparkPlan) extends LeafNode {
        | }
      """.stripMargin
     (child.execute(), code)
+  }
+
+  def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+    throw new UnsupportedOperationException
   }
 
   override def doExecute(): RDD[InternalRow] = {
@@ -82,7 +155,8 @@ case class FakeInput(child: SparkPlan) extends LeafNode {
   * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
   * used to generated code for BoundReference.
   */
-case class WholeStageCodegen(plan: SparkPlan, children: Seq[SparkPlan]) extends SparkPlan {
+case class WholeStageCodegen(plan: SupportCodegen, children: Seq[SparkPlan])
+  extends SparkPlan with SupportCodegen {
 
   override def output: Seq[Attribute] = plan.output
 
@@ -124,6 +198,10 @@ case class WholeStageCodegen(plan: SparkPlan, children: Seq[SparkPlan]) extends 
         override def next: InternalRow = buffer.next()
       }
     }
+  }
+
+  override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+    throw new UnsupportedOperationException
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
