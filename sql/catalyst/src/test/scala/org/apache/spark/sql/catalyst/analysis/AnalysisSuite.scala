@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -247,5 +248,21 @@ class AnalysisSuite extends AnalysisTest {
     val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
     val plan = relation.select(CaseWhen(Seq((Literal(true), 'a.attr)), 'b).as("val"))
     assertAnalysisSuccess(plan)
+  }
+
+  test("check resolve of natural join") {
+    val a = testRelation2.output(0)
+    val c = testRelation2.output(2)
+
+    val t1 = testRelation2.select('a, 'b)
+    val t2 = testRelation2.select('a, 'c)
+    val plan1 = t1.join(t2, NaturalJoin(Inner), None)
+    assertAnalysisSuccess(plan1)
+    val plan2 = t1.join(t2, NaturalJoin(LeftOuter), None)
+    assertAnalysisSuccess(plan2)
+    val plan3 = t1.join(t2, NaturalJoin(RightOuter), None)
+    assertAnalysisSuccess(plan3)
+    val plan4 = t1.join(t2, NaturalJoin(FullOuter), None)
+    assertAnalysisSuccess(plan4)
   }
 }

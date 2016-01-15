@@ -23,6 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
@@ -1160,7 +1161,7 @@ class Analyzer(
       }
     }
   }
- 
+
   /**
    * Removes natural joins.
    */
@@ -1168,7 +1169,7 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if !p.resolved => p // Skip unresolved nodes.
 
-      case j @ NaturalJoin(left, right, joinType, condition) =>
+      case j @ Join(left, right, NaturalJoin(joinType), condition) =>
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
         val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
         val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
@@ -1176,7 +1177,7 @@ class Analyzer(
         val newCondition = (condition ++ joinPairs.map {
           case (l, r) => EqualTo(l, r)
         }).reduceLeftOption(And)
-        Project(j.outerProjectList, Join(left, right, joinType, newCondition))
+        Project(j.outerProjectList(joinType), Join(left, right, joinType, newCondition))
     }
   }
 }

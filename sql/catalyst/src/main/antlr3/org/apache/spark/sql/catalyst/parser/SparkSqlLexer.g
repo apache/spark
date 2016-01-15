@@ -328,6 +328,8 @@ KW_WEEK: 'WEEK'|'WEEKS';
 KW_MILLISECOND: 'MILLISECOND'|'MILLISECONDS';
 KW_MICROSECOND: 'MICROSECOND'|'MICROSECONDS';
 
+KW_NATURAL: 'NATURAL';
+
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.
 
