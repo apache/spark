@@ -55,7 +55,8 @@ class GangliaSink(
     .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(DEFAULT_MODE)
 
   val ganglia = new GMetric(host, port, mode, ttl)
-  val reporter: GangliaReporter = GangliaReporter.forRegistry(registry)
+
+  override val reporter = GangliaReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .build(ganglia)
