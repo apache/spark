@@ -378,7 +378,6 @@ setGeneric("subtractByKey",
 setGeneric("value", function(bcast) { standardGeneric("value") })
 
 
-
 ####################  DataFrame Methods ########################
 
 #' @rdname agg
@@ -388,6 +387,14 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @rdname arrange
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
+
+#' @rdname as.data.frame
+#' @export
+setGeneric("as.data.frame")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")
 
 #' @rdname columns
 #' @export
@@ -525,13 +532,12 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
-#' @rdname withColumn
+#' @export
+setGeneric("str")
+
+#' @rdname mutate
 #' @export
 setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
-
-#' @rdname write.df
-#' @export
-setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
 
 #' @rdname write.df
 #' @export
@@ -593,6 +599,10 @@ setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 #' @export
 setGeneric("where", function(x, condition) { standardGeneric("where") })
 
+#' @rdname with
+#' @export
+setGeneric("with")
+
 #' @rdname withColumn
 #' @export
 setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
@@ -602,6 +612,9 @@ setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn
 setGeneric("withColumnRenamed",
            function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
 
+#' @rdname write.df
+#' @export
+setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
 
 ###################### Column Methods ##########################
 
@@ -1105,7 +1118,6 @@ setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
 
-
 #' @rdname glm
 #' @export
 setGeneric("glm")
@@ -1117,15 +1129,3 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
-
-#' @rdname as.data.frame
-#' @export
-setGeneric("as.data.frame")
-
-#' @rdname attach
-#' @export
-setGeneric("attach")
-
-#' @rdname with
-#' @export
-setGeneric("with")
