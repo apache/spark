@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Nondeterministic}
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Nondeterministic}
 
 /**
  * A trait that can be used to provide a fallback mode for expression code generation.
@@ -32,7 +31,7 @@ trait CodegenFallback extends Expression {
     }
 
     // LeafNode does not need `input`
-    val input = if (this.isInstanceOf[LeafNode]) "null" else ctx.INPUT_ROW
+    val input = if (this.isInstanceOf[LeafExpression]) "null" else ctx.INPUT_ROW
     val idx = ctx.references.length
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
