@@ -177,6 +177,12 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
       @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
     new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
   }
+
+  @Path("version")
+  def getVersion(): VersionResource = {
+    new VersionResource(uiRoot)
+  }
+
 }
 
 private[spark] object ApiRootResource {
