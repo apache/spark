@@ -832,14 +832,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -889,14 +891,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -927,21 +931,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -970,21 +977,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -1019,21 +1029,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -1107,21 +1120,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -1192,21 +1208,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -1289,14 +1308,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1351,14 +1372,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1431,14 +1454,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1529,14 +1554,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    }
@@ -1699,55 +1726,63 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |      "Stage Attempt ID": 3,
       |      "Accumulator Updates": [
       |        {
-      |          "ID": 82,
+      |          "ID": 81,
       |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
       |          "Update": 300,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 82,
+      |          "Name": "$EXECUTOR_RUN_TIME",
+      |          "Update": 400,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 83,
-      |          "Name": "$EXECUTOR_RUN_TIME",
-      |          "Update": 400,
-      |          "Internal": true
+      |          "Name": "$RESULT_SIZE",
+      |          "Update": 500,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 84,
-      |          "Name": "$RESULT_SIZE",
-      |          "Update": 500,
-      |          "Internal": true
+      |          "Name": "$JVM_GC_TIME",
+      |          "Update": 600,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 85,
-      |          "Name": "$JVM_GC_TIME",
-      |          "Update": 600,
-      |          "Internal": true
+      |          "Name": "$RESULT_SERIALIZATION_TIME",
+      |          "Update": 700,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 86,
-      |          "Name": "$RESULT_SERIALIZATION_TIME",
-      |          "Update": 700,
-      |          "Internal": true
+      |          "Name": "$MEMORY_BYTES_SPILLED",
+      |          "Update": 800,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 87,
-      |          "Name": "$MEMORY_BYTES_SPILLED",
-      |          "Update": 800,
-      |          "Internal": true
+      |          "Name": "$DISK_BYTES_SPILLED",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 88,
-      |          "Name": "$DISK_BYTES_SPILLED",
+      |          "Name": "$PEAK_EXECUTION_MEMORY",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 89,
-      |          "Name": "$PEAK_EXECUTION_MEMORY",
-      |          "Update": 0,
-      |          "Internal": true
-      |        },
-      |        {
-      |          "ID": 90,
       |          "Name": "$UPDATED_BLOCK_STATUSES",
       |          "Update": [
       |            {
@@ -1766,103 +1801,120 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |              }
       |            }
       |          ],
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 90,
+      |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 91,
-      |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
+      |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 92,
-      |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 93,
-      |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
+      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 94,
-      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 95,
-      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+      |          "Name": "${shuffleRead.RECORDS_READ}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 96,
-      |          "Name": "${shuffleRead.RECORDS_READ}",
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 97,
-      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 98,
-      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+      |          "Name": "${shuffleWrite.WRITE_TIME}",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 99,
-      |          "Name": "${shuffleWrite.WRITE_TIME}",
-      |          "Update": 0,
-      |          "Internal": true
+      |          "Name": "${input.READ_METHOD}",
+      |          "Update": "Hadoop",
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 100,
-      |          "Name": "${input.READ_METHOD}",
-      |          "Update": "Hadoop",
-      |          "Internal": true
+      |          "Name": "${input.BYTES_READ}",
+      |          "Update": 2100,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 101,
-      |          "Name": "${input.BYTES_READ}",
-      |          "Update": 2100,
-      |          "Internal": true
+      |          "Name": "${input.RECORDS_READ}",
+      |          "Update": 21,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 102,
-      |          "Name": "${input.RECORDS_READ}",
-      |          "Update": 21,
-      |          "Internal": true
+      |          "Name": "${output.WRITE_METHOD}",
+      |          "Update": "Hadoop",
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 103,
-      |          "Name": "${output.WRITE_METHOD}",
-      |          "Update": "Hadoop",
-      |          "Internal": true
+      |          "Name": "${output.BYTES_WRITTEN}",
+      |          "Update": 1200,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 104,
-      |          "Name": "${output.BYTES_WRITTEN}",
-      |          "Update": 1200,
-      |          "Internal": true
+      |          "Name": "${output.RECORDS_WRITTEN}",
+      |          "Update": 12,
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 105,
-      |          "Name": "${output.RECORDS_WRITTEN}",
-      |          "Update": 12,
-      |          "Internal": true
-      |        },
-      |        {
-      |          "ID": 106,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
-      |          "Internal": true
+      |          "Internal": true,
+      |          "Count Failed Values": true
       |        }
       |      ]
       |    }
