@@ -974,7 +974,7 @@ case class ScalaUDF(
   // scalastyle:on line.size.limit
 
   // Generate codes used to convert the arguments to Scala type for user-defined funtions
-  private[this] def genCodeForConverter(ctx: CodeGenContext, index: Int): String = {
+  private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
     val converterClassName = classOf[Any => Any].getName
     val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
     val expressionClassName = classOf[Expression].getName
@@ -990,8 +990,8 @@ case class ScalaUDF(
   }
 
   override def genCode(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode): String = {
+      ctx: CodegenContext,
+      ev: ExprCode): String = {
 
     ctx.references += this
 

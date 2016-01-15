@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Nondeterministic}
  */
 trait CodegenFallback extends Expression {
 
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     foreach {
       case n: Nondeterministic => n.setInitialValues()
       case _ =>

@@ -52,7 +52,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val condEval = predicate.gen(ctx)
     val trueEval = trueValue.gen(ctx)
     val falseEval = falseValue.gen(ctx)
@@ -136,7 +136,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     // Generate code that looks like:
     //
     // condA = ...
@@ -275,11 +275,11 @@ case class Least(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(eval: GeneratedExpressionCode): String = {
+    def updateEval(eval: ExprCode): String = {
       s"""
         ${eval.code}
         if (!${eval.isNull} && (${ev.isNull} ||
@@ -334,11 +334,11 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(eval: GeneratedExpressionCode): String = {
+    def updateEval(eval: ExprCode): String = {
       s"""
         ${eval.code}
         if (!${eval.isNull} && (${ev.isNull} ||

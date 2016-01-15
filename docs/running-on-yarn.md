@@ -260,10 +260,10 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
     A comma-separated list of secure HDFS namenodes your Spark application is going to access. For
-    example, <code>spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032</code>.
-    The Spark application must have access to the namenodes listed and Kerberos must
-    be properly configured to be able to access them (either in the same realm or in
-    a trusted realm). Spark acquires security tokens for each of the namenodes so that
+    example, <code>spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the namenodes listed 
+    and Kerberos must be properly configured to be able to access them (either in the same realm 
+    or in a trusted realm). Spark acquires security tokens for each of the namenodes so that
     the Spark application can access those remote HDFS clusters.
   </td>
 </tr>
