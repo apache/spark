@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.LeafExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -51,47 +47,9 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
     sqlContext.planner.plan(optimizedPlan).next()
   }
 
-  private def supportCodegen(plan: SparkPlan): Boolean = plan match {
-    case plan: SupportCodegen if plan.supportCodegen =>
-      // Non-leaf with CodegenFallback does not work with whole stage codegen
-      val willFallback = plan.expressions.exists(
-        _.find(e => e.isInstanceOf[CodegenFallback] && !e.isInstanceOf[LeafExpression]).isDefined
-      )
-      // the generated code will be huge if there are too many columns
-      val haveManyColumns = plan.output.length > 200
-      !willFallback && !haveManyColumns
-    case _ => false
-  }
-
-  /**
-    * Collapse multiple chained plans into WholeStageCodegen to compile them into a single Java
-    * function for better performance.
-    */
-  private def collapse(plan: SparkPlan): SparkPlan = plan transform {
-    case plan: SupportCodegen if supportCodegen(plan) &&
-      // Whole stage codegen is only useful when there are at least two levels of operators that
-      // support it (save at least one projection/iterator).
-      plan.children.exists(supportCodegen) =>
-
-      var inputs = ArrayBuffer[SparkPlan]()
-      val combined = plan.transform {
-        case p if !supportCodegen(p) =>
-          inputs += p
-          InputAdapter(p)
-      }.asInstanceOf[SupportCodegen]
-      WholeStageCodegen(combined, inputs)
-  }
-
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = {
-    val plan = sqlContext.prepareForExecution.execute(sparkPlan)
-    if (sqlContext.conf.wholeStageEnabled) {
-      collapse(plan)
-    } else {
-      plan
-    }
-  }
+  lazy val executedPlan: SparkPlan = sqlContext.prepareForExecution.execute(sparkPlan)
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()

@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{LeafExpression, Attribute, BoundReference, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
   * An interface for those physical operators that support codegen.
@@ -192,7 +196,7 @@ case class WholeStageCodegen(plan: SupportCodegen, children: Seq[SparkPlan])
     rdd.mapPartitions { iter =>
       val clazz = CodeGenerator.compile(source)
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-      buffer.process(iter)
+      buffer.setInput(iter)
       new Iterator[InternalRow] {
         override def hasNext: Boolean = buffer.hasNext
         override def next: InternalRow = buffer.next()
@@ -253,4 +257,44 @@ case class WholeStageCodegen(plan: SupportCodegen, children: Seq[SparkPlan])
   }
 
   override def simpleString: String = "WholeStageCodegen"
+}
+
+
+/**
+  * Find the chained plans that support codegen, collapse them together as WholeStageCodegen.
+  */
+private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Rule[SparkPlan] {
+
+  private def supportCodegen(plan: SparkPlan): Boolean = plan match {
+    case plan: SupportCodegen if plan.supportCodegen =>
+      // Non-leaf with CodegenFallback does not work with whole stage codegen
+      val willFallback = plan.expressions.exists(
+        _.find(e => e.isInstanceOf[CodegenFallback] && !e.isInstanceOf[LeafExpression]).isDefined
+      )
+      // the generated code will be huge if there are too many columns
+      val haveManyColumns = plan.output.length > 200
+      !willFallback && !haveManyColumns
+    case _ => false
+  }
+
+  def apply(plan: SparkPlan): SparkPlan = {
+    if (sqlContext.conf.wholeStageEnabled) {
+      plan.transformUp {
+        case plan: SupportCodegen if supportCodegen(plan) &&
+          // Whole stage codegen is only useful when there are at least two levels of operators that
+          // support it (save at least one projection/iterator).
+          plan.children.exists(supportCodegen) =>
+
+          var inputs = ArrayBuffer[SparkPlan]()
+          val combined = plan.transform {
+            case p if !supportCodegen(p) =>
+              inputs += p
+              InputAdapter(p)
+          }.asInstanceOf[SupportCodegen]
+          WholeStageCodegen(combined, inputs)
+      }
+    } else {
+      plan
+    }
+  }
 }

@@ -615,7 +615,7 @@ class HiveContext private[hive](
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
      * execution is simply passed back to Hive.
      */
-    def stringResult(): Seq[String] = sparkPlan match {
+    def stringResult(): Seq[String] = executedPlan match {
       case ExecutedCommand(desc: DescribeHiveTableCommand) =>
         // If it is a describe command for a Hive table, we want to have the output format
         // be similar with Hive.

@@ -477,7 +477,7 @@ abstract class HiveComparisonTest
               // If this query is reading other tables that were created during this test run
               // also print out the query plans and results for those.
               val computedTablesMessages: String = try {
-                val tablesRead = new TestHive.QueryExecution(query).sparkPlan.collect {
+                val tablesRead = new TestHive.QueryExecution(query).executedPlan.collect {
                   case ts: HiveTableScan => ts.relation.tableName
                 }.toSet
 

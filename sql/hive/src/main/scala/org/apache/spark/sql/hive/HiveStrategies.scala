@@ -107,7 +107,7 @@ private[hive] trait HiveStrategies {
               DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
 
           case o: LogicalPlan =>
-            val resultPlan = context.executePlan(o).sparkPlan
+            val resultPlan = context.executePlan(o).executedPlan
             ExecutedCommand(RunnableDescribeCommand(
               resultPlan, describe.output, describe.isExtended)) :: Nil
         }

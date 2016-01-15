@@ -47,15 +47,15 @@ public class BufferedRowIterator {
     return r;
   }
 
+  public void setInput(Iterator<InternalRow> iter) {
+    input = iter;
+  }
+
   /**
    * Processes the input until have a row as output (currentRow).
    *
    * After it's called, if currentRow is still null, it means no more rows left.
    */
-  public void process(Iterator<InternalRow> iter) {
-    input = iter;
-  }
-
   protected void processNext() {
     if (input.hasNext()) {
       currentRow = input.next();
