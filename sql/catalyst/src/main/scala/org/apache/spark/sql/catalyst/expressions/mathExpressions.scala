@@ -42,6 +42,7 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
+  override def sql: String = toString
 
   override def eval(input: InternalRow): Any = c
 }

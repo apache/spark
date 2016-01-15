@@ -109,6 +109,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
   override def toString: String = s"$child.${name.getOrElse(childSchema(ordinal).name)}"
+  override def sql: String = child.sql + s".`${childSchema(ordinal).name}`"
 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
@@ -130,8 +131,6 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
       }
     })
   }
-
-  override def sql: String = child.sql + s".`${childSchema(ordinal).name}`"
 }
 
 /**
@@ -148,6 +147,7 @@ case class GetArrayStructFields(
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
+  override def sql: String = s"${child.sql}.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {
     val array = input.asInstanceOf[ArrayData]
@@ -210,6 +210,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
 
   override def toString: String = s"$child[$ordinal]"
+  override def sql: String = s"${child.sql}[${ordinal.sql}]"
 
   override def left: Expression = child
   override def right: Expression = ordinal
@@ -258,6 +259,7 @@ case class GetMapValue(child: Expression, key: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
 
   override def toString: String = s"$child[$key]"
+  override def sql: String = s"${child.sql}[${key.sql}]"
 
   override def left: Expression = child
   override def right: Expression = key
