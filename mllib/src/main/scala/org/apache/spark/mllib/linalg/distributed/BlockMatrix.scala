@@ -318,11 +318,10 @@ class BlockMatrix @Since("1.3.0") (
 
   /**
    * For given matrices `this` and `other` of compatible dimensions and compatible block dimensions,
-   * it applies an associative binary function on their corresponding blocks.
+   * it applies a binary function on their corresponding blocks.
    *
-   * @param other The BlockMatrix to operate on
-   * @param binMap An associative function taking two dense breeze matrices and returning a
-   *               dense breeze matrix
+   * @param other The second BlockMatrix argument for the operator specified by `binMap`
+   * @param binMap A function taking two breeze matrices and returning a breeze matrix
    * @return A [[BlockMatrix]] whose blocks are the results of a specified binary map on blocks
    *         of `this` and `other`.
    */
@@ -334,46 +333,48 @@ class BlockMatrix @Since("1.3.0") (
     require(numCols() == other.numCols(), "Both matrices must have the same number of columns. " +
       s"A.numCols: ${numCols()}, B.numCols: ${other.numCols()}")
     if (rowsPerBlock == other.rowsPerBlock && colsPerBlock == other.colsPerBlock) {
-      val addedBlocks = blocks.cogroup(other.blocks, createPartitioner())
+      val newBlocks = blocks.cogroup(other.blocks, createPartitioner())
         .map { case ((blockRowIndex, blockColIndex), (a, b)) =>
-        if (a.size > 1 || b.size > 1) {
-          throw new SparkException("There are multiple MatrixBlocks with indices: " +
-            s"($blockRowIndex, $blockColIndex). Please remove them.")
-        }
-        if (a.isEmpty) {
-          new MatrixBlock((blockRowIndex, blockColIndex), b.head)
-        } else if (b.isEmpty) {
-          new MatrixBlock((blockRowIndex, blockColIndex), a.head)
-        } else {
-          val result = binMap(a.head.toBreeze, b.head.toBreeze)
-          new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
-        }
+          if (a.size > 1 || b.size > 1) {
+            throw new SparkException("There are multiple MatrixBlocks with indices: " +
+              s"($blockRowIndex, $blockColIndex). Please remove them.")
+          }
+          if (a.isEmpty) {
+            val zeroBlock = BM.zeros[Double](b.head.numRows, b.head.numCols)
+            val result = binMap(zeroBlock, b.head.toBreeze)
+            new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
+          } else if (b.isEmpty) {
+            new MatrixBlock((blockRowIndex, blockColIndex), a.head)
+          } else {
+            val result = binMap(a.head.toBreeze, b.head.toBreeze)
+            new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
+          }
       }
-      new BlockMatrix(addedBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
+      new BlockMatrix(newBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
     } else {
-      throw new SparkException("Cannot add matrices with different block dimensions")
+      throw new SparkException("Cannot perform on matrices with different block dimensions")
     }
   }
 
   /**
-   * Adds two block matrices together. The matrices must have the same size and matching
-   * `rowsPerBlock` and `colsPerBlock` values. If one of the blocks that are being added are
-   * instances of [[SparseMatrix]], the resulting sub matrix will also be a [[SparseMatrix]], even
-   * if it is being added to a [[DenseMatrix]]. If two dense matrices are added, the output will
-   * also be a [[DenseMatrix]].
+   * Adds the given block matrix `other` to `this` block matrix: `this + other`.
+   * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock` values.
+   * If one of the blocks that are being added are instances of [[SparseMatrix]], the resulting
+   * sub matrix will also be a [[SparseMatrix]], even if it is being added to a [[DenseMatrix]].
+   * If two dense matrices are added, the output will also be a [[DenseMatrix]].
    */
   @Since("1.3.0")
   def add(other: BlockMatrix): BlockMatrix =
     blockMap(other, (x: BM[Double], y: BM[Double]) => x + y)
 
   /**
-   * Subtracts two block matrices together. The matrices must have the same size and matching
-   * `rowsPerBlock` and `colsPerBlock` values. If one of the blocks that are being added are
-   * instances of [[SparseMatrix]], the resulting sub matrix will also be a [[SparseMatrix]], even
-   * if it is being added to a [[DenseMatrix]]. If two dense matrices are added, the output will
-   * also be a [[DenseMatrix]].
+   * Subtracts the given block matrix `other` from `this` block matrix: `this - other`.
+   * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock` values.
+   * If one of the blocks that are being subtracted are instances of [[SparseMatrix]], the resulting
+   * sub matrix will also be a [[SparseMatrix]], even if it is being subtracted from a [[DenseMatrix]].
+   * If two dense matrices are subtracted, the output will also be a [[DenseMatrix]].
    */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def subtract(other: BlockMatrix): BlockMatrix =
     blockMap(other, (x: BM[Double], y: BM[Double]) => x - y)
 

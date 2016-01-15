@@ -208,7 +208,7 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       (0.0, 0.0, 0.0, 0.0),
       (0.0, 0.0, 0.0, 0.0),
       (0.0, 0.0, 0.0, 0.0),
-      (1.0, 0.0, 0.0, 0.0))
+      (-1.0, 0.0, 0.0, 0.0))
 
     val AsubtractB = gridBasedMat.subtract(B)
     assert(AsubtractB.numRows() === m)
@@ -226,7 +226,7 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[SparkException] { // partitioning doesn't match
       gridBasedMat.subtract(C2)
     }
-    // adding BlockMatrices composed of SparseMatrices
+    // subtracting BlockMatrices composed of SparseMatrices
     val sparseBlocks = for (i <- 0 until 4) yield ((i / 2, i % 2), SparseMatrix.speye(4))
     val denseBlocks = for (i <- 0 until 4) yield ((i / 2, i % 2), DenseMatrix.eye(4))
     val sparseBM = new BlockMatrix(sc.makeRDD(sparseBlocks, 4), 4, 4, 8, 8)
