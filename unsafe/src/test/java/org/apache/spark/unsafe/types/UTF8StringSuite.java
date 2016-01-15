@@ -378,7 +378,7 @@ public class UTF8StringSuite {
     assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
       new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
   }
-  
+
   @Test
   public void levenshteinDistance() {
     assertEquals(0, EMPTY_UTF8.levenshteinDistance(EMPTY_UTF8));

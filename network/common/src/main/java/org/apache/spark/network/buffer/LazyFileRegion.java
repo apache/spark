@@ -32,7 +32,7 @@ import org.apache.spark.network.util.JavaUtils;
 /**
  * A FileRegion implementation that only creates the file descriptor when the region is being
  * transferred. This cannot be used with Epoll because there is no native support for it.
- * 
+ *
  * This is mostly copied from DefaultFileRegion implementation in Netty. In the future, we
  * should push this into Netty so the native Epoll transport can support this feature.
  */
