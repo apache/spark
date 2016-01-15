@@ -99,7 +99,7 @@ private[history] class ApplicationCache(
   }
 
   /**
-   * The metrics which are updated as the cache is used
+   * The metrics which are updated as the cache is used.
    */
   val metrics = new CacheMetrics("history.cache")
 
@@ -124,8 +124,9 @@ private[history] class ApplicationCache(
   }
 
   /**
-   * Get an entry. Cache fetch/refresh will have taken place by
-   * the time this method returns.
+   * Get an entry.
+   *
+   * Cache fetch/refresh will have taken place by the time this method returns.
    * @param appAndAttempt application to look up in the format needed by the history server web UI,
    *                      `appId/attemptId` or `appId`.
    * @return the entry
@@ -155,8 +156,9 @@ private[history] class ApplicationCache(
   }
 
   /**
-   * Get the associated spark UI. Cache fetch/refresh will have taken place by
-   * the time this method returns.
+   * Get the associated spark UI.
+   *
+   * Cache fetch/refresh will have taken place by the time this method returns.
    * @param appId application ID
    * @param attemptId optional attempt ID
    * @return the entry
@@ -205,7 +207,9 @@ private[history] class ApplicationCache(
   }
 
   /**
-   * This method is visible for testing. It looks up the cached entry *and returns a clone of it*.
+   * This method is visible for testing.
+   *
+   * It looks up the cached entry *and returns a clone of it*.
    * This ensures that the cached entries never leak
    * @param appId application ID
    * @param attemptId optional attempt ID
@@ -217,7 +221,7 @@ private[history] class ApplicationCache(
   }
 
   /**
-   * Probe for an application being updated
+   * Probe for an application being updated.
    * @param appId application ID
    * @param attemptId attempt ID
    * @return true if an update has been triggered
@@ -228,13 +232,13 @@ private[history] class ApplicationCache(
   }
 
   /**
-   * Size probe, primarily for testing
+   * Size probe, primarily for testing.
    * @return size
    */
   def size(): Long = appCache.size()
 
   /**
-   * Emptiness predicate, primarily for testing
+   * Emptiness predicate, primarily for testing.
    * @return true if the cache is empty
    */
   def isEmpty: Boolean = appCache.size() == 0
@@ -258,6 +262,7 @@ private[history] class ApplicationCache(
   /**
    * Load the Spark UI via [[ApplicationCacheOperations.getAppUI()]],
    * then attach it to the web UI via [[ApplicationCacheOperations.attachSparkUI()]].
+   *
    * If the application is incomplete, it has the [[ApplicationCacheCheckFilter]]
    * added as a filter to the HTTP requests, so that queries on the UI will trigger
    * update checks.
@@ -317,8 +322,9 @@ private[history] class ApplicationCache(
   }
 
   /**
-   * Merge an appId and optional attempt Id into a key of the form `applicationId/attemptId`
-   * if there is an `attemptId`; `applicationId` if not.
+   * Merge an appId and optional attempt Id into a key of the form `applicationId/attemptId`.
+   *
+   * If there is an `attemptId`; `applicationId` if not.
    * @param appId application ID
    * @param attemptId optional attempt ID
    * @return a unified string
