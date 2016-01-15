@@ -207,6 +207,16 @@ case class ExpressionEncoder[T](
     resolve(attrs, OuterScopes.outerScopes).bind(attrs)
   }
 
+
+  /**
+   * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
+   * of this object.
+   */
+  def namedExpressions: Seq[NamedExpression] = schema.map(_.name).zip(toRowExpressions).map {
+    case (_, ne: NamedExpression) => ne.newInstance()
+    case (name, e) => Alias(e, name)()
+  }
+
   /**
    * Returns an encoded version of `t` as a Spark SQL row.  Note that multiple calls to
    * toRow are allowed to return the same actual [[InternalRow]] object.  Thus, the caller should

@@ -26,6 +26,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
+case class OtherTuple(_1: String, _2: Int)
+
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
@@ -109,6 +111,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.map(v => (v._1, v._2 + 1)),
       ("a", 2), ("b", 3), ("c", 4))
+  }
+
+  test("map with type change") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+
+    checkAnswer(
+      ds.map(identity[(String, Int)])
+        .as[OtherTuple]
+        .map(identity[OtherTuple]),
+      OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
   }
 
   test("map and group by with class data") {

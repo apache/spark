@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends LeafExpression with NamedExpression {
 
-  override def toString: String = s"input[$ordinal, $dataType]"
+  override def toString: String = s"input[$ordinal, ${dataType.simpleString}]"
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
@@ -65,6 +65,8 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
 
   override def exprId: ExprId = throw new UnsupportedOperationException
+
+  override def newInstance(): NamedExpression = this
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val javaType = ctx.javaType(dataType)

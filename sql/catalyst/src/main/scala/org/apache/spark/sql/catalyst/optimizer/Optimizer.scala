@@ -67,7 +67,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      EliminateSerialization) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -93,6 +94,19 @@ object SamplePushDown extends Rule[LogicalPlan] {
     case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
       Sample(lb, up, replace, seed,
         Project(projectList, child))
+  }
+}
+
+/**
+ * Removes cases where we are unnecessarily going between the object and serialized (InternalRow)
+ * representation of data item.  For example back to back map operations.
+ */
+object EliminateSerialization extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case m @ MapPartitions(_, input, _, child: ObjectOperator)
+        if !input.isInstanceOf[Attribute] && m.input.dataType == child.outputObject.dataType =>
+      val childWithoutSerialization = child.withObjectOutput
+      m.copy(input = childWithoutSerialization.output.head, child = childWithoutSerialization)
   }
 }
 

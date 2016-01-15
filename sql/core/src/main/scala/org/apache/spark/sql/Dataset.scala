@@ -336,12 +336,7 @@ class Dataset[T] private[sql](
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
-      MapPartitions[T, U](
-        func,
-        resolvedTEncoder,
-        encoderFor[U],
-        encoderFor[U].schema.toAttributes,
-        logicalPlan))
+      MapPartitions[T, U](func, logicalPlan))
   }
 
   /**
@@ -434,7 +429,7 @@ class Dataset[T] private[sql](
    */
   def groupBy[K : Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = logicalPlan
-    val withGroupingKey = AppendColumns(func, resolvedTEncoder, inputPlan)
+    val withGroupingKey = AppendColumns(func, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(
