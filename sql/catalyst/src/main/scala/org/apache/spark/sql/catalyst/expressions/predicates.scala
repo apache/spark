@@ -221,7 +221,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     val hsetTerm = ctx.freshName("hset")
     val hasNullTerm = ctx.freshName("hasNull")
     ctx.addMutableState(setName, hsetTerm,
-      s"$hsetTerm = (($InSetName)expressions[${ctx.references.size - 1}]).getHSet();")
+      s"$hsetTerm = (($InSetName)references[${ctx.references.size - 1}]).getHSet();")
     ctx.addMutableState("boolean", hasNullTerm, s"$hasNullTerm = $hsetTerm.contains(null);")
     s"""
       ${childGen.code}
