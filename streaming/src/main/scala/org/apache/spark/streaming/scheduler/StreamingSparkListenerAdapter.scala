@@ -17,19 +17,16 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.concurrent.atomic.AtomicBoolean
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 
-import org.apache.spark.Logging
-import org.apache.spark.util.AsynchronousListenerBus
+/**
+ * A SparkListener adapter for StreamingListener that will dispatch the Streaming events to
+ * the underlying StreamingListener.
+ */
+private[spark] class StreamingSparkListenerAdapter(listener: StreamingListener)
+  extends SparkListener {
 
-/** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
-private[spark] class StreamingListenerBus
-  extends AsynchronousListenerBus[StreamingListener, StreamingListenerEvent]("StreamingListenerBus")
-  with Logging {
-
-  private val logDroppedEvent = new AtomicBoolean(false)
-
-  override def onPostEvent(listener: StreamingListener, event: StreamingListenerEvent): Unit = {
+  override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
       case receiverStarted: StreamingListenerReceiverStarted =>
         listener.onReceiverStarted(receiverStarted)
@@ -48,15 +45,6 @@ private[spark] class StreamingListenerBus
       case outputOperationCompleted: StreamingListenerOutputOperationCompleted =>
         listener.onOutputOperationCompleted(outputOperationCompleted)
       case _ =>
-    }
-  }
-
-  override def onDropEvent(event: StreamingListenerEvent): Unit = {
-    if (logDroppedEvent.compareAndSet(false, true)) {
-      // Only log the following message once to avoid duplicated annoying logs.
-      logError("Dropping StreamingListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the StreamingListeners is too slow and cannot keep up with the " +
-        "rate at which events are being started by the scheduler.")
     }
   }
 }

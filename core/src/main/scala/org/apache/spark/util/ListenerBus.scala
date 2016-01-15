@@ -24,19 +24,20 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 
 /**
- * An event bus which posts events to its listeners.
+ * An event bus which posts SparkListenerEvents to SparkListeners.
  */
-private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
+private[spark] trait ListenerBus extends Logging {
 
   // Marked `private[spark]` for access in tests.
-  private[spark] val listeners = new CopyOnWriteArrayList[L]
+  private[spark] val listeners = new CopyOnWriteArrayList[SparkListener]
 
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
-  final def addListener(listener: L) {
+  final def addListener(listener: SparkListener) {
     listeners.add(listener)
   }
 
@@ -44,7 +45,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * Post the event to all registered listeners. The `postToAll` caller should guarantee calling
    * `postToAll` in the same thread for all events.
    */
-  final def postToAll(event: E): Unit = {
+  final def postToAll(event: SparkListenerEvent): Unit = {
     // JavaConverters can create a JIterableWrapper if we use asScala.
     // However, this method will be called frequently. To avoid the wrapper cost, here ewe use
     // Java Iterator directly.
@@ -64,9 +65,9 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * Post an event to the specified listener. `onPostEvent` is guaranteed to be called in the same
    * thread.
    */
-  def onPostEvent(listener: L, event: E): Unit
+  def onPostEvent(listener: SparkListener, event: SparkListenerEvent): Unit
 
-  private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
+  private[spark] def findListenersByClass[T <: SparkListener : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
     listeners.asScala.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
   }

@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable.Queue
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.Distribution
 
 /**
@@ -27,7 +28,9 @@ import org.apache.spark.util.Distribution
  * Base trait for events related to StreamingListener
  */
 @DeveloperApi
-sealed trait StreamingListenerEvent
+sealed trait StreamingListenerEvent extends SparkListenerEvent {
+  override def logEvent: Boolean = false
+}
 
 @DeveloperApi
 case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
