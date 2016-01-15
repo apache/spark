@@ -19,19 +19,21 @@ package org.apache.spark.metrics.sink
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-private[spark] trait HasPollingPeriod {
-  def properties: Properties
+private object HasPollingPeriod {
+  val POLL_UNIT = TimeUnit.SECONDS
+  val MINIMAL_POLL_PERIOD = 1
 
-  private val POLL_UNIT = TimeUnit.SECONDS
-  private val MINIMAL_POLL_PERIOD = 1
-
-  private def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
+  def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
     val period = POLL_UNIT.convert(pollPeriod, pollUnit)
     if (period < MINIMAL_POLL_PERIOD) {
       throw new IllegalArgumentException("Polling period " + pollPeriod + " " + pollUnit +
         " below than minimal polling period ")
     }
   }
+}
+
+private[spark] trait HasPollingPeriod {
+  def properties: Properties
 
   private val DEFAULT_PERIOD = 10
   private val DEFAULT_UNIT = "SECONDS"
@@ -49,5 +51,6 @@ private[spark] trait HasPollingPeriod {
     case None => TimeUnit.valueOf(DEFAULT_UNIT)
   }
 
+  import HasPollingPeriod._
   checkMinimalPollingPeriod(pollUnit, pollPeriod)
 }
