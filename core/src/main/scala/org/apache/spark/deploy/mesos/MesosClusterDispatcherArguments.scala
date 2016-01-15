@@ -102,7 +102,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
         "  --webui-port WEBUI_PORT WebUI Port to listen on (default: 8081)\n" +
         "  --name NAME             Framework name to show in Mesos UI\n" +
         "  -m --master MASTER      URI for connecting to Mesos master\n" +
-        "  --disable-failover      Will kill the driver when dispatcher is stopped\n" +
+        "  --disable-failover      De-register the framework when dispatcher is stopped\n" +
         "  -z --zk ZOOKEEPER       Comma delimited URLs for connecting to \n" +
         "                          Zookeeper for persistence\n" +
         "  --properties-file FILE  Path to a custom Spark properties file.\n" +

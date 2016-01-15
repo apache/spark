@@ -307,8 +307,8 @@ private[spark] class MesosClusterScheduler(
       appName,
       conf,
       Some(frameworkUrl),
-      Some(true),
-      Some(Integer.MAX_VALUE),
+      Some(driverFailOver), // with checkpoint data if failOver is true
+      Some(if (driverFailOver) Double.MaxValue else 0.0), // timeout, 0.0 means no recovery
       fwId)
 
     startScheduler(driver)
@@ -319,7 +319,7 @@ private[spark] class MesosClusterScheduler(
     ready = false
     metricsSystem.report()
     metricsSystem.stop()
-    mesosDriver.stop(driverFailOver)
+    mesosDriver.stop(true)
   }
 
   override def registered(
