@@ -90,9 +90,11 @@ class CSVTypeCastSuite extends SparkFunSuite {
   }
 
   test("Float and Double Types are cast correctly with Locale") {
+    val originalLocale = Locale.getDefault
     val locale : Locale = new Locale("fr", "FR")
     Locale.setDefault(locale)
     assert(CSVTypeCast.castTo("1,00", FloatType) == 1.0)
     assert(CSVTypeCast.castTo("1,00", DoubleType) == 1.0)
+    Locale.setDefault(originalLocale)
   }
 }
