@@ -675,19 +675,22 @@ abstract class HadoopFsRelation private[sql](
    */
   private def groupBucketFiles(
       files: Array[FileStatus]): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
-    malformedBucketFile = false
     if (getBucketSpec.isDefined) {
       val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
-      for (file <- files) {
-        val bucketId = BucketingUtils.getBucketId(file.getPath.getName)
+      var i = 0
+      malformedBucketFile = false
+      while (!malformedBucketFile && i < files.length) {
+        val bucketId = BucketingUtils.getBucketId(files(i).getPath.getName)
         if (bucketId.isEmpty) {
-          logError(s"File ${file.getPath} is supposed to be a bucket file, but there is no " +
-            "bucket id information in file name, fallback to non-bucketing mode.")
+          logError(s"File ${files(i).getPath} is expected to be a bucket file, but there is no " +
+            "bucket id information in file name. Fall back to non-bucketing mode.")
           malformedBucketFile = true
-          return None
         } else {
-          groupedBucketFiles.getOrElseUpdate(bucketId.get, mutable.ArrayBuffer.empty) += file
+          val bucketFiles =
+            groupedBucketFiles.getOrElseUpdate(bucketId.get, mutable.ArrayBuffer.empty)
+          bucketFiles += files(i)
         }
+        i += 1
       }
       Some(groupedBucketFiles.mapValues(_.toArray))
     } else {

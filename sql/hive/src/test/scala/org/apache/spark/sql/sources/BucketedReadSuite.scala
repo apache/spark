@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.File
+
 import org.apache.spark.sql.{Column, DataFrame, DataFrameWriter, QueryTest, SQLConf}
-import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
-import org.apache.spark.sql.execution.{Exchange, PhysicalRDD, SparkPlan}
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.joins.SortMergeJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -44,8 +47,10 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
         val attrs = df.select("j", "k").schema.toAttributes
         val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
-          val projection = UnsafeProjection.create(new Murmur3Hash(attrs) :: Nil, attrs)
-          rows.map(row => Utils.nonNegativeMod(projection(row).getInt(0), 8) == index)
+          val getBucketId = UnsafeProjection.create(
+            HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
+            attrs)
+          rows.map(row => getBucketId(row).getInt(0) == index)
         })
 
         assert(checkBucketId.collect().reduce(_ && _))
@@ -154,6 +159,20 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
       assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isEmpty)
+    }
+  }
+
+  test("fallback to non-bucketing mode if there exists any malformed bucket files") {
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+      val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
+      Utils.deleteRecursively(tableDir)
+      df1.write.parquet(tableDir.getAbsolutePath)
+
+      val agged = hiveContext.table("bucketed_table").groupBy("i").count()
+      // make sure we fall back to non-bucketing mode and can't avoid shuffle
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isDefined)
+      checkAnswer(agged.sort("i"), df1.groupBy("i").count().sort("i"))
     }
   }
 }
