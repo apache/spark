@@ -29,7 +29,9 @@ import org.apache.spark.sql.types.StringType
  * The top level Spark SQL parser. This parser recognizes syntaxes that are available for all SQL
  * dialects supported by Spark SQL, and delegates all the other syntaxes to the `fallback` parser.
  *
- * @param fallback A function that parses an input string to a logical plan
+ * @param fallback A function that returns the next parser in the chain. This is a call-by-name
+ *                 parameter because this allows us to return a different dialect if we
+ *                 have to.
  */
 class SparkSQLParser(fallback: => ParserDialect) extends AbstractSparkSQLParser {
 

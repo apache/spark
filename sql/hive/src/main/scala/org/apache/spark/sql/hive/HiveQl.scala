@@ -670,8 +670,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     case other => super.nodeToGenerator(node)
   }
 
-  override protected def convertDecimalLiteralToBigDecimal: Boolean = false
-
   // This is based the getColumns methods in
   // ql/src/java/org/apache/hadoop/hive/ql/parse/BaseSemanticAnalyzer.java
   protected def nodeToColumns(node: ASTNode, lowerCase: Boolean): Seq[HiveColumn] = {

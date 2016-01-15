@@ -123,20 +123,12 @@ constant
     | SmallintLiteral
     | TinyintLiteral
     | DecimalLiteral
-    | charSetStringLiteral
     | booleanValue
     ;
 
 stringLiteralSequence
     :
     StringLiteral StringLiteral+ -> ^(TOK_STRINGLITERALSEQUENCE StringLiteral StringLiteral+)
-    ;
-
-charSetStringLiteral
-@init { gParent.pushMsg("character string literal", state); }
-@after { gParent.popMsg(state); }
-    :
-    csName=StringLiteral csLiteral=CharSetLiteral -> ^(TOK_CHARSETLITERAL $csName $csLiteral)
     ;
 
 dateLiteral

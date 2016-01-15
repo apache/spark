@@ -171,10 +171,4 @@ class CatalystQlSuite extends PlanTest {
     parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
   }
-
-  test("string charset literal") {
-    compareExpressions(
-      parser.parseExpression("'ISO-8859-1' 0x4341464562616265"),
-      Literal("CAFEbabe"))
-  }
 }

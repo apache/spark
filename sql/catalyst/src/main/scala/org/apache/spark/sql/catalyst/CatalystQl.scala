@@ -30,11 +30,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
-private[sql] object CatalystQl {
-  val parser = new CatalystQl
-  def parseExpression(sql: String): Expression = parser.parseExpression(sql)
-}
-
 /**
  * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
  */
@@ -628,8 +623,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val CASE = "(?i)CASE".r
 
   val INTEGRAL = "[+-]?\\d+".r
-  val SCIENTIFICDECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))([eE][+-]?\\d+)?".r
-  val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
 
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
@@ -806,28 +799,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               Literal(v.longValue())
             case v => Literal(v.underlying())
           }
-        case DECIMAL(_*) =>
-          // Hive and the current the old Spark SQL Parser have a different way of dealing with
-          // decimal numbers, the SQL Parser would use a decimal whereas the Hive would use a
-          // Double.
-           if (convertDecimalLiteralToBigDecimal) {
-             Literal(BigDecimal(text).underlying())
-          } else {
-             Literal(text.toDouble)
-          }
-        case SCIENTIFICDECIMAL(_*) =>
-          Literal(text.toDouble)
         case _ =>
-          noParseRule("Numeric", ast)
+          Literal(text.toDouble)
       }
     case ast if ast.tokenType == SparkSqlParser.StringLiteral =>
       Literal(ParseUtils.unescapeSQLString(ast.text))
 
     case ast if ast.tokenType == SparkSqlParser.TOK_DATELITERAL =>
       Literal(Date.valueOf(ast.text.substring(1, ast.text.length - 1)))
-
-    case ast if ast.tokenType == SparkSqlParser.TOK_CHARSETLITERAL =>
-      Literal(ParseUtils.charSetString(unquoteString(ast.children.head.text), ast.children(1).text))
 
     case ast if ast.tokenType == SparkSqlParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
       Literal(CalendarInterval.fromYearMonthString(ast.children.head.text))
@@ -836,26 +815,27 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Literal(CalendarInterval.fromDayTimeString(ast.children.head.text))
 
     case Token("TOK_INTERVAL", elements) =>
-      val (interval, updated) = elements.foldLeft((new CalendarInterval(0, 0), false)) {
-        case (t @ (current, count), element) =>
-          element match {
-            case Token(name, Token(value, Nil) :: Nil) =>
-              val unit = name match {
-                case "TOK_INTERVAL_YEAR_LITERAL" => "year"
-                case "TOK_INTERVAL_MONTH_LITERAL" => "month"
-                case "TOK_INTERVAL_WEEK_LITERAL" => "week"
-                case "TOK_INTERVAL_DAY_LITERAL" => "day"
-                case "TOK_INTERVAL_HOUR_LITERAL" => "hour"
-                case "TOK_INTERVAL_MINUTE_LITERAL" => "minute"
-                case "TOK_INTERVAL_SECOND_LITERAL" => "second"
-                case "TOK_INTERVAL_MILLISECOND_LITERAL" => "millisecond"
-                case "TOK_INTERVAL_MICROSECOND_LITERAL" => "microsecond"
-                case _ => noParseRule(s"Interval($name)", element)
-              }
-              val update = CalendarInterval.fromSingleUnitString(unit, value)
-              (current.add(update), true)
-            case _ => t
+      var interval = new CalendarInterval(0, 0)
+      var updated = false
+      elements.foreach {
+        // The interval node will always contain children for all possible time units. A child node
+        // is only useful when it contains exactly one (numeric) child.
+        case e @ Token(name, Token(value, Nil) :: Nil) =>
+          val unit = name match {
+            case "TOK_INTERVAL_YEAR_LITERAL" => "year"
+            case "TOK_INTERVAL_MONTH_LITERAL" => "month"
+            case "TOK_INTERVAL_WEEK_LITERAL" => "week"
+            case "TOK_INTERVAL_DAY_LITERAL" => "day"
+            case "TOK_INTERVAL_HOUR_LITERAL" => "hour"
+            case "TOK_INTERVAL_MINUTE_LITERAL" => "minute"
+            case "TOK_INTERVAL_SECOND_LITERAL" => "second"
+            case "TOK_INTERVAL_MILLISECOND_LITERAL" => "millisecond"
+            case "TOK_INTERVAL_MICROSECOND_LITERAL" => "microsecond"
+            case _ => noParseRule(s"Interval($name)", e)
           }
+          interval = interval.add(CalendarInterval.fromSingleUnitString(unit, value))
+          updated = true
+        case _ =>
       }
       if (!updated) {
         throw new AnalysisException("at least one time unit should be given for interval literal")
@@ -865,9 +845,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case _ =>
       noParseRule("Expression", node)
   }
-
-  /** Check if we should convert a decimal literal to a BigDecimal or a Double. */
-  protected def convertDecimalLiteralToBigDecimal: Boolean = true
 
   /* Case insensitive matches for Window Specification */
   val PRECEDING = "(?i)preceding".r

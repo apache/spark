@@ -403,12 +403,6 @@ StringLiteral
     )+
     ;
 
-CharSetLiteral
-    :
-    StringLiteral
-    | '0' 'X' (HexDigit|Digit)+
-    ;
-
 BigintLiteral
     :
     (Digit)+ 'L'
