@@ -133,7 +133,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     val driver = createSchedulerDriver(
       master,
       CoarseMesosSchedulerBackend.this,
-      sc.sparkUser,
+      conf.get("spark.executor.start.user", sc.sparkUser),
       sc.appName,
       sc.conf,
       sc.ui.map(_.appUIAddress))
