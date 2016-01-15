@@ -79,6 +79,9 @@ trait NamedExpression extends Expression {
   /** Returns the metadata when an expression is a reference to another expression with metadata. */
   def metadata: Metadata = Metadata.empty
 
+  /** Returns a copy of this expression with a new `exprId`. */
+  def newInstance(): NamedExpression
+
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -143,6 +146,9 @@ case class Alias(child: Expression, name: String)(
       }
     }
   }
+
+  def newInstance(): NamedExpression =
+    Alias(child, name)(qualifiers = qualifiers, explicitMetadata = explicitMetadata)
 
   override def toAttribute: Attribute = {
     if (resolved) {

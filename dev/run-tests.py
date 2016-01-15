@@ -529,11 +529,15 @@ def main():
     run_apache_rat_checks()
 
     # style checks
-    if not changed_files or any(f.endswith(".scala") for f in changed_files):
+    if not changed_files or any(f.endswith(".scala")
+                                or f.endswith("scalastyle-config.xml")
+                                for f in changed_files):
         run_scala_style_checks()
-    if not changed_files or any(f.endswith(".java") for f in changed_files):
-        # run_java_style_checks()
-        pass
+    if not changed_files or any(f.endswith(".java")
+                                or f.endswith("checkstyle.xml")
+                                or f.endswith("checkstyle-suppressions.xml")
+                                for f in changed_files):
+        run_java_style_checks()
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R") for f in changed_files):
