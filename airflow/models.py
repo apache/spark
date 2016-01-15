@@ -2850,6 +2850,7 @@ class SlaMiss(Base):
     email_sent = Column(Boolean, default=False)
     timestamp = Column(DateTime)
     description = Column(Text)
+    notification_sent = Column(Boolean, default=False)
 
     def __repr__(self):
         return str((
