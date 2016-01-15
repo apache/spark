@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution;
 import scala.collection.Iterator;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
@@ -30,6 +31,8 @@ import org.apache.spark.sql.catalyst.InternalRow;
 public class BufferedRowIterator {
   protected InternalRow currentRow;
   protected Iterator<InternalRow> input;
+  // used when there is no column in output
+  protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
   public boolean hasNext() {
     if (currentRow == null) {

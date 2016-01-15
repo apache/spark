@@ -100,7 +100,6 @@ case class WholeStageCodegen(plan: SparkPlan, children: Seq[SparkPlan]) extends 
 
        private $exprType[] expressions;
        ${ctx.declareMutableStates()}
-       private UnsafeRow unsafeRow = new UnsafeRow(${output.length});
 
        public GeneratedIterator($exprType[] exprs) {
          expressions = exprs;

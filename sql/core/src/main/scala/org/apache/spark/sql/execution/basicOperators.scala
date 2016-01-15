@@ -160,16 +160,16 @@ case class Range(
   override def supportCodegen: Boolean = true
 
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
-    val initTerm = ctx.freshName("initRange")
+    val initTerm = ctx.freshName("range_initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
-    val partitionEnd = ctx.freshName("partitionEnd")
+    val partitionEnd = ctx.freshName("range_partitionEnd")
     ctx.addMutableState("long", partitionEnd, s"$partitionEnd = 0L;")
-    val number = ctx.freshName("number")
+    val number = ctx.freshName("range_number")
     ctx.addMutableState("long", number, s"$number = 0L;")
-    val overflow = ctx.freshName("overflow")
+    val overflow = ctx.freshName("range_overflow")
     ctx.addMutableState("boolean", overflow, s"$overflow = false;")
 
-    val value = ctx.freshName("value")
+    val value = ctx.freshName("range_value")
     val ev = ExprCode("", "false", value)
     val BigInt = classOf[java.math.BigInteger].getName
     val checkEnd = if (step > 0) {
@@ -182,7 +182,9 @@ case class Range(
       .map(i => InternalRow(i))
 
     val code = s"""
+      | // initialize Range
       | if (!$initTerm) {
+      |   $initTerm = true;
       |   if (input.hasNext()) {
       |     $BigInt index = $BigInt.valueOf(((InternalRow) input.next()).getInt(0));
       |     $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
@@ -211,7 +213,6 @@ case class Range(
       |   } else {
       |     return;
       |   }
-      |   $initTerm = true;
       | }
       |
       | while (!$overflow && $checkEnd) {
