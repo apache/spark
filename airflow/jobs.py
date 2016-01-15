@@ -263,8 +263,8 @@ class SchedulerJob(BaseJob):
             dttm = ti.execution_date
             if task.sla:
                 dttm = dag.following_schedule(dttm)
-                following_schedule = dag.following_schedule(dttm)
                 while dttm < datetime.now():
+                    following_schedule = dag.following_schedule(dttm)
                     if following_schedule + task.sla < datetime.now():
                         session.merge(models.SlaMiss(
                             task_id=ti.task_id,
@@ -566,8 +566,7 @@ class SchedulerJob(BaseJob):
                     overloaded_dags.add(dag.dag_id)
                     continue
                 if ti.are_dependencies_met():
-                    executor.queue_task_instance(
-                        ti, force=True, pickle_id=pickle_id)
+                    executor.queue_task_instance(ti, pickle_id=pickle_id)
                     open_slots -= 1
                 else:
                     session.delete(ti)
