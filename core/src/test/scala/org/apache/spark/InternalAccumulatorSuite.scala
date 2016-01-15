@@ -70,7 +70,10 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     assert(shuffleRemoteBlocksRead.name === Some(shuffleRead.REMOTE_BLOCKS_FETCHED))
     assert(inputReadMethod.name === Some(input.READ_METHOD))
     assert(executorRunTime.value.isInstanceOf[Long])
-    assert(updatedBlockStatuses.value.isInstanceOf[Seq[(BlockId, BlockStatus)]])
+    assert(updatedBlockStatuses.value.isInstanceOf[Seq[_]])
+    // We cannot assert the type of the value directly since the type parameter is erased.
+    // Instead, try casting a `Seq` of expected type and see if it fails in run time.
+    updatedBlockStatuses.setValueAny(Seq.empty[(BlockId, BlockStatus)])
     assert(shuffleRemoteBlocksRead.value.isInstanceOf[Int])
     assert(inputReadMethod.value.isInstanceOf[String])
   }

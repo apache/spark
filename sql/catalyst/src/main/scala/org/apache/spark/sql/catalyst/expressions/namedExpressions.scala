@@ -133,8 +133,8 @@ case class Alias(child: Expression, name: String)(
   override def eval(input: InternalRow): Any = child.eval(input)
 
   /** Just a simple passthrough for code generation. */
-  override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
+  override def gen(ctx: CodegenContext): ExprCode = child.gen(ctx)
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = ""
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
