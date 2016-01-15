@@ -142,6 +142,8 @@ private[spark] class MesosClusterScheduler(
   private val queuedDriversState = engineFactory.createEngine("driverQueue")
   private val launchedDriversState = engineFactory.createEngine("launchedDrivers")
   private val pendingRetryDriversState = engineFactory.createEngine("retryList")
+  // dispactcher constraints
+  val driverOfferConstraints = parseConstraintString(conf.get("spark.mesos.constraints", ""))
   // Flag to mark if the scheduler is ready to be called, which is until the scheduler
   // is registered with Mesos master.
   @volatile protected var ready = false
@@ -517,6 +519,20 @@ private[spark] class MesosClusterScheduler(
     logTrace(s"Received offers from Mesos: \n${currentOffers.mkString("\n")}")
     val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
     val currentTime = new Date()
+
+    stateLock.synchronized {
+      var it = offers.iterator()
+      while (it.hasNext) {
+        val offer = it.next()
+        val offerAttributes = toAttributeMap(offer.getAttributesList)
+        val meetsConstraints = matchesAttributeRequirements(driverOfferConstraints, offerAttributes)
+
+        if (!meetsConstraints) {
+          driver.declineOffer(offer.getId)
+          it.remove()
+        }
+      }
+    }
 
     stateLock.synchronized {
       // We first schedule all the supervised drivers that are ready to retry.
