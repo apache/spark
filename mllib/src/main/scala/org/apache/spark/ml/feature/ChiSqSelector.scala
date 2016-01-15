@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
