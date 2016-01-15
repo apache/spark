@@ -84,14 +84,15 @@ def trigger_dag(args):
     session = settings.Session()
     # TODO: verify dag_id
     execution_date = datetime.now()
+    run_id = args.run_id or "manual__{0}".format(execution_date.isoformat())
     dr = session.query(DagRun).filter(
-        DagRun.dag_id==args.dag_id, DagRun.run_id==args.run_id).first()
+        DagRun.dag_id==args.dag_id, DagRun.run_id==run_id).first()
     if dr:
         logging.error("This run_id already exists")
     else:
         trigger = DagRun(
             dag_id=args.dag_id,
-            run_id=args.run_id,
+            run_id=run_id,
             execution_date=execution_date,
             state=State.RUNNING,
             external_trigger=True)
