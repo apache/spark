@@ -43,14 +43,14 @@ import org.apache.spark.util.Utils
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
  */
-case class GeneratedExpressionCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(var code: String, var isNull: String, var value: String)
 
 /**
  * A context for codegen, which is used to bookkeeping the expressions those are not supported
  * by codegen, then they are evaluated directly. The unsupported expression is appended at the
  * end of `references`, the position of it is kept in the code, used to access and evaluate it.
  */
-class CodeGenContext {
+class CodegenContext {
 
   /**
    * Holding all the expressions those do not support codegen, will be evaluated directly.
@@ -61,7 +61,7 @@ class CodeGenContext {
     * Holding a list of generated columns as input of current operator, will be used by
     * BoundReference to generate code.
     */
-  var currentVars: Array[GeneratedExpressionCode] = null
+  var currentVars: Seq[ExprCode] = null
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
@@ -142,7 +142,7 @@ class CodeGenContext {
   final val JAVA_DOUBLE = "double"
 
   /** The variable name of the input row in generated code. */
-  final val INPUT_ROW = "i"
+  final var INPUT_ROW = "i"
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -475,7 +475,7 @@ class CodeGenContext {
    * expression will be combined in the `expressions` order.
    */
   def generateExpressions(expressions: Seq[Expression],
-      doSubexpressionElimination: Boolean = false): Seq[GeneratedExpressionCode] = {
+      doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.gen(this))
   }
@@ -526,8 +526,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * Create a new codegen context for expression evaluator, used to store those
    * expressions that don't support codegen
    */
-  def newCodeGenContext(): CodeGenContext = {
-    new CodeGenContext
+  def newCodeGenContext(): CodegenContext = {
+    new CodegenContext
   }
 }
 

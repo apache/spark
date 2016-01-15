@@ -28,7 +28,7 @@ import org.apache.spark.util.Benchmark
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   def testWholeStage(values: Int): Unit = {
-    val conf = new SparkConf().setMaster("local[1]")
+    val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
     val sc = SparkContext.getOrCreate(conf)
     val sqlContext = SQLContext.getOrCreate(sc)
 

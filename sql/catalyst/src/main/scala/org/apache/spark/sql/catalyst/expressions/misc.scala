@@ -44,7 +44,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
       s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
@@ -97,7 +97,7 @@ case class Sha2(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
@@ -142,7 +142,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
       s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
     )
@@ -168,7 +168,7 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
     checksum.getValue
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val CRC32 = "java.util.zip.CRC32"
     nullSafeCodeGen(ctx, ev, value => {
       s"""
@@ -212,7 +212,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     unsafeProjection(input).hashCode(seed)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val unsafeRow = GenerateUnsafeProjection.createCode(ctx, children)
     ev.isNull = "false"
     s"""

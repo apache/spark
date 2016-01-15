@@ -40,9 +40,9 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     in.map(BindReferences.bindReference(_, inputSchema))
 
   private def createCodeForStruct(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       input: String,
-      schema: StructType): GeneratedExpressionCode = {
+      schema: StructType): ExprCode = {
     val tmp = ctx.freshName("tmp")
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
@@ -68,13 +68,13 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final InternalRow $output = new $rowClass($values);
     """
 
-    GeneratedExpressionCode(code, "false", output)
+    ExprCode(code, "false", output)
   }
 
   private def createCodeForArray(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       input: String,
-      elementType: DataType): GeneratedExpressionCode = {
+      elementType: DataType): ExprCode = {
     val tmp = ctx.freshName("tmp")
     val output = ctx.freshName("safeArray")
     val values = ctx.freshName("values")
@@ -96,14 +96,14 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final ArrayData $output = new $arrayClass($values);
     """
 
-    GeneratedExpressionCode(code, "false", output)
+    ExprCode(code, "false", output)
   }
 
   private def createCodeForMap(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       input: String,
       keyType: DataType,
-      valueType: DataType): GeneratedExpressionCode = {
+      valueType: DataType): ExprCode = {
     val tmp = ctx.freshName("tmp")
     val output = ctx.freshName("safeMap")
     val mapClass = classOf[ArrayBasedMapData].getName
@@ -117,20 +117,20 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
-    GeneratedExpressionCode(code, "false", output)
+    ExprCode(code, "false", output)
   }
 
   private def convertToSafe(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       input: String,
-      dataType: DataType): GeneratedExpressionCode = dataType match {
+      dataType: DataType): ExprCode = dataType match {
     case s: StructType => createCodeForStruct(ctx, input, s)
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     // UTF8String act as a pointer if it's inside UnsafeRow, so copy it to make it safe.
-    case StringType => GeneratedExpressionCode("", "false", s"$input.clone()")
+    case StringType => ExprCode("", "false", s"$input.clone()")
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
-    case _ => GeneratedExpressionCode("", "false", input)
+    case _ => ExprCode("", "false", input)
   }
 
   protected def create(expressions: Seq[Expression]): Projection = {

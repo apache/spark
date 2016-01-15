@@ -105,27 +105,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def execute(): RDD[InternalRow] = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-
-      if (sqlContext.conf.wholeStageEnabled && supportCodeGen
-        // Expression with CodegenFallback does not work with whole stage codegen
-        && !expressions.exists(_.find(_.isInstanceOf[CodegenFallback]).isDefined)
-        // Whole stage codegen is only used when there are at least two levels of operators that
-        // support it (save at least one projection/iterator).
-        && children.exists(_.supportCodeGen)) {
-        try {
-          doCodeGen()
-        } catch {
-          case e: CompileFailure =>
-            if (isTesting) {
-              throw e
-            } else {
-              // Fallback if fail to compile the generated code.
-              doExecute()
-            }
-        }
-      } else {
-        doExecute()
-      }
+      doExecute()
     }
   }
 
@@ -158,87 +138,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
     * Whether this SparkPlan support whole stage codegen or not.
     */
-  protected def supportCodeGen: Boolean = false
-
-  class CompileFailure(e: Exception) extends Exception {}
-
-  /**
-    * Returns an RDD of InternalRow that using generated code to process them.
-    *
-    * Here is the call graph of three SparkPlan, A and B support codegen, but C does not.
-    *
-    *   SparkPlan A            SparkPlan B          SparkPlan C
-    * ===============================================================
-    *
-    * -> doExecute()
-    *     |
-    *  doCodeGen()
-    *     |
-    *  produce()
-    *     |
-    *  doProduce() -------->   produce()
-    *                             |
-    *                          doProduce()  -------> produce()
-    *                                                   |
-    *                                                doProduce() (fetch row from upstream)
-    *                                                   |
-    *                                                consume()
-    *                          doConsume()  ------------|
-    *                             |
-    *  doConsume()  <-----    consume()
-    *     |
-    *   consume() (omit the rows)
-    *
-    * SparkPlan A and B should override doProduce() and doConsume().
-    *
-    * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
-    * used to generated code for BoundReference.
-    */
-  protected def doCodeGen(): RDD[InternalRow] = {
-    val ctx = new CodeGenContext
-    val (rdd, code) = produce(ctx, this)
-    val exprType: String = classOf[Expression].getName
-    val references = ctx.references.toArray
-    val source = s"""
-      public Object generate($exprType[] exprs) {
-       return new GeneratedIterator(exprs);
-      }
-
-      class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
-
-       private $exprType[] expressions;
-       ${ctx.declareMutableStates()}
-       private UnsafeRow unsafeRow = new UnsafeRow(${output.length});
-
-       public GeneratedIterator($exprType[] exprs) {
-         expressions = exprs;
-         ${ctx.initMutableStates()}
-       }
-
-       protected void processNext() {
-         $code
-       }
-      }
-     """
-    // try to compile, will fallback if fail
-    // println(s"${CodeFormatter.format(source)}")
-    try {
-      CodeGenerator.compile(source)
-    } catch {
-      case e: Exception =>
-        throw new CompileFailure(e)
-    }
-
-    rdd.mapPartitions { iter =>
-      val clazz = CodeGenerator.compile(source)
-      val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-      buffer.process(iter)
-      new Iterator[InternalRow] {
-        override def hasNext: Boolean = buffer.hasNext
-        override def next: InternalRow = buffer.next()
-      }
-    }
-  }
+  def supportCodegen: Boolean = false
 
   /**
     * Which SparkPlan is calling produce() of this one. It's itself for the first SparkPlan.
@@ -248,7 +148,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
     * Returns an input RDD of InternalRow and Java source code to process them.
     */
-  def produce(ctx: CodeGenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
+  def produce(ctx: CodegenContext, parent: SparkPlan): (RDD[InternalRow], String) = {
     this.parent = parent
     doProduce(ctx)
   }
@@ -270,53 +170,18 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     *     # call consume(), wich will call parent.doConsume()
     *   }
     */
-  protected def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
-    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
-    val columns = exprs.map(_.gen(ctx))
-    val code = s"""
-       |  while (input.hasNext()) {
-       |   InternalRow i = (InternalRow) input.next();
-       |   ${columns.map(_.code).mkString("\n")}
-       |   ${consume(ctx, columns)}
-       | }
-     """.stripMargin
-    (doExecute(), code)
+  protected def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+    throw new UnsupportedOperationException
   }
 
   /**
     * Consume the columns generated from current SparkPlan, call it's parent or create an iterator.
     */
   protected def consume(
-      ctx: CodeGenContext,
-      columns: Seq[GeneratedExpressionCode]): String = {
-
+      ctx: CodegenContext,
+      columns: Seq[ExprCode]): String = {
     assert(columns.length == output.length)
-    // Save the generated columns, will be used to generate BoundReference by parent SparkPlan.
-    ctx.currentVars = columns.toArray
-
-    if (parent eq this) {
-      // This is the first SparkPlan, omit the rows.
-      if (columns.nonEmpty) {
-        val colExprs = output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable)
-        }
-        val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
-        s"""
-           | ${code.code.trim}
-           | currentRow = ${code.value};
-           | return;
-     """.stripMargin
-      } else {
-        // There is no columns
-        s"""
-           | currentRow = unsafeRow;
-           | return;
-       """.stripMargin
-      }
-
-    } else {
-      parent.doConsume(ctx, this)
-    }
+    parent.doConsume(ctx, this, columns)
   }
 
   /**
@@ -331,9 +196,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     *     # call consume(), which will call parent.doConsume()
     *   }
     */
-  def doConsume(
-    ctx: CodeGenContext,
-    child: SparkPlan): String = {
+  def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
     throw new UnsupportedOperationException
   }
 

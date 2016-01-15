@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.LeafExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -47,9 +51,40 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
     sqlContext.planner.plan(optimizedPlan).next()
   }
 
+  private def shouldCodegen(plan: SparkPlan): Boolean = {
+    plan.supportCodegen &&
+    // Non-leaf with CodegenFallback does not work with whole stage codegen
+    !plan.expressions.exists(
+      _.find(e => e.isInstanceOf[CodegenFallback] && !e.isInstanceOf[LeafExpression]).isDefined) &&
+    // the generated code will be huge if there are too many columns
+    plan.output.length < 200
+  }
+
+  private def collape(plan: SparkPlan): SparkPlan = plan transform {
+    case plan if shouldCodegen(plan) &&
+      // Whole stage codegen is only useful when there are at least two levels of operators that
+      // support it (save at least one projection/iterator).
+      plan.children.exists(shouldCodegen) =>
+
+      var inputs = ArrayBuffer[SparkPlan]()
+      val combined = plan.transform {
+        case p if !shouldCodegen(p) =>
+          inputs += p
+          FakeInput(p)
+      }
+      WholeStageCodegen(combined, inputs)
+  }
+
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = sqlContext.prepareForExecution.execute(sparkPlan)
+  lazy val executedPlan: SparkPlan = {
+    val plan = sqlContext.prepareForExecution.execute(sparkPlan)
+    if (sqlContext.conf.wholeStageEnabled) {
+      collape(plan)
+    } else {
+      plan
+    }
+  }
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()

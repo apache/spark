@@ -23,7 +23,7 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, ExpressionCanonicalizer, GeneratedExpressionCode, GenerateUnsafeRowJoiner}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
@@ -37,15 +37,16 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def supportCodeGen: Boolean = true
+  override def supportCodegen: Boolean = true
 
-  protected override def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
+  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
     child.produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodeGenContext, child: SparkPlan): String = {
+  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
+    ctx.currentVars = input
     val output = exprs.map(_.gen(ctx))
     s"""
        | ${output.map(_.code).mkString("\n")}
@@ -77,15 +78,16 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def supportCodeGen: Boolean = true
+  override def supportCodegen: Boolean = true
 
-  protected override def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
+  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
     child.produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodeGenContext, child: SparkPlan): String = {
+  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
     val expr = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(condition, child.output))
+    ctx.currentVars = input
     val eval = expr.gen(ctx)
     s"""
        | ${eval.code}
@@ -155,9 +157,9 @@ case class Range(
     output: Seq[Attribute])
   extends LeafNode {
 
-  override def supportCodeGen: Boolean = true
+  override def supportCodegen: Boolean = true
 
-  protected override def doProduce(ctx: CodeGenContext): (RDD[InternalRow], String) = {
+  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
     val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
     val partitionEnd = ctx.freshName("partitionEnd")
@@ -168,7 +170,7 @@ case class Range(
     ctx.addMutableState("boolean", overflow, s"$overflow = false;")
 
     val value = ctx.freshName("value")
-    val ev = GeneratedExpressionCode("", "false", value)
+    val ev = ExprCode("", "false", value)
     val BigInt = classOf[java.math.BigInteger].getName
     val checkEnd = if (step > 0) {
       s"$number < $partitionEnd"
