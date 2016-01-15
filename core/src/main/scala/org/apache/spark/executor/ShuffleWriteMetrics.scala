@@ -29,7 +29,7 @@ import org.apache.spark.annotation.DeveloperApi
 class ShuffleWriteMetrics private (
     _bytesWritten: Accumulator[Long],
     _recordsWritten: Accumulator[Long],
-    _shuffleWriteTime: Accumulator[Long])
+    _writeTime: Accumulator[Long])
   extends Serializable {
 
   private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
@@ -65,11 +65,11 @@ class ShuffleWriteMetrics private (
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
-  def shuffleWriteTime: Long = _shuffleWriteTime.localValue
+  def writeTime: Long = _writeTime.localValue
 
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
-  private[spark] def incWriteTime(v: Long): Unit = _shuffleWriteTime.add(v)
+  private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
   private[spark] def decBytesWritten(v: Long): Unit = {
     _bytesWritten.setValue(bytesWritten - v)
   }

@@ -336,7 +336,7 @@ private[spark] object JsonProtocol {
     val shuffleWriteMetrics: JValue =
       taskMetrics.shuffleWriteMetrics.map { wm =>
         ("Shuffle Bytes Written" -> wm.bytesWritten) ~
-        ("Shuffle Write Time" -> wm.shuffleWriteTime) ~
+        ("Shuffle Write Time" -> wm.writeTime) ~
         ("Shuffle Records Written" -> wm.recordsWritten)
       }.getOrElse(JNothing)
     val inputMetrics: JValue =

@@ -126,12 +126,12 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
     writer.commitAndClose()
     val bytesWritten = writeMetrics.bytesWritten
-    val writeTime = writeMetrics.shuffleWriteTime
+    val writeTime = writeMetrics.writeTime
     assert(writeMetrics.recordsWritten === 1000)
     writer.commitAndClose()
     assert(writeMetrics.recordsWritten === 1000)
     assert(writeMetrics.bytesWritten === bytesWritten)
-    assert(writeMetrics.shuffleWriteTime === writeTime)
+    assert(writeMetrics.writeTime === writeTime)
   }
 
   test("revertPartialWritesAndClose() should be idempotent") {
@@ -144,12 +144,12 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
     writer.revertPartialWritesAndClose()
     val bytesWritten = writeMetrics.bytesWritten
-    val writeTime = writeMetrics.shuffleWriteTime
+    val writeTime = writeMetrics.writeTime
     assert(writeMetrics.recordsWritten === 0)
     writer.revertPartialWritesAndClose()
     assert(writeMetrics.recordsWritten === 0)
     assert(writeMetrics.bytesWritten === bytesWritten)
-    assert(writeMetrics.shuffleWriteTime === writeTime)
+    assert(writeMetrics.writeTime === writeTime)
   }
 
   test("fileSegment() can only be called after commitAndClose() has been called") {

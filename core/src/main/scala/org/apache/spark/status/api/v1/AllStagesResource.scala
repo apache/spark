@@ -216,7 +216,7 @@ private[v1] object AllStagesResource {
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
           writeBytes = submetricQuantiles(_.bytesWritten),
           writeRecords = submetricQuantiles(_.recordsWritten),
-          writeTime = submetricQuantiles(_.shuffleWriteTime)
+          writeTime = submetricQuantiles(_.writeTime)
         )
       }.metricOption
 
@@ -288,7 +288,7 @@ private[v1] object AllStagesResource {
   def convertShuffleWriteMetrics(internal: InternalShuffleWriteMetrics): ShuffleWriteMetrics = {
     new ShuffleWriteMetrics(
       bytesWritten = internal.bytesWritten,
-      writeTime = internal.shuffleWriteTime,
+      writeTime = internal.writeTime,
       recordsWritten = internal.recordsWritten
     )
   }
