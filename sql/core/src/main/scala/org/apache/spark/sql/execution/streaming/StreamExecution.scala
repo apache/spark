@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.lang.Thread.UncaughtExceptionHandler
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.{StandingQuery, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
@@ -93,6 +96,15 @@ class StreamExecution(
 
   @volatile
   private[sql] var lastExecution: QueryExecution = null
+  @volatile
+  private[sql] var streamDeathCause: Throwable = null
+
+  microBatchThread.setUncaughtExceptionHandler(
+    new UncaughtExceptionHandler {
+      override def uncaughtException(t: Thread, e: Throwable): Unit = {
+        streamDeathCause = e
+      }
+    })
 
   /**
    * Checks to see if any new data is present in any of the sources.  When new data is available,
@@ -203,5 +215,15 @@ class StreamExecution(
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
   }
+
+  override def toString: String =
+    s"""
+       |=== Streaming Query ===
+       |CurrentOffsets: $currentOffsets
+       |Thread State: ${microBatchThread.getState}
+       |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
+       |
+       |$logicalPlan
+     """.stripMargin
 }
 
