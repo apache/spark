@@ -86,22 +86,22 @@ abstract class Expression extends TreeNode[Expression] {
   def eval(input: InternalRow = null): Any
 
   /**
-   * Returns an [[GeneratedExpressionCode]], which contains Java source code that
+   * Returns an [[ExprCode]], which contains Java source code that
    * can be used to generate the result of evaluating the expression on an input row.
    *
-   * @param ctx a [[CodeGenContext]]
-   * @return [[GeneratedExpressionCode]]
+   * @param ctx a [[CodegenContext]]
+   * @return [[ExprCode]]
    */
-  def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
+  def gen(ctx: CodegenContext): ExprCode = {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated meaning the code to evaluated has already been added
       // as a function and called in advance. Just use it.
       val code = s"/* ${this.toCommentSafeString} */"
-      GeneratedExpressionCode(code, subExprState.isNull, subExprState.value)
+      ExprCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val primitive = ctx.freshName("primitive")
-      val ve = GeneratedExpressionCode("", isNull, primitive)
+      val ve = ExprCode("", isNull, primitive)
       ve.code = genCode(ctx, ve)
       // Add `this` in the comment.
       ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
@@ -113,11 +113,11 @@ abstract class Expression extends TreeNode[Expression] {
    * The default behavior is to call the eval method of the expression. Concrete expression
    * implementations should override this to do actual code generation.
    *
-   * @param ctx a [[CodeGenContext]]
-   * @param ev an [[GeneratedExpressionCode]] with unique terms.
+   * @param ctx a [[CodegenContext]]
+   * @param ev an [[ExprCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String
+  protected def genCode(ctx: CodegenContext, ev: ExprCode): String
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -245,7 +245,7 @@ trait Unevaluable extends Expression {
   final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  final override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+  final override protected def genCode(ctx: CodegenContext, ev: ExprCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 
@@ -330,8 +330,8 @@ abstract class UnaryExpression extends Expression {
    * @param f function that accepts a variable name and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: String => String): String = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"${ev.value} = ${f(eval)};"
@@ -346,8 +346,8 @@ abstract class UnaryExpression extends Expression {
    *          code to compute the output.
    */
   protected def nullSafeCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
     if (nullable) {
@@ -420,8 +420,8 @@ abstract class BinaryExpression extends Expression {
    * @param f accepts two variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: (String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"${ev.value} = ${f(eval1, eval2)};"
@@ -437,8 +437,8 @@ abstract class BinaryExpression extends Expression {
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
@@ -560,8 +560,8 @@ abstract class TernaryExpression extends Expression {
    * @param f accepts two variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
+    ctx: CodegenContext,
+    ev: ExprCode,
     f: (String, String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
       s"${ev.value} = ${f(eval1, eval2, eval3)};"
@@ -577,8 +577,8 @@ abstract class TernaryExpression extends Expression {
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
+    ctx: CodegenContext,
+    ev: ExprCode,
     f: (String, String, String) => String): String = {
     val evals = children.map(_.gen(ctx))
     val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
