@@ -693,7 +693,7 @@ class MinMaxScalerModel(JavaModel):
     """
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def originalMin(self):
         """
         Min value for each original column during fitting.
@@ -701,7 +701,7 @@ class MinMaxScalerModel(JavaModel):
         return self._call_java("originalMin")
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def originalMax(self):
         """
         Max value for each original column during fitting.
@@ -1030,7 +1030,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing")
     toLowercase = Param(Params._dummy(), "toLowercase", "whether to convert all characters to " +
-                        "lowercase before tokenizing, default is true")
+                        "lowercase before tokenizing")
 
     @keyword_only
     def __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None,
@@ -1045,7 +1045,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         self.gaps = Param(self, "gaps", "whether regex splits on gaps (True) or matches tokens")
         self.pattern = Param(self, "pattern", "regex pattern (Java dialect) used for tokenizing")
         self.toLowercase = Param(self, "toLowercase", "whether to convert all characters to " +
-                                 "lowercase before tokenizing, default is true")
+                                 "lowercase before tokenizing")
         self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1107,7 +1107,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         return self.getOrDefault(self.pattern)
 
-    @since("1.6.0")
+    @since("2.0.0")
     def setToLowercase(self, value):
         """
         Sets the value of :py:attr:`toLowercase`.
@@ -1115,7 +1115,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         self._paramMap[self.toLowercase] = value
         return self
 
-    @since("1.6.0")
+    @since("2.0.0")
     def getToLowercase(self):
         """
         Gets the value of toLowercase or its default value.
@@ -2044,7 +2044,7 @@ class PCAModel(JavaModel):
     """
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def pc(self):
         """
         Returns a principal components Matrix.
