@@ -129,14 +129,15 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         conditionSQL = condition.sql
       } yield s"$childSQL $whereOrHaving $conditionSQL"
 
-    case Union(children) if children.length == 1 =>
-      toSQL(children.head)
-
     case Union(children) if children.length > 1 =>
       for {
         leftSQL <- toSQL(children.head)
+        // When children.tail only has one child, we will go to the next case to get rid of Union.
         rightSQL <- toSQL(Union(children.tail))
       } yield s"$leftSQL UNION ALL $rightSQL"
+
+    case Union(children) if children.length == 1 =>
+      toSQL(children.head)
 
     // Persisted data source relation
     case Subquery(alias, LogicalRelation(_, _, Some(TableIdentifier(table, Some(database))))) =>

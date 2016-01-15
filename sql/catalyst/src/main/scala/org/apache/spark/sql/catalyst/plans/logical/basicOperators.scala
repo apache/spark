@@ -131,7 +131,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
-    lazy val allChildrenCompatible: Boolean =
+    def allChildrenCompatible: Boolean =
       children.tail.forall( child =>
         // compare the attribute number with the first child
         child.output.length == children.head.output.length &&

@@ -236,15 +236,7 @@ object HiveTypeCoercion {
       if (attrIndex >= children.head.output.length) return castedTypes.toSeq
 
       // For the attrIndex-th attribute, find the widest type
-      val initialType = Option(children.head.output(attrIndex).dataType)
-      children.foldLeft(initialType) { (currentOutputDataTypes, child) =>
-        (currentOutputDataTypes, child.output(attrIndex).dataType) match {
-          case (Some(dt1), dt2) if dt1 != dt2 =>
-            findWiderTypeForTwo(dt1, dt2)
-          case (Some(dt1), dt2) if dt1 == dt2 => Option(dt1)
-          case other => None
-        }
-      } match {
+      findWiderCommonType(children.map(_.output(attrIndex).dataType)) match {
         // If unable to find an appropriate widen type for this column, return an empty Seq
         case None => Seq.empty[DataType]
         // Otherwise, record the result in the queue and find the type for the next column

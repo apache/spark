@@ -98,7 +98,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.collect().toSeq)
   }
 
-  test ("union all") {
+  test("union all") {
     val unionDF = testData.unionAll(testData).unionAll(testData)
       .unionAll(testData).unionAll(testData)
 
