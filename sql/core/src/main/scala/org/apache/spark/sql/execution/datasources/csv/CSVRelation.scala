@@ -21,19 +21,19 @@ import java.nio.charset.Charset
 
 import scala.util.control.NonFatal
 
+import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{Text, NullWritable, LongWritable}
+import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.RecordWriter
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
-import com.google.common.base.Objects
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources._
-import org.apache.hadoop.mapreduce.{TaskAttemptContext, Job}
 import org.apache.spark.sql.types._
 
 private[csv] class CSVRelation(

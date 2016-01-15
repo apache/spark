@@ -22,13 +22,13 @@ import java.sql.{Date, Timestamp}
 import java.text.NumberFormat
 import java.util.Locale
 
-
-import scala.util.Try
 import scala.util.control.Exception._
+import scala.util.Try
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
+import org.apache.spark.sql.types._
+
 
 private[sql] object CSVInferSchema {
 
@@ -99,7 +99,6 @@ private[sql] object CSVInferSchema {
       }
     }
   }
-
 
   private def tryParseInteger(field: String): DataType = if ((allCatch opt field.toInt).isDefined) {
     IntegerType

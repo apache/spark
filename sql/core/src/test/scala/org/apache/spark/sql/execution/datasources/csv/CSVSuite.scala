@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.UnsupportedCharsetException
 import java.io.File
+import java.nio.charset.UnsupportedCharsetException
 import java.sql.Timestamp
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
@@ -234,7 +234,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .load(testFile(carsFile))
 
-      cars.repartition(1).write
+      cars.coalesce(1).write
         .format("csv")
         .option("header", "true")
         .save(csvDir)
@@ -256,7 +256,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .load(testFile(carsFile))
 
-      cars.repartition(1).write
+      cars.coalesce(1).write
         .format("csv")
         .option("header", "true")
         .option("quote", "\"")
