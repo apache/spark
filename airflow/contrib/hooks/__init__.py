@@ -6,8 +6,8 @@ _hooks = {
     'ftp_hook': ['FTPHook'],
     'vertica_hook': ['VerticaHook'],
     'ssh_hook': ['SSHHook'],
-    'qubole_hook': ['QuboleHook']
     'bigquery_hook': ['BigQueryHook'],
+    'qubole_hook': ['QuboleHook']
 }
 
 _import_module_attrs(globals(), _hooks)
