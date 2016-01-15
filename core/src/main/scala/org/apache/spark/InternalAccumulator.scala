@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.storage.{BlockStatus, BlockId}
+import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
 /**

@@ -23,7 +23,7 @@ import scala.collection.generic.Growable
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.storage.{BlockStatus, BlockId}
+import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
 /**
