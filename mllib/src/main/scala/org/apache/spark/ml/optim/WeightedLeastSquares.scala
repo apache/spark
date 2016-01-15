@@ -96,8 +96,11 @@ private[ml] class WeightedLeastSquares(
         val diagInvAtWA = new DenseVector(Array(0D))
         return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
       } else {
-      logWarning(s"The standard deviation of the label is zero. " +
-        "Consider setting fitIntercept=true.")
+        require(!(regParam > 0.0 && standardizeLabel),
+          "The standard deviation of the label is zero. " +
+            "Model cannot be regularized with standardization=true")
+        logWarning(s"The standard deviation of the label is zero. " +
+          "Consider setting fitIntercept=true.")
       }
     }
 

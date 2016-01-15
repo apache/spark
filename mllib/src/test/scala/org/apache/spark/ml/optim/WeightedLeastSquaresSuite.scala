@@ -49,7 +49,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
        R code:
 
        A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
-       b <- c(17, 17, 17, 17)
+       b.const <- c(17, 17, 17, 17)
        w <- c(1, 2, 3, 4)
      */
     instancesConstLabel = sc.parallelize(Seq(
@@ -80,22 +80,24 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val wls = new WeightedLeastSquares(
-        fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = false)
-        .fit(instances)
-      val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
-      assert(actual ~== expected(idx) absTol 1e-4)
+       for (standardization <- Seq(false, true)) {
+         val wls = new WeightedLeastSquares(
+           fitIntercept, regParam = 0.0, standardizeFeatures = standardization,
+           standardizeLabel = standardization).fit(instances)
+         val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
+         assert(actual ~== expected(idx) absTol 1e-4)
+       }
       idx += 1
     }
   }
 
-  test("WLS against lm when label is constant") {
+  test("WLS against lm when label is constant and no regularization") {
     /*
        R code:
-       # here b is constant
-       df <- as.data.frame(cbind(A, b))
-       for (formula in c(b ~ . -1, b ~ .)) {
-         model <- lm(formula, data=df, weights=w)
+
+       df.const.label <- as.data.frame(cbind(A, b.const))
+       for (formula in c(b.const ~ . -1, b.const ~ .)) {
+         model <- lm(formula, data=df.const.label, weights=w)
          print(as.vector(coef(model)))
        }
 
@@ -109,12 +111,25 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val wls = new WeightedLeastSquares(
-        fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = true)
-        .fit(instancesConstLabel)
-      val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
-      assert(actual ~== expected(idx) absTol 1e-4)
+      for (standardization <- Seq(false, true)) {
+        val wls = new WeightedLeastSquares(
+          fitIntercept, regParam = 0.0, standardizeFeatures = standardization,
+          standardizeLabel = standardization).fit(instancesConstLabel)
+        val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
+        assert(actual ~== expected(idx) absTol 1e-4)
+      }
       idx += 1
+    }
+  }
+
+  test("WLS with regularization when label is constant") {
+    // if regParam is non-zero and standardization is true, the problem is ill-defined and
+    // an exception is thrown.
+    val wls = new WeightedLeastSquares(
+      fitIntercept = false, regParam = 0.1, standardizeFeatures = true,
+      standardizeLabel = true)
+    intercept[IllegalArgumentException]{
+      wls.fit(instancesConstLabel)
     }
   }
 
