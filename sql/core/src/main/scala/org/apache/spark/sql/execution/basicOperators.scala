@@ -30,7 +30,7 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
-  extends UnaryNode with SupportCodegen {
+  extends UnaryNode with CodegenSupport {
 
   override private[sql] lazy val metrics = Map(
     "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
@@ -38,7 +38,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
-    child.asInstanceOf[SupportCodegen].produce(ctx, this)
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
@@ -69,17 +69,15 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 }
 
 
-case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode with SupportCodegen {
+case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
   private[sql] override lazy val metrics = Map(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def supportCodegen: Boolean = true
-
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
-    child.asInstanceOf[SupportCodegen].produce(ctx, this)
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
@@ -153,7 +151,7 @@ case class Range(
     numSlices: Int,
     numElements: BigInt,
     output: Seq[Attribute])
-  extends LeafNode with SupportCodegen {
+  extends LeafNode with CodegenSupport {
 
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
     val initTerm = ctx.freshName("range_initRange")
