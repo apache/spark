@@ -35,6 +35,8 @@
     <sbt.project.name>network-yarn</sbt.project.name>
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
     <hadoop.deps.scope>provided</hadoop.deps.scope>
+    <shuffle.jar>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
+    <shaded.jackson>org/spark-project/com/fasterxml/jackson</shaded.jackson>
   </properties>
 
   <dependencies>
@@ -91,14 +93,14 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</outputFile>
+          <outputFile>${shuffle.jar}</outputFile>
           <artifactSet>
             <includes>
-              <include>*:*</include>
               <include>com.fasterxml.jackson.core:jackson-databind</include>
               <include>com.fasterxml.jackson.core:jackson-annotations</include>
               <include>com.fasterxml.jackson.core:jackson-core</include>
               <include>com.fasterxml.jackson.module:jackson-module-scala_${scala.binary.version}</include>
+              <include>*:*</include>
             </includes>
           </artifactSet>
           <filters>
@@ -115,6 +117,9 @@
             <relocation>
               <pattern>com.fasterxml.jackson</pattern>
               <shadedPattern>org.spark-project.com.fasterxml.jackson</shadedPattern>
+              <includes>
+                <include>com.fasterxml.jackson.**</include>
+              </includes>
             </relocation>
           </relocations>
         </configuration>
@@ -130,32 +135,51 @@
 
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-failsafe-plugin</artifactId>
+        <artifactId>maven-antrun-plugin</artifactId>
         <executions>
           <execution>
-            <id>run-integration-tests</id>
+            <phase>verify</phase>
             <goals>
-              <goal>integration-test</goal>
-              <goal>verify</goal>
+              <goal>run</goal>
             </goals>
           </execution>
         </executions>
         <configuration>
-          <failIfNoTests>true</failIfNoTests>
-          <trimStackTrace>false</trimStackTrace>
-          <includes>
-            <include>**/*IT.java</include>
-          </includes>
-        </configuration>
+          <target>
+            <fail message="Not found: ${shaded.jackson}/core/JsonParser.class">
+              <condition>
+                <not>
+                  <resourceexists>
+                    <zipentry zipfile="${shuffle.jar}"
+                      name="${shaded.jackson}/core/JsonParser.class"/>
+                  </resourceexists>
+                </not>
+              </condition>
+            </fail>
+            <fail message="Not found: ${shaded.jackson}/annotation/JacksonAnnotation.class">
+              <condition>
+                <not>
+                  <resourceexists>
+                    <zipentry zipfile="${shuffle.jar}"
+                      name="${shaded.jackson}/annotation/JacksonAnnotation.class"/>
+                  </resourceexists>
+                </not>
+              </condition>
+            </fail>
+            <fail message="Not found: ${shaded.jackson}/databind/JsonSerializer.class">
+              <condition>
+                <not>
+                  <resourceexists>
+                    <zipentry zipfile="${shuffle.jar}"
+                      name="${shaded.jackson}/databind/JsonSerializer.class"/>
+                  </resourceexists>
+                </not>
+              </condition>
+            </fail>
+            <echo>Verified shading</echo>
 
-        <!-- keep in sync with surefire version -->
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.maven.surefire</groupId>
-            <artifactId>surefire-junit47</artifactId>
-            <version>2.16</version>
-          </dependency>
-        </dependencies>
+          </target>
+        </configuration>
       </plugin>
     </plugins>
 
