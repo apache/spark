@@ -107,7 +107,10 @@ def _java2py(sc, r, encoding="bytes"):
         if clsName in _picklable_classes:
             r = sc._jvm.SerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
-            r = list(r)
+            try:
+                r = sc._jvm.SerDe.dumps(r)
+            except Py4JJavaError:
+                pass  # not pickable
 
     if isinstance(r, (bytearray, bytes)):
         r = PickleSerializer().loads(bytes(r), encoding=encoding)
