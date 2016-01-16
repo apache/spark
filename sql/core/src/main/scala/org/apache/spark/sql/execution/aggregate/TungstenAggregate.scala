@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -113,22 +113,33 @@ case class TungstenAggregate(
     }
   }
 
-  override def supportCodegen: Boolean = {
-    groupingExpressions.isEmpty &&
-      !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+  protected override def supportCodegen: Boolean = {
+    groupingExpressions.isEmpty
   }
 
+  private val functions = aggregateExpressions.map(_.aggregateFunction)
+
+  private val declFunctions = functions.filter(_.isInstanceOf[DeclarativeAggregate])
+    .map(_.asInstanceOf[DeclarativeAggregate])
   private var bufVars: Array[ExprCode] = _
 
+  private val imperativeFunctions = AggregationIterator.initializeAggregateFunctions(
+    aggregateExpressions.filter(_.aggregateFunction.isInstanceOf[ImperativeAggregate]),
+    child.output,
+    0
+  ).map(_.asInstanceOf[ImperativeAggregate])
+  private var aggBuffTerm: String = _
+  private var imperativeFunctionsTerm: Array[String] = _
+
+
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
-    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val initExpr = functions.flatMap(f => f.initialValues)
-    val resultExpr = functions.map(_.evaluateExpression)
+    val initExpr = declFunctions.flatMap(f => f.initialValues)
+    val resultExpr = declFunctions.map(_.evaluateExpression)
 
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
-    // generate variables for aggregation buffer
+    // generate buffer variables for declarative aggregation functions
     bufVars = initExpr.map { e =>
       val isNull = ctx.freshName("bufIsNull")
       ctx.addMutableState("boolean", isNull, "")
@@ -149,10 +160,49 @@ case class TungstenAggregate(
       ExprCode(ev.code + code, isNull, value)
     }.toArray
 
-    val input = functions.flatMap(_.aggBufferAttributes)
-    ctx.currentVars = bufVars
-    val resultVar = resultExpr.map { e =>
-      BindReferences.bindReference(e, input).gen(ctx)
+    val initImpBuff = if (imperativeFunctions.nonEmpty) {
+      val aggBuffer = new SpecificMutableRow(
+        imperativeFunctions.flatMap(_.aggBufferAttributes).map(_.dataType))
+      val buffIndex = ctx.references.length
+      ctx.references += aggBuffer
+      aggBuffTerm = ctx.freshName("impBuff")
+      ctx.addMutableState("MutableRow", aggBuffTerm,
+        s"$aggBuffTerm = (MutableRow) references[$buffIndex];")
+
+      val funcName = classOf[ImperativeAggregate].getName
+      imperativeFunctionsTerm = imperativeFunctions.map { f =>
+        val idx = ctx.references.length
+        ctx.references += f
+        val t = ctx.freshName("aggFunc")
+        ctx.addMutableState(funcName, t, s"this.$t = ($funcName) references[$idx];")
+        t
+      }
+      imperativeFunctionsTerm.map { f =>
+        s"$f.initialize($aggBuffTerm);"
+      }.mkString("\n")
+    } else {
+      ""
+    }
+
+    val modes = aggregateExpressions.map(_.mode).distinct
+    val resultVar = if (modes.contains(Final) || modes.contains(Complete)) {
+      val input = functions.flatMap(_.aggBufferAttributes)
+      val impInput = imperativeFunctions.flatMap(_.aggBufferAttributes)
+      ctx.INPUT_ROW = aggBuffTerm
+      ctx.currentVars = bufVars ++ (new Array[ExprCode](impInput.length))
+      resultExpr.map { e =>
+        BindReferences.bindReference(e, input).gen(ctx)
+      }
+
+    } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
+      val impInput = imperativeFunctions.flatMap(_.aggBufferAttributes)
+      ctx.INPUT_ROW = aggBuffTerm
+      ctx.currentVars = null
+      bufVars ++ impInput.zipWithIndex.map { case (e, i) =>
+        BoundReference(i, e.dataType, e.nullable).gen(ctx)
+      }
+    } else {
+      Seq()
     }
 
     val (rdd, childSource) = child.asInstanceOf[CodegenSupport].produce(ctx, this)
@@ -161,8 +211,11 @@ case class TungstenAggregate(
          | if (!$initAgg) {
          |   $initAgg = true;
          |
-         |   // initialize aggregation buffer
+         |   // initialize declarative aggregation buffer
          |   ${bufVars.map(_.code).mkString("\n")}
+         |
+         |   // initialize imperative aggregate buffer
+         |   $initImpBuff
          |
          |   $childSource
          |
@@ -206,9 +259,42 @@ case class TungstenAggregate(
       }
     }
 
+    val impAgg = if (imperativeFunctions.nonEmpty) {
+      // TODO: only materialize the columns that is used
+      val columns = child.output.zipWithIndex.map {
+        case (a, i) => new BoundReference(i, a.dataType, a.nullable)
+      }
+      val code = GenerateUnsafeProjection.createCode(ctx, columns)
+      val row = ctx.freshName("inputRow")
+      val createRow = s"""
+         | ${code.code}
+         | InternalRow $row = ${code.value};
+       """.stripMargin
+
+      // call agg functions
+      // all aggregation expression should have the same mode
+      val mode = aggregateExpressions.map(_.mode).distinct.head
+      val update = imperativeFunctionsTerm.map { f =>
+        mode match {
+          case Partial | Complete =>
+            s"$f.update($aggBuffTerm, $row);"
+          case PartialMerge | Final =>
+            s"$f.merge($aggBuffTerm, $row);"
+        }
+      }.mkString("\n")
+
+      createRow + update
+    } else {
+      ""
+    }
+
     s"""
-       | // do aggregate and update aggregation buffer
+       | // declarative aggregation
        | ${codes.mkString("")}
+       |
+       | // imperative aggregation
+       | $impAgg
+       |
      """.stripMargin
   }
 

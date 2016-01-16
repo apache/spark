@@ -66,53 +66,9 @@ abstract class AggregationIterator(
       s"$aggregateExpressions can't have Partial/PartialMerge and Final/Complete in the same time.")
   }
 
-  // Initialize all AggregateFunctions by binding references if necessary,
-  // and set inputBufferOffset and mutableBufferOffset.
-  protected def initializeAggregateFunctions(
-      expressions: Seq[AggregateExpression],
-      startingInputBufferOffset: Int): Array[AggregateFunction] = {
-    var mutableBufferOffset = 0
-    var inputBufferOffset: Int = startingInputBufferOffset
-    val functions = new Array[AggregateFunction](expressions.length)
-    var i = 0
-    while (i < expressions.length) {
-      val func = expressions(i).aggregateFunction
-      val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
-        case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
-          // We need to create BoundReferences if the function is not an
-          // expression-based aggregate function (it does not support code-gen) and the mode of
-          // this function is Partial or Complete because we will call eval of this
-          // function's children in the update method of this aggregate function.
-          // Those eval calls require BoundReferences to work.
-          BindReferences.bindReference(func, inputAttributes)
-        case _ =>
-          // We only need to set inputBufferOffset for aggregate functions with mode
-          // PartialMerge and Final.
-          val updatedFunc = func match {
-            case function: ImperativeAggregate =>
-              function.withNewInputAggBufferOffset(inputBufferOffset)
-            case function => function
-          }
-          inputBufferOffset += func.aggBufferSchema.length
-          updatedFunc
-      }
-      val funcWithUpdatedAggBufferOffset = funcWithBoundReferences match {
-        case function: ImperativeAggregate =>
-          // Set mutableBufferOffset for this function. It is important that setting
-          // mutableBufferOffset happens after all potential bindReference operations
-          // because bindReference will create a new instance of the function.
-          function.withNewMutableAggBufferOffset(mutableBufferOffset)
-        case function => function
-      }
-      mutableBufferOffset += funcWithUpdatedAggBufferOffset.aggBufferSchema.length
-      functions(i) = funcWithUpdatedAggBufferOffset
-      i += 1
-    }
-    functions
-  }
-
   protected val aggregateFunctions: Array[AggregateFunction] =
-    initializeAggregateFunctions(aggregateExpressions, initialInputBufferOffset)
+    AggregationIterator.initializeAggregateFunctions(
+      aggregateExpressions, inputAttributes, initialInputBufferOffset)
 
   // Positions of those imperative aggregate functions in allAggregateFunctions.
   // For example, we have func1, func2, func3, func4 in aggregateFunctions, and
@@ -257,5 +213,53 @@ abstract class AggregationIterator(
       allImperativeAggregateFunctions(i).initialize(buffer)
       i += 1
     }
+  }
+}
+
+object AggregationIterator {
+  // Initialize all AggregateFunctions by binding references if necessary,
+  // and set inputBufferOffset and mutableBufferOffset.
+  def initializeAggregateFunctions(
+      expressions: Seq[AggregateExpression],
+      inputAttributes: Seq[Attribute],
+      startingInputBufferOffset: Int): Array[AggregateFunction] = {
+    var mutableBufferOffset = 0
+    var inputBufferOffset: Int = startingInputBufferOffset
+    val functions = new Array[AggregateFunction](expressions.length)
+    var i = 0
+    while (i < expressions.length) {
+      val func = expressions(i).aggregateFunction
+      val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
+        case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
+          // We need to create BoundReferences if the function is not an
+          // expression-based aggregate function (it does not support code-gen) and the mode of
+          // this function is Partial or Complete because we will call eval of this
+          // function's children in the update method of this aggregate function.
+          // Those eval calls require BoundReferences to work.
+          BindReferences.bindReference(func, inputAttributes)
+        case _ =>
+          // We only need to set inputBufferOffset for aggregate functions with mode
+          // PartialMerge and Final.
+          val updatedFunc = func match {
+            case function: ImperativeAggregate =>
+              function.withNewInputAggBufferOffset(inputBufferOffset)
+            case function => function
+          }
+          inputBufferOffset += func.aggBufferSchema.length
+          updatedFunc
+      }
+      val funcWithUpdatedAggBufferOffset = funcWithBoundReferences match {
+        case function: ImperativeAggregate =>
+          // Set mutableBufferOffset for this function. It is important that setting
+          // mutableBufferOffset happens after all potential bindReference operations
+          // because bindReference will create a new instance of the function.
+          function.withNewMutableAggBufferOffset(mutableBufferOffset)
+        case function => function
+      }
+      mutableBufferOffset += funcWithUpdatedAggBufferOffset.aggBufferSchema.length
+      functions(i) = funcWithUpdatedAggBufferOffset
+      i += 1
+    }
+    functions
   }
 }

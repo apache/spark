@@ -38,6 +38,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("wholecodegen") {
     sqlContext.range(1<<4).filter("(id & 1) = 1").groupBy().count().explain(true)
+    sqlContext.range(1<<4).filter("(id & 1) = 1").groupBy().agg("id" ->"stddev").explain(true)
+    sqlContext.range(1<<4).filter("(id & 1) = 1").groupBy().agg("id" ->"stddev").show()
     assert(sqlContext.range(1<<4).filter("(id & 1) = 1").count() === (1<<3))
   }
 
