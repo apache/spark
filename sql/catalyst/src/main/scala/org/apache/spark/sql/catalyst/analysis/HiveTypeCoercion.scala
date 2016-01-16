@@ -242,7 +242,7 @@ object HiveTypeCoercion {
         // Otherwise, record the result in the queue and find the type for the next column
         case Some(widenType) =>
           castedTypes.enqueue(widenType)
-          getCastedTypes (children, attrIndex + 1, castedTypes)
+          getCastedTypes(children, attrIndex + 1, castedTypes)
       }
     }
 
