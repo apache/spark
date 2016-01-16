@@ -109,6 +109,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
       partitionColumns = Array.empty[String],
+      bucketSpec = None,
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))

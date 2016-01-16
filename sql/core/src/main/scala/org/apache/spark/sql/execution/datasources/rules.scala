@@ -36,6 +36,7 @@ private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[Logica
           sqlContext,
           userSpecifiedSchema = None,
           partitionColumns = Array(),
+          bucketSpec = None,
           provider = u.tableIdentifier.database.get,
           options = Map("path" -> u.tableIdentifier.table))
         val plan = LogicalRelation(resolved.relation)
