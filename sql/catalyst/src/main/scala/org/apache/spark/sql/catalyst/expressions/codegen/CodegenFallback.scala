@@ -30,12 +30,13 @@ trait CodegenFallback extends Expression {
       case _ =>
     }
 
+    val idx = ctx.references.length
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
     if (nullable) {
       s"""
         /* expression: ${this.toCommentSafeString} */
-        Object $objectTerm = expressions[${ctx.references.size - 1}].eval(${ctx.INPUT_ROW});
+        Object $objectTerm = ((Expression) references[$idx]).eval(${ctx.INPUT_ROW});
         boolean ${ev.isNull} = $objectTerm == null;
         ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
         if (!${ev.isNull}) {
@@ -46,7 +47,7 @@ trait CodegenFallback extends Expression {
       ev.isNull = "false"
       s"""
         /* expression: ${this.toCommentSafeString} */
-        Object $objectTerm = expressions[${ctx.references.size - 1}].eval(${ctx.INPUT_ROW});
+        Object $objectTerm = ((Expression) references[$idx]).eval(${ctx.INPUT_ROW});
         ${ctx.javaType(this.dataType)} ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
       """
     }
