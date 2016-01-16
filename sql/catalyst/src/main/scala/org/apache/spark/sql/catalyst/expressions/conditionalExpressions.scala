@@ -224,6 +224,7 @@ object CaseWhen {
   }
 }
 
+
 /**
  * Case statements of the form "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END".
  * When a = b, returns c; when a = d, returns e; else returns f.
