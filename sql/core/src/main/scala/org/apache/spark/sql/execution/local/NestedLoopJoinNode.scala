@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.local
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{FullOuter, RightOuter, LeftOuter, JoinType}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
@@ -47,11 +47,7 @@ case class NestedLoopJoinNode(
   }
 
   private[this] def genResultProjection: InternalRow => InternalRow = {
-    if (outputsUnsafeRows) {
-      UnsafeProjection.create(schema)
-    } else {
-      identity[InternalRow]
-    }
+    UnsafeProjection.create(schema)
   }
 
   private[this] var currentRow: InternalRow = _

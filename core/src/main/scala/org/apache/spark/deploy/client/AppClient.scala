@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.client
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.util.control.NonFatal
 
@@ -104,8 +104,7 @@ private[spark] class AppClient(
               return
             }
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
-            val masterRef =
-              rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+            val masterRef = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled

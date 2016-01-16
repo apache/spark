@@ -25,10 +25,11 @@ import scala.util.Random
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -38,7 +39,6 @@ import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext}
 
 abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
@@ -137,8 +137,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     // Verify that the generated KinesisBackedBlockRDD has the all the right information
     val blockInfos = Seq(blockInfo1, blockInfo2)
     val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
-    nonEmptyRDD shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
-    val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
+    nonEmptyRDD shouldBe a [KinesisBackedBlockRDD[_]]
+    val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[_]]
     assert(kinesisRDD.regionName === dummyRegionName)
     assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
@@ -203,7 +203,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       Seconds(10), StorageLevel.MEMORY_ONLY, addFive,
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
-    stream shouldBe a [ReceiverInputDStream[Int]]
+    stream shouldBe a [ReceiverInputDStream[_]]
 
     val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
     stream.foreachRDD { rdd =>
@@ -272,7 +272,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     times.foreach { time =>
       val (arrayOfSeqNumRanges, data) = collectedData(time)
       val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
-      rdd shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
+      rdd shouldBe a [KinesisBackedBlockRDD[_]]
 
       // Verify the recovered sequence ranges
       val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]

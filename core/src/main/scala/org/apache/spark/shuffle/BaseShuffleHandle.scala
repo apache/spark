@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{ShuffleDependency, Aggregator, Partitioner}
+import org.apache.spark.{Aggregator, Partitioner, ShuffleDependency}
 import org.apache.spark.serializer.Serializer
 
 /**

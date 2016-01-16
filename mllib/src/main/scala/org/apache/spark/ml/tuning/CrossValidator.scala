@@ -19,8 +19,8 @@ package org.apache.spark.ml.tuning
 
 import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
-import org.json4s.jackson.JsonMethods._
 import org.json4s.{DefaultFormats, JObject}
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{Experimental, Since}
@@ -131,6 +131,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     $(estimator).transformSchema(schema)
   }
 
@@ -345,6 +346,7 @@ class CrossValidatorModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     bestModel.transformSchema(schema)
   }
 

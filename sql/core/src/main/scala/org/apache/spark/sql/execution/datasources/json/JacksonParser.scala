@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.ByteArrayOutputStream
+
 import scala.collection.mutable.ArrayBuffer
 
 import com.fasterxml.jackson.core._
@@ -89,7 +90,7 @@ object JacksonParser {
         DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
 
       case (VALUE_NUMBER_INT, TimestampType) =>
-        parser.getLongValue * 1000L
+        parser.getLongValue * 1000000L
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()

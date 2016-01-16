@@ -19,15 +19,14 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.Since
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.util.random.BernoulliCellSampler
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.annotation.Since
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -87,7 +86,8 @@ object MLUtils {
         val indicesLength = indices.length
         while (i < indicesLength) {
           val current = indices(i)
-          require(current > previous, "indices should be one-based and in ascending order" )
+          require(current > previous, s"indices should be one-based and in ascending order;"
+            + " found current=$current, previous=$previous; line=\"$line\"")
           previous = current
           i += 1
         }
