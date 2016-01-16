@@ -50,6 +50,8 @@ private[ui] class ExecutorsPage(
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
   private val listener = parent.listener
+  // When GCTimePercent is edited change ToolTips.TASK_TIME to match
+  private val GCTimePercent = 0.1
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val (storageStatusList, execInfo) = listener.synchronized {
@@ -115,37 +117,9 @@ private[ui] class ExecutorsPage(
 
   /** Render an HTML row representing an executor */
   private def execRow(info: ExecutorSummary, logsExist: Boolean): Seq[Node] = {
-    // When GCTimePercent is edited change ToolTips.TASK_TIME to match
-    val GCTimePercent = 0.1
-
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
-
-    // Determine Color Opacity from 0.5-1
-    // activeTasks range from 0 to all cores
-    val activeTasksAlpha =
-      if (info.maxTasks > 0) {
-        (info.activeTasks.toDouble / info.maxTasks) * 0.5 + 0.5
-      } else {
-        1
-      }
-    // failedTasks range max at 10% failure, alpha max = 1
-    // completedTasks range ignores 90% of tasks
-    val (failedTasksAlpha, completedTasksAlpha) =
-      if (info.totalTasks > 0) {
-        (math.min(10 * info.failedTasks.toDouble / info.totalTasks, 1) * 0.5 + 0.5,
-        math.max(((10 * info.completedTasks.toDouble / info.totalTasks) - 9) * 0.5 + 0.5, 0.5))
-      } else {
-        (1, 1)
-      }
-    // totalDuration range from 0 to 50% GC time, alpha max = 1
-    val totalDurationAlpha =
-      if (info.totalDuration > 0) {
-        math.min(info.totalGCTime.toDouble / info.totalDuration + 0.5, 1)
-      } else {
-        1
-      }
 
     <tr>
       <td>{info.id}</td>
@@ -158,39 +132,8 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={diskUsed.toString}>
         {Utils.bytesToString(diskUsed)}
       </td>
-      <td style={
-        if (info.activeTasks > 0) {
-          "background:hsla(240, 100%, 50%, " + activeTasksAlpha + ");color:white"
-        } else {
-          ""
-        }
-      }>{info.activeTasks}</td>
-      <td style={
-        if (info.failedTasks > 0) {
-          "background:hsla(0, 100%, 50%, " + failedTasksAlpha + ");color:white"
-        } else {
-          ""
-        }
-      }>{info.failedTasks}</td>
-      <td style={
-        if (info.completedTasks > 0) {
-          "background:hsla(120, 100%, 25%, " + completedTasksAlpha + ");color:white"
-        } else {
-          ""
-        }
-      }>{info.completedTasks}</td>
-      <td>{info.totalTasks}</td>
-      <td sorttable_customkey={info.totalDuration.toString} style={
-        // Red if GC time over GCTimePercent of total time
-        if (info.totalGCTime > GCTimePercent * info.totalDuration) {
-          "background:hsla(0, 100%, 50%, " + totalDurationAlpha + ");color:white"
-        } else {
-          ""
-        }
-      }>
-        {Utils.msDurationToString(info.totalDuration)}
-        ({Utils.msDurationToString(info.totalGCTime)})
-      </td>
+      {coloredData(info.maxTasks, info.activeTasks, info.failedTasks, info.completedTasks,
+      info.totalTasks, info.totalDuration, info.totalGCTime)}
       <td sorttable_customkey={info.totalInputBytes.toString}>
         {Utils.bytesToString(info.totalInputBytes)}
       </td>
@@ -232,7 +175,6 @@ private[ui] class ExecutorsPage(
     val maximumMemory = execInfo.map(_.maxMemory).sum
     val memoryUsed = execInfo.map(_.memoryUsed).sum
     val diskUsed = execInfo.map(_.diskUsed).sum
-    val totalDuration = execInfo.map(_.totalDuration).sum
     val totalInputBytes = execInfo.map(_.totalInputBytes).sum
     val totalShuffleRead = execInfo.map(_.totalShuffleRead).sum
     val totalShuffleWrite = execInfo.map(_.totalShuffleWrite).sum
@@ -247,13 +189,13 @@ private[ui] class ExecutorsPage(
         <td sorttable_customkey={diskUsed.toString}>
           {Utils.bytesToString(diskUsed)}
         </td>
-        <td>{execInfo.map(_.activeTasks).sum}</td>
-        <td>{execInfo.map(_.failedTasks).sum}</td>
-        <td>{execInfo.map(_.completedTasks).sum}</td>
-        <td>{execInfo.map(_.totalTasks).sum}</td>
-        <td sorttable_customkey={totalDuration.toString}>
-          {Utils.msDurationToString(totalDuration)}
-        </td>
+        {coloredData(execInfo.map(_.maxTasks).sum,
+        execInfo.map(_.activeTasks).sum,
+        execInfo.map(_.failedTasks).sum,
+        execInfo.map(_.completedTasks).sum,
+        execInfo.map(_.totalTasks).sum,
+        execInfo.map(_.totalDuration).sum,
+        execInfo.map(_.totalGCTime).sum)}
         <td sorttable_customkey={totalInputBytes.toString}>
           {Utils.bytesToString(totalInputBytes)}
         </td>
@@ -274,7 +216,7 @@ private[ui] class ExecutorsPage(
         <th>Failed Tasks</th>
         <th>Complete Tasks</th>
         <th>Total Tasks</th>
-        <th>Task Time</th>
+        <th data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</th>
         <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
         <th>
@@ -287,6 +229,77 @@ private[ui] class ExecutorsPage(
         {sumContent}
       </tbody>
     </table>
+  }
+
+  private def coloredData(maxTasks: Int,
+                        activeTasks: Int,
+                        failedTasks: Int,
+                        completedTasks: Int,
+                        totalTasks: Int,
+                        totalDuration: Long,
+                        totalGCTime: Long):
+  Seq[Node] = {
+    // Determine Color Opacity from 0.5-1
+    // activeTasks range from 0 to all cores
+    val activeTasksAlpha =
+      if (maxTasks > 0) {
+        (activeTasks.toDouble / maxTasks) * 0.5 + 0.5
+      } else {
+        1
+      }
+    // failedTasks range max at 10% failure, alpha max = 1
+    // completedTasks range ignores 90% of tasks
+    val (failedTasksAlpha, completedTasksAlpha) =
+      if (totalTasks > 0) {
+        (math.min (10 * failedTasks.toDouble / totalTasks, 1) * 0.5 + 0.5,
+          math.max (((10 * completedTasks.toDouble / totalTasks) - 9) * 0.5 + 0.5, 0.5) )
+      } else {
+        (1, 1)
+      }
+    // totalDuration range from 0 to 50% GC time, alpha max = 1
+    val totalDurationAlpha =
+      if (totalDuration > 0) {
+        math.min (totalGCTime.toDouble / totalDuration + 0.5, 1)
+      } else {
+        1
+      }
+
+    val tableData =
+    <td style={
+      if (activeTasks > 0) {
+        "background:hsla(240, 100%, 50%, " + activeTasksAlpha + ");color:white"
+      } else {
+        ""
+      }
+      }>{activeTasks}</td>
+    <td style={
+      if (failedTasks > 0) {
+        "background:hsla(0, 100%, 50%, " + failedTasksAlpha + ");color:white"
+      } else {
+        ""
+      }
+      }>{failedTasks}</td>
+    <td style={
+      if (completedTasks > 0) {
+        "background:hsla(120, 100%, 25%, " + completedTasksAlpha + ");color:white"
+      } else {
+        ""
+      }
+      }>{completedTasks}</td>
+    <td>{totalTasks}</td>
+    <td sorttable_customkey={totalDuration.toString} style={
+      // Red if GC time over GCTimePercent of total time
+      if (totalGCTime > GCTimePercent * totalDuration) {
+        "background:hsla(0, 100%, 50%, " + totalDurationAlpha + ");color:white"
+      } else {
+        ""
+      }
+    }>
+      {Utils.msDurationToString(totalDuration)}
+      ({Utils.msDurationToString(totalGCTime)})
+    </td>;
+
+    tableData
   }
 }
 
