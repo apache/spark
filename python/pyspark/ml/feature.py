@@ -1016,7 +1016,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> bucketed[0].buckets
     0.0
 
-    .. versionadded:: 1.6.0
+    .. versionadded:: 2.0.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -1040,7 +1040,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("1.6.0")
+    @since("2.0.0")
     def setParams(self, numBuckets=2, inputCol=None, outputCol=None):
         """
         setParams(self, numBuckets=2, inputCol=None, outputCol=None)
@@ -1049,7 +1049,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    @since("1.6.0")
+    @since("2.0.0")
     def setNumBuckets(self, value):
         """
         Sets the value of :py:attr:`numBuckets`.
@@ -1057,7 +1057,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
         self._paramMap[self.numBuckets] = value
         return self
 
-    @since("1.6.0")
+    @since("2.0.0")
     def getNumBuckets(self):
         """
         Gets the value of numBuckets or its default value.
