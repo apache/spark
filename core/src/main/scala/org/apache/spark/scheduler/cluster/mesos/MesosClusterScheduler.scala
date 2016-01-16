@@ -142,8 +142,7 @@ private[spark] class MesosClusterScheduler(
   private val queuedDriversState = engineFactory.createEngine("driverQueue")
   private val launchedDriversState = engineFactory.createEngine("launchedDrivers")
   private val pendingRetryDriversState = engineFactory.createEngine("retryList")
-  // dispactcher constraints
-  val driverOfferConstraints = parseConstraintString(conf.get("spark.mesos.constraints", ""))
+  private val driverOfferConstraints = parseConstraintString(conf.get("spark.mesos.constraints", ""))
   // Flag to mark if the scheduler is ready to be called, which is until the scheduler
   // is registered with Mesos master.
   @volatile protected var ready = false
@@ -512,16 +511,9 @@ private[spark] class MesosClusterScheduler(
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
-    val currentOffers = offers.asScala.map(o =>
-      new ResourceOffer(
-        o, getResource(o.getResourcesList, "cpus"), getResource(o.getResourcesList, "mem"))
-    ).toList
-    logTrace(s"Received offers from Mesos: \n${currentOffers.mkString("\n")}")
-    val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
-    val currentTime = new Date()
 
     stateLock.synchronized {
-      var it = offers.iterator()
+      val it = offers.iterator()
       while (it.hasNext) {
         val offer = it.next()
         val offerAttributes = toAttributeMap(offer.getAttributesList)
@@ -533,6 +525,14 @@ private[spark] class MesosClusterScheduler(
         }
       }
     }
+
+    val currentOffers = offers.asScala.map(o =>
+      new ResourceOffer(
+        o, getResource(o.getResourcesList, "cpus"), getResource(o.getResourcesList, "mem"))
+    ).toList
+    logTrace(s"Received offers from Mesos: \n${currentOffers.mkString("\n")}")
+    val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
+    val currentTime = new Date()
 
     stateLock.synchronized {
       // We first schedule all the supervised drivers that are ready to retry.
