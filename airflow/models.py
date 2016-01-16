@@ -696,7 +696,6 @@ class TaskInstance(Base):
         """
         return (self.dag_id, self.task_id, self.execution_date)
 
-    @provide_session
     def set_state(self, state, session):
         self.state = state
         self.start_date = datetime.now()
@@ -842,18 +841,18 @@ class TaskInstance(Base):
         if flag_upstream_failed:
             if tr == TR.ALL_SUCCESS:
                 if upstream_failed or failed:
-                    self.set_state(State.UPSTREAM_FAILED)
+                    self.set_state(State.UPSTREAM_FAILED, session)
                 elif skipped:
-                    self.set_state(State.SKIPPED)
+                    self.set_state(State.SKIPPED, session)
             elif tr == TR.ALL_FAILED:
                 if successes or skipped:
-                    self.set_state(State.SKIPPED)
+                    self.set_state(State.SKIPPED, session)
             elif tr == TR.ONE_SUCCESS:
                 if upstream_done and not successes:
-                    self.set_state(State.SKIPPED)
+                    self.set_state(State.SKIPPED, session)
             elif tr == TR.ONE_FAILED:
                 if upstream_done and not(failed or upstream_failed):
-                    self.set_state(State.SKIPPED)
+                    self.set_state(State.SKIPPED, session)
 
         if (
             (tr == TR.ONE_SUCCESS and successes) or
