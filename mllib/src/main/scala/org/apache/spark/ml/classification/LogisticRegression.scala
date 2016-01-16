@@ -32,6 +32,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -274,7 +275,7 @@ class LogisticRegression @Since("1.2.0") (
    */
   private def extractInstances(dataset: DataFrame): RDD[Instance] = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    dataset.select($(labelCol), w, $(featuresCol))
+    dataset.select(col($(labelCol)), w, col($(featuresCol)))
       .map { case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
     }
@@ -282,10 +283,30 @@ class LogisticRegression @Since("1.2.0") (
 
   override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    train(extractInstances(dataset), handlePersistence)
+    val (model, objectiveHistory) = train(extractInstances(dataset), handlePersistence)
+        val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
+    val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
+      summaryModel.transform(dataset),
+      probabilityColName,
+      $(labelCol),
+      $(featuresCol),
+      objectiveHistory)
+    model.setSummary(logRegSummary)
   }
 
-  protected[spark] def train(instances: RDD[Instance], handlePersistence: Boolean): LogisticRegressionModel = {
+  /**
+   * Internal train method, return the model and the objective history
+   */
+  protected[spark] def train(points: RDD[LabeledPoint], handlePersistence: Boolean):
+      LogisticRegressionModel = {
+    val instances = points.map{case LabeledPoint(l, f) => Instance(l, 1.0, f)}
+    train(instances, handlePersistence)._1
+  }
+
+  /**
+   * Internal train method, return the model and the objective history
+   */
+  protected[spark] def train(instances: RDD[Instance], handlePersistence: Boolean): (LogisticRegressionModel, Array[Double]) = {
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, labelSummarizer) = {
@@ -371,12 +392,12 @@ class LogisticRegression @Since("1.2.0") (
          b = \log{P(1) / P(0)} = \log{count_1 / count_0}
          }}}
        */
-      initialCoefficientsWithIntercept.toArray(numFeatures)
+      initialWeightsWithIntercept.toArray(numFeatures)
         = math.log(histogram(1) / histogram(0))
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+      initialWeightsWithIntercept.toBreeze.toDenseVector)
 
     val (coefficients, intercept, objectiveHistory) = {
       /*
@@ -421,14 +442,7 @@ class LogisticRegression @Since("1.2.0") (
     if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LogisticRegressionModel(uid, coefficients, intercept))
-    val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
-    val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
-      summaryModel.transform(dataset),
-      probabilityColName,
-      $(labelCol),
-      $(featuresCol),
-      objectiveHistory)
-    model.setSummary(logRegSummary)
+    (model, objectiveHistory)
   }
 
   @Since("1.4.0")

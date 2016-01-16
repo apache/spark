@@ -25,7 +25,7 @@ import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
+import org.apache.spark.mllib.util.{DataValidators, Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
@@ -421,7 +421,7 @@ class LogisticRegressionWithLBFGS
         lr.setElasticNetParam(elasticNetParam)
         if (userSuppliedWeights) {
           val initialWeightsWithIntercept = if (addIntercept) {
-            appendBias(initialWeights)
+            MLUtils.appendBias(initialWeights)
           } else {
             initialWeights
           }
