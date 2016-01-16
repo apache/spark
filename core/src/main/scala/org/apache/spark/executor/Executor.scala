@@ -252,7 +252,6 @@ private[spark] class Executor(
         }
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
-        // TODO: add a test
         val accumUpdates = task.collectAccumulatorUpdates()
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)

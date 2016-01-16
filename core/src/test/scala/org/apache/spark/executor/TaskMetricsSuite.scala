@@ -22,10 +22,11 @@ import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel, TestBlockId}
 
 
-class TaskMetricsSuite extends SparkFunSuite { self =>
+class TaskMetricsSuite extends SparkFunSuite {
   import AccumulatorParam._
   import InternalAccumulator._
   import StorageLevel._
+  import TaskMetricsSuite._
 
   test("create") {
     val internalAccums = InternalAccumulator.create()
@@ -101,8 +102,8 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     import shuffleRead._
     val accums = InternalAccumulator.create()
     val tm = new TaskMetrics(accums)
-    def assertValueEquals[T](tmValue: ShuffleReadMetrics => T, name: String, value: T): Unit = {
-      self.assertValueEquals(tm, tm => tmValue(tm.shuffleReadMetrics.get), accums, name, value)
+    def assertValEquals[T](tmValue: ShuffleReadMetrics => T, name: String, value: T): Unit = {
+      assertValueEquals(tm, tm => tmValue(tm.shuffleReadMetrics.get), accums, name, value)
     }
     // create shuffle read metrics
     assert(tm.shuffleReadMetrics.isEmpty)
@@ -111,12 +112,12 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     assert(tm.shuffleReadMetrics.isDefined)
     val sr = tm.shuffleReadMetrics.get
     // initial values
-    assertValueEquals(_.remoteBlocksFetched, REMOTE_BLOCKS_FETCHED, 0)
-    assertValueEquals(_.localBlocksFetched, LOCAL_BLOCKS_FETCHED, 0)
-    assertValueEquals(_.remoteBytesRead, REMOTE_BYTES_READ, 0L)
-    assertValueEquals(_.localBytesRead, LOCAL_BYTES_READ, 0L)
-    assertValueEquals(_.fetchWaitTime, FETCH_WAIT_TIME, 0L)
-    assertValueEquals(_.recordsRead, RECORDS_READ, 0L)
+    assertValEquals(_.remoteBlocksFetched, REMOTE_BLOCKS_FETCHED, 0)
+    assertValEquals(_.localBlocksFetched, LOCAL_BLOCKS_FETCHED, 0)
+    assertValEquals(_.remoteBytesRead, REMOTE_BYTES_READ, 0L)
+    assertValEquals(_.localBytesRead, LOCAL_BYTES_READ, 0L)
+    assertValEquals(_.fetchWaitTime, FETCH_WAIT_TIME, 0L)
+    assertValEquals(_.recordsRead, RECORDS_READ, 0L)
     // set and increment values
     sr.setRemoteBlocksFetched(100)
     sr.setRemoteBlocksFetched(10)
@@ -143,20 +144,20 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     sr.incRecordsRead(6L)
     sr.incRecordsRead(6L)
     // assert new values exist
-    assertValueEquals(_.remoteBlocksFetched, REMOTE_BLOCKS_FETCHED, 12)
-    assertValueEquals(_.localBlocksFetched, LOCAL_BLOCKS_FETCHED, 24)
-    assertValueEquals(_.remoteBytesRead, REMOTE_BYTES_READ, 36L)
-    assertValueEquals(_.localBytesRead, LOCAL_BYTES_READ, 48L)
-    assertValueEquals(_.fetchWaitTime, FETCH_WAIT_TIME, 60L)
-    assertValueEquals(_.recordsRead, RECORDS_READ, 72L)
+    assertValEquals(_.remoteBlocksFetched, REMOTE_BLOCKS_FETCHED, 12)
+    assertValEquals(_.localBlocksFetched, LOCAL_BLOCKS_FETCHED, 24)
+    assertValEquals(_.remoteBytesRead, REMOTE_BYTES_READ, 36L)
+    assertValEquals(_.localBytesRead, LOCAL_BYTES_READ, 48L)
+    assertValEquals(_.fetchWaitTime, FETCH_WAIT_TIME, 60L)
+    assertValEquals(_.recordsRead, RECORDS_READ, 72L)
   }
 
   test("mutating shuffle write metrics values") {
     import shuffleWrite._
     val accums = InternalAccumulator.create()
     val tm = new TaskMetrics(accums)
-    def assertValueEquals[T](tmValue: ShuffleWriteMetrics => T, name: String, value: T): Unit = {
-      self.assertValueEquals(tm, tm => tmValue(tm.shuffleWriteMetrics.get), accums, name, value)
+    def assertValEquals[T](tmValue: ShuffleWriteMetrics => T, name: String, value: T): Unit = {
+      assertValueEquals(tm, tm => tmValue(tm.shuffleWriteMetrics.get), accums, name, value)
     }
     // create shuffle write metrics
     assert(tm.shuffleWriteMetrics.isEmpty)
@@ -164,9 +165,9 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     assert(tm.shuffleWriteMetrics.isDefined)
     val sw = tm.shuffleWriteMetrics.get
     // initial values
-    assertValueEquals(_.bytesWritten, BYTES_WRITTEN, 0L)
-    assertValueEquals(_.recordsWritten, RECORDS_WRITTEN, 0L)
-    assertValueEquals(_.writeTime, WRITE_TIME, 0L)
+    assertValEquals(_.bytesWritten, BYTES_WRITTEN, 0L)
+    assertValEquals(_.recordsWritten, RECORDS_WRITTEN, 0L)
+    assertValEquals(_.writeTime, WRITE_TIME, 0L)
     // increment and decrement values
     sw.incBytesWritten(100L)
     sw.incBytesWritten(10L) // 100 + 10
@@ -179,17 +180,17 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     sw.incWriteTime(300L)
     sw.incWriteTime(30L)
     // assert new values exist
-    assertValueEquals(_.bytesWritten, BYTES_WRITTEN, 108L)
-    assertValueEquals(_.recordsWritten, RECORDS_WRITTEN, 216L)
-    assertValueEquals(_.writeTime, WRITE_TIME, 330L)
+    assertValEquals(_.bytesWritten, BYTES_WRITTEN, 108L)
+    assertValEquals(_.recordsWritten, RECORDS_WRITTEN, 216L)
+    assertValEquals(_.writeTime, WRITE_TIME, 330L)
   }
 
   test("mutating input metrics values") {
     import input._
     val accums = InternalAccumulator.create()
     val tm = new TaskMetrics(accums)
-    def assertValueEquals(tmValue: InputMetrics => Any, name: String, value: Any): Unit = {
-      self.assertValueEquals(tm, tm => tmValue(tm.inputMetrics.get), accums, name, value,
+    def assertValEquals(tmValue: InputMetrics => Any, name: String, value: Any): Unit = {
+      assertValueEquals(tm, tm => tmValue(tm.inputMetrics.get), accums, name, value,
         (x: Any, y: Any) => assert(x.toString === y.toString))
     }
     // create input metrics
@@ -198,9 +199,9 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     assert(tm.inputMetrics.isDefined)
     val in = tm.inputMetrics.get
     // initial values
-    assertValueEquals(_.bytesRead, BYTES_READ, 0L)
-    assertValueEquals(_.recordsRead, RECORDS_READ, 0L)
-    assertValueEquals(_.readMethod, READ_METHOD, DataReadMethod.Memory)
+    assertValEquals(_.bytesRead, BYTES_READ, 0L)
+    assertValEquals(_.recordsRead, RECORDS_READ, 0L)
+    assertValEquals(_.readMethod, READ_METHOD, DataReadMethod.Memory)
     // set and increment values
     in.setBytesRead(1L)
     in.setBytesRead(2L)
@@ -208,17 +209,17 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     in.incRecordsRead(2L)
     in.setReadMethod(DataReadMethod.Disk)
     // assert new values exist
-    assertValueEquals(_.bytesRead, BYTES_READ, 2L)
-    assertValueEquals(_.recordsRead, RECORDS_READ, 3L)
-    assertValueEquals(_.readMethod, READ_METHOD, DataReadMethod.Disk)
+    assertValEquals(_.bytesRead, BYTES_READ, 2L)
+    assertValEquals(_.recordsRead, RECORDS_READ, 3L)
+    assertValEquals(_.readMethod, READ_METHOD, DataReadMethod.Disk)
   }
 
   test("mutating output metrics values") {
     import output._
     val accums = InternalAccumulator.create()
     val tm = new TaskMetrics(accums)
-    def assertValueEquals(tmValue: OutputMetrics => Any, name: String, value: Any): Unit = {
-      self.assertValueEquals(tm, tm => tmValue(tm.outputMetrics.get), accums, name, value,
+    def assertValEquals(tmValue: OutputMetrics => Any, name: String, value: Any): Unit = {
+      assertValueEquals(tm, tm => tmValue(tm.outputMetrics.get), accums, name, value,
         (x: Any, y: Any) => assert(x.toString === y.toString))
     }
     // create input metrics
@@ -227,9 +228,9 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     assert(tm.outputMetrics.isDefined)
     val out = tm.outputMetrics.get
     // initial values
-    assertValueEquals(_.bytesWritten, BYTES_WRITTEN, 0L)
-    assertValueEquals(_.recordsWritten, RECORDS_WRITTEN, 0L)
-    assertValueEquals(_.writeMethod, WRITE_METHOD, DataWriteMethod.Hadoop)
+    assertValEquals(_.bytesWritten, BYTES_WRITTEN, 0L)
+    assertValEquals(_.recordsWritten, RECORDS_WRITTEN, 0L)
+    assertValEquals(_.writeMethod, WRITE_METHOD, DataWriteMethod.Hadoop)
     // set values
     out.setBytesWritten(1L)
     out.setBytesWritten(2L)
@@ -237,11 +238,11 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     out.setRecordsWritten(4L)
     out.setWriteMethod(DataWriteMethod.Hadoop)
     // assert new values exist
-    assertValueEquals(_.bytesWritten, BYTES_WRITTEN, 2L)
-    assertValueEquals(_.recordsWritten, RECORDS_WRITTEN, 4L)
+    assertValEquals(_.bytesWritten, BYTES_WRITTEN, 2L)
+    assertValEquals(_.recordsWritten, RECORDS_WRITTEN, 4L)
     // Note: this doesn't actually test anything, but there's only one DataWriteMethod
     // so we can't set it to anything else
-    assertValueEquals(_.writeMethod, WRITE_METHOD, DataWriteMethod.Hadoop)
+    assertValEquals(_.writeMethod, WRITE_METHOD, DataWriteMethod.Hadoop)
   }
 
   test("merging multiple shuffle read metrics") {
@@ -420,11 +421,11 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
     // accumulators that were not registered with `Accumulators` will not show up
     assertUpdatesEquals(metrics2.accumulatorUpdates(), accumUpdates1 ++ registeredAccumInfos)
   }
+}
 
 
-  /* --------------------- *
-   |  Helper test methods  |
-   * --------------------- */
+// This extends SparkFunSuite only because we want its `assert` method.
+private[spark] object TaskMetricsSuite extends SparkFunSuite {
 
   /**
    * Assert that the following three things are equal to `value`:
@@ -432,7 +433,7 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
    *   (2) TaskMetrics accumulator update value
    *   (3) Original accumulator value
    */
-  private def assertValueEquals(
+  def assertValueEquals(
       tm: TaskMetrics,
       tmValue: TaskMetrics => Any,
       accums: Seq[Accumulator[_]],
@@ -453,7 +454,7 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
    * Assert that two lists of accumulator updates are equal.
    * Note: this does NOT check accumulator ID equality.
    */
-  private def assertUpdatesEquals(
+  def assertUpdatesEquals(
       updates1: Seq[AccumulableInfo],
       updates2: Seq[AccumulableInfo]): Unit = {
     assert(updates1.size === updates2.size)
@@ -471,7 +472,7 @@ class TaskMetricsSuite extends SparkFunSuite { self =>
    * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
    * info as an accumulator update.
    */
-  private def makeInfo(a: Accumulable[_, _]): AccumulableInfo = {
+  def makeInfo(a: Accumulable[_, _]): AccumulableInfo = {
     new AccumulableInfo(
       a.id, a.name.orNull, Some(a.value), None, a.isInternal, a.countFailedValues)
   }

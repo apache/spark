@@ -190,8 +190,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    // This means use 1 core and allow up to 4 failed tasks
-    sc = new SparkContext("local[1, 4]", "DAGSchedulerSuite")
+    sc = new SparkContext("local", "DAGSchedulerSuite")
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
@@ -1591,29 +1590,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(Accumulators.get(acc1.id).get.value === 15L)
     assert(Accumulators.get(acc2.id).get.value === 13L)
     assert(Accumulators.get(acc3.id).get.value === 18L)
-  }
-
-  test("accumulators are updated on exception failures (end-to-end)") {
-    import AccumulatorParam._
-    // Create 2 accumulators, one that counts failed values and another that doesn't
-    val acc1 = new Accumulator(
-      0L, LongAccumulatorParam, Some("ingenieur"), internal = false, countFailedValues = true)
-    val acc2 = new Accumulator(
-      0L, LongAccumulatorParam, Some("boulangere"), internal = false, countFailedValues = false)
-    // Fail first 3 attempts of every task. This means each task should be run 4 times.
-    sc.parallelize(1 to 10, 10).map { i =>
-      acc1 += 1
-      acc2 += 1
-      if (TaskContext.get.attemptNumber() <= 2) {
-        throw new Exception("you did something wrong")
-      } else {
-        0
-      }
-    }.count()
-    // The one that counts failed values should be 4x the one that didn't,
-    // since we ran each task 4 times
-    assert(Accumulators.get(acc1.id).get.value === 40L)
-    assert(Accumulators.get(acc2.id).get.value === 10L)
   }
 
   test("reduce tasks should be placed locally with map output") {
