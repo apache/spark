@@ -17,17 +17,32 @@
 
 package org.apache.spark.scheduler
 
-import org.mockito.Mockito._
 import org.mockito.Matchers.any
-
+import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.metrics.source.JvmSource
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{TaskCompletionListenerException, TaskCompletionListener}
-
+import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
 
 class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
+
+  test("provide metrics sources") {
+    val filePath = getClass.getClassLoader.getResource("test_metrics_config.properties").getFile
+    val conf = new SparkConf(loadDefaults = false)
+      .set("spark.metrics.conf", filePath)
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.makeRDD(1 to 1)
+    val result = sc.runJob(rdd, (tc: TaskContext, it: Iterator[Int]) => {
+      tc.getMetricsSources("jvm").count {
+        case source: JvmSource => true
+        case _ => false
+      }
+    }).sum
+    assert(result > 0)
+  }
 
   test("calls TaskCompletionListener after failure") {
     TaskContextSuite.completed = false
@@ -41,16 +56,17 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
+    val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, sc.broadcast(closureSerializer.serialize((rdd, func)).array), rdd.partitions(0), Seq(), 0)
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, Seq.empty)
     intercept[RuntimeException] {
-      task.run(0, 0)
+      task.run(0, 0, null)
     }
     assert(TaskContextSuite.completed === true)
   }
 
   test("all TaskCompletionListeners should be called even if some fail") {
-    val context = new TaskContextImpl(0, 0, 0, 0, null)
+    val context = TaskContext.empty()
     val listener = mock(classOf[TaskCompletionListener])
     context.addTaskCompletionListener(_ => throw new Exception("blah"))
     context.addTaskCompletionListener(listener)
@@ -80,14 +96,6 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       Seq(attemptId).iterator
     }.collect()
     assert(attemptIdsWithFailedTask.toSet === Set(0, 1))
-  }
-
-  test("TaskContext.attemptId returns taskAttemptId for backwards-compatibility (SPARK-4014)") {
-    sc = new SparkContext("local", "test")
-    val attemptIds = sc.parallelize(Seq(1, 2, 3, 4), 4).mapPartitions { iter =>
-      Seq(TaskContext.get().attemptId).iterator
-    }.collect()
-    assert(attemptIds.toSet === Set(0, 1, 2, 3))
   }
 }
 

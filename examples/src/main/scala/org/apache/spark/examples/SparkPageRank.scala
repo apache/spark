@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
 
 /**
  * Computes the PageRank of URLs from an input file. Input file should
@@ -74,3 +75,4 @@ object SparkPageRank {
     ctx.stop()
   }
 }
+// scalastyle:on println

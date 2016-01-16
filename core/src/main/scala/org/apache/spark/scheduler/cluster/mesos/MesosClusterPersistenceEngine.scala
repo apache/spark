@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.curator.framework.CuratorFramework
 import org.apache.zookeeper.CreateMode
@@ -129,6 +129,6 @@ private[spark] class ZookeeperMesosClusterPersistenceEngine(
   }
 
   override def fetchAll[T](): Iterable[T] = {
-    zk.getChildren.forPath(WORKING_DIR).map(fetch[T]).flatten
+    zk.getChildren.forPath(WORKING_DIR).asScala.flatMap(fetch[T])
   }
 }

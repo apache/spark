@@ -43,7 +43,9 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
 
   test("[SPARK-2210] boolean cast on boolean value should be removed") {
     val q = "select cast(cast(key=0 as boolean) as boolean) from src"
-    val project = TestHive.sql(q).queryExecution.executedPlan.collect { case e: Project => e }.head
+    val project = TestHive.sql(q).queryExecution.executedPlan.collect {
+      case e: Project => e
+    }.head
 
     // No cast expression introduced
     project.transformAllExpressions { case c: Cast =>
@@ -58,11 +60,5 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
       e
     }
     assert(numEquals === 1)
-  }
-
-  test("COALESCE with different types") {
-    intercept[RuntimeException] {
-      TestHive.sql("""SELECT COALESCE(1, true, "abc") FROM src limit 1""").collect()
-    }
   }
 }

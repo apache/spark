@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.math.abs
 import scala.util.Random
 
@@ -38,7 +38,7 @@ object ALSSuite {
       negativeWeights: Boolean): (java.util.List[Rating], DoubleMatrix, DoubleMatrix) = {
     val (sampledRatings, trueRatings, truePrefs) =
       generateRatings(users, products, features, samplingRate, implicitPrefs)
-    (seqAsJavaList(sampledRatings), trueRatings, truePrefs)
+    (sampledRatings.asJava, trueRatings, truePrefs)
   }
 
   def generateRatings(

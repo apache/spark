@@ -23,8 +23,6 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.Partitioner
-import org.apache.spark.SparkContext.doubleRDDToDoubleRDDFunctions
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
@@ -209,25 +207,19 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
     srdd.meanApprox(timeout, confidence)
 
   /**
-   * :: Experimental ::
    * Approximate operation to return the mean within a timeout.
    */
-  @Experimental
   def meanApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.meanApprox(timeout)
 
   /**
-   * :: Experimental ::
    * Approximate operation to return the sum within a timeout.
    */
-  @Experimental
   def sumApprox(timeout: Long, confidence: JDouble): PartialResult[BoundedDouble] =
     srdd.sumApprox(timeout, confidence)
 
   /**
-   * :: Experimental ::
    * Approximate operation to return the sum within a timeout.
    */
-  @Experimental
   def sumApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.sumApprox(timeout)
 
   /**

@@ -19,12 +19,12 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 import java.util.{Map => JMap}
+import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.expressions.Expression
 
-private[hive] case class HiveDatabase(
-    name: String,
-    location: String)
+private[hive] case class HiveDatabase(name: String, location: String)
 
 private[hive] abstract class TableType { val name: String }
 private[hive] case object ExternalTable extends TableType { override val name = "EXTERNAL_TABLE" }
@@ -44,7 +44,7 @@ private[hive] case class HivePartition(
     values: Seq[String],
     storage: HiveStorageDescriptor)
 
-private[hive] case class HiveColumn(name: String, hiveType: String, comment: String)
+private[hive] case class HiveColumn(name: String, @Nullable hiveType: String, comment: String)
 private[hive] case class HiveTable(
     specifiedDatabase: Option[String],
     name: String,
@@ -73,6 +73,9 @@ private[hive] case class HiveTable(
 
   def getAllPartitions: Seq[HivePartition] = client.getAllPartitions(this)
 
+  def getPartitions(predicates: Seq[Expression]): Seq[HivePartition] =
+    client.getPartitionsByFilter(this, predicates)
+
   // Hive does not support backticks when passing names to the client.
   def qualifiedName: String = s"$database.$name"
 }
@@ -83,6 +86,13 @@ private[hive] case class HiveTable(
  * shared classes.
  */
 private[hive] trait ClientInterface {
+
+  /** Returns the Hive Version of this client. */
+  def version: HiveVersion
+
+  /** Returns the configuration for the given key in the current session. */
+  def getConf(key: String, defaultValue: String): String
+
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
    * result in one string.
@@ -115,6 +125,12 @@ private[hive] trait ClientInterface {
   /** Returns the metadata for the specified table or None if it doens't exist. */
   def getTableOption(dbName: String, tableName: String): Option[HiveTable]
 
+  /** Creates a view with the given metadata. */
+  def createView(view: HiveTable): Unit
+
+  /** Updates the given view with new metadata. */
+  def alertView(view: HiveTable): Unit
+
   /** Creates a table with the given metadata. */
   def createTable(table: HiveTable): Unit
 
@@ -131,6 +147,9 @@ private[hive] trait ClientInterface {
 
   /** Returns all partitions for the given table. */
   def getAllPartitions(hTable: HiveTable): Seq[HivePartition]
+
+  /** Returns partitions filtered by predicates for the given table. */
+  def getPartitionsByFilter(hTable: HiveTable, predicates: Seq[Expression]): Seq[HivePartition]
 
   /** Loads a static partition into an existing table. */
   def loadPartition(
@@ -158,6 +177,15 @@ private[hive] trait ClientInterface {
       numDP: Int,
       holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit
+
+  /** Add a jar into class loader */
+  def addJar(path: String): Unit
+
+  /** Return a ClientInterface as new session, that will share the class loader and Hive client */
+  def newSession(): ClientInterface
+
+  /** Run a function within Hive state (SessionState, HiveConf, Hive client and class loader) */
+  def withHiveState[A](f: => A): A
 
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit

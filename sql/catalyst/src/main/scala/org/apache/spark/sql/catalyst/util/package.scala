@@ -124,8 +124,24 @@ package object util {
     val startTime = System.nanoTime()
     val ret = f
     val endTime = System.nanoTime()
+    // scalastyle:off println
     println(s"${(endTime - startTime).toDouble / 1000000}ms")
+    // scalastyle:on println
     ret
+  }
+
+  /**
+   * Converts a `Seq` of `Option[T]` to an `Option` of `Seq[T]`.
+   */
+  def sequenceOption[T](seq: Seq[Option[T]]): Option[Seq[T]] = seq match {
+    case xs if xs.isEmpty =>
+      Option(Seq.empty[T])
+
+    case xs =>
+      for {
+        head <- xs.head
+        tail <- sequenceOption(xs.tail)
+      } yield head +: tail
   }
 
   /* FIX ME

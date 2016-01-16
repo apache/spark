@@ -1,0 +1,4 @@
+org.apache.spark.sql.execution.datasources.jdbc.DefaultSource
+org.apache.spark.sql.execution.datasources.json.DefaultSource
+org.apache.spark.sql.execution.datasources.parquet.DefaultSource
+org.apache.spark.sql.execution.datasources.text.DefaultSource

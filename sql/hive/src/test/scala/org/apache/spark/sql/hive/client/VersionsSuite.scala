@@ -17,8 +17,16 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.io.File
+
+import org.apache.hadoop.util.VersionInfo
+
 import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 /**
@@ -27,7 +35,16 @@ import org.apache.spark.util.Utils
  * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
  * is not fully tested.
  */
+@ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
+
+  // In order to speed up test execution during development or in Jenkins, you can specify the path
+  // of an existing Ivy cache:
+  private val ivyPath: Option[String] = {
+    sys.env.get("SPARK_VERSIONS_SUITE_IVY_PATH").orElse(
+      Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
+  }
+
   private def buildConf() = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
@@ -38,7 +55,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   test("success sanity check") {
-    val badClient = IsolatedClientLoader.forVersion("13", buildConf()).client
+    val badClient = IsolatedClientLoader.forVersion(
+      hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
+      hadoopVersion = VersionInfo.getVersion,
+      config = buildConf(),
+      ivyPath = ivyPath).createClient()
     val db = new HiveDatabase("default", "")
     badClient.createDatabase(db)
   }
@@ -67,19 +88,31 @@ class VersionsSuite extends SparkFunSuite with Logging {
   // TODO: currently only works on mysql where we manually create the schema...
   ignore("failure sanity check") {
     val e = intercept[Throwable] {
-      val badClient = quietly { IsolatedClientLoader.forVersion("13", buildConf()).client }
+      val badClient = quietly {
+        IsolatedClientLoader.forVersion(
+          hiveMetastoreVersion = "13",
+          hadoopVersion = VersionInfo.getVersion,
+          config = buildConf(),
+          ivyPath = ivyPath).createClient()
+      }
     }
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("12", "13")
+  private val versions = Seq("12", "13", "14", "1.0.0", "1.1.0", "1.2.0")
 
   private var client: ClientInterface = null
 
   versions.foreach { version =>
     test(s"$version: create client") {
       client = null
-      client = IsolatedClientLoader.forVersion(version, buildConf()).client
+      System.gc() // Hack to avoid SEGV on some JVM versions.
+      client =
+        IsolatedClientLoader.forVersion(
+          hiveMetastoreVersion = version,
+          hadoopVersion = VersionInfo.getVersion,
+          config = buildConf(),
+          ivyPath = ivyPath).createClient()
     }
 
     test(s"$version: createDatabase") {
@@ -141,6 +174,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.getAllPartitions(client.getTable("default", "src_part"))
     }
 
+    test(s"$version: getPartitionsByFilter") {
+      client.getPartitionsByFilter(client.getTable("default", "src_part"), Seq(EqualTo(
+        AttributeReference("key", IntegerType, false)(NamedExpression.newExprId),
+        Literal(1))))
+    }
+
     test(s"$version: loadPartition") {
       client.loadPartition(
         emptyDir,
@@ -169,6 +208,13 @@ class VersionsSuite extends SparkFunSuite with Logging {
         1,
         false,
         false)
+    }
+
+    test(s"$version: create index and reset") {
+      client.runSqlHive("CREATE TABLE indexed_table (key INT)")
+      client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
+        "as 'COMPACT' WITH DEFERRED REBUILD")
+      client.reset()
     }
   }
 }

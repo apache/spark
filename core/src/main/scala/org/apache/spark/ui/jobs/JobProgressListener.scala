@@ -21,8 +21,6 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
@@ -53,8 +51,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   type PoolName = String
   type ExecutorId = String
 
-  // Applicatin:
+  // Application:
   @volatile var startTime = -1L
+  @volatile var endTime = -1L
 
   // Jobs:
   val activeJobs = new HashMap[JobId, JobUIData]
@@ -536,14 +535,18 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     startTime = appStarted.time
   }
 
+  override def onApplicationEnd(appEnded: SparkListenerApplicationEnd) {
+    endTime = appEnded.time
+  }
+
   /**
    * For testing only. Wait until at least `numExecutors` executors are up, or throw
    * `TimeoutException` if the waiting time elapsed before `numExecutors` executors up.
+   * Exposed for testing.
    *
    * @param numExecutors the number of executors to wait at least
    * @param timeout time to wait in milliseconds
    */
-  @VisibleForTesting
   private[spark] def waitUntilExecutorsUp(numExecutors: Int, timeout: Long): Unit = {
     val finishTime = System.currentTimeMillis() + timeout
     while (System.currentTimeMillis() < finishTime) {

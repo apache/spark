@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
 
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 
 /**
  * Logistic regression based classification.
@@ -77,3 +78,4 @@ object LocalLR {
     println("Final w: " + w)
   }
 }
+// scalastyle:on println

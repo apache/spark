@@ -27,7 +27,7 @@ import org.apache.spark.mllib.tree.impurity._
  * and helps with indexing.
  * This class is abstract to support learning with and without feature subsampling.
  */
-private[tree] class DTStatsAggregator(
+private[spark] class DTStatsAggregator(
     val metadata: DecisionTreeMetadata,
     featureSubset: Option[Array[Int]]) extends Serializable {
 

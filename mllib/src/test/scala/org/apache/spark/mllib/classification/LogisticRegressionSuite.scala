@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -39,7 +39,7 @@ object LogisticRegressionSuite {
     scale: Double,
     nPoints: Int,
     seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateLogisticInput(offset, scale, nPoints, seed))
+    generateLogisticInput(offset, scale, nPoints, seed).asJava
   }
 
   // Generate input of the form Y = logistic(offset + scale*X)
@@ -197,6 +197,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
       .setStepSize(10.0)
       .setRegParam(0.0)
       .setNumIterations(20)
+      .setConvergenceTol(0.0005)
 
     val model = lr.run(testRDD)
 

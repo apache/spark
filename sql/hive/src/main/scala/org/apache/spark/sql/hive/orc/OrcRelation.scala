@@ -23,47 +23,51 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.{OrcInputFormat, OrcOutputFormat, OrcSerde, OrcSplit}
-import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
+import org.apache.hadoop.hive.ql.io.orc.{OrcInputFormat, OrcOutputFormat, OrcSerde, OrcSplit, OrcStruct}
+import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
+import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
-import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, RecordWriter, Reporter}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.Logging
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{HadoopRDD, RDD}
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{Logging, SerializableWritable}
+import org.apache.spark.util.SerializableConfiguration
 
-/* Implicit conversions */
-import scala.collection.JavaConversions._
+private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
-  def createRelation(
+  override def shortName(): String = "orc"
+
+  override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
     assert(
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
 
-    new OrcRelation(paths, dataSchema, None, partitionColumns, parameters)(sqlContext)
+    new OrcRelation(paths, dataSchema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
 
 private[orc] class OrcOutputWriter(
     path: String,
+    bucketId: Option[Int],
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
+  extends OutputWriter with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -73,7 +77,8 @@ private[orc] class OrcOutputWriter(
     }.mkString(":"))
 
     val serde = new OrcSerde
-    serde.initialize(context.getConfiguration, table)
+    val configuration = context.getConfiguration
+    serde.initialize(configuration, table)
     serde
   }
 
@@ -83,18 +88,9 @@ private[orc] class OrcOutputWriter(
       TypeInfoUtils.getTypeInfoFromTypeString(
         HiveMetastoreTypes.toMetastoreType(dataSchema))
 
-    TypeInfoUtils
-      .getStandardJavaObjectInspectorFromTypeInfo(typeInfo)
-      .asInstanceOf[StructObjectInspector]
+    OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
+      .asInstanceOf[SettableStructObjectInspector]
   }
-
-  // Used to hold temporary `Writable` fields of the next row to be written.
-  private val reusableOutputBuffer = new Array[Any](dataSchema.length)
-
-  // Used to convert Catalyst values into Hadoop `Writable`s.
-  private val wrappers = structOI.getAllStructFieldRefs.map { ref =>
-    wrapperFor(ref.getFieldObjectInspector)
-  }.toArray
 
   // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
   // flag to decide whether `OrcRecordWriter.close()` needs to be called.
@@ -104,27 +100,48 @@ private[orc] class OrcOutputWriter(
     recordWriterInstantiated = true
 
     val conf = context.getConfiguration
-    val partition = context.getTaskAttemptID.getTaskID.getId
-    val filename = f"part-r-$partition%05d-${System.currentTimeMillis}%015d.orc"
+    val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
+    val taskAttemptId = context.getTaskAttemptID
+    val partition = taskAttemptId.getTaskID.getId
+    val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
       conf.asInstanceOf[JobConf],
-      new Path(path, filename).toUri.getPath,
+      new Path(path, filename).toString,
       Reporter.NULL
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def write(row: Row): Unit = {
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+
+  private def wrapOrcStruct(
+      struct: OrcStruct,
+      oi: SettableStructObjectInspector,
+      row: InternalRow): Unit = {
+    val fieldRefs = oi.getAllStructFieldRefs
     var i = 0
-    while (i < row.length) {
-      reusableOutputBuffer(i) = wrappers(i)(row(i))
+    while (i < fieldRefs.size) {
+      oi.setStructFieldData(
+        struct,
+        fieldRefs.get(i),
+        wrap(
+          row.get(i, dataSchema(i).dataType),
+          fieldRefs.get(i).getFieldObjectInspector,
+          dataSchema(i).dataType))
       i += 1
     }
+  }
+
+  val cachedOrcStruct = structOI.create().asInstanceOf[OrcStruct]
+
+  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+    wrapOrcStruct(cachedOrcStruct, structOI, row)
 
     recordWriter.write(
       NullWritable.get(),
-      serializer.serialize(reusableOutputBuffer, structOI))
+      serializer.serialize(cachedOrcStruct, structOI))
   }
 
   override def close(): Unit = {
@@ -134,15 +151,15 @@ private[orc] class OrcOutputWriter(
   }
 }
 
-@DeveloperApi
 private[sql] class OrcRelation(
     override val paths: Array[String],
     maybeDataSchema: Option[StructType],
     maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
+    override val bucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(
@@ -156,6 +173,7 @@ private[sql] class OrcRelation(
       maybeDataSchema,
       maybePartitionSpec,
       maybePartitionSpec.map(_.partitionColumns),
+      None,
       parameters)(sqlContext)
   }
 
@@ -183,21 +201,33 @@ private[sql] class OrcRelation(
       partitionColumns)
   }
 
-  override def buildScan(
+  override private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputPaths: Array[FileStatus]): RDD[Row] = {
+      inputPaths: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
     OrcTableScan(output, this, filters, inputPaths).execute()
   }
 
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    new OutputWriterFactory {
+  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
+    job.getConfiguration match {
+      case conf: JobConf =>
+        conf.setOutputFormat(classOf[OrcOutputFormat])
+      case conf =>
+        conf.setClass(
+          "mapred.output.format.class",
+          classOf[OrcOutputFormat],
+          classOf[MapRedOutputFormat[_, _]])
+    }
+
+    new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
+          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, dataSchema, context)
+        new OrcOutputWriter(path, bucketId, dataSchema, context)
       }
     }
   }
@@ -222,39 +252,48 @@ private[orc] case class OrcTableScan(
     HiveShim.appendReadColumns(conf, sortedIds, sortedNames)
   }
 
-  // Transform all given raw `Writable`s into `Row`s.
+  // Transform all given raw `Writable`s into `InternalRow`s.
   private def fillObject(
       path: String,
       conf: Configuration,
       iterator: Iterator[Writable],
-      nonPartitionKeyAttrs: Seq[(Attribute, Int)],
-      mutableRow: MutableRow): Iterator[Row] = {
+      nonPartitionKeyAttrs: Seq[Attribute]): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val soi = OrcFileOperator.getObjectInspector(path, Some(conf))
-    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
-      case (attr, ordinal) =>
-        soi.getStructFieldRef(attr.name.toLowerCase) -> ordinal
-    }.unzip
-    val unwrappers = fieldRefs.map(unwrapperFor)
-    // Map each tuple to a row object
-    iterator.map { value =>
-      val raw = deserializer.deserialize(value)
-      var i = 0
-      while (i < fieldRefs.length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+    val maybeStructOI = OrcFileOperator.getObjectInspector(path, Some(conf))
+    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
+    val unsafeProjection = UnsafeProjection.create(StructType.fromAttributes(nonPartitionKeyAttrs))
+
+    // SPARK-8501: ORC writes an empty schema ("struct<>") to an ORC file if the file contains zero
+    // rows, and thus couldn't give a proper ObjectInspector.  In this case we just return an empty
+    // partition since we know that this file is empty.
+    maybeStructOI.map { soi =>
+      val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.zipWithIndex.map {
+        case (attr, ordinal) =>
+          soi.getStructFieldRef(attr.name) -> ordinal
+      }.unzip
+      val unwrappers = fieldRefs.map(unwrapperFor)
+      // Map each tuple to a row object
+      iterator.map { value =>
+        val raw = deserializer.deserialize(value)
+        var i = 0
+        while (i < fieldRefs.length) {
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
         }
-        i += 1
+        unsafeProjection(mutableRow)
       }
-      mutableRow: Row
+    }.getOrElse {
+      Iterator.empty
     }
   }
 
-  def execute(): RDD[Row] = {
-    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
+  def execute(): RDD[InternalRow] = {
+    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
 
     // Tries to push down filters if ORC filter push-down is enabled
@@ -268,9 +307,11 @@ private[orc] case class OrcTableScan(
     // Sets requested columns
     addColumnIds(attributes, relation, conf)
 
-    if (inputPaths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
+    if (inputPaths.isEmpty) {
+      // the input path probably be pruned, return an empty RDD.
+      return sqlContext.sparkContext.emptyRDD[InternalRow]
     }
+    FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
 
     val inputFormatClass =
       classOf[OrcInputFormat]
@@ -283,16 +324,11 @@ private[orc] case class OrcTableScan(
       classOf[Writable]
     ).asInstanceOf[HadoopRDD[NullWritable, Writable]]
 
-    val wrappedConf = new SerializableWritable(conf)
+    val wrappedConf = new SerializableConfiguration(conf)
 
     rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
-      val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
-      fillObject(
-        split.getPath.toString,
-        wrappedConf.value,
-        iterator.map(_._2),
-        attributes.zipWithIndex,
-        mutableRow)
+      val writableIterator = iterator.map(_._2)
+      fillObject(split.getPath.toString, wrappedConf.value, writableIterator, attributes)
     }
   }
 }

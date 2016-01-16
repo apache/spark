@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.hash;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * 32-bit Murmur3 hasher.  This is based on Guava's Murmur3_32HashFunction.
@@ -44,12 +44,16 @@ public final class Murmur3_x86_32 {
     return fmix(h1, 4);
   }
 
-  public int hashUnsafeWords(Object baseObject, long baseOffset, int lengthInBytes) {
+  public int hashUnsafeWords(Object base, long offset, int lengthInBytes) {
+    return hashUnsafeWords(base, offset, lengthInBytes, seed);
+  }
+
+  public static int hashUnsafeWords(Object base, long offset, int lengthInBytes, int seed) {
     // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
     int h1 = seed;
-    for (int offset = 0; offset < lengthInBytes; offset += 4) {
-      int halfWord = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
+    for (int i = 0; i < lengthInBytes; i += 4) {
+      int halfWord = Platform.getInt(base, offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }

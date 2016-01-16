@@ -113,7 +113,9 @@ private[sink] object Logging {
   try {
     // We use reflection here to handle the case where users remove the
     // slf4j-to-jul bridge order to route their logs to JUL.
+    // scalastyle:off classforname
     val bridgeClass = Class.forName("org.slf4j.bridge.SLF4JBridgeHandler")
+    // scalastyle:on classforname
     bridgeClass.getMethod("removeHandlersForRootLogger").invoke(null)
     val installed = bridgeClass.getMethod("isInstalled").invoke(null).asInstanceOf[Boolean]
     if (!installed) {

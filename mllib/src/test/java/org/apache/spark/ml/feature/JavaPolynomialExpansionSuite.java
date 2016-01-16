@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.feature;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+import java.util.List;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -59,7 +61,7 @@ public class JavaPolynomialExpansionSuite {
       .setOutputCol("polyFeatures")
       .setDegree(3);
 
-    JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(
         Vectors.dense(-2.0, 2.3),
         Vectors.dense(-2.0, 4.0, -8.0, 2.3, -4.6, 9.2, 5.29, -10.58, 12.17)
@@ -69,7 +71,7 @@ public class JavaPolynomialExpansionSuite {
         Vectors.dense(0.6, -1.1),
         Vectors.dense(0.6, 0.36, 0.216, -1.1, -0.66, -0.396, 1.21, 0.726, -1.331)
       )
-    ));
+    );
 
     StructType schema = new StructType(new StructField[] {
       new StructField("features", new VectorUDT(), false, Metadata.empty()),

@@ -17,11 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
-
-import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.util.NextIterator
 
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
@@ -29,6 +26,11 @@ import kafka.consumer.SimpleConsumer
 import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
+
+import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.partial.{BoundedDouble, PartialResult}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.NextIterator
 
 /**
  * A batch-oriented interface for consuming from Kafka.
@@ -58,6 +60,47 @@ class KafkaRDD[
         val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
         new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
     }.toArray
+  }
+
+  override def count(): Long = offsetRanges.map(_.count).sum
+
+  override def countApprox(
+      timeout: Long,
+      confidence: Double = 0.95
+  ): PartialResult[BoundedDouble] = {
+    val c = count
+    new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
+  }
+
+  override def isEmpty(): Boolean = count == 0L
+
+  override def take(num: Int): Array[R] = {
+    val nonEmptyPartitions = this.partitions
+      .map(_.asInstanceOf[KafkaRDDPartition])
+      .filter(_.count > 0)
+
+    if (num < 1 || nonEmptyPartitions.size < 1) {
+      return new Array[R](0)
+    }
+
+    // Determine in advance how many messages need to be taken from each partition
+    val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
+      val remain = num - result.values.sum
+      if (remain > 0) {
+        val taken = Math.min(remain, part.count)
+        result + (part.index -> taken.toInt)
+      } else {
+        result
+      }
+    }
+
+    val buf = new ArrayBuffer[R]
+    val res = context.runJob(
+      this,
+      (tc: TaskContext, it: Iterator[R]) => it.take(parts(tc.partitionId)).toArray,
+      parts.keys.toArray)
+    res.foreach(buf ++= _)
+    buf.toArray
   }
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
@@ -113,7 +156,7 @@ class KafkaRDD[
     var requestOffset = part.fromOffset
     var iter: Iterator[MessageAndOffset] = null
 
-    // The idea is to use the provided preferred host, except on task retry atttempts,
+    // The idea is to use the provided preferred host, except on task retry attempts,
     // to minimize number of kafka metadata requests
     private def connectLeader: SimpleConsumer = {
       if (context.attemptNumber > 0) {
@@ -154,7 +197,11 @@ class KafkaRDD[
         .dropWhile(_.offset < requestOffset)
     }
 
-    override def close(): Unit = consumer.close()
+    override def close(): Unit = {
+      if (consumer != null) {
+        consumer.close()
+      }
+    }
 
     override def getNext(): R = {
       if (iter == null || !iter.hasNext) {

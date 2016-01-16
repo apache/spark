@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameJoinSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("join - join using") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
@@ -32,6 +31,40 @@ class DataFrameJoinSuite extends QueryTest {
     checkAnswer(
       df.join(df2, "int"),
       Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
+  }
+
+  test("join - join using multiple columns") {
+    val df = Seq(1, 2, 3).map(i => (i, i + 1, i.toString)).toDF("int", "int2", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, i + 1, (i + 1).toString)).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Seq("int", "int2")),
+      Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
+  }
+
+  test("join - join using multiple columns and specifying join type") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "inner"),
+      Row(1, "1", 2, 3) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "left"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "right"),
+      Row(1, "1", 2, 3) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "outer"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "left_semi"),
+      Row(1, "1", 2) :: Nil)
   }
 
   test("join - join using self join") {
@@ -49,7 +82,7 @@ class DataFrameJoinSuite extends QueryTest {
 
     checkAnswer(
       df1.join(df2, $"df1.key" === $"df2.key"),
-      ctx.sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key")
+      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key")
         .collect().toSeq)
   }
 
@@ -83,5 +116,28 @@ class DataFrameJoinSuite extends QueryTest {
     checkAnswer(
       left.join(right, left("key") === right("key")),
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
+  }
+
+  test("broadcast join hint") {
+    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+
+    // equijoin - should be converted into broadcast join
+    val plan1 = df1.join(broadcast(df2), "key").queryExecution.executedPlan
+    assert(plan1.collect { case p: BroadcastHashJoin => p }.size === 1)
+
+    // no join key -- should not be a broadcast join
+    val plan2 = df1.join(broadcast(df2)).queryExecution.executedPlan
+    assert(plan2.collect { case p: BroadcastHashJoin => p }.size === 0)
+
+    // planner should not crash without a join
+    broadcast(df1).queryExecution.executedPlan
+
+    // SPARK-12275: no physical plan for BroadcastHint in some condition
+    withTempPath { path =>
+      df1.write.parquet(path.getCanonicalPath)
+      val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
+      assert(df1.join(broadcast(pf1)).count() === 4)
+    }
   }
 }

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -22,7 +23,7 @@ import java.util.Random
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-import breeze.linalg.{Vector, DenseVector, squaredDistance}
+import breeze.linalg.{squaredDistance, DenseVector, Vector}
 
 import org.apache.spark.SparkContext._
 
@@ -119,3 +120,4 @@ object LocalKMeans {
     println("Final centers: " + kPoints)
   }
 }
+// scalastyle:on println

@@ -21,10 +21,10 @@ import java.util.UUID
 
 import scala.language.existentials
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Row}
@@ -47,6 +47,8 @@ private[ml] trait OneVsRestParams extends PredictorParams {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
+   * The base classifier input and output columns are ignored in favor of
+   * the ones specified in [[OneVsRest]].
    * @group param
    */
   val classifier: Param[ClassifierType] = new Param(this, "classifier", "base binary classifier")
@@ -68,17 +70,20 @@ private[ml] trait OneVsRestParams extends PredictorParams {
  *               The i-th model is produced by testing the i-th class (taking label 1) vs the rest
  *               (taking label 0).
  */
+@Since("1.4.0")
 @Experimental
 final class OneVsRestModel private[ml] (
-    override val uid: String,
-    labelMetadata: Metadata,
-    val models: Array[_ <: ClassificationModel[_, _]])
+    @Since("1.4.0")  override val uid: String,
+    @Since("1.4.0") labelMetadata: Metadata,
+    @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
   }
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     // Check schema
     transformSchema(dataset.schema, logging = true)
@@ -88,9 +93,8 @@ final class OneVsRestModel private[ml] (
 
     // add an accumulator column to store predictions of all the models
     val accColName = "mbc$acc" + UUID.randomUUID().toString
-    val init: () => Map[Int, Double] = () => {Map()}
-    val mapType = MapType(IntegerType, DoubleType, valueContainsNull = false)
-    val newDataset = dataset.withColumn(accColName, callUDF(init, mapType))
+    val initUDF = udf { () => Map[Int, Double]() }
+    val newDataset = dataset.withColumn(accColName, initUDF())
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -106,17 +110,16 @@ final class OneVsRestModel private[ml] (
 
         // add temporary column to store intermediate scores and update
         val tmpColName = "mbc$tmp" + UUID.randomUUID().toString
-        val update: (Map[Int, Double], Vector) => Map[Int, Double] =
-          (predictions: Map[Int, Double], prediction: Vector) => {
-            predictions + ((index, prediction(1)))
-          }
-        val updateUdf = callUDF(update, mapType, col(accColName), col(rawPredictionCol))
-        val transformedDataset = model.transform(df).select(columns : _*)
-        val updatedDataset = transformedDataset.withColumn(tmpColName, updateUdf)
+        val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
+          predictions + ((index, prediction(1)))
+        }
+        val transformedDataset = model.transform(df).select(columns: _*)
+        val updatedDataset = transformedDataset
+          .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
         val newColumns = origCols ++ List(col(tmpColName))
 
         // switch out the intermediate column with the accumulator column
-        updatedDataset.select(newColumns : _*).withColumnRenamed(tmpColName, accColName)
+        updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
     }
 
     if (handlePersistence) {
@@ -124,14 +127,21 @@ final class OneVsRestModel private[ml] (
     }
 
     // output the index of the classifier with highest confidence as prediction
-    val label: Map[Int, Double] => Double = (predictions: Map[Int, Double]) => {
+    val labelUDF = udf { (predictions: Map[Int, Double]) =>
       predictions.maxBy(_._2)._1.toDouble
     }
 
     // output label and label metadata as prediction
-    val labelUdf = callUDF(label, DoubleType, col(accColName))
-    aggregatedDataset.withColumn($(predictionCol), labelUdf.as($(predictionCol), labelMetadata))
+    aggregatedDataset
+      .withColumn($(predictionCol), labelUDF(col(accColName)), labelMetadata)
       .drop(accColName)
+  }
+
+  @Since("1.4.1")
+  override def copy(extra: ParamMap): OneVsRestModel = {
+    val copied = new OneVsRestModel(
+      uid, labelMetadata, models.map(_.copy(extra).asInstanceOf[ClassificationModel[_, _]]))
+    copyValues(copied, extra).setParent(parent)
   }
 }
 
@@ -144,21 +154,39 @@ final class OneVsRestModel private[ml] (
  * Each example is scored against all k models and the model with highest score
  * is picked to label the example.
  */
+@Since("1.4.0")
 @Experimental
-final class OneVsRest(override val uid: String)
+final class OneVsRest @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
   extends Estimator[OneVsRestModel] with OneVsRestParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setClassifier(value: Classifier[_, _, _]): this.type = {
     set(classifier, value.asInstanceOf[ClassifierType])
   }
 
+  /** @group setParam */
+  @Since("1.5.0")
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
+  /** @group setParam */
+  @Since("1.5.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("1.5.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): OneVsRestModel = {
     // determine number of classes either from metadata if provided, or via computation.
     val labelSchema = dataset.schema($(labelCol))
@@ -179,20 +207,17 @@ final class OneVsRest(override val uid: String)
 
     // create k columns, one for each binary classifier.
     val models = Range(0, numClasses).par.map { index =>
-
-      val label: Double => Double = (label: Double) => {
-        if (label.toInt == index) 1.0 else 0.0
-      }
-
       // generate new label metadata for the binary problem.
-      // TODO: use when ... otherwise after SPARK-7321 is merged
-      val labelUDF = callUDF(label, DoubleType, col($(labelCol)))
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
       val labelColName = "mc2b$" + index
-      val labelUDFWithNewMeta = labelUDF.as(labelColName, newLabelMeta)
-      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
+      val trainingDataset = multiclassLabeled.withColumn(
+        labelColName, when(col($(labelCol)) === index.toDouble, 1.0).otherwise(0.0), newLabelMeta)
       val classifier = getClassifier
-      classifier.fit(trainingDataset, classifier.labelCol -> labelColName)
+      val paramMap = new ParamMap()
+      paramMap.put(classifier.labelCol -> labelColName)
+      paramMap.put(classifier.featuresCol -> getFeaturesCol)
+      paramMap.put(classifier.predictionCol -> getPredictionCol)
+      classifier.fit(trainingDataset, paramMap)
     }.toArray[ClassificationModel[_, _]]
 
     if (handlePersistence) {
@@ -208,5 +233,14 @@ final class OneVsRest(override val uid: String)
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
     copyValues(model)
+  }
+
+  @Since("1.4.1")
+  override def copy(extra: ParamMap): OneVsRest = {
+    val copied = defaultCopy(extra).asInstanceOf[OneVsRest]
+    if (isDefined(classifier)) {
+      copied.setClassifier($(classifier).copy(extra))
+    }
+    copied
   }
 }

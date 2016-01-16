@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
 
 import scala.math.exp
 
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 
 import org.apache.spark._
 
@@ -86,3 +87,4 @@ object SparkLR {
     sc.stop()
   }
 }
+// scalastyle:on println

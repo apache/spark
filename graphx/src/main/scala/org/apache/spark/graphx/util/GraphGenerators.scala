@@ -23,17 +23,14 @@ import scala.reflect.ClassTag
 import scala.util._
 
 import org.apache.spark._
-import org.apache.spark.serializer._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.Graph
-import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.impl.GraphImpl
+import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer._
 
 /** A collection of graph generating functions. */
-object GraphGenerators {
+object GraphGenerators extends Logging {
 
   val RMATa = 0.45
   val RMATb = 0.15
@@ -142,7 +139,7 @@ object GraphGenerators {
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
-        println(edges.size + " edges")
+        logDebug(edges.size + " edges")
       }
       edges += addEdge(numVertices)
     }

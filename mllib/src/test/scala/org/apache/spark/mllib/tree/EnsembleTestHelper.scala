@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.collection.mutable
+
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 import org.apache.spark.util.StatCounter
-
-import scala.collection.mutable
 
 object EnsembleTestHelper {
 
@@ -69,8 +69,8 @@ object EnsembleTestHelper {
       required: Double,
       metricName: String = "mse") {
     val predictions = input.map(x => model.predict(x.features))
-    val errors = predictions.zip(input.map(_.label)).map { case (prediction, label) =>
-      prediction - label
+    val errors = predictions.zip(input).map { case (prediction, point) =>
+      point.label - prediction
     }
     val metric = metricName match {
       case "mse" =>

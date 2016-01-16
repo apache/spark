@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{VirtualColumn, Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
-  self: PlanType with Product =>
+  self: PlanType =>
 
   def output: Seq[Attribute]
 
@@ -44,15 +44,16 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
 
   /**
+    * The set of all attributes that are produced by this node.
+    */
+  def producedAttributes: AttributeSet = AttributeSet.empty
+
+  /**
    * Attributes that are referenced by expressions but not provided by this nodes children.
    * Subclasses should override this method if they produce attributes internally as it is used by
    * assertions designed to prevent the construction of invalid plans.
-   *
-   * Note that virtual columns should be excluded. Currently, we only support the grouping ID
-   * virtual column.
    */
-  def missingInput: AttributeSet =
-    (references -- inputSet).filter(_.name != VirtualColumn.groupingIdName)
+  def missingInput: AttributeSet = references -- inputSet -- producedAttributes
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.
@@ -81,19 +82,19 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       }
     }
 
-    val newArgs = productIterator.map {
+    def recursiveTransform(arg: Any): AnyRef = arg match {
       case e: Expression => transformExpressionDown(e)
       case Some(e: Expression) => Some(transformExpressionDown(e))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case seq: Traversable[_] => seq.map {
-        case e: Expression => transformExpressionDown(e)
-        case other => other
-      }
+      case seq: Traversable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
-    }.toArray
+      case null => null
+    }
 
-    if (changed) makeCopy(newArgs) else this
+    val newArgs = productIterator.map(recursiveTransform).toArray
+
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
   /**
@@ -114,19 +115,19 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       }
     }
 
-    val newArgs = productIterator.map {
+    def recursiveTransform(arg: Any): AnyRef = arg match {
       case e: Expression => transformExpressionUp(e)
       case Some(e: Expression) => Some(transformExpressionUp(e))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case seq: Traversable[_] => seq.map {
-        case e: Expression => transformExpressionUp(e)
-        case other => other
-      }
+      case seq: Traversable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
-    }.toArray
+      case null => null
+    }
 
-    if (changed) makeCopy(newArgs) else this
+    val newArgs = productIterator.map(recursiveTransform).toArray
+
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
   /** Returns the result of running [[transformExpressions]] on this node
@@ -139,13 +140,17 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   /** Returns all of the expressions present in this query plan operator. */
   def expressions: Seq[Expression] = {
+    // Recursively find all expressions from a traversable.
+    def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
+      case e: Expression => e :: Nil
+      case s: Traversable[_] => seqToExpressions(s)
+      case other => Nil
+    }
+
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case Some(e: Expression) => e :: Nil
-      case seq: Traversable[_] => seq.flatMap {
-        case e: Expression => e :: Nil
-        case other => Nil
-      }
+      case seq: Traversable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
   }
@@ -156,7 +161,9 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def schemaString: String = schema.treeString
 
   /** Prints out the schema in the tree format */
+  // scalastyle:off println
   def printSchema(): Unit = println(schemaString)
+  // scalastyle:on println
 
   /**
    * A prefix string used when printing the plan.

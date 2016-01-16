@@ -122,7 +122,8 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       numGDIterations,
       regParam,
       miniBatchFrac,
-      initialWeightsWithIntercept)
+      initialWeightsWithIntercept,
+      convergenceTol)
 
     assert(lossGD(0) ~= lossLBFGS(0) absTol 1E-5,
       "The first losses of LBFGS and GD should be the same.")
@@ -221,7 +222,8 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       numGDIterations,
       regParam,
       miniBatchFrac,
-      initialWeightsWithIntercept)
+      initialWeightsWithIntercept,
+      convergenceTol)
 
     // for class LBFGS and the optimize method, we only look at the weights
     assert(

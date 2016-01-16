@@ -21,12 +21,11 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.HashPartitioner
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl._
 import org.apache.spark.graphx.util.BytecodeUtils
-
+import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * An implementation of [[org.apache.spark.graphx.Graph]] to support computation on graphs.
@@ -332,9 +331,9 @@ object GraphImpl {
       edgeStorageLevel: StorageLevel,
       vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
     val edgeRDD = EdgeRDD.fromEdges(edges)(classTag[ED], classTag[VD])
-      .withTargetStorageLevel(edgeStorageLevel).cache()
+      .withTargetStorageLevel(edgeStorageLevel)
     val vertexRDD = VertexRDD(vertices, edgeRDD, defaultVertexAttr)
-      .withTargetStorageLevel(vertexStorageLevel).cache()
+      .withTargetStorageLevel(vertexStorageLevel)
     GraphImpl(vertexRDD, edgeRDD)
   }
 
@@ -346,9 +345,14 @@ object GraphImpl {
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
       edges: EdgeRDD[ED]): GraphImpl[VD, ED] = {
+
+    vertices.cache()
+
     // Convert the vertex partitions in edges to the correct type
     val newEdges = edges.asInstanceOf[EdgeRDDImpl[ED, _]]
       .mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD])
+      .cache()
+
     GraphImpl.fromExistingRDDs(vertices, newEdges)
   }
 

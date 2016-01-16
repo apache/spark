@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.sources
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// This file defines all the filters that we can push down to the data sources.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /**
  * A filter predicate for data sources.
  *
@@ -31,6 +35,15 @@ abstract class Filter
  * @since 1.3.0
  */
 case class EqualTo(attribute: String, value: Any) extends Filter
+
+/**
+ * Performs equality comparison, similar to [[EqualTo]]. However, this differs from [[EqualTo]]
+ * in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
+ * (rather than NULL) if one of the input is NULL and the other is not NULL.
+ *
+ * @since 1.5.0
+ */
+case class EqualNullSafe(attribute: String, value: Any) extends Filter
 
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to a value

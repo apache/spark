@@ -38,9 +38,11 @@ private[spark] object UIWorkloadGenerator {
 
   def main(args: Array[String]) {
     if (args.length < 3) {
+      // scalastyle:off println
       println(
-        "usage: ./bin/spark-class org.apache.spark.ui.UIWorkloadGenerator " +
+        "Usage: ./bin/spark-class org.apache.spark.ui.UIWorkloadGenerator " +
           "[master] [FIFO|FAIR] [#job set (4 jobs per set)]")
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -96,6 +98,7 @@ private[spark] object UIWorkloadGenerator {
       for ((desc, job) <- jobs) {
         new Thread {
           override def run() {
+            // scalastyle:off println
             try {
               setProperties(desc)
               job()
@@ -106,6 +109,7 @@ private[spark] object UIWorkloadGenerator {
             } finally {
               barrier.release()
             }
+            // scalastyle:on println
           }
         }.start
         Thread.sleep(INTER_JOB_WAIT_MS)

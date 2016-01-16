@@ -18,10 +18,9 @@
 package org.apache.spark.util
 
 import java.io.NotSerializableException
-import java.util.Random
 
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.rdd.RDD
 
@@ -91,11 +90,6 @@ class ClosureCleanerSuite extends SparkFunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testKeyBy(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitions(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithIndex(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testMapPartitionsWithContext(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testFlatMapWith(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testFilterWith(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testForEachWith(rdd) }
-      expectCorrectException { TestUserClosuresActuallyCleaned.testMapWith(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions2(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions3(rdd) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testZipPartitions4(rdd) }
@@ -120,6 +114,10 @@ class ClosureCleanerSuite extends SparkFunSuite {
       expectCorrectException { TestUserClosuresActuallyCleaned.testRunApproximateJob(sc) }
       expectCorrectException { TestUserClosuresActuallyCleaned.testSubmitJob(sc) }
     }
+  }
+
+  test("createNullValue") {
+    new TestCreateNullValue().run()
   }
 }
 
@@ -265,21 +263,6 @@ private object TestUserClosuresActuallyCleaned {
   def testMapPartitionsWithIndex(rdd: RDD[Int]): Unit = {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
-  def testFlatMapWith(rdd: RDD[Int]): Unit = {
-    rdd.flatMapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; Seq() }.count()
-  }
-  def testMapWith(rdd: RDD[Int]): Unit = {
-    rdd.mapWith ((index: Int) => new Random(index + 42)){ (_, it) => return; 0 }.count()
-  }
-  def testFilterWith(rdd: RDD[Int]): Unit = {
-    rdd.filterWith ((index: Int) => new Random(index + 42)){ (_, it) => return; true }.count()
-  }
-  def testForEachWith(rdd: RDD[Int]): Unit = {
-    rdd.foreachWith ((index: Int) => new Random(index + 42)){ (_, it) => return }
-  }
-  def testMapPartitionsWithContext(rdd: RDD[Int]): Unit = {
-    rdd.mapPartitionsWithContext { (_, it) => return; it }.count()
-  }
   def testZipPartitions2(rdd: RDD[Int]): Unit = {
     rdd.zipPartitions(rdd) { case (it1, it2) => return; it1 }.count()
   }
@@ -348,5 +331,47 @@ private object TestUserClosuresActuallyCleaned {
       { case (_, _) => return }: (Int, Int) => Unit,
       { return }
     )
+  }
+}
+
+class TestCreateNullValue {
+
+  var x = 5
+
+  def getX: Int = x
+
+  def run(): Unit = {
+    val bo: Boolean = true
+    val c: Char = '1'
+    val b: Byte = 1
+    val s: Short = 1
+    val i: Int = 1
+    val l: Long = 1
+    val f: Float = 1
+    val d: Double = 1
+
+    // Bring in all primitive types into the closure such that they become
+    // parameters of the closure constructor. This allows us to test whether
+    // null values are created correctly for each type.
+    val nestedClosure = () => {
+      // scalastyle:off println
+      if (s.toString == "123") { // Don't really output them to avoid noisy
+        println(bo)
+        println(c)
+        println(b)
+        println(s)
+        println(i)
+        println(l)
+        println(f)
+        println(d)
+      }
+
+      val closure = () => {
+        println(getX)
+      }
+      // scalastyle:on println
+      ClosureCleaner.clean(closure)
+    }
+    nestedClosure()
   }
 }

@@ -136,8 +136,19 @@ public class TransportClientFactory implements Closeable {
     TransportClient cachedClient = clientPool.clients[clientIndex];
 
     if (cachedClient != null && cachedClient.isActive()) {
-      logger.trace("Returning cached connection to {}: {}", address, cachedClient);
-      return cachedClient;
+      // Make sure that the channel will not timeout by updating the last use time of the
+      // handler. Then check that the client is still alive, in case it timed out before
+      // this code was able to update things.
+      TransportChannelHandler handler = cachedClient.getChannel().pipeline()
+        .get(TransportChannelHandler.class);
+      synchronized (handler) {
+        handler.getResponseHandler().updateTimeOfLastRequest();
+      }
+
+      if (cachedClient.isActive()) {
+        logger.trace("Returning cached connection to {}: {}", address, cachedClient);
+        return cachedClient;
+      }
     }
 
     // If we reach here, we don't have an existing connection open. Let's create a new one.
@@ -156,6 +167,18 @@ public class TransportClientFactory implements Closeable {
       clientPool.clients[clientIndex] = createClient(address);
       return clientPool.clients[clientIndex];
     }
+  }
+
+  /**
+   * Create a completely new {@link TransportClient} to the given remote host / port.
+   * This connection is not pooled.
+   *
+   * As with {@link #createClient(String, int)}, this method is blocking.
+   */
+  public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
+      throws IOException {
+    final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+    return createClient(address);
   }
 
   /** Create a completely new {@link TransportClient} to the remote address. */

@@ -39,6 +39,7 @@ import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.TransportFrameDecoder;
 
 /**
  * Contains the context to create a {@link TransportServer}, {@link TransportClientFactory}, and to
@@ -58,15 +59,24 @@ public class TransportContext {
 
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
+  private final boolean closeIdleConnections;
 
   private final MessageEncoder encoder;
   private final MessageDecoder decoder;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
+    this(conf, rpcHandler, false);
+  }
+
+  public TransportContext(
+      TransportConf conf,
+      RpcHandler rpcHandler,
+      boolean closeIdleConnections) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.encoder = new MessageEncoder();
     this.decoder = new MessageDecoder();
+    this.closeIdleConnections = closeIdleConnections;
   }
 
   /**
@@ -84,7 +94,13 @@ public class TransportContext {
 
   /** Create a server which will attempt to bind to a specific port. */
   public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
-    return new TransportServer(this, port, rpcHandler, bootstraps);
+    return new TransportServer(this, null, port, rpcHandler, bootstraps);
+  }
+
+  /** Create a server which will attempt to bind to a specific host and port. */
+  public TransportServer createServer(
+      String host, int port, List<TransportServerBootstrap> bootstraps) {
+    return new TransportServer(this, host, port, rpcHandler, bootstraps);
   }
 
   /** Creates a new server, binding to any available ephemeral port. */
@@ -119,7 +135,7 @@ public class TransportContext {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       channel.pipeline()
         .addLast("encoder", encoder)
-        .addLast("frameDecoder", NettyUtils.createFrameDecoder())
+        .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
@@ -143,7 +159,7 @@ public class TransportContext {
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs());
+      conf.connectionTimeoutMs(), closeIdleConnections);
   }
 
   public TransportConf getConf() { return conf; }

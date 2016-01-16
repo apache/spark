@@ -19,12 +19,15 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{AttributeGroup, BinaryAttribute, NominalAttribute}
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 
-class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
+class OneHotEncoderSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   def stringIndexed(): DataFrame = {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
@@ -34,6 +37,10 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("labelIndex")
       .fit(df)
     indexer.transform(df)
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new OneHotEncoder)
   }
 
   test("OneHotEncoder dropLast = false") {
@@ -81,8 +88,8 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
     val output = encoder.transform(df)
     val group = AttributeGroup.fromStructField(output.schema("encoded"))
     assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("size_is_small").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("size_is_medium").withIndex(1))
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
   }
 
   test("input column without ML attribute") {
@@ -93,7 +100,15 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
     val output = encoder.transform(df)
     val group = AttributeGroup.fromStructField(output.schema("encoded"))
     assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("index_is_0").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("index_is_1").withIndex(1))
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
+  }
+
+  test("read/write") {
+    val t = new OneHotEncoder()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setDropLast(false)
+    testDefaultReadWrite(t)
   }
 }

@@ -18,13 +18,12 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
 
 class ProjectCollapsingSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -67,6 +66,32 @@ class ProjectCollapsingSuite extends PlanTest {
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse two nondeterministic, independent projects into one") {
+    val query = testRelation
+      .select(Rand(10).as('rand))
+      .select(Rand(20).as('rand2))
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = testRelation
+      .select(Rand(20).as('rand2)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse one nondeterministic, one deterministic, independent projects into one") {
+    val query = testRelation
+      .select(Rand(10).as('rand), 'a)
+      .select(('a + 1).as('a_plus_1))
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = testRelation
+      .select(('a + 1).as('a_plus_1)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

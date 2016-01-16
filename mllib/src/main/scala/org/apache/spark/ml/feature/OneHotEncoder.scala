@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, udf}
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Experimental
 class OneHotEncoder(override val uid: String) extends Transformer
-  with HasInputCol with HasOutputCol {
+  with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("oneHot"))
 
@@ -66,7 +66,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
-    val is = "_is_"
+    validateParams()
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
 
@@ -79,17 +79,17 @@ class OneHotEncoder(override val uid: String) extends Transformer
     val outputAttrNames: Option[Array[String]] = inputAttr match {
       case nominal: NominalAttribute =>
         if (nominal.values.isDefined) {
-          nominal.values.map(_.map(v => inputColName + is + v))
+          nominal.values
         } else if (nominal.numValues.isDefined) {
-          nominal.numValues.map(n => Array.tabulate(n)(i => inputColName + is + i))
+          nominal.numValues.map(n => Array.tabulate(n)(_.toString))
         } else {
           None
         }
       case binary: BinaryAttribute =>
         if (binary.values.isDefined) {
-          binary.values.map(_.map(v => inputColName + is + v))
+          binary.values
         } else {
-          Some(Array.tabulate(2)(i => inputColName + is + i))
+          Some(Array.tabulate(2)(_.toString))
         }
       case _: NumericAttribute =>
         throw new RuntimeException(
@@ -123,7 +123,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
 
   override def transform(dataset: DataFrame): DataFrame = {
     // schema transformation
-    val is = "_is_"
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
     val shouldDropLast = $(dropLast)
@@ -142,7 +141,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
             math.max(m0, m1)
           }
         ).toInt + 1
-      val outputAttrNames = Array.tabulate(numAttrs)(i => inputColName + is + i)
+      val outputAttrNames = Array.tabulate(numAttrs)(_.toString)
       val filtered = if (shouldDropLast) outputAttrNames.dropRight(1) else outputAttrNames
       val outputAttrs: Array[Attribute] =
         filtered.map(name => BinaryAttribute.defaultAttr.withName(name))
@@ -165,4 +164,13 @@ class OneHotEncoder(override val uid: String) extends Transformer
 
     dataset.select(col("*"), encode(col(inputColName).cast(DoubleType)).as(outputColName, metadata))
   }
+
+  override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object OneHotEncoder extends DefaultParamsReadable[OneHotEncoder] {
+
+  @Since("1.6.0")
+  override def load(path: String): OneHotEncoder = super.load(path)
 }

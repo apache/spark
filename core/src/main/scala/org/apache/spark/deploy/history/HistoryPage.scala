@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
@@ -51,7 +51,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val hasMultipleAttempts = appsToShow.exists(_.attempts.size > 1)
     val appTable =
       if (hasMultipleAttempts) {
-        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow, appsToShow)
+        // Sorting is disable here as table sort on rowspan has issues.
+        // ref. SPARK-10172
+        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow,
+          appsToShow, sortable = false)
       } else {
         UIUtils.listingTable(appHeader, appRow, appsToShow)
       }
@@ -158,7 +161,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       info: ApplicationHistoryInfo,
       attempt: ApplicationAttemptInfo,
       isFirst: Boolean): Seq[Node] = {
-    val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
+    val uiAddress = UIUtils.prependBaseUri(HistoryServer.getAttemptURI(info.id, attempt.attemptId))
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
     val duration =
@@ -187,8 +190,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       {
         if (renderAttemptIdColumn) {
           if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
-            <td><a href={HistoryServer.getAttemptURI(info.id, attempt.attemptId)}>
-              {attempt.attemptId.get}</a></td>
+            <td><a href={uiAddress}>{attempt.attemptId.get}</a></td>
           } else {
             <td>&nbsp;</td>
           }
@@ -215,9 +217,9 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
-    "/?" + Array(
+    UIUtils.prependBaseUri("/?" + Array(
       "page=" + linkPage,
       "showIncomplete=" + showIncomplete
-    ).mkString("&")
+      ).mkString("&"))
   }
 }

@@ -20,12 +20,13 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 class VectorAssembler(override val uid: String)
-  extends Transformer with HasInputCols with HasOutputCol {
+  extends Transformer with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
@@ -83,6 +84,8 @@ class VectorAssembler(override val uid: String)
             val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
             Array.fill(numAttrs)(NumericAttribute.defaultAttr)
           }
+        case otherType =>
+          throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
     val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
@@ -99,10 +102,11 @@ class VectorAssembler(override val uid: String)
       }
     }
 
-    dataset.select(col("*"), assembleFunc(struct(args : _*)).as($(outputCol), metadata))
+    dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)
@@ -115,11 +119,17 @@ class VectorAssembler(override val uid: String)
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
-    StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, false))
+    StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
+
+  override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 
-private object VectorAssembler {
+@Since("1.6.0")
+object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
+
+  @Since("1.6.0")
+  override def load(path: String): VectorAssembler = super.load(path)
 
   private[feature] def assemble(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]

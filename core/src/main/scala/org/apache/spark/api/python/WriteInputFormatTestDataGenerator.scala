@@ -17,11 +17,12 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataOutput, DataInput}
 import java.{util => ju}
+import java.io.{DataInput, DataOutput}
+
+import scala.collection.JavaConverters._
 
 import com.google.common.base.Charsets.UTF_8
-
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 
@@ -62,10 +63,9 @@ private[python] class TestInputKeyConverter extends Converter[Any, Any] {
 }
 
 private[python] class TestInputValueConverter extends Converter[Any, Any] {
-  import collection.JavaConversions._
   override def convert(obj: Any): ju.List[Double] = {
     val m = obj.asInstanceOf[MapWritable]
-    seqAsJavaList(m.keySet.map(w => w.asInstanceOf[DoubleWritable].get()).toSeq)
+    m.keySet.asScala.map(_.asInstanceOf[DoubleWritable].get()).toSeq.asJava
   }
 }
 
@@ -76,9 +76,8 @@ private[python] class TestOutputKeyConverter extends Converter[Any, Any] {
 }
 
 private[python] class TestOutputValueConverter extends Converter[Any, Any] {
-  import collection.JavaConversions._
   override def convert(obj: Any): DoubleWritable = {
-    new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().head)
+    new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().iterator().next())
   }
 }
 
