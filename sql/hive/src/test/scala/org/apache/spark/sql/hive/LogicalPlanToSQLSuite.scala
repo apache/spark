@@ -24,6 +24,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
+    sql("DROP TABLE IF EXISTS t0")
+    sql("DROP TABLE IF EXISTS t1")
+    sql("DROP TABLE IF EXISTS t2")
     sqlContext.range(10).write.saveAsTable("t0")
 
     sqlContext
@@ -142,5 +145,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   // Query plans transformed by DistinctAggregationRewriter are not recognized yet
   ignore("distinct and non-distinct aggregation") {
     checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM t2 GROUP BY a")
+  }
+
+  test("persisted data source relations") {
+    Seq("orc", "json", "parquet").foreach { format =>
+      val tableName = s"${format}_t0"
+      withTable(tableName) {
+        sqlContext.range(10).write.format(format).saveAsTable(tableName)
+        checkHiveQl(s"SELECT id FROM $tableName")
+      }
+    }
   }
 }
