@@ -28,13 +28,13 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, Partition, PartitioningUtils, PartitionSpec}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -458,7 +458,12 @@ abstract class HadoopFsRelation private[sql](
 
   private var _partitionSpec: PartitionSpec = _
 
-  private[sql] def bucketSpec: Option[BucketSpec] = None
+  private[this] var malformedBucketFile = false
+
+  private[sql] def maybeBucketSpec: Option[BucketSpec] = None
+
+  final private[sql] def getBucketSpec: Option[BucketSpec] =
+    maybeBucketSpec.filter(_ => sqlContext.conf.bucketingEnabled() && !malformedBucketFile)
 
   private class FileStatusCache {
     var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
@@ -664,6 +669,35 @@ abstract class HadoopFsRelation private[sql](
     })
   }
 
+  /**
+   * Groups the input files by bucket id, if bucketing is enabled and this data source is bucketed.
+   * Returns None if there exists any malformed bucket files.
+   */
+  private def groupBucketFiles(
+      files: Array[FileStatus]): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
+    malformedBucketFile = false
+    if (getBucketSpec.isDefined) {
+      val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
+      var i = 0
+      while (!malformedBucketFile && i < files.length) {
+        val bucketId = BucketingUtils.getBucketId(files(i).getPath.getName)
+        if (bucketId.isEmpty) {
+          logError(s"File ${files(i).getPath} is expected to be a bucket file, but there is no " +
+            "bucket id information in file name. Fall back to non-bucketing mode.")
+          malformedBucketFile = true
+        } else {
+          val bucketFiles =
+            groupedBucketFiles.getOrElseUpdate(bucketId.get, mutable.ArrayBuffer.empty)
+          bucketFiles += files(i)
+        }
+        i += 1
+      }
+      if (malformedBucketFile) None else Some(groupedBucketFiles.mapValues(_.toArray))
+    } else {
+      None
+    }
+  }
+
   final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
@@ -683,7 +717,20 @@ abstract class HadoopFsRelation private[sql](
       }
     }
 
-    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    groupBucketFiles(inputStatuses).map { groupedBucketFiles =>
+      // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket
+      // id from file name. Then read these files into a RDD(use one-partition empty RDD for empty
+      // bucket), and coalesce it to one partition. Finally union all bucket RDDs to one result.
+      val perBucketRows = (0 until maybeBucketSpec.get.numBuckets).map { bucketId =>
+        groupedBucketFiles.get(bucketId).map { inputStatuses =>
+          buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
+        }.getOrElse(sqlContext.emptyResult)
+      }
+
+      new UnionRDD(sqlContext.sparkContext, perBucketRows)
+    }.getOrElse {
+      buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    }
   }
 
   /**

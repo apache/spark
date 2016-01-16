@@ -52,7 +52,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val condEval = predicate.gen(ctx)
     val trueEval = trueValue.gen(ctx)
     val falseEval = falseValue.gen(ctx)
@@ -136,46 +136,56 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val got = ctx.freshName("got")
-
-    val cases = branches.map { case (condition, value) =>
-      val cond = condition.gen(ctx)
-      val res = value.gen(ctx)
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    // Generate code that looks like:
+    //
+    // condA = ...
+    // if (condA) {
+    //   valueA
+    // } else {
+    //   condB = ...
+    //   if (condB) {
+    //     valueB
+    //   } else {
+    //     condC = ...
+    //     if (condC) {
+    //       valueC
+    //     } else {
+    //       elseValue
+    //     }
+    //   }
+    // }
+    val cases = branches.map { case (condExpr, valueExpr) =>
+      val cond = condExpr.gen(ctx)
+      val res = valueExpr.gen(ctx)
       s"""
-        if (!$got) {
-          ${cond.code}
-          if (!${cond.isNull} && ${cond.value}) {
-            $got = true;
-            ${res.code}
-            ${ev.isNull} = ${res.isNull};
-            ${ev.value} = ${res.value};
-          }
-        }
-      """
-    }.mkString("\n")
-
-    val elseCase = {
-      if (elseValue.isDefined) {
-        val res = elseValue.get.gen(ctx)
-        s"""
-        if (!$got) {
+        ${cond.code}
+        if (!${cond.isNull} && ${cond.value}) {
           ${res.code}
           ${ev.isNull} = ${res.isNull};
           ${ev.value} = ${res.value};
         }
-        """
-      } else {
-        ""
-      }
+      """
     }
 
+    var generatedCode = cases.mkString("", "\nelse {\n", "\nelse {\n")
+
+    elseValue.foreach { elseExpr =>
+      val res = elseExpr.gen(ctx)
+      generatedCode +=
+        s"""
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.value} = ${res.value};
+        """
+    }
+
+    generatedCode += "}\n" * cases.size
+
     s"""
-      boolean $got = false;
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $cases
-      $elseCase
+      $generatedCode
     """
   }
 
@@ -265,11 +275,11 @@ case class Least(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(eval: GeneratedExpressionCode): String = {
+    def updateEval(eval: ExprCode): String = {
       s"""
         ${eval.code}
         if (!${eval.isNull} && (${ev.isNull} ||
@@ -324,11 +334,11 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(eval: GeneratedExpressionCode): String = {
+    def updateEval(eval: ExprCode): String = {
       s"""
         ${eval.code}
         if (!${eval.isNull} && (${ev.isNull} ||

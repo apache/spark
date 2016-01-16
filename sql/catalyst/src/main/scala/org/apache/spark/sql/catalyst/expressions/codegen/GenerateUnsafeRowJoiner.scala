@@ -158,7 +158,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
-       |public java.lang.Object generate($exprType[] exprs) {
+       |public java.lang.Object generate(Object[] references) {
        |  return new SpecificUnsafeRowJoiner();
        |}
        |

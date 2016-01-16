@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -33,8 +34,8 @@ public abstract class ColumnVector {
   /**
    * Allocates a column with each element of size `width` either on or off heap.
    */
-  public static ColumnVector allocate(int capacity, DataType type, boolean offHeap) {
-    if (offHeap) {
+  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
+    if (mode == MemoryMode.OFF_HEAP) {
       return new OffHeapColumnVector(capacity, type);
     } else {
       return new OnHeapColumnVector(capacity, type);
@@ -111,7 +112,7 @@ public abstract class ColumnVector {
   public abstract void putInts(int rowId, int count, int[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
    * The data in src must be 4-byte little endian ints.
    */
   public abstract void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex);
@@ -138,7 +139,7 @@ public abstract class ColumnVector {
   public abstract void putDoubles(int rowId, int count, double[] src, int srcIndex);
 
   /**
-   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
    * The data in src must be ieee formated doubles.
    */
   public abstract void putDoubles(int rowId, int count, byte[] src, int srcIndex);
