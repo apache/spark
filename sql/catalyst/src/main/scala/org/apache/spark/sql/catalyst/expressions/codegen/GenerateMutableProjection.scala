@@ -99,24 +99,24 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val code = s"""
-      public java.lang.Object generate($exprType[] expr) {
-        return new SpecificMutableProjection(expr);
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificMutableProjection(references);
       }
 
       class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
-        private $exprType[] expressions;
-        private $mutableRowType mutableRow;
+        private Object[] references;
+        private MutableRow mutableRow;
         ${ctx.declareMutableStates()}
         ${ctx.declareAddedFunctions()}
 
-        public SpecificMutableProjection($exprType[] expr) {
-          expressions = expr;
+        public SpecificMutableProjection(Object[] references) {
+          this.references = references;
           mutableRow = new $genericMutableRowType(${expressions.size});
           ${ctx.initMutableStates()}
         }
 
-        public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
+        public ${classOf[BaseMutableProjection].getName} target(MutableRow row) {
           mutableRow = row;
           return this;
         }

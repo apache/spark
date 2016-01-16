@@ -38,7 +38,7 @@ trait CodegenFallback extends Expression {
     if (nullable) {
       s"""
         /* expression: ${this.toCommentSafeString} */
-        Object $objectTerm = expressions[$idx].eval($input);
+        Object $objectTerm = ((Expression) references[$idx]).eval($input);
         boolean ${ev.isNull} = $objectTerm == null;
         ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
         if (!${ev.isNull}) {
@@ -49,7 +49,7 @@ trait CodegenFallback extends Expression {
       ev.isNull = "false"
       s"""
         /* expression: ${this.toCommentSafeString} */
-        Object $objectTerm = expressions[$idx].eval($input);
+        Object $objectTerm = ((Expression) references[$idx]).eval($input);
         ${ctx.javaType(this.dataType)} ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
       """
     }

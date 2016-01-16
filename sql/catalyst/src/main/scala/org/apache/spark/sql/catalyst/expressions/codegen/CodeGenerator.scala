@@ -45,16 +45,15 @@ import org.apache.spark.util.Utils
 case class ExprCode(var code: String, var isNull: String, var value: String)
 
 /**
- * A context for codegen, which is used to bookkeeping the expressions those are not supported
- * by codegen, then they are evaluated directly. The unsupported expression is appended at the
- * end of `references`, the position of it is kept in the code, used to access and evaluate it.
+ * A context for codegen, tracking a list of objects that could be passed into generated Java
+ * function.
  */
 class CodegenContext {
 
   /**
-   * Holding all the expressions those do not support codegen, will be evaluated directly.
+   * Holding a list of objects that could be used passed into generated class.
    */
-  val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
+  val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
     * Holding a list of generated columns as input of current operator, will be used by
@@ -420,7 +419,7 @@ class CodegenContext {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
-    // Get all the exprs that appear at least twice and set up the state for subexpression
+    // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach(e => {
@@ -485,7 +484,7 @@ class CodegenContext {
  * into generated class.
  */
 abstract class GeneratedClass {
-  def generate(expressions: Array[Expression]): Any
+  def generate(references: Array[Any]): Any
 }
 
 /**
@@ -495,8 +494,6 @@ abstract class GeneratedClass {
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val exprType: String = classOf[Expression].getName
-  protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
   /**
@@ -557,7 +554,8 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[MutableRow].getName
+      classOf[MutableRow].getName,
+      classOf[Expression].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 

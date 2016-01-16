@@ -21,10 +21,11 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.sql.catalyst.DefaultParserDialect
+import org.apache.spark.sql.catalyst.CatalystQl
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.catalyst.parser.ParserConf
+import org.apache.spark.sql.execution.{aggregate, SparkQl}
 import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -32,7 +33,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect extends DefaultParserDialect
+class MyDialect(conf: ParserConf) extends CatalystQl(conf)
 
 class SQLQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -161,7 +162,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       newContext.sql("SELECT 1")
     }
     // test if the dialect set back to DefaultSQLDialect
-    assert(newContext.getSQLDialect().getClass === classOf[DefaultParserDialect])
+    assert(newContext.getSQLDialect().getClass === classOf[SparkQl])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -586,7 +587,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Allow only a single WITH clause per query") {
-    intercept[RuntimeException] {
+    intercept[AnalysisException] {
       sql(
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }
@@ -602,8 +603,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("from follow multiple brackets") {
     checkAnswer(sql(
       """
-        |select key from ((select * from testData limit 1)
-        |  union all (select * from testData limit 1)) x limit 1
+        |select key from ((select * from testData)
+        |  union all (select * from testData)) x limit 1
       """.stripMargin),
       Row(1)
     )
@@ -616,7 +617,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql(
       """
         |select key from
-        |  (select * from testData limit 1 union all select * from testData limit 1) x
+        |  (select * from testData union all select * from testData) x
         |  limit 1
       """.stripMargin),
       Row(1)
@@ -649,13 +650,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("approximate count distinct") {
     checkAnswer(
-      sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
+      sql("SELECT APPROX_COUNT_DISTINCT(a) FROM testData2"),
       Row(3))
   }
 
   test("approximate count distinct with user provided standard deviation") {
     checkAnswer(
-      sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
+      sql("SELECT APPROX_COUNT_DISTINCT(a, 0.04) FROM testData2"),
       Row(3))
   }
 
@@ -1192,19 +1193,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Floating point number format") {
     checkAnswer(
-      sql("SELECT 0.3"), Row(BigDecimal(0.3).underlying())
+      sql("SELECT 0.3"), Row(0.3)
     )
 
     checkAnswer(
-      sql("SELECT -0.8"), Row(BigDecimal(-0.8).underlying())
+      sql("SELECT -0.8"), Row(-0.8)
     )
 
     checkAnswer(
-      sql("SELECT .5"), Row(BigDecimal(0.5))
+      sql("SELECT .5"), Row(0.5)
     )
 
     checkAnswer(
-      sql("SELECT -.18"), Row(BigDecimal(-0.18))
+      sql("SELECT -.18"), Row(-0.18)
     )
   }
 
@@ -1218,11 +1219,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      sql("SELECT 9223372036854775808"), Row(new java.math.BigDecimal("9223372036854775808"))
+      sql("SELECT 9223372036854775808BD"), Row(new java.math.BigDecimal("9223372036854775808"))
     )
 
     checkAnswer(
-      sql("SELECT -9223372036854775809"), Row(new java.math.BigDecimal("-9223372036854775809"))
+      sql("SELECT -9223372036854775809BD"), Row(new java.math.BigDecimal("-9223372036854775809"))
     )
   }
 
@@ -1237,11 +1238,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      sql("SELECT -5.2"), Row(BigDecimal(-5.2))
+      sql("SELECT -5.2BD"), Row(BigDecimal(-5.2))
     )
 
     checkAnswer(
-      sql("SELECT +6.8"), Row(BigDecimal(6.8))
+      sql("SELECT +6.8"), Row(6.8d)
     )
 
     checkAnswer(
@@ -1616,20 +1617,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("decimal precision with multiply/division") {
-    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
-    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
-    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
-    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
+    checkAnswer(sql("select 10.3BD * 3.0BD"), Row(BigDecimal("30.90")))
+    checkAnswer(sql("select 10.3000BD * 3.0BD"), Row(BigDecimal("30.90000")))
+    checkAnswer(sql("select 10.30000BD * 30.0BD"), Row(BigDecimal("309.000000")))
+    checkAnswer(sql("select 10.300000000000000000BD * 3.000000000000000000BD"),
       Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
-    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
+    checkAnswer(sql("select 10.300000000000000000BD * 3.0000000000000000000BD"),
       Row(null))
 
-    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
-    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
-    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
-    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
+    checkAnswer(sql("select 10.3BD / 3.0BD"), Row(BigDecimal("3.433333")))
+    checkAnswer(sql("select 10.3000BD / 3.0BD"), Row(BigDecimal("3.4333333")))
+    checkAnswer(sql("select 10.30000BD / 30.0BD"), Row(BigDecimal("0.343333333")))
+    checkAnswer(sql("select 10.300000000000000000BD / 3.00000000000000000BD"),
       Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
-    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
+    checkAnswer(sql("select 10.3000000000000000000BD / 3.00000000000000000BD"),
       Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
   }
 
@@ -1655,13 +1656,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("precision smaller than scale") {
-    checkAnswer(sql("select 10.00"), Row(BigDecimal("10.00")))
-    checkAnswer(sql("select 1.00"), Row(BigDecimal("1.00")))
-    checkAnswer(sql("select 0.10"), Row(BigDecimal("0.10")))
-    checkAnswer(sql("select 0.01"), Row(BigDecimal("0.01")))
-    checkAnswer(sql("select 0.001"), Row(BigDecimal("0.001")))
-    checkAnswer(sql("select -0.01"), Row(BigDecimal("-0.01")))
-    checkAnswer(sql("select -0.001"), Row(BigDecimal("-0.001")))
+    checkAnswer(sql("select 10.00BD"), Row(BigDecimal("10.00")))
+    checkAnswer(sql("select 1.00BD"), Row(BigDecimal("1.00")))
+    checkAnswer(sql("select 0.10BD"), Row(BigDecimal("0.10")))
+    checkAnswer(sql("select 0.01BD"), Row(BigDecimal("0.01")))
+    checkAnswer(sql("select 0.001BD"), Row(BigDecimal("0.001")))
+    checkAnswer(sql("select -0.01BD"), Row(BigDecimal("-0.01")))
+    checkAnswer(sql("select -0.001BD"), Row(BigDecimal("-0.001")))
   }
 
   test("external sorting updates peak execution memory") {
@@ -1750,7 +1751,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e1.message.contains("Table not found"))
 
     val e2 = intercept[AnalysisException] {
-      sql("select * from no_db.no_table")
+      sql("select * from no_db.no_table").show()
     }
     assert(e2.message.contains("Table not found"))
 

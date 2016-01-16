@@ -167,20 +167,19 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
   override def doExecute(): RDD[InternalRow] = {
     val ctx = new CodegenContext
     val (rdd, code) = plan.produce(ctx, this)
-    val exprType: String = classOf[Expression].getName
     val references = ctx.references.toArray
     val source = s"""
-      public Object generate($exprType[] exprs) {
-       return new GeneratedIterator(exprs);
+      public Object generate(Object[] references) {
+       return new GeneratedIterator(references);
       }
 
       class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
-       private $exprType[] expressions;
+       private Object[] references;
        ${ctx.declareMutableStates()}
 
-       public GeneratedIterator($exprType[] exprs) {
-         expressions = exprs;
+       public GeneratedIterator(Object[] references) {
+         this.references = references;
          ${ctx.initMutableStates()}
        }
 

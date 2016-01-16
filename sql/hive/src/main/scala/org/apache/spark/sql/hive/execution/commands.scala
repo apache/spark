@@ -213,7 +213,12 @@ case class CreateMetastoreDataSourceAsSelect(
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val resolved = ResolvedDataSource(
-            sqlContext, Some(query.schema.asNullable), partitionColumns, provider, optionsWithPath)
+            sqlContext,
+            Some(query.schema.asNullable),
+            partitionColumns,
+            bucketSpec,
+            provider,
+            optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
           EliminateSubQueries(sqlContext.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
