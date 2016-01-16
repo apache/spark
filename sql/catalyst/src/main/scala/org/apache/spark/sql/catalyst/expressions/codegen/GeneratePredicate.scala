@@ -47,12 +47,12 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final Object[] references;
-        ${declareMutableStates(ctx)}
-        ${declareAddedFunctions(ctx)}
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
         public SpecificPredicate(Object[] references) {
           this.references = references;
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
@@ -63,7 +63,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
     logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
-    val p = compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
+    val p = CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
     (r: InternalRow) => p.eval(r)
   }
 }

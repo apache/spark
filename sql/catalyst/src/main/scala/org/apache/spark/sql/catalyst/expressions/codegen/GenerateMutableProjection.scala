@@ -107,13 +107,13 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
         private Object[] references;
         private MutableRow mutableRow;
-        ${declareMutableStates(ctx)}
-        ${declareAddedFunctions(ctx)}
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
         public SpecificMutableProjection(Object[] references) {
           this.references = references;
           mutableRow = new $genericMutableRowType(${expressions.size});
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
         public ${classOf[BaseMutableProjection].getName} target(MutableRow row) {
@@ -138,7 +138,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     () => {
       c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
     }

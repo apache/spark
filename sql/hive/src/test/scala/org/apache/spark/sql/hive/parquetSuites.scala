@@ -190,11 +190,11 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
   test(s"conversion is working") {
     assert(
-      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
+      sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
         case _: HiveTableScan => true
       }.isEmpty)
     assert(
-      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
+      sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
         case _: PhysicalRDD => true
       }.nonEmpty)
   }
@@ -305,7 +305,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         """.stripMargin)
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
-      df.queryExecution.executedPlan match {
+      df.queryExecution.sparkPlan match {
         case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation, _, _)) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[ParquetRelation].getCanonicalName} and " +
@@ -335,7 +335,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         """.stripMargin)
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
-      df.queryExecution.executedPlan match {
+      df.queryExecution.sparkPlan match {
         case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation, _, _)) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[ParquetRelation].getCanonicalName} and " +

@@ -118,12 +118,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
 
         private Object[] references;
-        ${declareMutableStates(ctx)}
-        ${declareAddedFunctions(ctx)}
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
         public SpecificOrdering(Object[] references) {
           this.references = references;
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
         public int compare(InternalRow a, InternalRow b) {
@@ -135,6 +135,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
     logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
-    compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
+    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
 }

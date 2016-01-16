@@ -351,8 +351,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     val hasher = classOf[Murmur3_x86_32].getName
     def hashInt(i: String): ExprCode = inlineValue(s"$hasher.hashInt($i, $seed)")
     def hashLong(l: String): ExprCode = inlineValue(s"$hasher.hashLong($l, $seed)")
-    def inlineValue(v: String): ExprCode =
-      ExprCode(code = "", isNull = "false", value = v)
+    def inlineValue(v: String): ExprCode = ExprCode(code = "", isNull = "false", value = v)
 
     dataType match {
       case NullType => inlineValue(seed)

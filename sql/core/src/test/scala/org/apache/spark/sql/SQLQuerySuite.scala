@@ -247,7 +247,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
-    val hasGeneratedAgg = df.queryExecution.executedPlan
+    val hasGeneratedAgg = df.queryExecution.sparkPlan
       .collect { case _: aggregate.TungstenAggregate => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
@@ -792,11 +792,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
-    val cp = df.queryExecution.executedPlan.collect {
+    val cp = df.queryExecution.sparkPlan.collect {
       case cp: CartesianProduct => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
-    val smj = df.queryExecution.executedPlan.collect {
+    val smj = df.queryExecution.sparkPlan.collect {
       case smj: SortMergeJoin => smj
     }
     assert(smj.size > 0, "should use SortMergeJoin")

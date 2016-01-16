@@ -62,7 +62,7 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
       // Comparison at the end is for broadcast left semi join
       val joinExpression = df1("key") === df2("key") && df1("value") > df2("value")
       val df3 = df1.join(broadcast(df2), joinExpression, joinType)
-      val plan = df3.queryExecution.executedPlan
+      val plan = df3.queryExecution.sparkPlan
       assert(plan.collect { case p: T => p }.size === 1)
       plan.executeCollect()
     }
