@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
-import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, HANDLED_FILTERS}
+import org.apache.spark.sql.execution.PhysicalRDD.{HANDLED_FILTERS, INPUT_PATHS}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
