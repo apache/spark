@@ -88,6 +88,13 @@ class EquivalentExpressions {
   }
 
   /**
+   * Returns true if e exists.
+   */
+  def contains(e: Expression): Boolean = {
+    equivalenceMap.contains(Expr(e))
+  }
+
+  /**
    * Returns the state of the data structure as a string. If `all` is false, skips sets of
    * equivalent expressions with cardinality 1.
    */

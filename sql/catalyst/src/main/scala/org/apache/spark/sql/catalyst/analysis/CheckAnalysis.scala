@@ -104,12 +104,12 @@ trait CheckAnalysis {
               s"filter expression '${f.condition.prettyString}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
+          case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.prettyString}' " +
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
 
-          case j @ Join(_, _, _, Some(condition)) =>
+          case j @ Join(_, _, _, Some(condition), _) =>
             def checkValidJoinConditionExprs(expr: Expression): Unit = expr match {
               case p: Predicate =>
                 p.asInstanceOf[Expression].children.foreach(checkValidJoinConditionExprs)
@@ -207,14 +207,15 @@ trait CheckAnalysis {
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
           // Special handling for cases when self-join introduce duplicate expression ids.
-          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-            failAnalysis(
-              s"""
-                 |Failure when resolving conflicting references in Join:
-                 |$plan
-                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+          case j @ Join(left, right, _, _, _)
+            if left.outputSet.intersect(right.outputSet).nonEmpty =>
+              val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+              failAnalysis(
+                s"""
+                   |Failure when resolving conflicting references in Join:
+                   |$plan
+                   |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                   |""".stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(

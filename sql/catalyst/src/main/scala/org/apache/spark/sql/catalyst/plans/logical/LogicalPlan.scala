@@ -99,6 +99,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
+  /**
+   * Returns true if the two plans are semantically equal. This should ignore state generated
+   * during planning to help the planning process.
+   * TODO: implement this as a pass that canonicalizes the plan tree instead?
+   */
+  def semanticEquals(other: LogicalPlan): Boolean = this == other
+
   override protected def statePrefix = if (!resolved) "'" else super.statePrefix
 
   /**
