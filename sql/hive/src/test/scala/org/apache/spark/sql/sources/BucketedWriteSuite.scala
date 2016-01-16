@@ -20,7 +20,9 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -61,14 +63,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[IllegalArgumentException](df.write.bucketBy(2, "i").insertInto("tt"))
   }
 
-  private val testFileName = """.*-(\d+)$""".r
-  private val otherFileName = """.*-(\d+)\..*""".r
-  private def getBucketId(fileName: String): Int = {
-    fileName match {
-      case testFileName(bucketId) => bucketId.toInt
-      case otherFileName(bucketId) => bucketId.toInt
-    }
-  }
+  private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
   private def testBucketing(
       dataDir: File,
@@ -78,30 +73,34 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     val allBucketFiles = dataDir.listFiles().filterNot(f =>
       f.getName.startsWith(".") || f.getName.startsWith("_")
     )
-    val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+    val groupedBucketFiles = allBucketFiles.groupBy(f => BucketingUtils.getBucketId(f.getName).get)
     assert(groupedBucketFiles.size <= 8)
 
     for ((bucketId, bucketFiles) <- groupedBucketFiles) {
-      for (bucketFile <- bucketFiles) {
-        val df = sqlContext.read.format(source).load(bucketFile.getAbsolutePath)
-          .select((bucketCols ++ sortCols).map(col): _*)
+      for (bucketFilePath <- bucketFiles.map(_.getAbsolutePath)) {
+        val types = df.select((bucketCols ++ sortCols).map(col): _*).schema.map(_.dataType)
+        val columns = (bucketCols ++ sortCols).zip(types).map {
+          case (colName, dt) => col(colName).cast(dt)
+        }
+        val readBack = sqlContext.read.format(source).load(bucketFilePath).select(columns: _*)
 
         if (sortCols.nonEmpty) {
-          checkAnswer(df.sort(sortCols.map(col): _*), df.collect())
+          checkAnswer(readBack.sort(sortCols.map(col): _*), readBack.collect())
         }
 
-        val rows = df.select(bucketCols.map(col): _*).queryExecution.toRdd.map(_.copy()).collect()
+        val qe = readBack.select(bucketCols.map(col): _*).queryExecution
+        val rows = qe.toRdd.map(_.copy()).collect()
+        val getBucketId = UnsafeProjection.create(
+          HashPartitioning(qe.analyzed.output, 8).partitionIdExpression :: Nil,
+          qe.analyzed.output)
 
         for (row <- rows) {
-          assert(row.isInstanceOf[UnsafeRow])
-          val actualBucketId = (row.hashCode() % 8 + 8) % 8
+          val actualBucketId = getBucketId(row).getInt(0)
           assert(actualBucketId == bucketId)
         }
       }
     }
   }
-
-  private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
   test("write bucketed data") {
     for (source <- Seq("parquet", "json", "orc")) {

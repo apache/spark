@@ -101,7 +101,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * of elements in a window over this DStream. windowDuration and slideDuration are as defined in
    * the window() operation. This is equivalent to window(windowDuration, slideDuration).count()
    */
-  def countByWindow(windowDuration: Duration, slideDuration: Duration) : JavaDStream[jl.Long] = {
+  def countByWindow(windowDuration: Duration, slideDuration: Duration): JavaDStream[jl.Long] = {
     dstream.countByWindow(windowDuration, slideDuration)
   }
 
