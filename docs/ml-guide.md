@@ -428,7 +428,7 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.mllib.linalg.Vector
@@ -466,7 +466,7 @@ model.save("/tmp/spark-logistic-regression-model")
 pipeline.save("/tmp/unfit-lr-model")
 
 // and load it back in during production
-val sameModel = Pipeline.load("/tmp/spark-logistic-regression-model")
+val sameModel = PipelineModel.load("/tmp/spark-logistic-regression-model")
 
 // Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
