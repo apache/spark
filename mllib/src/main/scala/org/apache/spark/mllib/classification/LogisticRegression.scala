@@ -384,7 +384,6 @@ class LogisticRegressionWithLBFGS
     }
   }
 
-
   /**
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.

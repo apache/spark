@@ -275,7 +275,6 @@ class LogisticRegression @Since("1.2.0") (
         Instance(label, weight, features)
     }
 
-
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
