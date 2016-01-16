@@ -513,7 +513,7 @@ private[spark] class MesosClusterScheduler(
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
 
-    // filter by mesos constraints
+    // Filter by mesos constraints
     stateLock.synchronized {
       val it = offers.iterator()
       while (it.hasNext) {
