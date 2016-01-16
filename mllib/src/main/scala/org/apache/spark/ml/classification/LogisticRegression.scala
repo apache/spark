@@ -306,7 +306,8 @@ class LogisticRegression @Since("1.2.0") (
   /**
    * Internal train method, return the model and the objective history
    */
-  protected[spark] def train(instances: RDD[Instance], handlePersistence: Boolean): (LogisticRegressionModel, Array[Double]) = {
+  protected[spark] def train(instances: RDD[Instance], handlePersistence: Boolean):
+      (LogisticRegressionModel, Array[Double]) = {
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, labelSummarizer) = {
