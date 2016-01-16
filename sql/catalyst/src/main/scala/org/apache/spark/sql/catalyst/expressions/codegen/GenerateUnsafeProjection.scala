@@ -320,8 +320,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     create(canonicalize(expressions), subexpressionEliminationEnabled)
   }
 
-  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
-    create(expressions, subexpressionEliminationEnabled = false)
+  protected def create(references: Seq[Expression]): UnsafeProjection = {
+    create(references, subexpressionEliminationEnabled = false)
   }
 
   private def create(
@@ -331,20 +331,20 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
     val code = s"""
-      public java.lang.Object generate($exprType[] exprs) {
-        return new SpecificUnsafeProjection(exprs);
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificUnsafeProjection(references);
       }
 
       class SpecificUnsafeProjection extends ${classOf[UnsafeProjection].getName} {
 
-        private $exprType[] expressions;
+        private Object[] references;
 
         ${declareMutableStates(ctx)}
 
         ${declareAddedFunctions(ctx)}
 
-        public SpecificUnsafeProjection($exprType[] expressions) {
-          this.expressions = expressions;
+        public SpecificUnsafeProjection(Object[] references) {
+          this.references = references;
           ${initMutableStates(ctx)}
         }
 

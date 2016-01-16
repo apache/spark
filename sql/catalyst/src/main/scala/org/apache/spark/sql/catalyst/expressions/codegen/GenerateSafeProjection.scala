@@ -152,19 +152,19 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
     val code = s"""
-      public java.lang.Object generate($exprType[] expr) {
-        return new SpecificSafeProjection(expr);
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificSafeProjection(references);
       }
 
       class SpecificSafeProjection extends ${classOf[BaseProjection].getName} {
 
-        private $exprType[] expressions;
-        private $mutableRowType mutableRow;
+        private Object[] references;
+        private MutableRow mutableRow;
         ${declareMutableStates(ctx)}
         ${declareAddedFunctions(ctx)}
 
-        public SpecificSafeProjection($exprType[] expr) {
-          expressions = expr;
+        public SpecificSafeProjection(Object[] references) {
+          this.references = references;
           mutableRow = new $genericMutableRowType(${expressions.size});
           ${initMutableStates(ctx)}
         }

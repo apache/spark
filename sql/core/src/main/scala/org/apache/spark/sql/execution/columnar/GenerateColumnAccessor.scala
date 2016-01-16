@@ -123,7 +123,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 
-      public SpecificColumnarIterator generate($exprType[] expr) {
+      public SpecificColumnarIterator generate(Object[] references) {
         return new SpecificColumnarIterator();
       }
 
@@ -190,6 +190,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
     logDebug(s"Generated ColumnarIterator: ${CodeFormatter.format(code)}")
 
-    compile(code).generate(ctx.references.toArray).asInstanceOf[ColumnarIterator]
+    compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
   }
 }

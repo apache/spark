@@ -41,17 +41,17 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
     val ctx = newCodeGenContext()
     val eval = predicate.gen(ctx)
     val code = s"""
-      public SpecificPredicate generate($exprType[] expr) {
-        return new SpecificPredicate(expr);
+      public SpecificPredicate generate(Object[] references) {
+        return new SpecificPredicate(references);
       }
 
       class SpecificPredicate extends ${classOf[Predicate].getName} {
-        private final $exprType[] expressions;
+        private final Object[] references;
         ${declareMutableStates(ctx)}
         ${declareAddedFunctions(ctx)}
 
-        public SpecificPredicate($exprType[] expr) {
-          expressions = expr;
+        public SpecificPredicate(Object[] references) {
+          this.references = references;
           ${initMutableStates(ctx)}
         }
 
