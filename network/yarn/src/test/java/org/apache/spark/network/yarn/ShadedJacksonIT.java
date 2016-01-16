@@ -34,26 +34,30 @@ public class ShadedJacksonIT {
   private static final Logger log =
       LoggerFactory.getLogger(ShadedJacksonIT.class);
 
-  private static final String SHADED_JACKSON_PACKAGE = "org.spark-project.com.fasterxml.jackson.";
+  private static final String SHADED_JACKSON_PACKAGE = "/org/spark-project/com/fasterxml/jackson/";
 
   @Test
+  public void logClasspath() throws Throwable {
+    log.info("classpath={}", System.getProperty("java.class.path"));
+  }
+  @Test
   public void testJacksonShadedAnnotation() throws Throwable {
-    loadClassAsResource(SHADED_JACKSON_PACKAGE + "annotation.JacksonAnnotation");
+    loadClassAsResource(SHADED_JACKSON_PACKAGE + "annotation/JacksonAnnotation");
   }
 
   @Test
   public void testJacksonShadedCore() throws Throwable {
-    loadClassAsResource(SHADED_JACKSON_PACKAGE + "core.JsonParser");
+    loadClassAsResource(SHADED_JACKSON_PACKAGE + "core/JsonParser");
   }
 
   @Test
   public void testJacksonShadedDatabind() throws Throwable {
-    loadClassAsResource(SHADED_JACKSON_PACKAGE + "databind.JsonSerializer");
+    loadClassAsResource(SHADED_JACKSON_PACKAGE + "databind/JsonSerializer");
   }
 
   @Test
   public void testJacksonShadedScala() throws Throwable {
-    loadClassAsResource(SHADED_JACKSON_PACKAGE + "scala.SetModule");
+    loadClassAsResource(SHADED_JACKSON_PACKAGE + "scala/SetModule");
   }
 
   private void loadClassAsResource(String classname) throws Throwable {
