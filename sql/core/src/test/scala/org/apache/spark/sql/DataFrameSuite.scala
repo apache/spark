@@ -36,14 +36,6 @@ import org.apache.spark.sql.types._
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("wholecodegen") {
-    //sqlContext.range(1<<4).filter("(id & 1) = 1").groupBy().count().explain(true)
-    sqlContext.range(1<<4).filter("(id & 1) = 1").groupBy().agg("id" ->"stddev").explain(true)
-    sqlContext.range(1<<4).filter("(id & 1) = 1").groupBy().agg("id" -> "stddev")
-      .filter("`stddev(id)` > 0").show()
-    //assert(sqlContext.range(1<<4).filter("(id & 1) = 1").count() === (1<<3))
-  }
-
   test("analysis error should be eagerly reported") {
     // Eager analysis.
     withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {

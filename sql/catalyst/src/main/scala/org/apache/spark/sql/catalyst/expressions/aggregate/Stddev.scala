@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.dsl.expressions._
 
 case class StddevSamp(child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -81,8 +81,6 @@ case class StddevPop(
     }
   }
 }
-
-///// This is included for test purpose (comparing the performance against imperative one)
 
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance

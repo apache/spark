@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf, SparkFunSuite}
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Benchmark
 
 /**
@@ -34,7 +33,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
   def testRangeFilterAndAggregation(values: Int): Unit = {
 
-    val benchmark = new Benchmark("Single Int Column Scan", values)
+    val benchmark = new Benchmark("range/filter/aggregation", values)
 
     benchmark.addCase("Without whole stage codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
@@ -58,7 +57,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
   def testImperitaveAggregation(values: Int): Unit = {
 
-    val benchmark = new Benchmark("Single Int Column Scan", values)
+    val benchmark = new Benchmark("aggregation", values)
 
     benchmark.addCase("ImpAgg w/o whole stage codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
