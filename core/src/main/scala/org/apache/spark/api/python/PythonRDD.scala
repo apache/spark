@@ -276,6 +276,7 @@ private[spark] class PythonRunner(
         // Serialized command:
         dataOut.writeInt(command.length)
         dataOut.write(command)
+		dataOut.flush()
         // Data values
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
