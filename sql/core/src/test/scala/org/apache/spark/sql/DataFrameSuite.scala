@@ -1228,4 +1228,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
     checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
   }
+
+  test("SPARK-12841: cast in filter") {
+    checkAnswer(
+      Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
+      Row(1, "a"))
+  }
 }
