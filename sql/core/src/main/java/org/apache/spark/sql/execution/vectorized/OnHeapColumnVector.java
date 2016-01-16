@@ -97,6 +97,7 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putNotNulls(int rowId, int count) {
+    if (!anyNullsSet) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }

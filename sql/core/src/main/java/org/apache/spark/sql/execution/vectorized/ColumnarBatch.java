@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.vectorized;
 import java.util.Arrays;
 import java.util.Iterator;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -59,12 +60,12 @@ public final class ColumnarBatch {
   // Total number of rows that have been filtered.
   private int numRowsFiltered = 0;
 
-  public static ColumnarBatch allocate(StructType schema, boolean offHeap) {
-    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, offHeap);
+  public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
+    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode);
   }
 
-  public static ColumnarBatch allocate(StructType schema, boolean offHeap, int maxRows) {
-    return new ColumnarBatch(schema, maxRows, offHeap);
+  public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
+    return new ColumnarBatch(schema, maxRows, memMode);
   }
 
   /**
@@ -282,7 +283,7 @@ public final class ColumnarBatch {
     ++numRowsFiltered;
   }
 
-  private ColumnarBatch(StructType schema, int maxRows, boolean offHeap) {
+  private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
@@ -290,7 +291,7 @@ public final class ColumnarBatch {
 
     for (int i = 0; i < schema.fields().length; ++i) {
       StructField field = schema.fields()[i];
-      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), offHeap);
+      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode);
     }
   }
 }

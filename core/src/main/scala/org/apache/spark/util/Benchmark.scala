@@ -62,10 +62,10 @@ private[spark] class Benchmark(
     val firstRate = results.head.avgRate
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
-    printf("%-24s %16s %16s %14s\n", name + ":", "Avg Time(ms)", "Avg Rate(M/s)", "Relative Rate")
-    println("-------------------------------------------------------------------------")
+    printf("%-30s %16s %16s %14s\n", name + ":", "Avg Time(ms)", "Avg Rate(M/s)", "Relative Rate")
+    println("-------------------------------------------------------------------------------")
     results.zip(benchmarks).foreach { r =>
-      printf("%-24s %16s %16s %14s\n",
+      printf("%-30s %16s %16s %14s\n",
         r._2.name,
         "%10.2f" format r._1.avgMs,
         "%10.2f" format r._1.avgRate,

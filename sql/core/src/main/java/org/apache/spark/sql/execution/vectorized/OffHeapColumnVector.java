@@ -49,6 +49,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       throw new RuntimeException("Unhandled " + type);
     }
+    anyNullsSet = true;
     reset();
   }
 
@@ -98,6 +99,7 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putNotNulls(int rowId, int count) {
+    if (!anyNullsSet) return;
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 0);
