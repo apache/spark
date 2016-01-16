@@ -26,8 +26,8 @@ private object HasPollingPeriod {
   def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
     val period = POLL_UNIT.convert(pollPeriod, pollUnit)
     if (period < MINIMAL_POLL_PERIOD) {
-      throw new IllegalArgumentException("Polling period " + pollPeriod + " " + pollUnit +
-        " below than minimal polling period ")
+      throw new IllegalArgumentException(s"Given polling period $pollPeriod $pollUnit below the " +
+        s"minimal polling period ($MINIMAL_POLL_PERIOD $POLL_UNIT)")
     }
   }
 }
