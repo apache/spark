@@ -142,7 +142,8 @@ private[spark] class MesosClusterScheduler(
   private val queuedDriversState = engineFactory.createEngine("driverQueue")
   private val launchedDriversState = engineFactory.createEngine("launchedDrivers")
   private val pendingRetryDriversState = engineFactory.createEngine("retryList")
-  private val driverOfferConstraints = parseConstraintString(conf.get("spark.mesos.constraints", ""))
+  private val driverOfferConstraints =
+    parseConstraintString(conf.get("spark.mesos.constraints", ""))
   // Flag to mark if the scheduler is ready to be called, which is until the scheduler
   // is registered with Mesos master.
   @volatile protected var ready = false
@@ -512,6 +513,7 @@ private[spark] class MesosClusterScheduler(
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
 
+    // filter by mesos constraints
     stateLock.synchronized {
       val it = offers.iterator()
       while (it.hasNext) {
