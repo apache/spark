@@ -56,7 +56,7 @@ class GangliaSink(
 
   val ganglia = new GMetric(host, port, mode, ttl)
 
-  override val reporter = GangliaReporter.forRegistry(registry)
+  val reporter = GangliaReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .build(ganglia)

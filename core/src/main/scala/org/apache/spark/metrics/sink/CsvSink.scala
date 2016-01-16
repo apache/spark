@@ -39,7 +39,7 @@ private[spark] class CsvSink(
     case None => DEFAULT_DIR
   }
 
-  override val reporter = CsvReporter.forRegistry(registry)
+  val reporter = CsvReporter.forRegistry(registry)
       .formatFor(Locale.US)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)

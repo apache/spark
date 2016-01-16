@@ -29,7 +29,7 @@ private[spark] class JmxSink(
   securityMgr: SecurityManager
 ) extends Sink {
 
-  override val reporter = JmxReporter.forRegistry(registry).build()
+  val reporter = JmxReporter.forRegistry(registry).build()
 
   override def start() {
     reporter.start()

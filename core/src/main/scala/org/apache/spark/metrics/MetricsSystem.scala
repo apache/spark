@@ -65,9 +65,9 @@ import org.apache.spark.util.Utils
  * [options] is the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
-    val instance: String,
-    conf: SparkConf,
-    securityMgr: SecurityManager
+  val instance: String,
+  conf: SparkConf,
+  securityMgr: SecurityManager
 ) extends Logging {
 
   private[this] val metricsConfig = new MetricsConfig(conf)

@@ -30,7 +30,7 @@ private[spark] class ConsoleSink(
   securityMgr: SecurityManager
 ) extends Sink with HasPollingPeriod {
 
-  override val reporter = ConsoleReporter.forRegistry(registry)
+  val reporter = ConsoleReporter.forRegistry(registry)
     .convertDurationsTo(TimeUnit.MILLISECONDS)
     .convertRatesTo(TimeUnit.SECONDS)
     .build()

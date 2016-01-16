@@ -17,10 +17,7 @@
 
 package org.apache.spark.metrics.sink
 
-import com.codahale.metrics.ScheduledReporter
-
 private[spark] trait Sink {
-  def reporter: ScheduledReporter
   def start(): Unit
   def stop(): Unit
   def report(): Unit

@@ -58,8 +58,6 @@ private[spark] class MetricsServlet(
     mapper.writeValueAsString(registry)
   }
 
-  override val reporter = _
-
   override def start() { }
 
   override def stop() { }

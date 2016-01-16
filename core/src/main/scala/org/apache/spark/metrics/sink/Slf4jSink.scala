@@ -31,7 +31,7 @@ private[spark] class Slf4jSink(
   securityMgr: SecurityManager
 ) extends Sink with HasPollingPeriod {
 
-  override val reporter = Slf4jReporter.forRegistry(registry)
+  val reporter = Slf4jReporter.forRegistry(registry)
     .convertDurationsTo(TimeUnit.MILLISECONDS)
     .convertRatesTo(TimeUnit.SECONDS)
     .build()
