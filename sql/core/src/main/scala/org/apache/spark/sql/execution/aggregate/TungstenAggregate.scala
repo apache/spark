@@ -21,9 +21,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
+import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 
@@ -35,7 +36,7 @@ case class TungstenAggregate(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryNode with CodegenSupport {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -110,6 +111,105 @@ case class TungstenAggregate(
         }
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    groupingExpressions.isEmpty &&
+      !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+  }
+
+  private var bufVars: Array[ExprCode] = _
+
+  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val initExpr = functions.flatMap(f => f.initialValues)
+    val resultExpr = functions.map(_.evaluateExpression)
+
+    val initAgg = ctx.freshName("initAgg")
+    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+
+    // generate variables for aggregation buffer
+    bufVars = initExpr.map { e =>
+      val isNull = ctx.freshName("bufIsNull")
+      ctx.addMutableState("boolean", isNull, "")
+      val value = ctx.freshName("bufValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
+      // The initial expression should not access any column
+      val ev = e.gen(ctx)
+      val code = if (e.nullable) {
+        s"""
+           | $isNull = ${ev.isNull};
+           | if (!${ev.isNull}) {
+           |   $value = ${ev.value};
+           | }
+         """.stripMargin
+      } else {
+        s"$value = ${ev.value};"
+      }
+      ExprCode(ev.code + code, isNull, value)
+    }.toArray
+
+    val input = functions.flatMap(_.aggBufferAttributes)
+    ctx.currentVars = bufVars
+    val resultVar = resultExpr.map { e =>
+      BindReferences.bindReference(e, input).gen(ctx)
+    }
+
+    val (rdd, childSource) = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    val source =
+      s"""
+         | if (!$initAgg) {
+         |   $initAgg = true;
+         |
+         |   // initialize aggregation buffer
+         |   ${bufVars.map(_.code).mkString("\n")}
+         |
+         |   $childSource
+         |
+         |   // output the result
+         |   ${resultVar.map(_.code).mkString("\n")}
+         |   ${consume(ctx, resultVar)}
+         | }
+       """.stripMargin
+
+    (rdd, source)
+  }
+
+  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val updateExpr = aggregateExpressions.flatMap {
+      case AggregateExpression(f: DeclarativeAggregate, Partial | Complete, _) =>
+        f.updateExpressions
+      case AggregateExpression(f: DeclarativeAggregate, PartialMerge | Final, _) =>
+        f.mergeExpressions
+    }
+
+    val inputAttr = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
+
+    ctx.currentVars = bufVars.toSeq ++ input
+    val codes = boundExpr.zipWithIndex.map { case (e, i) =>
+      val ev = e.gen(ctx)
+      if (e.nullable) {
+        s"""
+           | ${ev.code}
+           | ${bufVars(i).isNull} = ${ev.isNull};
+           | if (!${ev.isNull}) {
+           |   ${bufVars(i).value} = ${ev.value};
+           | }
+       """.stripMargin
+      } else {
+        s"""
+           | ${ev.code}
+           | ${bufVars(i).value} = ${ev.value};
+         """.stripMargin
+      }
+    }
+
+    s"""
+       | // do aggregate and update aggregation buffer
+       | ${codes.mkString("")}
+     """.stripMargin
   }
 
   override def simpleString: String = {
