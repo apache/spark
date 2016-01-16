@@ -2363,7 +2363,7 @@ setMethod("with",
 #' @examples \dontrun{
 #' # Create a DataFrame from the Iris dataset
 #' irisDF <- createDataFrame(sqlContext, iris)
-#' 
+#'
 #' # Show the structure of the DataFrame
 #' str(irisDF)
 #' }
@@ -2505,4 +2505,3 @@ setMethod("write.jdbc",
             write <- callJMethod(write, "mode", jmode)
             invisible(callJMethod(write, "jdbc", url, tableName, jprops))
           })
-
