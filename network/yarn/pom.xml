@@ -142,44 +142,43 @@
             <goals>
               <goal>run</goal>
             </goals>
+            <configuration>
+              <target>
+                <fail message="Not found: ${shaded.jackson}/core/JsonParser.class">
+                  <condition>
+                    <not>
+                      <resourceexists>
+                        <zipentry zipfile="${shuffle.jar}"
+                          name="${shaded.jackson}/core/JsonParser.class"/>
+                      </resourceexists>
+                    </not>
+                  </condition>
+                </fail>
+                <fail message="Not found: ${shaded.jackson}/annotation/JacksonAnnotation.class">
+                  <condition>
+                    <not>
+                      <resourceexists>
+                        <zipentry zipfile="${shuffle.jar}"
+                          name="${shaded.jackson}/annotation/JacksonAnnotation.class"/>
+                      </resourceexists>
+                    </not>
+                  </condition>
+                </fail>
+                <fail message="Not found: ${shaded.jackson}/databind/JsonSerializer.class">
+                  <condition>
+                    <not>
+                      <resourceexists>
+                        <zipentry zipfile="${shuffle.jar}"
+                          name="${shaded.jackson}/databind/JsonSerializer.class"/>
+                      </resourceexists>
+                    </not>
+                  </condition>
+                </fail>
+                <echo>Verified shading of Jackson ${fasterxml.jackson.version}</echo>
+              </target>
+            </configuration>
           </execution>
         </executions>
-        <configuration>
-          <target>
-            <fail message="Not found: ${shaded.jackson}/core/JsonParser.class">
-              <condition>
-                <not>
-                  <resourceexists>
-                    <zipentry zipfile="${shuffle.jar}"
-                      name="${shaded.jackson}/core/JsonParser.class"/>
-                  </resourceexists>
-                </not>
-              </condition>
-            </fail>
-            <fail message="Not found: ${shaded.jackson}/annotation/JacksonAnnotation.class">
-              <condition>
-                <not>
-                  <resourceexists>
-                    <zipentry zipfile="${shuffle.jar}"
-                      name="${shaded.jackson}/annotation/JacksonAnnotation.class"/>
-                  </resourceexists>
-                </not>
-              </condition>
-            </fail>
-            <fail message="Not found: ${shaded.jackson}/databind/JsonSerializer.class">
-              <condition>
-                <not>
-                  <resourceexists>
-                    <zipentry zipfile="${shuffle.jar}"
-                      name="${shaded.jackson}/databind/JsonSerializer.class"/>
-                  </resourceexists>
-                </not>
-              </condition>
-            </fail>
-            <echo>Verified shading</echo>
-
-          </target>
-        </configuration>
       </plugin>
     </plugins>
 
