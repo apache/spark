@@ -36,6 +36,7 @@ HADOOP_PROFILES=(
     hadoop-2.3
     hadoop-2.4
     hadoop-2.6
+    hadoop-2.7
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
