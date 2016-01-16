@@ -96,10 +96,6 @@
           <outputFile>${shuffle.jar}</outputFile>
           <artifactSet>
             <includes>
-              <include>com.fasterxml.jackson.core:jackson-databind</include>
-              <include>com.fasterxml.jackson.core:jackson-annotations</include>
-              <include>com.fasterxml.jackson.core:jackson-core</include>
-              <include>com.fasterxml.jackson.module:jackson-module-scala_${scala.binary.version}</include>
               <include>*:*</include>
             </includes>
           </artifactSet>
