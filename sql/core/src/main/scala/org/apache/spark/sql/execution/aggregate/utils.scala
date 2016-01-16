@@ -61,11 +61,13 @@ object Utils {
     val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     if (usesTungstenAggregate) {
+      val (sortedExpr, sortedAttr) = aggregateExpressions.zip(aggregateAttributes)
+        .sortBy(_._1.aggregateFunction.isInstanceOf[ImperativeAggregate]).unzip
       TungstenAggregate(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
-        aggregateExpressions = aggregateExpressions,
-        aggregateAttributes = aggregateAttributes,
+        aggregateExpressions = sortedExpr,
+        aggregateAttributes = sortedAttr,
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
         child = child)

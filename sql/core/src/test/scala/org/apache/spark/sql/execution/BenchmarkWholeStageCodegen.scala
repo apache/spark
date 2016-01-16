@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkContext, SparkConf, SparkFunSuite}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Benchmark
 
 /**
@@ -27,10 +28,11 @@ import org.apache.spark.util.Benchmark
   *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
-  def testWholeStage(values: Int): Unit = {
-    val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
-    val sc = SparkContext.getOrCreate(conf)
-    val sqlContext = SQLContext.getOrCreate(sc)
+  lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
+  lazy val sc = SparkContext.getOrCreate(conf)
+  lazy val sqlContext = SQLContext.getOrCreate(sc)
+
+  def testRangeFilterAndAggregation(values: Int): Unit = {
 
     val benchmark = new Benchmark("Single Int Column Scan", values)
 
@@ -46,15 +48,47 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /*
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      Single Int Column Scan:      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-      -------------------------------------------------------------------------
-      Without whole stage codegen       6441.88            32.55         1.00 X
-      With whole stage codegen           358.28           585.34        17.98 X
+      Single Int Column Scan:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      Without whole stage codegen             6585.36            31.85         1.00 X
+      With whole stage codegen                 343.80           609.99        19.15 X
     */
     benchmark.run()
   }
 
-  test("benchmark") {
-    testWholeStage(1024 * 1024 * 200)
+  def testImperitaveAggregation(values: Int): Unit = {
+
+    val benchmark = new Benchmark("Single Int Column Scan", values)
+
+    benchmark.addCase("ImpAgg w/o whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).filter("(id & 1) = 1").groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("ImpAgg w whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).filter("(id & 1) = 1").groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("DeclAgg w whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      //
+      sqlContext.range(values).filter("(id & 1) = 1").groupBy().agg("id" -> "stddev1").collect()
+    }
+
+    /*
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      Single Int Column Scan:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      ImpAgg w/o whole stage codegen          7076.30            14.82         1.00 X
+      ImpAgg w whole stage codegen            4027.90            26.03         1.76 X
+      DeclAgg w whole stage codegen            786.13           133.38         9.00 X
+    */
+    benchmark.run()
+  }
+
+  ignore("benchmark") {
+    testRangeFilterAndAggregation(1024 * 1024 * 200)
+    testImperitaveAggregation(1024 * 1024 * 100)
   }
 }

@@ -113,34 +113,33 @@ case class TungstenAggregate(
     }
   }
 
-  protected override def supportCodegen: Boolean = {
-    groupingExpressions.isEmpty
+  override def supportCodegen: Boolean = {
+    groupingExpressions.isEmpty &&
+      // final aggregation only have one row, do not need to codegen
+      !aggregateExpressions.exists(e => e.mode == Final || e.mode == Complete)
   }
 
-  private val functions = aggregateExpressions.map(_.aggregateFunction)
-
-  private val declFunctions = functions.filter(_.isInstanceOf[DeclarativeAggregate])
+  // For declarative functions
+  private val declFunctions = aggregateExpressions.map(_.aggregateFunction)
+    .filter(_.isInstanceOf[DeclarativeAggregate])
     .map(_.asInstanceOf[DeclarativeAggregate])
-  private var bufVars: Array[ExprCode] = _
+  private var declBufVars: Seq[ExprCode] = _
 
-  private val imperativeFunctions = AggregationIterator.initializeAggregateFunctions(
+  // For imperative functions
+  private val impFunctions = AggregationIterator.initializeAggregateFunctions(
     aggregateExpressions.filter(_.aggregateFunction.isInstanceOf[ImperativeAggregate]),
     child.output,
     0
   ).map(_.asInstanceOf[ImperativeAggregate])
-  private var aggBuffTerm: String = _
-  private var imperativeFunctionsTerm: Array[String] = _
+  private var impBuffTerm: String = _
+  private var impFunctionTerms: Array[String] = _
 
+  private val mode = aggregateExpressions.map(_.mode).distinct.head
 
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
-    val initExpr = declFunctions.flatMap(f => f.initialValues)
-    val resultExpr = declFunctions.map(_.evaluateExpression)
-
-    val initAgg = ctx.freshName("initAgg")
-    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
-
     // generate buffer variables for declarative aggregation functions
-    bufVars = initExpr.map { e =>
+    val declInitExpr = declFunctions.flatMap(f => f.initialValues)
+    declBufVars = declInitExpr.map { e =>
       val isNull = ctx.freshName("bufIsNull")
       ctx.addMutableState("boolean", isNull, "")
       val value = ctx.freshName("bufValue")
@@ -158,70 +157,74 @@ case class TungstenAggregate(
         s"$value = ${ev.value};"
       }
       ExprCode(ev.code + code, isNull, value)
-    }.toArray
+    }
 
-    val initImpBuff = if (imperativeFunctions.nonEmpty) {
+    // generate aggregation buffer for imperative functions
+    val impInitCode = if (impFunctions.nonEmpty) {
+
+      // create aggregation buffer
       val aggBuffer = new SpecificMutableRow(
-        imperativeFunctions.flatMap(_.aggBufferAttributes).map(_.dataType))
+        impFunctions.flatMap(_.aggBufferAttributes).map(_.dataType))
       val buffIndex = ctx.references.length
       ctx.references += aggBuffer
-      aggBuffTerm = ctx.freshName("impBuff")
-      ctx.addMutableState("MutableRow", aggBuffTerm,
-        s"$aggBuffTerm = (MutableRow) references[$buffIndex];")
+      impBuffTerm = ctx.freshName("impBuff")
+      ctx.addMutableState("MutableRow", impBuffTerm,
+        s"this.$impBuffTerm = (MutableRow) references[$buffIndex];")
 
+      // create varialbles for imperative functions
       val funcName = classOf[ImperativeAggregate].getName
-      imperativeFunctionsTerm = imperativeFunctions.map { f =>
+      impFunctionTerms = impFunctions.map { f =>
         val idx = ctx.references.length
         ctx.references += f
-        val t = ctx.freshName("aggFunc")
-        ctx.addMutableState(funcName, t, s"this.$t = ($funcName) references[$idx];")
-        t
+        val funcTerm = ctx.freshName("aggFunc")
+        ctx.addMutableState(funcName, funcTerm, s"this.$funcTerm = ($funcName) references[$idx];")
+        funcTerm
       }
-      imperativeFunctionsTerm.map { f =>
-        s"$f.initialize($aggBuffTerm);"
+
+      // call initialize() of imperative functions
+      impFunctionTerms.map { f =>
+        s"$f.initialize($impBuffTerm);"
       }.mkString("\n")
     } else {
       ""
     }
 
+    // create variables for result (aggregation buffer)
     val modes = aggregateExpressions.map(_.mode).distinct
-    val resultVar = if (modes.contains(Final) || modes.contains(Complete)) {
-      val input = functions.flatMap(_.aggBufferAttributes)
-      val impInput = imperativeFunctions.flatMap(_.aggBufferAttributes)
-      ctx.INPUT_ROW = aggBuffTerm
-      ctx.currentVars = bufVars ++ (new Array[ExprCode](impInput.length))
-      resultExpr.map { e =>
-        BindReferences.bindReference(e, input).gen(ctx)
-      }
+    // Final aggregation only output one row, do not need codegen
+    assert(!modes.contains(Final) && !modes.contains(Complete))
+    assert(modes.contains(Partial) || modes.contains(PartialMerge))
 
-    } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
-      val impInput = imperativeFunctions.flatMap(_.aggBufferAttributes)
-      ctx.INPUT_ROW = aggBuffTerm
-      ctx.currentVars = null
-      bufVars ++ impInput.zipWithIndex.map { case (e, i) =>
-        BoundReference(i, e.dataType, e.nullable).gen(ctx)
-      }
-    } else {
-      Seq()
+    // create variables for imperative functions
+    // TODO: the next operator should be Exchange, we could output the aggregation buffer
+    // directly without creating any variables, if there is no declarative function.
+    ctx.INPUT_ROW = impBuffTerm
+    ctx.currentVars = null
+    val impAttrs = impFunctions.flatMap(_.aggBufferAttributes)
+    val impBufVars = impAttrs.zipWithIndex.map { case (e, i) =>
+      BoundReference(i, e.dataType, e.nullable).gen(ctx)
     }
 
     val (rdd, childSource) = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+    val initAgg = ctx.freshName("initAgg")
+    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
     val source =
       s"""
          | if (!$initAgg) {
          |   $initAgg = true;
          |
          |   // initialize declarative aggregation buffer
-         |   ${bufVars.map(_.code).mkString("\n")}
+         |   ${declBufVars.map(_.code).mkString("\n")}
          |
          |   // initialize imperative aggregate buffer
-         |   $initImpBuff
+         |   $impInitCode
          |
          |   $childSource
          |
          |   // output the result
-         |   ${resultVar.map(_.code).mkString("\n")}
-         |   ${consume(ctx, resultVar)}
+         |   ${impBufVars.map(_.code).mkString("\n")}
+         |   ${consume(ctx, declBufVars ++ impBufVars)}
          | }
        """.stripMargin
 
@@ -229,72 +232,69 @@ case class TungstenAggregate(
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
-    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val updateExpr = aggregateExpressions.flatMap {
-      case AggregateExpression(f: DeclarativeAggregate, Partial | Complete, _) =>
-        f.updateExpressions
-      case AggregateExpression(f: DeclarativeAggregate, PartialMerge | Final, _) =>
-        f.mergeExpressions
+    // update expressions for declarative functions
+    val updateExpr = mode match {
+      case Partial | Complete => declFunctions.flatMap(_.updateExpressions)
+      case PartialMerge | Final => declFunctions.flatMap(_.mergeExpressions)
     }
 
-    val inputAttr = functions.flatMap(_.aggBufferAttributes) ++ child.output
-    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
-
-    ctx.currentVars = bufVars.toSeq ++ input
-    val codes = boundExpr.zipWithIndex.map { case (e, i) =>
+    // evaluate update expression to update buffer variables
+    val declInputAttr = declFunctions.flatMap(_.aggBufferAttributes) ++ child.output
+    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, declInputAttr))
+    ctx.currentVars = declBufVars ++ input
+    val declUpdateCode = boundExpr.zipWithIndex.map { case (e, i) =>
       val ev = e.gen(ctx)
       if (e.nullable) {
         s"""
            | ${ev.code}
-           | ${bufVars(i).isNull} = ${ev.isNull};
+           | ${declBufVars(i).isNull} = ${ev.isNull};
            | if (!${ev.isNull}) {
-           |   ${bufVars(i).value} = ${ev.value};
+           |   ${declBufVars(i).value} = ${ev.value};
            | }
        """.stripMargin
       } else {
         s"""
            | ${ev.code}
-           | ${bufVars(i).value} = ${ev.value};
+           | ${declBufVars(i).value} = ${ev.value};
          """.stripMargin
       }
     }
 
-    val impAgg = if (imperativeFunctions.nonEmpty) {
-      // TODO: only materialize the columns that is used
+    val impUpdateCode = if (impFunctions.nonEmpty) {
+      // create a UnsafeRow as input for imperative functions
+      // TODO: only create the columns that are needed
       val columns = child.output.zipWithIndex.map {
         case (a, i) => new BoundReference(i, a.dataType, a.nullable)
       }
-      val code = GenerateUnsafeProjection.createCode(ctx, columns)
-      val row = ctx.freshName("inputRow")
-      val createRow = s"""
-         | ${code.code}
-         | InternalRow $row = ${code.value};
-       """.stripMargin
+      ctx.currentVars = input
+      val rowCode = GenerateUnsafeProjection.createCode(ctx, columns)
 
       // call agg functions
       // all aggregation expression should have the same mode
-      val mode = aggregateExpressions.map(_.mode).distinct.head
-      val update = imperativeFunctionsTerm.map { f =>
+      val updates = impFunctionTerms.map { f =>
         mode match {
           case Partial | Complete =>
-            s"$f.update($aggBuffTerm, $row);"
+            s"$f.update($impBuffTerm, ${rowCode.value});"
           case PartialMerge | Final =>
-            s"$f.merge($aggBuffTerm, $row);"
+            s"$f.merge($impBuffTerm, ${rowCode.value});"
         }
-      }.mkString("\n")
-
-      createRow + update
+      }
+      s"""
+         | // create an UnsafeRow for imperative functions
+         | ${rowCode.code}
+         | // call update()/merge() on imperative functions
+         | ${updates.mkString("\n")}
+       """.stripMargin
     } else {
       ""
     }
 
     s"""
        | // declarative aggregation
-       | ${codes.mkString("")}
+       | ${declUpdateCode.mkString("\n")}
        |
        | // imperative aggregation
-       | $impAgg
-       |
+       | $impUpdateCode
      """.stripMargin
   }
 
