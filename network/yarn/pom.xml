@@ -51,27 +51,6 @@
       <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
     </dependency>
 
-    <!-- explicit jackson declaration so as to encourage shading -->
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-annotations</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-core</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>com.fasterxml.jackson.module</groupId>
-      <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
-    </dependency>
-
     <!-- Provided dependencies -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -170,16 +149,6 @@
                     </not>
                   </condition>
                 </fail>
-                <fail message="Not found: ${shaded.jackson}/module/scala/SetModule.class">
-                  <condition>
-                    <not>
-                      <resourceexists>
-                        <zipentry zipfile="${shuffle.jar}"
-                          name="${shaded.jackson}/module/scala/SetModule.class"/>
-                      </resourceexists>
-                    </not>
-                  </condition>
-                </fail>
                 <echo>Verified shading of Jackson ${fasterxml.jackson.version}</echo>
               </target>
             </configuration>
@@ -187,7 +156,5 @@
         </executions>
       </plugin>
     </plugins>
-
-
   </build>
 </project>
