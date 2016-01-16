@@ -35,6 +35,8 @@
     <sbt.project.name>network-yarn</sbt.project.name>
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
     <hadoop.deps.scope>provided</hadoop.deps.scope>
+    <shuffle.jar>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
+    <shaded.jackson>org/spark-project/com/fasterxml/jackson</shaded.jackson>
   </properties>
 
   <dependencies>
@@ -70,7 +72,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</outputFile>
+          <outputFile>${shuffle.jar}</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -86,6 +88,15 @@
               </excludes>
             </filter>
           </filters>
+          <relocations>
+            <relocation>
+              <pattern>com.fasterxml.jackson</pattern>
+              <shadedPattern>org.spark-project.com.fasterxml.jackson</shadedPattern>
+              <includes>
+                <include>com.fasterxml.jackson.**</include>
+              </includes>
+            </relocation>
+          </relocations>
         </configuration>
         <executions>
           <execution>
@@ -93,6 +104,54 @@
             <goals>
               <goal>shade</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>verify</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <fail message="Not found: ${shaded.jackson}/core/JsonParser.class">
+                  <condition>
+                    <not>
+                      <resourceexists>
+                        <zipentry zipfile="${shuffle.jar}"
+                          name="${shaded.jackson}/core/JsonParser.class"/>
+                      </resourceexists>
+                    </not>
+                  </condition>
+                </fail>
+                <fail message="Not found: ${shaded.jackson}/annotation/JacksonAnnotation.class">
+                  <condition>
+                    <not>
+                      <resourceexists>
+                        <zipentry zipfile="${shuffle.jar}"
+                          name="${shaded.jackson}/annotation/JacksonAnnotation.class"/>
+                      </resourceexists>
+                    </not>
+                  </condition>
+                </fail>
+                <fail message="Not found: ${shaded.jackson}/databind/JsonSerializer.class">
+                  <condition>
+                    <not>
+                      <resourceexists>
+                        <zipentry zipfile="${shuffle.jar}"
+                          name="${shaded.jackson}/databind/JsonSerializer.class"/>
+                      </resourceexists>
+                    </not>
+                  </condition>
+                </fail>
+                <echo>Verified shading of Jackson ${fasterxml.jackson.version}</echo>
+              </target>
+            </configuration>
           </execution>
         </executions>
       </plugin>
