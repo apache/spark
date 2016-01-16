@@ -28,7 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater, Updater, LBFGS, LogisticGradient}
+import org.apache.spark.mllib.optimization.{L1Updater, LBFGS, LogisticGradient, SquaredL2Updater, Updater}
 import org.apache.spark.util.Utils
 
 
