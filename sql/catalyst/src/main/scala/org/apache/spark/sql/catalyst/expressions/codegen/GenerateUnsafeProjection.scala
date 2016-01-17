@@ -320,8 +320,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     create(canonicalize(expressions), subexpressionEliminationEnabled)
   }
 
-  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
-    create(expressions, subexpressionEliminationEnabled = false)
+  protected def create(references: Seq[Expression]): UnsafeProjection = {
+    create(references, subexpressionEliminationEnabled = false)
   }
 
   private def create(
@@ -331,21 +331,19 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
     val code = s"""
-      public java.lang.Object generate($exprType[] exprs) {
-        return new SpecificUnsafeProjection(exprs);
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificUnsafeProjection(references);
       }
 
       class SpecificUnsafeProjection extends ${classOf[UnsafeProjection].getName} {
 
-        private $exprType[] expressions;
+        private Object[] references;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
-        ${declareMutableStates(ctx)}
-
-        ${declareAddedFunctions(ctx)}
-
-        public SpecificUnsafeProjection($exprType[] expressions) {
-          this.expressions = expressions;
-          ${initMutableStates(ctx)}
+        public SpecificUnsafeProjection(Object[] references) {
+          this.references = references;
+          ${ctx.initMutableStates()}
         }
 
         // Scala.Function1 need this
@@ -362,7 +360,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
   }
 }

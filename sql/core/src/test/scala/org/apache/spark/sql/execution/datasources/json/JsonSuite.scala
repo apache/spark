@@ -1223,6 +1223,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         sqlContext,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
+        bucketSpec = None,
         provider = classOf[DefaultSource].getCanonicalName,
         options = Map("path" -> path))
 
@@ -1230,6 +1231,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         sqlContext,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
+        bucketSpec = None,
         provider = classOf[DefaultSource].getCanonicalName,
         options = Map("path" -> path))
       assert(d1 === d2)

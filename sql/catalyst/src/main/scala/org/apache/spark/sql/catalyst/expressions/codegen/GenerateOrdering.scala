@@ -111,19 +111,19 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     val ctx = newCodeGenContext()
     val comparisons = genComparisons(ctx, ordering)
     val code = s"""
-      public SpecificOrdering generate($exprType[] expr) {
-        return new SpecificOrdering(expr);
+      public SpecificOrdering generate(Object[] references) {
+        return new SpecificOrdering(references);
       }
 
       class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
 
-        private $exprType[] expressions;
-        ${declareMutableStates(ctx)}
-        ${declareAddedFunctions(ctx)}
+        private Object[] references;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
-        public SpecificOrdering($exprType[] expr) {
-          expressions = expr;
-          ${initMutableStates(ctx)}
+        public SpecificOrdering(Object[] references) {
+          this.references = references;
+          ${ctx.initMutableStates()}
         }
 
         public int compare(InternalRow a, InternalRow b) {
@@ -135,6 +135,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
     logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
-    compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
+    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
 }
