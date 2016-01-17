@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 import static org.apache.spark.unsafe.Platform.*;
 
@@ -935,11 +936,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public int hashCode() {
-    int result = 1;
-    for (int i = 0; i < numBytes; i ++) {
-      result = 31 * result + getByte(i);
-    }
-    return result;
+    return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
   }
 
   /**
