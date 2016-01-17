@@ -54,6 +54,8 @@ class DockerOperator(BaseOperator):
     :param volumes: List of volumes to mount into the container, e.g.
         ``['/host/path:/container/path', '/host/path2:/container/path2:ro']``.
     """
+    template_fields = ('command',)
+    template_ext = ('.sh', '.bash',)
 
     @apply_defaults
     def __init__(
