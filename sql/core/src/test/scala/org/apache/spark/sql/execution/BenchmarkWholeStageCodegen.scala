@@ -80,18 +80,30 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     }
 
     /*
+      Before optimizing CentralMomentAgg and generated mutable projection:
+
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       aggregation:                       Avg Time(ms)    Avg Rate(M/s)  Relative Rate
       -------------------------------------------------------------------------------
-      ImpAgg w/o whole stage codegen          5602.36            18.72         1.00 X
-      DeclAgg w/o whole stage codegen          6600.94            15.89         0.85 X
-      ImpAgg w whole stage codegen            3817.21            27.47         1.47 X
-      DeclAgg w whole stage codegen           1373.10            76.37         4.08 X
+      ImpAgg w/o whole stage codegen          9047.35            11.59         1.00 X
+      DeclAgg w/o whole stage codegen         6507.27            16.11         1.39 X
+      ImpAgg w whole stage codegen            6947.30            15.09         1.30 X
+      DeclAgg w whole stage codegen           1376.74            76.16         6.57 X
+
+      After optimization:
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      aggregation:                       Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      ImpAgg w/o whole stage codegen          6159.03            17.03         1.00 X
+      DeclAgg w/o whole stage codegen         5248.69            19.98         1.17 X
+      ImpAgg w whole stage codegen            4202.30            24.95         1.47 X
+      DeclAgg w whole stage codegen           1367.34            76.69         4.50 X
     */
     benchmark.run()
   }
 
-  ignore("benchmark") {
+  test("benchmark") {
     testRangeFilterAndAggregation(1024 * 1024 * 200)
     testImperitaveAggregation(1024 * 1024 * 100)
   }
