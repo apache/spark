@@ -905,6 +905,8 @@ class SQLContext private[sql](
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches = Seq(
       Batch("Add exchange", Once, EnsureRequirements(self)),
+      Batch("Apply Bucketing", FixedPoint(100), ReplacePhysicalRelation(self)),
+      Batch("Add exchange", Once, EnsureRequirements(self)),
       Batch("Whole stage codegen", Once, CollapseCodegenStages(self))
     )
   }

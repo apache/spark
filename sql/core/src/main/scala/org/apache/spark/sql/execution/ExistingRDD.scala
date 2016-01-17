@@ -129,27 +129,11 @@ private[sql] object PhysicalRDD {
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
+      metadata: Map[String, String] = Map.empty,
+      outputPartitioning: Partitioning = UnknownPartitioning(0)): PhysicalRDD = {
     // All HadoopFsRelations output UnsafeRows
     val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
 
-    val bucketSpec = relation match {
-      case r: HadoopFsRelation => r.getBucketSpec
-      case _ => None
-    }
-
-    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
-      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
-        s"(${output.map(_.name).mkString(", ")})")
-    }
-
-    bucketSpec.map { spec =>
-      val numBuckets = spec.numBuckets
-      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
-      val partitioning = HashPartitioning(bucketColumns, numBuckets)
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
-    }.getOrElse {
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
-    }
+    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, outputPartitioning)
   }
 }
