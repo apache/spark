@@ -165,7 +165,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
         public SpecificSafeProjection(Object[] references) {
           this.references = references;
-          mutableRow = new $genericMutableRowType(${expressions.size});
+          mutableRow = (MutableRow) references[references.length - 1];
           ${ctx.initMutableStates()}
         }
 
@@ -180,6 +180,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
-    c.generate(ctx.references.toArray).asInstanceOf[Projection]
+    val resultRow = new SpecificMutableRow(expressions.map(_.dataType))
+    c.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
   }
 }
