@@ -134,7 +134,7 @@ case class TungstenAggregate(
   private var impBuffTerm: String = _
   private var impFunctionTerms: Array[String] = _
 
-  private val mode = aggregateExpressions.map(_.mode).distinct.head
+  private val modes = aggregateExpressions.map(_.mode).distinct
 
   protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
     // generate buffer variables for declarative aggregation functions
@@ -233,9 +233,10 @@ case class TungstenAggregate(
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
     // update expressions for declarative functions
-    val updateExpr = mode match {
-      case Partial | Complete => declFunctions.flatMap(_.updateExpressions)
-      case PartialMerge | Final => declFunctions.flatMap(_.mergeExpressions)
+    val updateExpr = if (modes.contains(Partial)) {
+      declFunctions.flatMap(_.updateExpressions)
+    } else {
+      declFunctions.flatMap(_.mergeExpressions)
     }
 
     // evaluate update expression to update buffer variables
@@ -255,6 +256,7 @@ case class TungstenAggregate(
       } else {
         s"""
            | ${ev.code}
+           | ${declBufVars(i).isNull} = false;
            | ${declBufVars(i).value} = ${ev.value};
          """.stripMargin
       }
@@ -271,13 +273,10 @@ case class TungstenAggregate(
 
       // call agg functions
       // all aggregation expression should have the same mode
-      val updates = impFunctionTerms.map { f =>
-        mode match {
-          case Partial | Complete =>
-            s"$f.update($impBuffTerm, ${rowCode.value});"
-          case PartialMerge | Final =>
-            s"$f.merge($impBuffTerm, ${rowCode.value});"
-        }
+      val updates = if (modes.contains(Partial)) {
+        impFunctionTerms.map { f => s"$f.update($impBuffTerm, ${rowCode.value});" }
+      } else {
+        impFunctionTerms.map { f => s"$f.merge($impBuffTerm, ${rowCode.value});" }
       }
       s"""
          | // create an UnsafeRow for imperative functions

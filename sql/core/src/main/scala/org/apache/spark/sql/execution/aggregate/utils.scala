@@ -61,13 +61,11 @@ object Utils {
     val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     if (usesTungstenAggregate) {
-      val (sortedExpr, sortedAttr) = aggregateExpressions.zip(aggregateAttributes)
-        .sortBy(_._1.aggregateFunction.isInstanceOf[ImperativeAggregate]).unzip
       TungstenAggregate(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
-        aggregateExpressions = sortedExpr,
-        aggregateAttributes = sortedAttr,
+        aggregateExpressions = aggregateExpressions,
+        aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
         child = child)
@@ -89,12 +87,16 @@ object Utils {
       aggregateFunctionToAttribute: Map[(AggregateFunction, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
-    // Check if we can use TungstenAggregate.
+
+    // group aggregation expressions by type (declarative functions always come before imperative
+    // functions) to easy code generation
+    val sortedAggExpressions =
+      aggregateExpressions.sortBy(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
 
     // 1. Create an Aggregate Operator for partial aggregations.
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
-    val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
+    val partialAggregateExpressions = sortedAggExpressions.map(_.copy(mode = Partial))
     val partialAggregateAttributes =
       partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
     val partialResultExpressions =
@@ -111,7 +113,7 @@ object Utils {
         child = child)
 
     // 2. Create an Aggregate Operator for final aggregations.
-    val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
+    val finalAggregateExpressions = sortedAggExpressions.map(_.copy(mode = Final))
     // The attributes of the final aggregation buffer, which is presented as input to the result
     // projection:
     val finalAggregateAttributes = finalAggregateExpressions.map {
