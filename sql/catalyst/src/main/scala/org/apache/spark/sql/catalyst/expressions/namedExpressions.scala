@@ -22,6 +22,7 @@ import java.util.UUID
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.safeSQLIdent
 import org.apache.spark.sql.types._
 
 object NamedExpression {
@@ -183,9 +184,9 @@ case class Alias(child: Expression, name: String)(
 
   override def sql: String = {
     val qualifiersString =
-      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+      if (qualifiers.isEmpty) "" else qualifiers.map(safeSQLIdent).mkString("", ".", ".")
     val aliasName = if (isGenerated) s"$name#${exprId.id}" else s"$name"
-    s"${child.sql} AS $qualifiersString`$aliasName`"
+    s"${child.sql} AS $qualifiersString${safeSQLIdent(aliasName)}"
   }
 }
 
@@ -300,9 +301,9 @@ case class AttributeReference(
 
   override def sql: String = {
     val qualifiersString =
-      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+      if (qualifiers.isEmpty) "" else qualifiers.map(safeSQLIdent).mkString("", ".", ".")
     val attrRefName = if (isGenerated) s"$name#${exprId.id}" else s"$name"
-    s"$qualifiersString`$attrRefName`"
+    s"$qualifiersString${safeSQLIdent(attrRefName)}"
   }
 }
 

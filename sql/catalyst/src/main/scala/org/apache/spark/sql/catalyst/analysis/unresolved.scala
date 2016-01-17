@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.safeSQLIdent
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -68,7 +69,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def toString: String = s"'$name"
 
-  override def sql: String = s"`$name`"
+  override def sql: String = safeSQLIdent(name)
 }
 
 object UnresolvedAttribute {

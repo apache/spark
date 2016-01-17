@@ -130,6 +130,25 @@ package object util {
     ret
   }
 
+  private val alphaCharSet = ('a' to 'z').toSet ++ ('A' to 'Z')
+  private val digitCharSet = ('0' to '9').toSet
+  private val alnumCharSet = alphaCharSet ++ digitCharSet
+
+  /**
+   * Quotes a SQL identifier with backticks when necessary.
+   */
+  def safeSQLIdent(name: String): String = {
+    val dontQuote = alphaCharSet(name.head) && name.tail.forall { c => alnumCharSet(c) || c == '_' }
+
+    if (dontQuote) {
+      name
+    } else {
+      // Escapes backticks within the identifier name with double-backticks, and then quote the
+      // identifier with backticks.
+      "`" + name.replace("`", "``") + "`"
+    }
+  }
+
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {

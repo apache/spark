@@ -37,38 +37,43 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
     // TODO tests for decimals
   }
 
+  test("attributes") {
+    checkSQL('a.int, "a")
+    checkSQL(Symbol("foo bar").int, "`foo bar`")
+  }
+
   test("binary comparisons") {
-    checkSQL('a.int === 'b.int, "(`a` = `b`)")
-    checkSQL('a.int <=> 'b.int, "(`a` <=> `b`)")
-    checkSQL('a.int !== 'b.int, "(NOT (`a` = `b`))")
+    checkSQL('a.int === 'b.int, "(a = b)")
+    checkSQL('a.int <=> 'b.int, "(a <=> b)")
+    checkSQL('a.int !== 'b.int, "(NOT (a = b))")
 
-    checkSQL('a.int < 'b.int, "(`a` < `b`)")
-    checkSQL('a.int <= 'b.int, "(`a` <= `b`)")
-    checkSQL('a.int > 'b.int, "(`a` > `b`)")
-    checkSQL('a.int >= 'b.int, "(`a` >= `b`)")
+    checkSQL('a.int < 'b.int, "(a < b)")
+    checkSQL('a.int <= 'b.int, "(a <= b)")
+    checkSQL('a.int > 'b.int, "(a > b)")
+    checkSQL('a.int >= 'b.int, "(a >= b)")
 
-    checkSQL('a.int in ('b.int, 'c.int), "(`a` IN (`b`, `c`))")
-    checkSQL('a.int in (1, 2), "(`a` IN (1, 2))")
+    checkSQL('a.int in ('b.int, 'c.int), "(a IN (b, c))")
+    checkSQL('a.int in (1, 2), "(a IN (1, 2))")
 
-    checkSQL('a.int.isNull, "(`a` IS NULL)")
-    checkSQL('a.int.isNotNull, "(`a` IS NOT NULL)")
+    checkSQL('a.int.isNull, "(a IS NULL)")
+    checkSQL('a.int.isNotNull, "(a IS NOT NULL)")
   }
 
   test("logical operators") {
-    checkSQL('a.boolean && 'b.boolean, "(`a` AND `b`)")
-    checkSQL('a.boolean || 'b.boolean, "(`a` OR `b`)")
-    checkSQL(!'a.boolean, "(NOT `a`)")
-    checkSQL(If('a.boolean, 'b.int, 'c.int), "(IF(`a`, `b`, `c`))")
+    checkSQL('a.boolean && 'b.boolean, "(a AND b)")
+    checkSQL('a.boolean || 'b.boolean, "(a OR b)")
+    checkSQL(!'a.boolean, "(NOT a)")
+    checkSQL(If('a.boolean, 'b.int, 'c.int), "(IF(a, b, c))")
   }
 
   test("arithmetic expressions") {
-    checkSQL('a.int + 'b.int, "(`a` + `b`)")
-    checkSQL('a.int - 'b.int, "(`a` - `b`)")
-    checkSQL('a.int * 'b.int, "(`a` * `b`)")
-    checkSQL('a.int / 'b.int, "(`a` / `b`)")
-    checkSQL('a.int % 'b.int, "(`a` % `b`)")
+    checkSQL('a.int + 'b.int, "(a + b)")
+    checkSQL('a.int - 'b.int, "(a - b)")
+    checkSQL('a.int * 'b.int, "(a * b)")
+    checkSQL('a.int / 'b.int, "(a / b)")
+    checkSQL('a.int % 'b.int, "(a % b)")
 
-    checkSQL(-'a.int, "(-`a`)")
-    checkSQL(-('a.int + 'b.int), "(-(`a` + `b`))")
+    checkSQL(-'a.int, "(-a)")
+    checkSQL(-('a.int + 'b.int), "(-(a + b))")
   }
 }

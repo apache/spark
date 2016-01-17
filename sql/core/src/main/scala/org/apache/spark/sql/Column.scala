@@ -123,6 +123,8 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // make it a NamedExpression.
     case u: UnresolvedAttribute => UnresolvedAlias(u)
 
+    case u: UnresolvedExtractValue => UnresolvedAlias(u)
+
     case expr: NamedExpression => expr
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate

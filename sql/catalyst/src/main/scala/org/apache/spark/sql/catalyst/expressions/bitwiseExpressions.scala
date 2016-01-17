@@ -123,4 +123,6 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
   }
 
   protected override def nullSafeEval(input: Any): Any = not(input)
+
+  override def sql: _root_.scala.Predef.String = s"~${child.sql}"
 }

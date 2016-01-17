@@ -165,6 +165,7 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
+              case e: ExtractValue => Alias(e, e.sql)()
               case other => Alias(other, optionalAliasName.getOrElse(s"_c$i"))()
             }
           }
