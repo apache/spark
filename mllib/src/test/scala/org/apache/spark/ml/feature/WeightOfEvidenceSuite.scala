@@ -39,9 +39,9 @@ class WeightOfEvidenceSuite
     )).toDF("label", "feature", "expected")
 
     val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    woe.transform(df).foreach(r =>
-      assert(r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3)
-    )
+    assert (woe.transform(df).collect().forall(r =>
+      r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
+    ))
     assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
   }
 
@@ -55,9 +55,9 @@ class WeightOfEvidenceSuite
     )).toDF("label", "feature", "expected")
 
     val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    woe.transform(df).foreach(r =>
-      assert(r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3)
-    )
+    assert (woe.transform(df).collect().forall(r =>
+      r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
+    ))
     assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
   }
 
@@ -71,27 +71,27 @@ class WeightOfEvidenceSuite
     )).toDF("label", "feature", "expected")
 
     val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    woe.transform(df).foreach(r =>
-      assert(r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3)
-    )
+    assert (woe.transform(df).collect().forall(r =>
+      r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
+    ))
     assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
   }
 
-  test("Weight of Evidence with 0 1ount and 0 0count") {
+  test("Weight of Evidence with 0 postive or 0 negative") {
     val df = sqlContext.createDataFrame(Seq(
       (true, "ab", 0.4005),
       (false, "ab", 0.4005),
       (true, "ab", 0.4005),
-      (true, "cd", -5.0156),
-      (true, "cd", -5.0156),
+      (true, "cd", 5.0156),
+      (true, "cd", 5.0156),
       (false, "ef", -5.5910),
       (false, "ef", -5.5910)
     )).toDF("label", "feature", "expected")
 
     val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    woe.transform(df).foreach(r =>
-      assert(r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3)
-    )
+    assert (woe.transform(df).collect().forall(r =>
+      r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
+    ))
     assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 6.3018 absTol 1E-3)
   }
 

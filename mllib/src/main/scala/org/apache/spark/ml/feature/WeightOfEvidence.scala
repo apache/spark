@@ -19,11 +19,24 @@ package org.apache.spark.ml.feature
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util.{Identifiable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
+/**
+ * :: Experimental ::
+ * The Weight of Evidence or WoE value provides a measure of how well a grouping of feature is
+ * able to distinguish between a binary response (e.g. "good" versus "bad"), which is widely
+ * used in grouping continuous feature or mapping categorical features to continuous values.
+ *      WoEi = ln(Distribution Of Goodi / Distribution of Badi).
+ *
+ * The WoE recoding of features is particularly well suited for subsequent modeling using
+ * Logistic Regression or MLP.
+ *
+ * In addition, the information value or IV can be computed based on WoE, which is is a popular
+ * technique to select variables in a predictive model.
+ */
 class WeightOfEvidence(override val uid: String) extends Transformer
 with HasInputCol with HasLabelCol with HasOutputCol  {
 
@@ -32,7 +45,10 @@ with HasInputCol with HasLabelCol with HasOutputCol  {
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
-  /** @group setParam */
+  /**
+   * Set the column name which is used as binary classes label column. The data type can be
+   * boolean or numeric, which has at most two distinct values.
+   * @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
@@ -43,12 +59,12 @@ with HasInputCol with HasLabelCol with HasOutputCol  {
     val woeTable = WeightOfEvidence.getWoeTable(dataset, $(inputCol), $(labelCol))
 
     val woeMap = woeTable.map(r => {
-      val category = r.getAs[String]($(inputCol))
+      val category = r.get(0)
       val woe = r.getAs[Double]("woe")
       (category, woe)
     }).collectAsMap()
 
-    val trans = udf { (factor: String) =>
+    val trans = udf { (factor: Any) =>
       woeMap.get(factor)
     }
     dataset.withColumn($(outputCol), trans(col($(inputCol))))
@@ -56,16 +72,21 @@ with HasInputCol with HasLabelCol with HasOutputCol  {
 
   override def transformSchema(schema: StructType): StructType = {
     validateParams()
-    val inputColNames = $(inputCol)
-    val outputColName = $(outputCol)
+    require(isDefined(inputCol),
+      s"VectorIndexerModel requires input column parameter: $inputCol")
+    require(isDefined(outputCol),
+      s"VectorIndexerModel requires output column parameter: $outputCol")
+    require(isDefined(labelCol),
+      s"VectorIndexerModel requires output column parameter: $labelCol")
 
+    val outputColName = $(outputCol)
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
     StructType(schema.fields :+ new StructField(outputColName, DoubleType, true))
   }
 
-  override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
+  override def copy(extra: ParamMap): WeightOfEvidence = defaultCopy(extra)
 }
 
 object WeightOfEvidence{
@@ -76,8 +97,7 @@ object WeightOfEvidence{
     iv
   }
 
-  def getWoeTable(dataset: DataFrame, categoryCol: String, labelCol: String): DataFrame = {
-
+  private def getWoeTable(dataset: DataFrame, categoryCol: String, labelCol: String): DataFrame = {
     val data = dataset.select(categoryCol, labelCol)
     val tmpTableName = "woe_temp"
     data.registerTempTable(tmpTableName)
@@ -90,15 +110,16 @@ object WeightOfEvidence{
          |FROM $tmpTableName
          |GROUP BY $categoryCol
         """.stripMargin
-    val groupResult = data.sqlContext.sql(query).cache()
+    val groupResult = data.sqlContext.sql(query)
 
     val total0 = groupResult.selectExpr("SUM(0count)").first().getAs[Long](0).toDouble
     val total1 = groupResult.selectExpr("SUM(1count)").first().getAs[Long](0).toDouble
-    groupResult.selectExpr(
+    val tt = groupResult.selectExpr(
       categoryCol,
       s"1count/$total1 AS p1",
       s"0count/$total0 AS p0",
       s"LOG(($err + 1count) / $total1 * $total0 / (0count + $err)) AS woe")
-
+    tt.show()
+    tt
   }
 }
