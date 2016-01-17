@@ -114,5 +114,6 @@ class DockerOperatorTestCase(unittest.TestCase):
 
         client_mock.stop.assert_called_with('some_id')
 
+
 if __name__ == "__main__":
     unittest.main()
