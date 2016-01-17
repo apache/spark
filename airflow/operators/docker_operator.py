@@ -54,6 +54,11 @@ class DockerOperator(BaseOperator):
     :type user: int or str
     :param volumes: List of volumes to mount into the container, e.g.
         ``['/host/path:/container/path', '/host/path2:/container/path2:ro']``.
+    :param xcom_push: Does the stdout will be pushed to the next step using XCom.
+           The default is False.
+    :type xcom_push: bool
+    :param xcom_all: Push all the stdout or just the last line. The default is False (last line).
+    :type xcom_all: bool
     """
     template_fields = ('command',)
     template_ext = ('.sh', '.bash',)
@@ -78,6 +83,8 @@ class DockerOperator(BaseOperator):
             tmp_dir='/tmp/airflow',
             user=None,
             volumes=None,
+            xcom_push=False,
+            xcom_all=False,
             *args,
             **kwargs):
 
@@ -99,6 +106,8 @@ class DockerOperator(BaseOperator):
         self.tmp_dir = tmp_dir
         self.user = user
         self.volumes = volumes or []
+        self.xcom_push = xcom_push
+        self.xcom_all = xcom_all
 
         self.cli = None
         self.container = None
@@ -148,12 +157,16 @@ class DockerOperator(BaseOperator):
             )
             self.cli.start(self.container['Id'])
 
-            for l in self.cli.logs(container=self.container['Id'], stream=True):
-                logging.info("{}".format(l.strip()))
+            line = ''
+            for line in self.cli.logs(container=self.container['Id'], stream=True):
+                logging.info("{}".format(line.strip()))
 
             exit_code = self.cli.wait(self.container['Id'])
             if exit_code != 0:
                 raise AirflowException('docker container failed')
+
+            if self.xcom_push:
+                return self.cli.logs(container=self.container['Id']) if self.xcom_all else str(line.strip())
 
     def get_command(self):
         if self.command is not None and self.command.strip().find('[') == 0:
