@@ -33,11 +33,14 @@ import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveCurrentExecutorIdCounter
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.Utils
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -166,6 +169,24 @@ private[yarn] class YarnAllocator(
     amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala
       .flatMap(_.asScala)
       .toSeq
+  }
+
+  /**
+   * Init `executorIdCounter`
+   */
+  def initExecutorIdCounter(): Unit = {
+    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    SparkHadoopUtil.get.runAsSparkUser { () =>
+      val init = RpcEnv.create(
+        "executorIdCounterInit",
+        Utils.localHostName,
+        port,
+        sparkConf,
+        new SecurityManager(sparkConf))
+      val driver = init.setupEndpointRefByURI(driverUrl)
+      executorIdCounter = driver.askWithRetry[Integer](RetrieveCurrentExecutorIdCounter)
+      init.shutdown()
+    }
   }
 
   /**

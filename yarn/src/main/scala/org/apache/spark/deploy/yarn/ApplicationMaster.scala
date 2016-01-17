@@ -292,6 +292,7 @@ private[spark] class ApplicationMaster(
       historyAddress,
       securityMgr)
 
+    allocator.initExecutorIdCounter()
     allocator.allocateResources()
     reporterThread = launchReporterThread()
   }
