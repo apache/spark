@@ -170,8 +170,9 @@ abstract class TaskContext extends Serializable {
   /**
    * Return the local values of accumulators that belong to this task. The key of the Map is the
    * accumulator id and the value of the Map is the latest accumulator local value.
+   * If a partition has only been partially processed we don't want to include its updates to
+   * consistent accumulators since consistent accumulators work on a full partitions.
    * @param includeConsistent if we should include consistent accumulators.
-   * If we didn't process the full partition should be false.
    */
   private[spark] def collectAccumulators(includeConsistent: Boolean): Map[Long, Any]
 
