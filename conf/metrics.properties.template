@@ -68,8 +68,8 @@
 
 # org.apache.spark.metrics.source.JvmSource
 #   Note: Currently, JvmSource is the only available common source.
-#         Additionally, you can add your own source by setting the
-#         "class" option to its fully qualified class name (see examples below).
+#         It can be added to an instance by setting the "class" option to its fully
+#         qualified class name (see examples below).
 
 ## List of available sinks and their properties.
 
