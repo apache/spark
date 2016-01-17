@@ -61,27 +61,32 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("ImpAgg w/o whole stage codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
-      sqlContext.range(values).filter("(id & 1) = 1").groupBy().agg("id" -> "stddev").collect()
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("DeclAgg w/o whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev1").collect()
     }
 
     benchmark.addCase("ImpAgg w whole stage codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.range(values).filter("(id & 1) = 1").groupBy().agg("id" -> "stddev").collect()
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
     }
 
     benchmark.addCase("DeclAgg w whole stage codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      //
-      sqlContext.range(values).filter("(id & 1) = 1").groupBy().agg("id" -> "stddev1").collect()
+      sqlContext.range(values).groupBy().agg("id" -> "stddev1").collect()
     }
 
     /*
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      Single Int Column Scan:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      aggregation:                       Avg Time(ms)    Avg Rate(M/s)  Relative Rate
       -------------------------------------------------------------------------------
-      ImpAgg w/o whole stage codegen          7076.30            14.82         1.00 X
-      ImpAgg w whole stage codegen            4027.90            26.03         1.76 X
-      DeclAgg w whole stage codegen            786.13           133.38         9.00 X
+      ImpAgg w/o whole stage codegen          5602.36            18.72         1.00 X
+      DeclAgg w/o whole stage codegen          6600.94            15.89         0.85 X
+      ImpAgg w whole stage codegen            3817.21            27.47         1.47 X
+      DeclAgg w whole stage codegen           1373.10            76.37         4.08 X
     */
     benchmark.run()
   }

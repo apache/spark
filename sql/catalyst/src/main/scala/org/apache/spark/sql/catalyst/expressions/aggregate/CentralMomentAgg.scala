@@ -57,7 +57,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
 
   override def dataType: DataType = DoubleType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, s"function $prettyName")
@@ -109,7 +109,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
    * Update the central moments buffer.
    */
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val v = Cast(child, DoubleType).eval(input)
+    val v = child.eval(input)
     if (v != null) {
       val updateValue = v match {
         case d: Double => d

@@ -95,44 +95,51 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
   override def dataType: DataType = resultType
 
   // Expected input data type.
-  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression1) to the
+  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression) to the
   // new version at planning time (after analysis phase). For now, NullType is added at here
   // to make it resolved when we have cases like `select stddev(null)`.
   // We can use our analyzer to cast NullType to the default data type of the NumericType once
   // we remove the old aggregate functions. Then, we will not need NullType at here.
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, NullType))
 
   private val resultType = DoubleType
 
-  private val count = AttributeReference("count", resultType)()
-  private val avg = AttributeReference("avg", resultType)()
-  private val mk = AttributeReference("mk", resultType)()
+  private val count = AttributeReference("count", resultType, false)()
+  private val avg = AttributeReference("avg", resultType, false)()
+  private val mk = AttributeReference("mk", resultType, false)()
 
   override val aggBufferAttributes = count :: avg :: mk :: Nil
 
   override val initialValues: Seq[Expression] = Seq(
-    /* count = */ Cast(Literal(0), resultType),
-    /* avg = */ Cast(Literal(0), resultType),
-    /* mk = */ Cast(Literal(0), resultType)
+    /* count = */ Literal(0.0),
+    /* avg = */ Literal(0.0),
+    /* mk = */ Literal(0.0)
   )
 
   override val updateExpressions: Seq[Expression] = {
-    val value = Cast(child, resultType)
-    val newCount = count + Cast(Literal(1), resultType)
+    val newCount = count + Literal(1.0)
 
     // update average
     // avg = avg + (value - avg)/count
-    val newAvg = avg + (value - avg) / newCount
+    val newAvg = avg + (child - avg) / newCount
 
     // update sum ofference from mean
     // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-    val newMk = mk + (value - avg) * (value - newAvg)
+    val newMk = mk + (child - avg) * (child - newAvg)
 
-    Seq(
-      /* count = */ If(IsNull(child), count, newCount),
-      /* avg = */ If(IsNull(child), avg, newAvg),
-      /* mk = */ If(IsNull(child), mk, newMk)
-    )
+    if (child.nullable) {
+      Seq(
+        /* count = */ If(IsNull(child), count, newCount),
+        /* avg = */ If(IsNull(child), avg, newAvg),
+        /* mk = */ If(IsNull(child), mk, newMk)
+      )
+    } else {
+      Seq(
+        /* count = */ newCount,
+        /* avg = */ newAvg,
+        /* mk = */ newMk
+      )
+    }
   }
 
   override val mergeExpressions: Seq[Expression] = {
@@ -151,12 +158,9 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     }
 
     Seq(
-      /* count = */ If(IsNull(count.left), count.right,
-        If(IsNull(count.right), count.left, newCount)),
-      /* avg = */ If(IsNull(avg.left), avg.right,
-        If(IsNull(avg.right), avg.left, newAvg)),
-      /* mk = */ If(IsNull(mk.left), mk.right,
-        If(IsNull(mk.right), mk.left, newMk))
+      /* count = */ newCount,
+      /* avg = */ newAvg,
+      /* mk = */ newMk
     )
   }
 
@@ -168,14 +172,14 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     // stddev_pop = sqrt (mk/count)
     val varCol =
       if (isSample) {
-        mk / Cast(count - Cast(Literal(1), resultType), resultType)
+        mk / (count - Literal(1.0))
       } else {
         mk / count
       }
 
-    If(EqualTo(count, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
-      If(EqualTo(count, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-        Cast(Sqrt(varCol), resultType)))
+    If(EqualTo(count, Literal(0.0)), Literal.create(null, resultType),
+      If(EqualTo(count, Literal(1.0)), Literal(0.0),
+        Sqrt(varCol)))
   }
 }
 

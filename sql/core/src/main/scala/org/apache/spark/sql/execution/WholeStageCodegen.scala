@@ -191,7 +191,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
      """
     // try to compile, helpful for debug
     // println(s"${CodeFormatter.format(source)}")
-    CodeGenerator.compile(source)
+    // CodeGenerator.compile(source)
 
     rdd.mapPartitions { iter =>
       val clazz = CodeGenerator.compile(source)

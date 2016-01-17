@@ -243,6 +243,7 @@ case class TungstenAggregate(
     val declInputAttr = declFunctions.flatMap(_.aggBufferAttributes) ++ child.output
     val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, declInputAttr))
     ctx.currentVars = declBufVars ++ input
+    // TODO: eliminate common sub-expression
     val declUpdateCode = boundExpr.zipWithIndex.map { case (e, i) =>
       val ev = e.gen(ctx)
       if (e.nullable) {
