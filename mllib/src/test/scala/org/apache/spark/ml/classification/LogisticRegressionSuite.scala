@@ -884,7 +884,7 @@ class LogisticRegressionSuite
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
   }
 
-  test("logistic regression with all labels the same") {
+  test("logistic regression with fitIntercept=true and all labels the same") {
     val lr = new LogisticRegression()
       .setFitIntercept(true)
       .setMaxIter(3)
@@ -892,12 +892,17 @@ class LogisticRegressionSuite
       .withColumn("zeroLabel", lit(0.0))
       .withColumn("oneLabel", lit(1.0))
 
-    val model = lr
+    val allZeroModel = lr
+      .setLabelCol("zeroLabel")
+      .fit(sameLabels)
+    assert(allZeroModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allZeroModel.intercept === Double.NegativeInfinity)
+
+    val allOneModel = lr
       .setLabelCol("oneLabel")
       .fit(sameLabels)
-
-    assert(model.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
-    assert(model.intercept === Double.PositiveInfinity)
+    assert(allOneModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allOneModel.intercept === Double.PositiveInfinity)
   }
 
   test("read/write") {
