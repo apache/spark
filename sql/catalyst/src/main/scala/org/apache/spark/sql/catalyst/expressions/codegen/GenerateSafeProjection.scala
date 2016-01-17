@@ -160,13 +160,13 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
         private Object[] references;
         private MutableRow mutableRow;
-        ${declareMutableStates(ctx)}
-        ${declareAddedFunctions(ctx)}
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
         public SpecificSafeProjection(Object[] references) {
           this.references = references;
           mutableRow = new $genericMutableRowType(${expressions.size});
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
         public java.lang.Object apply(java.lang.Object _i) {
@@ -179,7 +179,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[Projection]
   }
 }

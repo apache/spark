@@ -143,14 +143,14 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
 
-        ${declareMutableStates(ctx)}
+        ${ctx.declareMutableStates()}
 
         public SpecificColumnarIterator() {
           this.nativeOrder = ByteOrder.nativeOrder();
           this.buffers = new byte[${columnTypes.length}][];
           this.mutableRow = new MutableUnsafeRow(rowWriter);
 
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
         public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
@@ -190,6 +190,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
     logDebug(s"Generated ColumnarIterator: ${CodeFormatter.format(code)}")
 
-    compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
+    CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
   }
 }
