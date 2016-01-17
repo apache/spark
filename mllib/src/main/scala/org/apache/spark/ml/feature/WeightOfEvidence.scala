@@ -18,74 +18,45 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
-import org.apache.spark.ml.util.{DefaultParamsWritable, Identifiable}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 class WeightOfEvidence(override val uid: String) extends Transformer
-with HasInputCols with HasOutputCol with DefaultParamsWritable {
+with HasInputCol with HasLabelCol with HasOutputCol  {
 
   def this() = this(Identifiable.randomUID("woe"))
 
   /** @group setParam */
-  def setInputCols(value: Array[String]): this.type = set(inputCols, value)
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
     validateParams()
-    val categoryCol = $(inputCols)(0)
-    val labelCol = $(inputCols)(1)
+    val woeTable = WeightOfEvidence.getWoeTable(dataset, $(inputCol), $(labelCol))
 
-    val data = dataset.select(categoryCol, labelCol)
-    val tmpTableName = "woe_temp"
-    data.registerTempTable(tmpTableName)
-
-    val total0 = data.where(s"$labelCol= '0'").count()
-    val total1 = data.where(s"$labelCol= '1'").count()
-
-    val tt = data.sqlContext.sql(
-      s"""
-         |select
-         |$categoryCol,
-         |sum (IF($labelCol='1', 1, 1e-2)) as 1count,
-         |sum (IF($labelCol='0', 1, 1e-2)) as 0count
-         |from $tmpTableName
-         |group by $categoryCol
-        """.stripMargin
-    ).selectExpr(categoryCol, "1count", "0count", s"1count/$total1 as p1", s"0count/$total0 as p0", "1count/0count as ratio")
-
-    val woeMap = tt.map(r => {
-      val category = r.getString(0)
-      val oneZeroRatio = r.getAs[Double]("ratio")
-      val base = total1.toDouble / total0
-      val woe = math.log(oneZeroRatio / base)
+    val woeMap = woeTable.map(r => {
+      val category = r.getAs[String]($(inputCol))
+      val woe = r.getAs[Double]("woe")
       (category, woe)
     }).collectAsMap()
 
-    val iv = tt.map(r => {
-      val oneZeroRatio = r.getAs[Double]("ratio")
-      val base = total1.toDouble / total0
-      val woe = math.log(oneZeroRatio / base)
-      val p1 = r.getAs[Double]("p1")
-      val p0 = r.getAs[Double]("p0")
-      woe * (p1 - p0)
-    }).sum()
-
-    println("information value: " + iv)
     val trans = udf { (factor: String) =>
       woeMap.get(factor)
     }
-
-    dataset.withColumn($(outputCol), trans(col(categoryCol)))
+    dataset.withColumn($(outputCol), trans(col($(inputCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     validateParams()
-    val inputColNames = $(inputCols)
+    val inputColNames = $(inputCol)
     val outputColName = $(outputCol)
 
     if (schema.fieldNames.contains(outputColName)) {
@@ -99,36 +70,35 @@ with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
 object WeightOfEvidence{
 
-  def getIV(dataset: DataFrame, categoryCol: String, labelCol: String): Double ={
+  def getInformationValue(dataset: DataFrame, categoryCol: String, labelCol: String): Double = {
+    val tt = getWoeTable(dataset, categoryCol, labelCol)
+    val iv = tt.selectExpr("SUM(woe * (p1 - p0)) as iv").first().getAs[Double](0)
+    iv
+  }
+
+  def getWoeTable(dataset: DataFrame, categoryCol: String, labelCol: String): DataFrame = {
 
     val data = dataset.select(categoryCol, labelCol)
     val tmpTableName = "woe_temp"
     data.registerTempTable(tmpTableName)
-
-    val total0 = data.where(s"$labelCol= '0'").count()
-    val total1 = data.where(s"$labelCol= '1'").count()
-
-    val tt = data.sqlContext.sql(
-      s"""
-         |select
+    val err = 0.01
+    val query = s"""
+         |SELECT
          |$categoryCol,
-         |sum (IF($labelCol='1', 1, 1e-2)) as 1count,
-         |sum (IF($labelCol='0', 1, 1e-2)) as 0count
-         |from $tmpTableName
-         |group by $categoryCol
+         |SUM (IF(CAST ($labelCol AS DOUBLE)=1, 1, 0)) AS 1count,
+         |SUM (IF(CAST ($labelCol AS DOUBLE)=0, 1, 0)) AS 0count
+         |FROM $tmpTableName
+         |GROUP BY $categoryCol
         """.stripMargin
-    ).selectExpr(categoryCol, "1count", "0count", s"1count/$total1 as p1", s"0count/$total0 as p0", "1count/0count as ratio")
+    val groupResult = data.sqlContext.sql(query).cache()
 
-    val iv = tt.map(r => {
-      val oneZeroRatio = r.getAs[Double]("ratio")
-      val base = total1.toDouble / total0
-      val woe = math.log(oneZeroRatio / base)
-      val p1 = r.getAs[Double]("p1")
-      val p0 = r.getAs[Double]("p0")
-      woe * (p1 - p0)
-    }).sum()
+    val total0 = groupResult.selectExpr("SUM(0count)").first().getAs[Long](0).toDouble
+    val total1 = groupResult.selectExpr("SUM(1count)").first().getAs[Long](0).toDouble
+    groupResult.selectExpr(
+      categoryCol,
+      s"1count/$total1 AS p1",
+      s"0count/$total0 AS p0",
+      s"LOG(($err + 1count) / $total1 * $total0 / (0count + $err)) AS woe")
 
-    return iv
   }
-
 }
