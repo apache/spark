@@ -40,6 +40,8 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("attributes") {
     checkSQL('a.int, "a")
     checkSQL(Symbol("foo bar").int, "`foo bar`")
+    // Keyword
+    checkSQL('int.int, "`int`")
   }
 
   test("binary comparisons") {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.io._
 
+import org.apache.spark.sql.catalyst.parser.SparkSqlParser
 import org.apache.spark.util.Utils
 
 package object util {
@@ -130,22 +131,28 @@ package object util {
     ret
   }
 
-  private val alphaCharSet = ('a' to 'z').toSet ++ ('A' to 'Z')
-  private val digitCharSet = ('0' to '9').toSet
-  private val alnumCharSet = alphaCharSet ++ digitCharSet
+  private val sqlKeywords =
+    SparkSqlParser
+      .tokenNames
+      .filter(_.startsWith("KW_"))
+      .map(_.stripPrefix("KW_").toLowerCase)
+      .toSet
 
   /**
-   * Quotes a SQL identifier with backticks when necessary.
+   * Quotes a SQL identifier with back-ticks when:
+   *
+   *  1. The identifier is a keyword, or
+   *  2. The identifier doesn't match regular expression "[a-zA-Z][a-zA-Z0-9_]*"
    */
   def safeSQLIdent(name: String): String = {
-    val dontQuote = alphaCharSet(name.head) && name.tail.forall { c => alnumCharSet(c) || c == '_' }
+    val SimpleIdent = "[a-zA-Z][a-zA-Z0-9_]*".r
 
-    if (dontQuote) {
-      name
-    } else {
-      // Escapes backticks within the identifier name with double-backticks, and then quote the
-      // identifier with backticks.
-      "`" + name.replace("`", "``") + "`"
+    name match {
+      case SimpleIdent() if !sqlKeywords.contains(name) => name
+
+      // Escapes back-ticks within the identifier name with double-backticks, and then quote the
+      // identifier with back-ticks.
+      case _ => "`" + name.replace("`", "``") + "`"
     }
   }
 
