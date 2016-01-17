@@ -17,12 +17,9 @@
 
 package org.apache.spark
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
 
 import org.scalatest.Matchers
-import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.scheduler._
 
