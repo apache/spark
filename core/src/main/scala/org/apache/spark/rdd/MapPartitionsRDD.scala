@@ -32,15 +32,15 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
   extends RDD[U](prev) {
 
   def this(prev: RDD[T],
-    // (TaskContext, partition index, iterator)
-    f: (TaskContext, Int, Iterator[T]) => Iterator[U],
-    preservesPartitioning: Boolean) = {
+      // (TaskContext, partition index, iterator)
+      f: (TaskContext, Int, Iterator[T]) => Iterator[U],
+      preservesPartitioning: Boolean) = {
     this(prev, (t, _, p, i) => f(t, p, i), preservesPartitioning)
   }
 
   def this(prev: RDD[T],
-    // (TaskContext, partition index, iterator)
-    f: (TaskContext, Int, Iterator[T]) => Iterator[U]) = {
+      // (TaskContext, partition index, iterator)
+      f: (TaskContext, Int, Iterator[T]) => Iterator[U]) = {
     this(prev, (t, _, p, i) => f(t, p, i), false)
   }
 
