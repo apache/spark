@@ -19,38 +19,30 @@ package org.apache.spark.metrics.sink
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-private object HasPollingPeriod {
-  val POLL_UNIT = TimeUnit.SECONDS
-  val MINIMAL_POLL_PERIOD = 1
-
-  def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
-    val period = POLL_UNIT.convert(pollPeriod, pollUnit)
-    if (period < MINIMAL_POLL_PERIOD) {
-      throw new IllegalArgumentException(s"Given polling period $pollPeriod $pollUnit below the " +
-        s"minimal polling period ($MINIMAL_POLL_PERIOD $POLL_UNIT)")
-    }
-  }
-}
-
 private[spark] trait HasPollingPeriod {
   def properties: Properties
 
-  private val DEFAULT_PERIOD = 10
-  private val DEFAULT_UNIT = "SECONDS"
+  protected val (pollPeriod, pollUnit) = {
+    val PERIOD_KEY = "period"
+    val DEFAULT_PERIOD = 10
 
-  private val PERIOD_KEY = "period"
-  private val UNIT_KEY = "unit"
+    val UNIT_KEY = "unit"
+    val DEFAULT_UNIT = TimeUnit.SECONDS
 
-  protected val pollPeriod = Option(properties.getProperty(PERIOD_KEY)) match {
-    case Some(s) => s.toInt
-    case None => DEFAULT_PERIOD
+    val pp = Option(properties.getProperty(PERIOD_KEY)) match {
+      case Some(s) => s.toInt
+      case None => DEFAULT_PERIOD
+    }
+    val pu = Option(properties.getProperty(UNIT_KEY)) match {
+      case Some(s) => TimeUnit.valueOf(s.toUpperCase)
+      case None => DEFAULT_UNIT
+    }
+
+    // perform validation against the minimal 1 second period
+    val MINIMAL_PERIOD = 1
+    val period = DEFAULT_UNIT.convert(pp, pu)
+    require(period > MINIMAL_PERIOD, s"Given polling period $pp $pu below the " +
+        s"minimal polling period ($MINIMAL_PERIOD $DEFAULT_UNIT)")
+    (pp, pu)
   }
-
-  protected val pollUnit = Option(properties.getProperty(UNIT_KEY)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase)
-    case None => TimeUnit.valueOf(DEFAULT_UNIT)
-  }
-
-  import HasPollingPeriod._
-  checkMinimalPollingPeriod(pollUnit, pollPeriod)
 }

@@ -61,7 +61,7 @@ class HasPollingPeriodSuite extends SparkFunSuite with PrivateMethodTester {
         }
       }
     }
-    assert(thrown.getMessage ===
+    assert(thrown.getMessage contains
       "Given polling period 500 MILLISECONDS below the minimal polling period (1 SECONDS)")
   }
 }
