@@ -495,7 +495,6 @@ abstract class GeneratedClass {
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
-  protected val specificMutableRowType: String = classOf[SpecificMutableRow].getName
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
