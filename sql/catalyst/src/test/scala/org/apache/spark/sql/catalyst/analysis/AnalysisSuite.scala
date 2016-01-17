@@ -76,6 +76,70 @@ class AnalysisSuite extends AnalysisTest {
       caseSensitive = false)
   }
 
+  test("resolve sort references - filter") {
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+    val c = testRelation2.output(2)
+
+    val plan1 = testRelation2
+      .where('a > 0).select('a, 'b)
+      .where('b > 0).select('a)
+      .sortBy('b.asc, 'c.desc)
+    val expected1 = testRelation2
+      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
+      .where(b.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
+      .sortBy(b.asc, c.desc)
+      .select(a, b).select(a)
+    checkAnalysis(plan1, expected1)
+
+    val plan2 = testRelation2
+      .where('a > 0).select('a)
+      .where('a > 0).select('a)
+      .sortBy('b.asc, 'c.desc)
+    val expected2 = testRelation2
+      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
+      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
+      .sortBy(b.asc, c.desc)
+      .select(a)
+    checkAnalysis(plan2, expected2)
+  }
+
+  test("resolve sort references - join") {
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+    val c = testRelation2.output(2)
+
+    val f = testRelation3.output(1)
+    val h = testRelation3.output(3)
+
+    val plan1 = testRelation2.join(testRelation3)
+      .where('a > 0).select('a, 'b)
+      .sortBy('c.desc, 'h.asc)
+    val expected1 = testRelation2.join(testRelation3)
+      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c, h)
+      .sortBy(c.desc, h.asc)
+      .select(a, b)
+    checkAnalysis(plan1, expected1)
+
+    val plan2 = testRelation2.select('a, 'b).join(testRelation3)
+      .where('a > 0).select('a, 'b)
+      .sortBy('c.desc, 'h.asc)
+    val expected2 = testRelation2.select(a, b, c).join(testRelation3)
+      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, h, c)
+      .sortBy(c.desc, h.asc)
+      .select(a, b, h).select(a, b)
+    checkAnalysis(plan2, expected2)
+
+    val plan3 = testRelation2.select('a, 'b).join(testRelation3.select('f))
+      .where('a > 0).select('a, 'b)
+      .sortBy('c.desc, 'h.asc)
+    val expected3 = testRelation2.select(a, b, c).join(testRelation3.select(f, h))
+      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c, h)
+      .sortBy(c.desc, h.asc)
+      .select(a, b, c).select(a, b)
+    checkAnalysis(plan3, expected3)
+  }
+
   test("resolve relations") {
     assertAnalysisError(
       UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table not found: tAbLe"))

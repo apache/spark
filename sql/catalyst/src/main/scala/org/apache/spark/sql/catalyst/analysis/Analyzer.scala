@@ -606,7 +606,7 @@ class Analyzer(
             collectResolvableMissingAttrs(ordering, plans)
           }
         // Skip the UnaryNode whose output is the same as their child's output
-        case un: UnaryNode if un.child.output == un.output =>
+        case un: UnaryNode if un.inputSet == un.outputSet =>
           plans.enqueue(un.child)
           collectResolvableMissingAttrs(ordering, plans)
         case join @ Join(left, right, joinType, _) =>
