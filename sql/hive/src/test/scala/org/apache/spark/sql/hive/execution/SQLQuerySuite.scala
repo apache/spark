@@ -973,19 +973,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       WindowData(3, "b", 7),
       WindowData(4, "b", 8),
       WindowData(5, "c", 9),
-      WindowData(6, "c", 10)
+      WindowData(6, "c", 11)
     )
     sparkContext.parallelize(data).toDF().registerTempTable("windowData")
 
     checkAnswer(
       sql("select month, product, sum(product + 1) over() from windowData order by area"),
       Seq(
-        (2, 6, 56),
-        (3, 7, 56),
-        (4, 8, 56),
-        (5, 9, 56),
-        (6, 10, 56),
-        (1, 10, 56)
+        (2, 6, 57),
+        (3, 7, 57),
+        (4, 8, 57),
+        (5, 9, 57),
+        (6, 11, 57),
+        (1, 10, 57)
       ).map(i => Row(i._1, i._2, i._3)))
 
     checkAnswer(
@@ -1014,8 +1014,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         ("b", 1),
         ("b", 2),
         ("c", 1),
-        ("c", 2),
-        ("d", 1)
+        ("d", 1),
+        ("c", 2)
       ).map(i => Row(i._1, i._2)))
   }
 
