@@ -151,6 +151,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           """
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
+    val types = GenerateSafeProjection.getClass.getName.stripSuffix("$") +
+      s".getDataTypes(references, ${expressions.length})"
     val code = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificSafeProjection(references);
@@ -165,7 +167,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
         public SpecificSafeProjection(Object[] references) {
           this.references = references;
-          mutableRow = new $genericMutableRowType(${expressions.size});
+          mutableRow = new $specificMutableRowType($types);
           ${initMutableStates(ctx)}
         }
 
@@ -180,6 +182,10 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = compile(code)
-    c.generate(ctx.references.toArray).asInstanceOf[Projection]
+    c.generate(ctx.references.toArray ++ expressions.map(_.dataType)).asInstanceOf[Projection]
+  }
+
+  def getDataTypes(references: Array[Any], numTypes: Int): Seq[DataType] = {
+    references.takeRight(numTypes).map(_.asInstanceOf[DataType])
   }
 }

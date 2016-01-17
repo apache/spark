@@ -475,6 +475,7 @@ abstract class GeneratedClass {
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+  protected val specificMutableRowType: String = classOf[SpecificMutableRow].getName
 
   protected def declareMutableStates(ctx: CodegenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
