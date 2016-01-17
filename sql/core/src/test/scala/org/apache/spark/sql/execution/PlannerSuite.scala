@@ -94,7 +94,7 @@ class PlannerSuite extends SharedSQLContext {
           """
             |SELECT l.a, l.b
             |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
-          """.stripMargin).queryExecution.executedPlan
+          """.stripMargin).queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
         val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
@@ -147,7 +147,7 @@ class PlannerSuite extends SharedSQLContext {
 
         val a = testData.as("a")
         val b = sqlContext.table("tiny").as("b")
-        val planned = a.join(b, $"a.key" === $"b.key").queryExecution.executedPlan
+        val planned = a.join(b, $"a.key" === $"b.key").queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
         val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
@@ -168,7 +168,7 @@ class PlannerSuite extends SharedSQLContext {
       sqlContext.registerDataFrameAsTable(df, "testPushed")
 
       withTempTable("testPushed") {
-        val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
+        val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
         assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
       }
     }
