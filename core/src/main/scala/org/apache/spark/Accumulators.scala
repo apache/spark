@@ -333,7 +333,8 @@ private[spark] case class UpdateTracking[T](
  * scala> val accum = sc.consistentAccumulator(0)
  * accum: spark.ConsistentAccumulator[Int] = 0
  *
- * scala> val rdd = sc.parallelize(Array(1, 2, 3, 4)).map(x => accum += x)
+ * scala> val data = Array(1, 2, 3, 4)
+ * scala> val rdd = sc.parallelize(data).mapWithAccumulator{case (ui, x) => accum += (ui, x)}
  * scala> rdd.count()
  * scala> rdd.count()
  * ...
@@ -419,9 +420,8 @@ class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
     extends AccumulableParam[UpdateTracking[T], (UpdateInfo, T)] {
 
   /**
-   * Add additional value to the current accumulator. No consistency checking is perford at this
-   * stage as addAccumulator may be called multiple times inside
-   * the partition.
+   * Add additional value to the current accumulator. No consistency checking is performed at this
+   * stage as addAccumulator may be called multiple times inside the partition.
    *
    * @param r the current value of the accumulator
    * @param t the data to be added to the accumulator
@@ -446,10 +446,10 @@ class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
    * @return both data sets merged together
    */
   def addInPlace(r1: UpdateTracking[T], r2: UpdateTracking[T]): UpdateTracking[T] = {
-    r2.pending.foreach{case (UpdateInfo(rddId, partitionId), v) =>
-      val partitions = r1.processed.getOrElseUpdate(rddId, new mutable.BitSet())
-      if (!partitions.contains(partitionId)) {
-        partitions += partitionId
+    r2.pending.foreach{case (UpdateInfo(rddId, splitId), v) =>
+      val splits = r1.processed.getOrElseUpdate(rddId, new mutable.BitSet())
+      if (!splits.contains(splitId)) {
+        splits += splitId
         r1.value = accumulatorParam.addInPlace(r1.value, v)
       }
     }
