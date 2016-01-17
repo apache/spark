@@ -623,6 +623,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val CASE = "(?i)CASE".r
 
   val INTEGRAL = "[+-]?\\d+".r
+  val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
 
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
@@ -799,7 +800,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               Literal(v.longValue())
             case v => Literal(v.underlying())
           }
+        case DECIMAL(_*) =>
+          Literal(BigDecimal(text).underlying())
         case _ =>
+          // Convert a scientifically notated decimal into a double.
           Literal(text.toDouble)
       }
     case ast if ast.tokenType == SparkSqlParser.StringLiteral =>
