@@ -3,6 +3,7 @@ import logging
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults, AirflowException, TemporaryDirectory
 from docker import Client, tls
+import ast
 
 
 class DockerOperator(BaseOperator):
@@ -136,7 +137,7 @@ class DockerOperator(BaseOperator):
             self.volumes.append('{0}:{1}'.format(host_tmp_dir, self.tmp_dir))
 
             self.container = self.cli.create_container(
-                    command=self.command,
+                    command=self.get_command(),
                     cpu_shares=cpu_shares,
                     environment=self.environment,
                     host_config=self.cli.create_host_config(binds=self.volumes,
@@ -153,6 +154,13 @@ class DockerOperator(BaseOperator):
             exit_code = self.cli.wait(self.container['Id'])
             if exit_code != 0:
                 raise AirflowException('docker container failed')
+
+    def get_command(self):
+        if self.command is not None and self.command.strip().find('[') == 0:
+            commands = ast.literal_eval(self.command)
+        else:
+            commands = self.command
+        return commands
 
     def on_kill(self):
         if self.cli is not None:
