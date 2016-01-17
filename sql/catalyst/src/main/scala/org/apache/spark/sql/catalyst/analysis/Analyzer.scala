@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.annotation.tailrec
 
@@ -24,6 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
@@ -523,7 +525,8 @@ class Analyzer(
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ Sort(_, _, child) if !s.resolved && child.resolved =>
-        val (newOrdering, missingResolvableAttrs) = collectResolvedMissingAttrs(s.order, child)
+        val (newOrdering, missingResolvableAttrs) =
+          collectResolvableMissingAttrs(s.order, plans = mutable.Queue(child))
 
         if (missingResolvableAttrs.isEmpty) {
           val unresolvableAttrs = s.order.filterNot(_.resolved)
@@ -531,33 +534,30 @@ class Analyzer(
           s // Nothing we can do here. Return original plan.
         }
         else {
-          var stop: Boolean = false
-          var missingAttrs: Seq[Attribute] = missingResolvableAttrs
-          val newChild = child transform {
-            case p: Project if !stop && missingAttrs.nonEmpty =>
-              val newList = p.projectList ++ missingAttrs
-              missingAttrs = missingAttrs.filterNot(
-                attr => p.child.outputSet.exists(_.semanticEquals(attr)))
-              p.copy(projectList = newList)
-            case w: Window if !stop && missingAttrs.nonEmpty =>
-              val newList = w.projectList ++ missingAttrs
-              missingAttrs = missingAttrs.filterNot(
-                attr => w.child.outputSet.exists(_.semanticEquals(attr)))
-              w.copy(projectList = newList)
-            case a: Aggregate if !stop && missingAttrs.nonEmpty =>
+          // Transform the whole tree in post-order. Add into the self's outputSet
+          //   all the children attributes that are part of missingResolvableAttrs.
+          // Assumption: all the conflicting attributes between left and right have been resolved
+          val newChild = child transformUp {
+            case p: Project =>
+              val missingAttrs =
+                findNotResolvedMissingAttrs(p.outputSet, p.child.outputSet, missingResolvableAttrs)
+              p.copy(projectList = p.projectList ++ missingAttrs)
+            case w: Window =>
+              val missingAttrs =
+                findNotResolvedMissingAttrs(w.outputSet, w.child.outputSet, missingResolvableAttrs)
+              w.copy(projectList = w.projectList ++ missingAttrs)
+            case a: Aggregate =>
               // Grouping expressions could already have the missing attributes.
               // Do not add the duplicate attributes.
-              val newGroupExpressions = a.groupingExpressions ++ missingAttrs.filterNot(
-                attr => a.groupingExpressions.exists(_.semanticEquals(attr)))
-              val newAggregateExpressions = a.aggregateExpressions ++ missingAttrs
-              missingAttrs = missingAttrs.filterNot(
-                attr => a.child.outputSet.exists(_.semanticEquals(attr)))
+              val newGroupExpressions = a.groupingExpressions ++
+                findNotResolvedMissingAttrs(
+                  a.groupingExpressions, a.child.outputSet, missingResolvableAttrs)
+              val newAggregateExpressions = a.aggregateExpressions ++
+                findNotResolvedMissingAttrs(
+                  a.aggregateExpressions, a.child.outputSet, missingResolvableAttrs)
               a.copy(groupingExpressions = newGroupExpressions,
                 aggregateExpressions = newAggregateExpressions)
-            case s: Subquery if !stop && missingAttrs.nonEmpty => s
-            case o =>
-              stop = true
-              o
+            case o => o
           }
 
           // Add missing attributes and then project them away after the sort.
@@ -566,16 +566,33 @@ class Analyzer(
         }
     }
 
+    private def findNotResolvedMissingAttrs(
+        outputSet: AttributeSet,
+        childOutputSet: AttributeSet,
+        missingAttrs: Seq[Attribute]): Seq[Attribute] = {
+      val resolvedAttrs =
+        missingAttrs.filter(attr => childOutputSet.exists(_.semanticEquals(attr)))
+      resolvedAttrs.filterNot(attr => outputSet.exists(_.semanticEquals(attr)))
+    }
+
+    private def findNotResolvedMissingAttrs(
+        outputSet: Seq[Expression],
+        childOutputSet: AttributeSet,
+        missingAttrs: Seq[Attribute]): Seq[Attribute] = {
+      val resolvedAttrs =
+        missingAttrs.filter(attr => childOutputSet.exists(_.semanticEquals(attr)))
+      resolvedAttrs.filterNot(attr => outputSet.exists(_.semanticEquals(attr)))
+    }
+
     /**
-     * Traverse the tree until resolving the sorting attributes.
+     * Traverse the tree until resolving the sorting attributes
+     * Return all the resolvable missing sorting attributes
      */
     @tailrec
-    private def collectResolvedMissingAttrs(
+    private def collectResolvableMissingAttrs(
         ordering: Seq[SortOrder],
-        plan: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      plan match {
-        // Subquery does nothing. We can simply skip it.
-        case s: Subquery => collectResolvedMissingAttrs(ordering, s.child)
+        plans: mutable.Queue[LogicalPlan]): (Seq[SortOrder], Seq[Attribute]) = {
+      plans.dequeue() match {
         // Only Windows, Project and Aggregate have projectList-like attribute.
         // TODO: when the other operators have it, we should add a support too.
         case un: UnaryNode
@@ -584,7 +601,24 @@ class Analyzer(
           // If missingAttrs is non empty, that means we got it and return it;
           // Otherwise, continue to traverse the tree.
           if (missingAttrs.nonEmpty) (newOrdering, missingAttrs)
-          else collectResolvedMissingAttrs(ordering, un.child)
+          else {
+            plans.enqueue(un.child)
+            collectResolvableMissingAttrs(ordering, plans)
+          }
+        // Skip the UnaryNode whose output is the same as their child's output
+        case un: UnaryNode if un.child.output == un.output =>
+          plans.enqueue(un.child)
+          collectResolvableMissingAttrs(ordering, plans)
+        case join @ Join(left, right, joinType, _) =>
+          joinType match {
+            case _ @ (Inner | LeftOuter | RightOuter | FullOuter) =>
+              plans.enqueue(left, right)
+              collectResolvableMissingAttrs(ordering, plans)
+            // If we support LeftAnti, we should add it here
+            case _ @ LeftSemi =>
+              plans.enqueue(left)
+              collectResolvableMissingAttrs(ordering, plans)
+          }
         // If hitting the other unsupported operators, we are unable to resolve it
         // and thus stop traversing the plan tree.
         case other => (Seq.empty[SortOrder], Seq.empty[Attribute])
