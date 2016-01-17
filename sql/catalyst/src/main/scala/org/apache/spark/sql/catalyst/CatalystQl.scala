@@ -786,8 +786,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case ast if ast.tokenType == SparkSqlParser.BigintLiteral =>
       Literal.create(ast.text.substring(0, ast.text.length() - 1).toLong, LongType)
 
-    case ast if ast.tokenType == SparkSqlParser.DecimalLiteral =>
-      Literal(Decimal(ast.text.substring(0, ast.text.length() - 2)))
+    case ast if ast.tokenType == SparkSqlParser.DoubleLiteral =>
+      Literal(ast.text.toDouble)
 
     case ast if ast.tokenType == SparkSqlParser.Number =>
       val text = ast.text
