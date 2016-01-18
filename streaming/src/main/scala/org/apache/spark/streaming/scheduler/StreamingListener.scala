@@ -29,7 +29,8 @@ import org.apache.spark.util.Distribution
  */
 @DeveloperApi
 sealed trait StreamingListenerEvent extends SparkListenerEvent {
-  override def logEvent: Boolean = false
+  // TODO once SPARK-12140 is resolved this will be true as well
+  protected[spark] override def logEvent: Boolean = false
 }
 
 @DeveloperApi

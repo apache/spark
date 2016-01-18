@@ -36,7 +36,7 @@ import org.apache.spark.util.{Distribution, Utils}
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
 trait SparkListenerEvent {
   /* Whether output this event to the event log */
-  def logEvent: Boolean = true
+  protected[spark] def logEvent: Boolean = true
 }
 
 @DeveloperApi

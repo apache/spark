@@ -40,8 +40,8 @@ private[spark] class LiveListenerBus extends SparkListenerBus {
 
   private var sparkContext: SparkContext = null
 
-  /* Cap the capacity of the event queue so we get an explicit error (rather than
-   * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
+  // Cap the capacity of the event queue so we get an explicit error (rather than
+  // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
   private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
 
@@ -98,7 +98,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus {
    *
    * @param sc Used to stop the SparkContext in case the listener thread dies.
    */
-  def start(sc: SparkContext) {
+  def start(sc: SparkContext): Unit = {
     if (started.compareAndSet(false, true)) {
       sparkContext = sc
       listenerThread.start()
@@ -107,7 +107,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus {
     }
   }
 
-  def post(event: SparkListenerEvent) {
+  def post(event: SparkListenerEvent): Unit = {
     if (stopped.get) {
       // Drop further events to make `listenerThread` exit ASAP
       logError(s"$name has already stopped! Dropping event $event")
@@ -159,7 +159,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus {
    * Stop the listener bus. It will wait until the queued events have been processed, but drop the
    * new events after stopping.
    */
-  def stop() {
+  def stop(): Unit = {
     if (!started.get()) {
       throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
     }
@@ -190,8 +190,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus {
 }
 
 private[spark] object LiveListenerBus {
-  /* Allows for Context to check whether stop() call is made within listener thread
-  */
+  // Allows for Context to check whether stop() call is made within listener thread
   val withinListenerThread: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 
   /** The thread name of Spark listener bus */
