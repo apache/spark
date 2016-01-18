@@ -73,6 +73,7 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
+      ResolveIndexReferences ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
@@ -360,6 +361,62 @@ class Analyzer(
   }
 
   /**
+    * Replace the index with the related attribute for order by and group by.
+    */
+  object ResolveIndexReferences extends Rule[LogicalPlan] {
+
+    def indexToColumn(
+        sortOrder: SortOrder,
+        child: LogicalPlan,
+        index: Int,
+        direction: SortDirection): SortOrder = {
+      val orderNodes = child.output
+      if (index > 0 && index <= orderNodes.size) {
+        SortOrder(orderNodes(index - 1), direction)
+      } else {
+        throw new UnresolvedException(sortOrder,
+          s"""Order by position: $index does not exist \n
+              |The Select List is indexed from 1 to ${orderNodes.size}""".stripMargin)
+      }
+    }
+
+    def indexToColumn(
+        agg: Aggregate,
+        child: LogicalPlan,
+        index: Int): Expression = {
+      val attributes = child.output
+      if (index > 0 && index <= attributes.size) {
+        attributes(index - 1)
+      } else {
+        throw new UnresolvedException(agg,
+          s"""Order by position: $index does not exist \n
+              |The Select List is indexed from 1 to ${attributes.size}""".stripMargin)
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case s @ Sort(orders, global, child) if child.resolved =>
+        val newOrders = orders map {
+          case s @ SortOrder(IntegerLiteral(index), direction) =>
+            indexToColumn(s, child, index, direction)
+          case s @ SortOrder(UnaryMinus(IntegerLiteral(index)), direction) =>
+            indexToColumn(s, child, -index, direction)
+          case other => other
+        }
+        Sort(newOrders, global, child)
+      case a @ Aggregate(groups, aggs, child) =>
+        val newGroups = groups map {
+          case IntegerLiteral(index) =>
+            indexToColumn(a, child, index)
+          case UnaryMinus(IntegerLiteral(index)) =>
+            indexToColumn(a, child, -index)
+          case other => other
+        }
+        Aggregate(newGroups, aggs, child)
+    }
+  }
+
+  /**
    * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
    * a logical plan node's children.
    */
@@ -495,6 +552,10 @@ class Analyzer(
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
         val newOrdering =
           ordering.map(order => resolveExpression(order, child).asInstanceOf[SortOrder])
+        Sort(newOrdering, global, child)
+
+      case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
+        val newOrdering = resolveSortOrders(ordering, child, throws = false)
         Sort(newOrdering, global, child)
 
       // A special case for Generate, because the output of Generate should not be resolved by
