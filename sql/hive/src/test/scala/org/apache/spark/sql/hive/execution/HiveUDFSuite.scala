@@ -17,22 +17,22 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{PrintWriter, File, DataInput, DataOutput}
+import java.io.{DataInput, DataOutput, File, PrintWriter}
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDFOPAnd, GenericUDTFExplode, GenericUDAFAverage, GenericUDF}
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF, GenericUDFOPAnd, GenericUDTFExplode}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.Writable
-import org.apache.spark.sql.test.SQLTestUtils
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
-
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
 
@@ -348,6 +348,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
 
     sqlContext.dropTempTable("testUDF")
+  }
+
+  test("Hive UDF in group by") {
+    Seq(Tuple1(1451400761)).toDF("test_date").registerTempTable("tab1")
+    val count = sql("select date(cast(test_date as timestamp))" +
+      " from tab1 group by date(cast(test_date as timestamp))").count()
+    assert(count == 1)
   }
 
   test("SPARK-11522 select input_file_name from non-parquet table"){

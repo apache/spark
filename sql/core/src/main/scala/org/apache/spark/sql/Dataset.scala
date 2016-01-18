@@ -23,9 +23,9 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
@@ -336,12 +336,7 @@ class Dataset[T] private[sql](
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
-      MapPartitions[T, U](
-        func,
-        resolvedTEncoder,
-        encoderFor[U],
-        encoderFor[U].schema.toAttributes,
-        logicalPlan))
+      MapPartitions[T, U](func, logicalPlan))
   }
 
   /**
@@ -434,7 +429,7 @@ class Dataset[T] private[sql](
    */
   def groupBy[K : Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = logicalPlan
-    val withGroupingKey = AppendColumns(func, resolvedTEncoder, inputPlan)
+    val withGroupingKey = AppendColumns(func, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(

@@ -22,9 +22,9 @@ import java.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
+import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState

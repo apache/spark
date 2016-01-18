@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.math.{min, max}
+import scala.math.{max, min}
 import scala.util.control.NonFatal
 
 import org.apache.spark._

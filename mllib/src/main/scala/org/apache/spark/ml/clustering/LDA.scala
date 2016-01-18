@@ -263,6 +263,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }

@@ -102,10 +102,11 @@ class VectorAssembler(override val uid: String)
       }
     }
 
-    dataset.select(col("*"), assembleFunc(struct(args : _*)).as($(outputCol), metadata))
+    dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
     val inputDataTypes = inputColNames.map(name => schema(name).dataType)

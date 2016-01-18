@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.{execution, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -24,10 +25,9 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
-import org.apache.spark.sql.{Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -309,16 +309,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
 
-      case logical.MapPartitions(f, tEnc, uEnc, output, child) =>
-        execution.MapPartitions(f, tEnc, uEnc, output, planLater(child)) :: Nil
-      case logical.AppendColumns(f, tEnc, uEnc, newCol, child) =>
-        execution.AppendColumns(f, tEnc, uEnc, newCol, planLater(child)) :: Nil
-      case logical.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, child) =>
-        execution.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, planLater(child)) :: Nil
-      case logical.CoGroup(f, kEnc, leftEnc, rightEnc, rEnc, output,
-        leftGroup, rightGroup, left, right) =>
-        execution.CoGroup(f, kEnc, leftEnc, rightEnc, rEnc, output, leftGroup, rightGroup,
-          planLater(left), planLater(right)) :: Nil
+      case logical.MapPartitions(f, in, out, child) =>
+        execution.MapPartitions(f, in, out, planLater(child)) :: Nil
+      case logical.AppendColumns(f, in, out, child) =>
+        execution.AppendColumns(f, in, out, planLater(child)) :: Nil
+      case logical.MapGroups(f, key, in, out, grouping, child) =>
+        execution.MapGroups(f, key, in, out, grouping, planLater(child)) :: Nil
+      case logical.CoGroup(f, keyObj, lObj, rObj, out, lGroup, rGroup, left, right) =>
+        execution.CoGroup(
+          f, keyObj, lObj, rObj, out, lGroup, rGroup, planLater(left), planLater(right)) :: Nil
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
@@ -382,13 +381,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsing if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
-      case CreateTableUsingAsSelect(tableIdent, provider, true, partitionsCols, mode, opts, query)
-          if partitionsCols.nonEmpty =>
+      case c: CreateTableUsingAsSelect if c.temporary && c.partitionColumns.nonEmpty =>
         sys.error("Cannot create temporary partitioned table.")
 
-      case CreateTableUsingAsSelect(tableIdent, provider, true, _, mode, opts, query) =>
+      case c: CreateTableUsingAsSelect if c.temporary =>
         val cmd = CreateTempTableUsingAsSelect(
-          tableIdent, provider, Array.empty[String], mode, opts, query)
+          c.tableIdent, c.provider, Array.empty[String], c.mode, c.options, c.child)
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")

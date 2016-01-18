@@ -458,7 +458,10 @@ setMethod("registerTempTable",
 setMethod("insertInto",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName, overwrite = FALSE) {
-            callJMethod(x@sdf, "insertInto", tableName, overwrite)
+            jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
+            write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "mode", jmode)
+            callJMethod(write, "insertInto", tableName)
           })
 
 #' Cache
@@ -659,6 +662,34 @@ setMethod("saveAsParquetFile",
           function(x, path) {
             .Deprecated("write.parquet")
             write.parquet(x, path)
+          })
+
+#' write.text
+#'
+#' Saves the content of the DataFrame in a text file at the specified path.
+#' The DataFrame must have only one column of string type with the name "value".
+#' Each row becomes a new line in the output file.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param path The directory where the file is saved
+#'
+#' @family DataFrame functions
+#' @rdname write.text
+#' @name write.text
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.txt"
+#' df <- read.text(sqlContext, path)
+#' write.text(df, "/tmp/sparkr-tmp/")
+#'}
+setMethod("write.text",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "text", path))
           })
 
 #' Distinct
@@ -1948,18 +1979,15 @@ setMethod("write.df",
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
-            allModes <- c("append", "overwrite", "error", "ignore")
-            # nolint start
-            if (!(mode %in% allModes)) {
-              stop('mode should be one of "append", "overwrite", "error", "ignore"')
-            }
-            # nolint end
-            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+            jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
                 options[["path"]] <- path
             }
-            callJMethod(df@sdf, "save", source, jmode, options)
+            write <- callJMethod(df@sdf, "write")
+            write <- callJMethod(write, "format", source)
+            write <- callJMethod(write, "mode", jmode)
+            write <- callJMethod(write, "save", path)
           })
 
 #' @rdname write.df
@@ -2013,15 +2041,14 @@ setMethod("saveAsTable",
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
-            allModes <- c("append", "overwrite", "error", "ignore")
-            # nolint start
-            if (!(mode %in% allModes)) {
-              stop('mode should be one of "append", "overwrite", "error", "ignore"')
-            }
-            # nolint end
-            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+            jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
-            callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
+
+            write <- callJMethod(df@sdf, "write")
+            write <- callJMethod(write, "format", source)
+            write <- callJMethod(write, "mode", jmode)
+            write <- callJMethod(write, "options", options)
+            callJMethod(write, "saveAsTable", tableName)
           })
 
 #' summary
@@ -2271,4 +2298,77 @@ setMethod("with",
           function(data, expr, ...) {
             newEnv <- assignNewEnv(data)
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
+          })
+
+#' Display the structure of a DataFrame, including column names, column types, as well as a
+#' a small sample of rows.
+#' @name str
+#' @title Compactly display the structure of a dataset
+#' @rdname str
+#' @family DataFrame functions
+#' @param object a DataFrame
+#' @examples \dontrun{
+#' # Create a DataFrame from the Iris dataset
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' 
+#' # Show the structure of the DataFrame
+#' str(irisDF)
+#' }
+setMethod("str",
+          signature(object = "DataFrame"),
+          function(object) {
+
+            # TODO: These could be made global parameters, though in R it's not the case
+            MAX_CHAR_PER_ROW <- 120
+            MAX_COLS <- 100
+
+            # Get the column names and types of the DataFrame
+            names <- names(object)
+            types <- coltypes(object)
+
+            # Get the first elements of the dataset. Limit number of columns accordingly
+            localDF <- if (ncol(object) > MAX_COLS) {
+              head(object[, c(1:MAX_COLS)])
+            } else {
+              head(object)
+            }
+
+            # The number of observations will not be displayed as computing the
+            # number of rows is a very expensive operation
+            cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
+
+            if (nrow(localDF) > 0) {
+              for (i in 1 : ncol(localDF)) {
+                # Get the first elements for each column
+
+                firstElements <- if (types[i] == "character") {
+                  paste(paste0("\"", localDF[,i], "\""), collapse = " ")
+                } else {
+                  paste(localDF[,i], collapse = " ")
+                }
+
+                # Add the corresponding number of spaces for alignment
+                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
+
+                # Get the short type. For 'character', it would be 'chr';
+                # 'for numeric', it's 'num', etc.
+                dataType <- SHORT_TYPES[[types[i]]]
+                if (is.null(dataType)) {
+                  dataType <- substring(types[i], 1, 3)
+                }
+
+                # Concatenate the colnames, coltypes, and first
+                # elements of each column
+                line <- paste0(" $ ", names[i], spaces, ": ",
+                               dataType, " ",firstElements)
+
+                # Chop off extra characters if this is too long
+                cat(substr(line, 1, MAX_CHAR_PER_ROW))
+                cat("\n")
+              }
+
+              if (ncol(localDF) < ncol(object)) {
+                cat(paste0("\nDisplaying first ", ncol(localDF), " columns only."))
+              }
+            }
           })

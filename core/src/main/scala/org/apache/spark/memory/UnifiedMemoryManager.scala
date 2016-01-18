@@ -20,7 +20,7 @@ package org.apache.spark.memory
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockStatus, BlockId}
+import org.apache.spark.storage.{BlockId, BlockStatus}
 
 /**
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that

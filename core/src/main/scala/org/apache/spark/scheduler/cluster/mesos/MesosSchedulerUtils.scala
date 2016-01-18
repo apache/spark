@@ -25,12 +25,12 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter
-import org.apache.mesos.{MesosSchedulerDriver, SchedulerDriver, Scheduler, Protos}
+import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
-import org.apache.spark.{SparkException, SparkConf, Logging, SparkContext}
-import org.apache.spark.util.Utils
 
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.util.Utils
 
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper

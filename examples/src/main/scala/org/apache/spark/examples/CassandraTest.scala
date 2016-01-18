@@ -23,9 +23,9 @@ import java.util.Arrays
 import java.util.SortedMap
 
 import org.apache.cassandra.db.IColumn
+import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
 import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat
 import org.apache.cassandra.hadoop.ConfigHelper
-import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
 import org.apache.cassandra.thrift._
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job

@@ -18,25 +18,26 @@
 package org.apache.spark.sql.catalyst.trees
 
 import java.util.UUID
+
 import scala.collection.Map
 import scala.collection.mutable.Stack
+
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.util.Utils
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.{EmptyRDD, RDD}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.{ScalaReflectionLock, TableIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
-import org.apache.spark.sql.catalyst.{TableIdentifier, ScalaReflectionLock}
+import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{StructType, DataType}
+import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.Utils
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -314,6 +315,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           } else {
             arg
           }
+        case tuple @ (arg1: TreeNode[_], arg2: TreeNode[_]) =>
+          val newChild1 = nextOperation(arg1.asInstanceOf[BaseType], rule)
+          val newChild2 = nextOperation(arg2.asInstanceOf[BaseType], rule)
+          if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
+            changed = true
+            (newChild1, newChild2)
+          } else {
+            tuple
+          }
         case other => other
       }
       case nonChild: AnyRef => nonChild
@@ -442,7 +452,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
    * `lastChildren` for the root node should be empty.
    */
-  protected def generateTreeString(
+  def generateTreeString(
       depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>

@@ -21,11 +21,11 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
 import io.netty.channel.Channel
-import org.mockito.Mockito._
 import org.mockito.Matchers._
+import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.client.{TransportResponseHandler, TransportClient}
+import org.apache.spark.network.client.{TransportClient, TransportResponseHandler}
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc._
 

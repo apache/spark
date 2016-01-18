@@ -18,19 +18,19 @@
 package org.apache.spark.sql.execution.datasources.text
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.{Path, FileStatus}
-import org.apache.hadoop.io.{NullWritable, Text, LongWritable}
-import org.apache.hadoop.mapred.{TextInputFormat, JobConf}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -48,7 +48,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, partitionColumns, paths)(sqlContext)
+    new TextRelation(None, dataSchema, partitionColumns, paths)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -68,15 +68,16 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
 private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
+    val textSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
-  /** Data schema is always a single column, named "value". */
-  override def dataSchema: StructType = new StructType().add("value", StringType)
-
+  /** Data schema is always a single column, named "value" if original Data source has no schema. */
+  override def dataSchema: StructType =
+    textSchema.getOrElse(new StructType().add("value", StringType))
   /** This is an internal data source that outputs internal row format. */
   override val needConversion: Boolean = false
 

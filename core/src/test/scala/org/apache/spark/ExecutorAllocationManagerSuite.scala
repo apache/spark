@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo

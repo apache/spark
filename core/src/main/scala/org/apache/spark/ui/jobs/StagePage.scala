@@ -31,7 +31,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.util.{Distribution, Utils}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
@@ -100,7 +100,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
-      val taskSortColumn = Option(parameterTaskSortColumn).getOrElse("Index")
+      val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
+        UIUtils.decodeURLParameter(sortColumn)
+      }.getOrElse("Index")
       val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
       val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
       val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)

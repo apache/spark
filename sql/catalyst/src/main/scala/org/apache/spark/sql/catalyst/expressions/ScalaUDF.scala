@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.DataType
 
@@ -975,7 +974,7 @@ case class ScalaUDF(
   // scalastyle:on line.size.limit
 
   // Generate codes used to convert the arguments to Scala type for user-defined funtions
-  private[this] def genCodeForConverter(ctx: CodeGenContext, index: Int): String = {
+  private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
     val converterClassName = classOf[Any => Any].getName
     val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
     val expressionClassName = classOf[Expression].getName
@@ -986,13 +985,13 @@ case class ScalaUDF(
     ctx.addMutableState(converterClassName, converterTerm,
       s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
-          s"expressions[$expressionIdx]).getChildren().apply($index))).dataType());")
+          s"references[$expressionIdx]).getChildren().apply($index))).dataType());")
     converterTerm
   }
 
   override def genCode(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode): String = {
+      ctx: CodegenContext,
+      ev: ExprCode): String = {
 
     ctx.references += this
 
@@ -1006,7 +1005,7 @@ case class ScalaUDF(
     val catalystConverterTermIdx = ctx.references.size - 1
     ctx.addMutableState(converterClassName, catalystConverterTerm,
       s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
-        s".createToCatalystConverter((($scalaUDFClassName)expressions" +
+        s".createToCatalystConverter((($scalaUDFClassName)references" +
           s"[$catalystConverterTermIdx]).dataType());")
 
     val resultTerm = ctx.freshName("result")
@@ -1021,7 +1020,7 @@ case class ScalaUDF(
     val funcTerm = ctx.freshName("udf")
     val funcExpressionIdx = ctx.references.size - 1
     ctx.addMutableState(funcClassName, funcTerm,
-      s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)expressions" +
+      s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)references" +
         s"[$funcExpressionIdx]).userDefinedFunc());")
 
     // codegen for children expressions

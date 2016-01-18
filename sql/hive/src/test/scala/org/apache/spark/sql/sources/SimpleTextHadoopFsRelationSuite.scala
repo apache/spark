@@ -21,14 +21,13 @@ import java.io.File
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.{execution, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, PredicateHelper}
 import org.apache.spark.sql.execution.{LogicalRDD, PhysicalRDD}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame, Row, execution}
 import org.apache.spark.util.Utils
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with PredicateHelper {
@@ -157,9 +156,9 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     test(s"pruning and filtering: df.select(${projections.mkString(", ")}).where($filter)") {
       val df = partitionedDF.where(filter).select(projections: _*)
       val queryExecution = df.queryExecution
-      val executedPlan = queryExecution.executedPlan
+      val sparkPlan = queryExecution.sparkPlan
 
-      val rawScan = executedPlan.collect {
+      val rawScan = sparkPlan.collect {
         case p: PhysicalRDD => p
       } match {
         case Seq(scan) => scan
@@ -178,7 +177,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       assert(requiredColumns === SimpleTextRelation.requiredColumns)
 
       val nonPushedFilters = {
-        val boundFilters = executedPlan.collect {
+        val boundFilters = sparkPlan.collect {
           case f: execution.Filter => f
         } match {
           case Nil => Nil
