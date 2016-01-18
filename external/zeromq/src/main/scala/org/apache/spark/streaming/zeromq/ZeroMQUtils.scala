@@ -54,7 +54,7 @@ object ZeroMQUtils {
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
     ): ReceiverInputDStream[T] = {
-    AkkaUtils.actorStream(
+    AkkaUtils.createStream(
       ssc,
       actorSystemCreator,
       Props(new ZeroMQReceiver(publisherUrl, subscribe, bytesToObjects)),

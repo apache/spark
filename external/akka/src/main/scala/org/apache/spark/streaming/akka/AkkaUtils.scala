@@ -52,7 +52,7 @@ object AkkaUtils {
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
    */
-  def actorStream[T: ClassTag](
+  def createStream[T: ClassTag](
       ssc: StreamingContext,
       actorSystemCreator: () => ActorSystem,
       props: Props,
@@ -80,7 +80,7 @@ object AkkaUtils {
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
    */
-  def actorStream[T](
+  def createStream[T](
       jssc: JavaStreamingContext,
       actorSystemFactory: ActorSystemFactory,
       props: Props,
@@ -90,7 +90,7 @@ object AkkaUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    actorStream[T](
+    createStream[T](
       jssc.ssc, () => actorSystemFactory.create(), props, name, storageLevel, supervisorStrategy)
   }
 
@@ -108,7 +108,7 @@ object AkkaUtils {
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
    */
-  def actorStream[T](
+  def createStream[T](
       jssc: JavaStreamingContext,
       actorSystemFactory: ActorSystemFactory,
       props: Props,
@@ -117,7 +117,7 @@ object AkkaUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    actorStream[T](jssc.ssc, () => actorSystemFactory.create(), props, name, storageLevel)
+    createStream[T](jssc.ssc, () => actorSystemFactory.create(), props, name, storageLevel)
   }
 
   /**
@@ -134,7 +134,7 @@ object AkkaUtils {
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
    */
-  def actorStream[T](
+  def createStream[T](
       jssc: JavaStreamingContext,
       actorSystemFactory: ActorSystemFactory,
       props: Props,
@@ -142,7 +142,7 @@ object AkkaUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    actorStream[T](jssc.ssc, () => actorSystemFactory.create(), props, name)
+    createStream[T](jssc.ssc, () => actorSystemFactory.create(), props, name)
   }
 
 }

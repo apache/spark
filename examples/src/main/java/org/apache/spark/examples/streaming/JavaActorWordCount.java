@@ -117,7 +117,7 @@ public class JavaActorWordCount {
      * For example: Both actorStream and JavaSampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
-    JavaDStream<String> lines = AkkaUtils.actorStream(
+    JavaDStream<String> lines = AkkaUtils.createStream(
         jssc,
         new WordcountActorSystemFactory(),
         Props.create(JavaSampleActorReceiver.class, feederActorURI),

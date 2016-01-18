@@ -168,7 +168,7 @@ object ActorWordCount {
       ActorSystem(uniqueSystemName, akkaConf)
     }
 
-    val lines = AkkaUtils.actorStream[String](
+    val lines = AkkaUtils.createStream[String](
       ssc,
       actorSystemCreator _,
       Props(new SampleActorReceiver[String](
