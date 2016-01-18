@@ -94,7 +94,7 @@ object ZeroMQWordCount {
       val uniqueSystemName = s"actor-wordcount-${TaskContext.get().taskAttemptId()}"
       val akkaConf = ConfigFactory.parseString(
         s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
-           |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+           |akka.remote.enabled-transports = ["akka.remote.netty.tcp"]
            |""".stripMargin)
       ActorSystem(uniqueSystemName, akkaConf)
     }
