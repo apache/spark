@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 
@@ -30,12 +30,12 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
   import hiveContext._
 
   def rddIdOf(tableName: String): Int = {
-    val executedPlan = table(tableName).queryExecution.executedPlan
-    executedPlan.collect {
+    val plan = table(tableName).queryExecution.sparkPlan
+    plan.collect {
       case InMemoryColumnarTableScan(_, _, relation) =>
         relation.cachedColumnBuffers.id
       case _ =>
-        fail(s"Table $tableName is not cached\n" + executedPlan)
+        fail(s"Table $tableName is not cached\n" + plan)
     }.head
   }
 

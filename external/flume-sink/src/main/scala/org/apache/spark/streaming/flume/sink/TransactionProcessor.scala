@@ -22,7 +22,7 @@ import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 
 import scala.util.control.Breaks
 
-import org.apache.flume.{Transaction, Channel}
+import org.apache.flume.{Channel, Transaction}
 
 // Flume forces transactions to be thread-local (horrible, I know!)
 // So the sink basically spawns a new thread to pull the events out within a transaction.

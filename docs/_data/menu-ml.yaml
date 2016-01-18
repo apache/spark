@@ -1,10 +1,10 @@
-- text: Feature extraction, transformation, and selection
+- text: "Overview: estimators, transformers and pipelines"
+  url: ml-guide.html
+- text: Extracting, transforming and selecting features
   url: ml-features.html
-- text: Decision trees for classification and regression
-  url: ml-decision-tree.html
-- text: Ensembles
-  url: ml-ensembles.html
-- text: Linear methods with elastic-net regularization
-  url: ml-linear-methods.html
-- text: Multilayer perceptron classifier
-  url: ml-ann.html
+- text: Classification and Regression
+  url: ml-classification-regression.html
+- text: Clustering
+  url: ml-clustering.html
+- text: Advanced topics
+  url: ml-advanced.html

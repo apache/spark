@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveContext}
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 
 /**

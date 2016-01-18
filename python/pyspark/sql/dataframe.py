@@ -36,7 +36,7 @@ from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
 
-__all__ = ["DataFrame", "SchemaRDD", "DataFrameNaFunctions", "DataFrameStatFunctions"]
+__all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
 class DataFrame(object):
@@ -113,14 +113,6 @@ class DataFrame(object):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    def saveAsParquetFile(self, path):
-        """Saves the contents as a Parquet file, preserving the schema.
-
-        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.parquet` instead.
-        """
-        warnings.warn("saveAsParquetFile is deprecated. Use write.parquet() instead.")
-        self._jdf.saveAsParquetFile(path)
-
     @since(1.3)
     def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.
@@ -134,38 +126,6 @@ class DataFrame(object):
         True
         """
         self._jdf.registerTempTable(name)
-
-    def registerAsTable(self, name):
-        """
-        .. note:: Deprecated in 1.4, use :func:`registerTempTable` instead.
-        """
-        warnings.warn("Use registerTempTable instead of registerAsTable.")
-        self.registerTempTable(name)
-
-    def insertInto(self, tableName, overwrite=False):
-        """Inserts the contents of this :class:`DataFrame` into the specified table.
-
-        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.insertInto` instead.
-        """
-        warnings.warn("insertInto is deprecated. Use write.insertInto() instead.")
-        self.write.insertInto(tableName, overwrite)
-
-    def saveAsTable(self, tableName, source=None, mode="error", **options):
-        """Saves the contents of this :class:`DataFrame` to a data source as a table.
-
-        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.saveAsTable` instead.
-        """
-        warnings.warn("insertInto is deprecated. Use write.saveAsTable() instead.")
-        self.write.saveAsTable(tableName, source, mode, **options)
-
-    @since(1.3)
-    def save(self, path=None, source=None, mode="error", **options):
-        """Saves the contents of the :class:`DataFrame` to a data source.
-
-        .. note:: Deprecated in 1.4, use :func:`DataFrameWriter.save` instead.
-        """
-        warnings.warn("insertInto is deprecated. Use write.save() instead.")
-        return self.write.save(path, source, mode, **options)
 
     @property
     @since(1.4)
@@ -213,7 +173,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan PhysicalRDD[age#0,name#1]
+        Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -371,18 +331,18 @@ class DataFrame(object):
 
     @since(1.3)
     def cache(self):
-        """ Persists with the default storage level (C{MEMORY_ONLY_SER}).
+        """ Persists with the default storage level (C{MEMORY_ONLY}).
         """
         self.is_cached = True
         self._jdf.cache()
         return self
 
     @since(1.3)
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY):
         """Sets the storage level to persist its values across operations
         after the first time it is computed. This can only be used to assign
         a new storage level if the RDD does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
+        If no storage level is specified defaults to (C{MEMORY_ONLY}).
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -443,10 +403,10 @@ class DataFrame(object):
         +---+-----+
         |age| name|
         +---+-----+
-        |  2|Alice|
-        |  2|Alice|
         |  5|  Bob|
         |  5|  Bob|
+        |  2|Alice|
+        |  2|Alice|
         +---+-----+
         >>> data = data.repartition(7, "age")
         >>> data.show()
@@ -592,7 +552,7 @@ class DataFrame(object):
         >>> df_as2 = df.alias("df_as2")
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
         >>> joined_df.select(col("df_as1.name"), col("df_as2.name"), col("df_as2.age")).collect()
-        [Row(name=u'Alice', name=u'Alice', age=2), Row(name=u'Bob', name=u'Bob', age=5)]
+        [Row(name=u'Bob', name=u'Bob', age=5), Row(name=u'Alice', name=u'Alice', age=2)]
         """
         assert isinstance(alias, basestring), "alias should be a string"
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
@@ -608,16 +568,19 @@ class DataFrame(object):
         :param on: a string for join column name, a list of column names,
             , a join expression (Column) or a list of Columns.
             If `on` is a string or a list of string indicating the name of the join column(s),
-            the column(s) must exist on both sides, and this performs an inner equi-join.
+            the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default 'inner'.
-            One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
+            One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
-        [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
+        [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
+
+        >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
+        [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
         >>> cond = [df.name == df3.name, df.age == df3.age]
         >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
-        [Row(name=u'Bob', age=5), Row(name=u'Alice', age=2)]
+        [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
 
         >>> df.join(df2, 'name').select(df.name, df2.height).collect()
         [Row(name=u'Bob', height=85)]
@@ -917,9 +880,9 @@ class DataFrame(object):
 
         >>> df.groupBy().avg().collect()
         [Row(avg(age)=3.5)]
-        >>> df.groupBy('name').agg({'age': 'mean'}).collect()
+        >>> sorted(df.groupBy('name').agg({'age': 'mean'}).collect())
         [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
-        >>> df.groupBy(df.name).avg().collect()
+        >>> sorted(df.groupBy(df.name).avg().collect())
         [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
         >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
@@ -938,11 +901,11 @@ class DataFrame(object):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        |Alice|null|    1|
+        |Alice|   2|    1|
         |  Bob|   5|    1|
         |  Bob|null|    1|
         | null|null|    2|
-        |Alice|   2|    1|
+        |Alice|null|    1|
         +-----+----+-----+
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
@@ -960,12 +923,12 @@ class DataFrame(object):
         | name| age|count|
         +-----+----+-----+
         | null|   2|    1|
-        |Alice|null|    1|
-        |  Bob|   5|    1|
-        |  Bob|null|    1|
-        | null|   5|    1|
-        | null|null|    2|
         |Alice|   2|    1|
+        |  Bob|   5|    1|
+        | null|   5|    1|
+        |  Bob|null|    1|
+        | null|null|    2|
+        |Alice|null|    1|
         +-----+----+-----+
         """
         jgd = self._jdf.cube(self._jcols(*cols))
@@ -1383,12 +1346,6 @@ class DataFrame(object):
 
     groupby = groupBy
     drop_duplicates = dropDuplicates
-
-
-# Having SchemaRDD for backward compatibility (for docs)
-class SchemaRDD(DataFrame):
-    """SchemaRDD is deprecated, please use :class:`DataFrame`.
-    """
 
 
 def _to_scala_map(sc, jm):

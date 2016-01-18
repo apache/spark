@@ -21,11 +21,10 @@ import java.util.Date
 
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.scheduler.cluster.mesos._
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
-
 
 class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 

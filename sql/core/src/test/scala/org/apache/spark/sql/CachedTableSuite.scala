@@ -17,20 +17,18 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.execution.Exchange
-import org.apache.spark.sql.execution.PhysicalRDD
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Accumulators
+import org.apache.spark.sql.execution.Exchange
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
-import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 private case class BigData(s: String)
 
@@ -38,12 +36,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   import testImplicits._
 
   def rddIdOf(tableName: String): Int = {
-    val executedPlan = sqlContext.table(tableName).queryExecution.executedPlan
-    executedPlan.collect {
+    val plan = sqlContext.table(tableName).queryExecution.sparkPlan
+    plan.collect {
       case InMemoryColumnarTableScan(_, _, relation) =>
         relation.cachedColumnBuffers.id
       case _ =>
-        fail(s"Table $tableName is not cached\n" + executedPlan)
+        fail(s"Table $tableName is not cached\n" + plan)
     }.head
   }
 
@@ -289,7 +287,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     testData.select('key).registerTempTable("t1")
     sqlContext.table("t1")
     sqlContext.dropTempTable("t1")
-    intercept[NoSuchTableException](sqlContext.table("t1"))
+    intercept[AnalysisException](sqlContext.table("t1"))
   }
 
   test("Drops cached temporary table") {
@@ -301,7 +299,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(sqlContext.isCached("t2"))
 
     sqlContext.dropTempTable("t1")
-    intercept[NoSuchTableException](sqlContext.table("t1"))
+    intercept[AnalysisException](sqlContext.table("t1"))
     assert(!sqlContext.isCached("t2"))
   }
 

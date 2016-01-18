@@ -23,9 +23,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 /**
  * Instructions on how to partition the table among workers.
@@ -91,12 +91,10 @@ private[sql] case class JDBCRelation(
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val driver: String = DriverRegistry.getDriverClassName(url)
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
       schema,
-      driver,
       url,
       properties,
       table,
@@ -109,5 +107,10 @@ private[sql] case class JDBCRelation(
     data.write
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
       .jdbc(url, table, properties)
+  }
+
+  override def toString: String = {
+    // credentials should not be included in the plan output, table information is sufficient.
+    s"JDBCRelation(${table})"
   }
 }

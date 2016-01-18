@@ -85,8 +85,6 @@ class JobData private[spark](
     val numSkippedStages: Int,
     val numFailedStages: Int)
 
-// Q: should Tachyon size go in here as well?  currently the UI only shows it on the overall storage
-// page ... does anybody pay attention to it?
 class RDDStorageInfo private[spark](
     val id: Int,
     val name: String,
@@ -115,11 +113,14 @@ class StageData private[spark](
     val status: StageStatus,
     val stageId: Int,
     val attemptId: Int,
-    val numActiveTasks: Int ,
+    val numActiveTasks: Int,
     val numCompleteTasks: Int,
     val numFailedTasks: Int,
 
     val executorRunTime: Long,
+    val submissionTime: Option[Date],
+    val firstTaskLaunchedTime: Option[Date],
+    val completionTime: Option[Date],
 
     val inputBytes: Long,
     val inputRecords: Long,
