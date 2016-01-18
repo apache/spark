@@ -28,6 +28,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
 object Literal {
+  val TrueLiteral: Literal = Literal(true, BooleanType)
+
+  val FalseLiteral: Literal = Literal(false, BooleanType)
+
   def apply(v: Any): Literal = v match {
     case i: Int => Literal(i, IntegerType)
     case l: Long => Literal(l, LongType)
@@ -167,7 +171,7 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override def eval(input: InternalRow): Any = value
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
