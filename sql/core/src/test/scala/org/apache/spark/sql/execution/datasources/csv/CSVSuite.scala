@@ -21,6 +21,8 @@ import java.io.File
 import java.nio.charset.UnsupportedCharsetException
 import java.sql.Timestamp
 
+import org.apache.hadoop.io.compress.GzipCodec
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -338,4 +340,29 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
+  test("save csv with compression codec option") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(testFile(carsFile))
+
+      cars.coalesce(1).write
+        .format("csv")
+        .option("header", "true")
+        .option("compression", classOf[GzipCodec].getCanonicalName)
+        .save(csvDir)
+
+      val compressedFiles = new File(csvDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+
+      val carsCopy = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(csvDir)
+
+      verifyCars(carsCopy, withHeader = true)
+    }
+  }
 }

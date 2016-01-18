@@ -19,15 +19,12 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.Charset
 
-import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.spark.util.Utils
-
 import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.RecordWriter
