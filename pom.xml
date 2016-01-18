@@ -665,7 +665,7 @@
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
         <classifier>shaded</classifier>
-        <version>3.4.0</version>
+        <version>3.5.9</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>

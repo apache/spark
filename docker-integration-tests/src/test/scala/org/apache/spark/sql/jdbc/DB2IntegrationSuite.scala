@@ -21,12 +21,14 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import com.spotify.docker.client._
+import com.spotify.docker.client.DockerClient._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
 class Db2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "ibmcom/db2express-c:10.5.0.5-3.10.0"
+    override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
       "LICENSE" -> "accept"
@@ -39,7 +41,6 @@ class Db2IntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (17,'dave')").executeUpdate()
