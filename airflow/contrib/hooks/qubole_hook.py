@@ -50,9 +50,10 @@ class QuboleHook(BaseHook):
         self.cls = COMMAND_CLASSES[self.kwargs['command_type']]
         self.cmd = None
 
-    def execute(self):
+    def execute(self, context):
         args = self.cls.parse(self.args)
         self.cmd = self.cls.create(**args)
+        context['task_instance'].xcom_push(key='qbol_cmd_id', value=self.cmd.id)
         logging.info("Qubole command created with Id: {0} and Status: {1}".format(str(self.cmd.id), self.cmd.status))
 
         while not Command.is_done(self.cmd.status):
@@ -61,12 +62,11 @@ class QuboleHook(BaseHook):
             logging.info("Command Id: {0} and Status: {1}".format(str(self.cmd.id), self.cmd.status))
 
         if self.kwargs.has_key('fetch_logs') and self.kwargs['fetch_logs'] == True:
-            logging.info("Logs for Command Id: {0}, {1}".format(str(self.cmd.id), self.cmd.get_log()))
+            logging.info("Logs for Command Id: {0} \n{1}".format(str(self.cmd.id), self.cmd.get_log()))
 
         if self.cmd.status != 'done':
             raise AirflowException('Command Id: {0} failed with Status: {1}'.format(self.cmd.id, self.cmd.status))
 
-        return self.cmd.id
 
     def kill(self, ti):
         """
@@ -99,7 +99,7 @@ class QuboleHook(BaseHook):
             fp = open(resultpath + '/' + iso, 'wb')
 
         if self.cmd is None:
-            cmd_id = ti.xcom_pull(key="return_value", task_ids=self.task_id)
+            cmd_id = ti.xcom_pull(key="qbol_cmd_id", task_ids=self.task_id)
             self.cmd = self.cls.find(cmd_id)
 
         self.cmd.get_results(fp, inline, delim, fetch)
@@ -114,7 +114,7 @@ class QuboleHook(BaseHook):
         :return: command log as text
         """
         if self.cmd is None:
-            cmd_id = ti.xcom_pull(key="return_value", task_ids=self.task_id)
+            cmd_id = ti.xcom_pull(key="qbol_cmd_id", task_ids=self.task_id)
         Command.get_log_id(self.cls, cmd_id)
 
     def get_jobs_id(self, ti):
@@ -124,7 +124,7 @@ class QuboleHook(BaseHook):
         :return: Job informations assoiciated with command
         """
         if self.cmd is None:
-            cmd_id = ti.xcom_pull(key="return_value", task_ids=self.task_id)
+            cmd_id = ti.xcom_pull(key="qbol_cmd_id", task_ids=self.task_id)
         Command.get_jobs_id(self.cls, cmd_id)
 
     def create_cmd_args(self):

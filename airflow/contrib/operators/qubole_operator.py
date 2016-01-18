@@ -106,7 +106,7 @@ class QuboleOperator(BaseOperator):
 
     def execute(self, context):
         self.hook = QuboleHook(*self.args, **self.kwargs)
-        return self.hook.execute()
+        return self.hook.execute(context)
 
     def on_kill(self, ti):
         self.hook.kill(ti)
@@ -115,10 +115,10 @@ class QuboleOperator(BaseOperator):
         return self.hook.get_results(ti, fp, inline, delim, fetch)
 
     def get_log(self, ti):
-        return self.hook(ti)
+        return self.hook.get_log(ti)
 
     def get_jobs_id(self, ti):
-        return self.get_jobs_id(ti)
+        return self.hook.get_jobs_id(ti)
 
 
 

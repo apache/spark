@@ -143,8 +143,8 @@ setup(
         'webhdfs': webhdfs,
         'kerberos': kerberos,
         'password': password,
-        'qds': qds
         'github_enterprise': github_enterprise,
+        'qds': qds
     },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
