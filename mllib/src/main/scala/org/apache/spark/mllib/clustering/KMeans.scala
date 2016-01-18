@@ -231,7 +231,7 @@ class KMeans private (
       }
     }
 
-    val samplePoint = data.take(1)(0)
+    val samplePoint = data.first()
     val dims = samplePoint.size
     // TODO: make stack size can be configured.
     val stackSize = 128
