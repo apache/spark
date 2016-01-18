@@ -1403,7 +1403,7 @@ showStatement
 @init { pushMsg("show statement", state); }
 @after { popMsg(state); }
     : KW_SHOW (KW_DATABASES|KW_SCHEMAS) (KW_LIKE showStmtIdentifier)? -> ^(TOK_SHOWDATABASES showStmtIdentifier?)
-    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES (TOK_FROM $db_name)? showStmtIdentifier?)
+    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES ^(TOK_FROM $db_name)? showStmtIdentifier?)
     | KW_SHOW KW_COLUMNS (KW_FROM|KW_IN) tableName ((KW_FROM|KW_IN) db_name=identifier)?
     -> ^(TOK_SHOWCOLUMNS tableName $db_name?)
     | KW_SHOW KW_FUNCTIONS (KW_LIKE showFunctionIdentifier|showFunctionIdentifier)?  -> ^(TOK_SHOWFUNCTIONS KW_LIKE? showFunctionIdentifier?)
@@ -2517,12 +2517,12 @@ cacheStatement
 
 cacheTableStatement
   :
-  KW_CACHE (lazy=KW_LAZY)? KW_TABLE tableName (KW_AS selectStatement[true])? -> ^(TOK_CACHETABLE tableName $lazy? selectStatement?)
+  KW_CACHE (lazy=KW_LAZY)? KW_TABLE identifier (KW_AS selectStatement[true])? -> ^(TOK_CACHETABLE identifier $lazy? selectStatement?)
   ;
 
 uncacheTableStatement
   :
-  KW_UNCACHE KW_TABLE tableName -> ^(TOK_UNCACHETABLE tableName)
+  KW_UNCACHE KW_TABLE identifier -> ^(TOK_UNCACHETABLE identifier)
   ;
 
 clearCacheStatement

@@ -75,6 +75,37 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           }
         }
 
+      case Token("TOK_CACHETABLE", Token(tableName, Nil) :: args) =>
+       val lzy :: selectAst :: Nil = getClauses(Seq("LAZY", "TOK_QUERY"), args)
+        CacheTableCommand(tableName, selectAst.map(nodeToPlan), lzy.isDefined)
+
+      case Token("TOK_UNCACHETABLE", Token(tableName, Nil) :: Nil) =>
+        UncacheTableCommand(tableName)
+
+      case Token("TOK_CLEARCACHE", Nil) =>
+        ClearCacheCommand
+
+      case Token("TOK_SHOWTABLES", args) =>
+        val databaseName = args match {
+          case Nil => None
+          case Token("TOK_FROM", Token(dbName, Nil) :: Nil) :: Nil => Option(dbName)
+          case _ => noParseRule("SHOW TABLES", node)
+        }
+        ShowTablesCommand(databaseName)
+
+      case Token("TOK_SHOWFUNCTIONS", args) =>
+        args match {
+          case Nil =>
+            ShowFunctions(None, None)
+          case Token(pattern, Nil) :: Nil =>
+            // Spark SQL does not support a db for show functions currently.
+            ShowFunctions(None, Some(unquoteString(pattern)))
+          case _ => noParseRule("SHOW FUNCTIONS", node)
+        }
+
+      case Token("TOK_DESCFUNCTION", Token(functionName, Nil) :: isExtended) =>
+        DescribeFunction(functionName, isExtended.nonEmpty)
+
       case _ =>
         super.nodeToPlan(node)
     }

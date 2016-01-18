@@ -19,11 +19,9 @@ package org.apache.spark.sql.execution
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, ParserDialect, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.{ParserDialect, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.StringType
 
 /**
  * The top level Spark SQL parser. This parser recognizes syntaxes that are available for all SQL
@@ -33,92 +31,33 @@ import org.apache.spark.sql.types.StringType
  *                 parameter because this allows us to return a different dialect if we
  *                 have to.
  */
-class SparkSQLParser(fallback: => ParserDialect) extends AbstractSparkSQLParser {
+class SparkSQLParser(fallback: => ParserDialect) extends ParserDialect {
 
   override def parseExpression(sql: String): Expression = fallback.parseExpression(sql)
 
   override def parseTableIdentifier(sql: String): TableIdentifier =
     fallback.parseTableIdentifier(sql)
 
+  override def parsePlan(sqlText: String): LogicalPlan =
+    SetCommandParser(sqlText).getOrElse(fallback.parsePlan(sqlText))
+
   // A parser for the key-value part of the "SET [key = [value ]]" syntax
   private object SetCommandParser extends RegexParsers {
+    private val set: Parser[String] = "(?i)set".r
+
     private val key: Parser[String] = "(?m)[^=]+".r
 
     private val value: Parser[String] = "(?m).*$".r
 
-    private val output: Seq[Attribute] = Seq(AttributeReference("", StringType, nullable = false)())
-
     private val pair: Parser[LogicalPlan] =
-      (key ~ ("=".r ~> value).?).? ^^ {
+      set ~> (key ~ ("=".r ~> value).?).? ^^ {
         case None => SetCommand(None)
         case Some(k ~ v) => SetCommand(Some(k.trim -> v.map(_.trim)))
       }
 
-    def apply(input: String): LogicalPlan = parseAll(pair, input) match {
-      case Success(plan, _) => plan
-      case x => sys.error(x.toString)
+    def apply(input: String): Option[LogicalPlan] = parseAll(pair, input) match {
+      case Success(plan, _) => Some(plan)
+      case _ => None
     }
   }
-
-  protected val AS = Keyword("AS")
-  protected val CACHE = Keyword("CACHE")
-  protected val CLEAR = Keyword("CLEAR")
-  protected val DESCRIBE = Keyword("DESCRIBE")
-  protected val EXTENDED = Keyword("EXTENDED")
-  protected val FUNCTION = Keyword("FUNCTION")
-  protected val FUNCTIONS = Keyword("FUNCTIONS")
-  protected val IN = Keyword("IN")
-  protected val LAZY = Keyword("LAZY")
-  protected val SET = Keyword("SET")
-  protected val SHOW = Keyword("SHOW")
-  protected val TABLE = Keyword("TABLE")
-  protected val TABLES = Keyword("TABLES")
-  protected val UNCACHE = Keyword("UNCACHE")
-
-  override protected lazy val start: Parser[LogicalPlan] =
-    cache | uncache | set | show | desc | others
-
-  private lazy val cache: Parser[LogicalPlan] =
-    CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
-      case isLazy ~ tableName ~ plan =>
-        CacheTableCommand(tableName, plan.map(fallback.parsePlan), isLazy.isDefined)
-    }
-
-  private lazy val uncache: Parser[LogicalPlan] =
-    ( UNCACHE ~ TABLE ~> ident ^^ {
-        case tableName => UncacheTableCommand(tableName)
-      }
-    | CLEAR ~ CACHE ^^^ ClearCacheCommand
-    )
-
-  private lazy val set: Parser[LogicalPlan] =
-    SET ~> restInput ^^ {
-      case input => SetCommandParser(input)
-    }
-
-  // It can be the following patterns:
-  // SHOW FUNCTIONS;
-  // SHOW FUNCTIONS mydb.func1;
-  // SHOW FUNCTIONS func1;
-  // SHOW FUNCTIONS `mydb.a`.`func1.aa`;
-  private lazy val show: Parser[LogicalPlan] =
-    ( SHOW ~> TABLES ~ (IN ~> ident).? ^^ {
-        case _ ~ dbName => ShowTablesCommand(dbName)
-      }
-    | SHOW ~ FUNCTIONS ~> ((ident <~ ".").? ~ (ident | stringLit)).? ^^ {
-        case Some(f) => logical.ShowFunctions(f._1, Some(f._2))
-        case None => logical.ShowFunctions(None, None)
-      }
-    )
-
-  private lazy val desc: Parser[LogicalPlan] =
-    DESCRIBE ~ FUNCTION ~> EXTENDED.? ~ (ident | stringLit) ^^ {
-      case isExtended ~ functionName => logical.DescribeFunction(functionName, isExtended.isDefined)
-    }
-
-  private lazy val others: Parser[LogicalPlan] =
-    wholeInput ^^ {
-      case input => fallback.parsePlan(input)
-    }
-
 }
