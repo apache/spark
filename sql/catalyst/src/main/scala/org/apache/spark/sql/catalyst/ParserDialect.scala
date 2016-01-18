@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * Root class of SQL Parser Dialect, and we don't guarantee the binary
- * compatibility for the future release, let's keep it as the internal
- * interface for advanced user.
+ * Interface for a parser.
  */
-@DeveloperApi
 trait ParserDialect {
   /** Creates LogicalPlan for a given SQL string. */
   def parsePlan(sqlText: String): LogicalPlan

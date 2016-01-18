@@ -542,16 +542,12 @@ class HiveContext private[hive](
   }
 
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  protected[sql] override def getSQLDialect(): ParserDialect = {
-    if (conf.dialect == "hiveql") {
-      new ExtendedHiveQlParser(this)
-    } else {
-      super.getSQLDialect()
-    }
+  @transient
+  protected[sql] override val sqlParser: ParserDialect = {
+    new SparkSQLParser(new ExtendedHiveQlParser(this))
   }
 
   @transient

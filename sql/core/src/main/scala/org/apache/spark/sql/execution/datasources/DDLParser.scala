@@ -37,9 +37,10 @@ class DDLParser(fallback: => ParserDialect)
 
   override def parseExpression(sql: String): Expression = fallback.parseExpression(sql)
 
-  override def parseTableIdentifier(sql: String): TableIdentifier =
-
+  override def parseTableIdentifier(sql: String): TableIdentifier = {
     fallback.parseTableIdentifier(sql)
+  }
+
   def parse(input: String, exceptionOnError: Boolean): LogicalPlan = {
     try {
       parsePlan(input)
