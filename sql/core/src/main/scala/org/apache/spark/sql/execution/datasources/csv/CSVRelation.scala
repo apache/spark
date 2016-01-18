@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.Charset
 
+import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.CompressionCodec
+import org.apache.spark.util.Utils
+
 import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
@@ -58,9 +62,10 @@ private[csv] class CSVRelation(
     if (Charset.forName(params.charset) == Charset.forName("UTF-8")) {
       sqlContext.sparkContext.textFile(location)
     } else {
+      val charset = params.charset
       sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions { _.map { pair =>
-            new String(pair._2.getBytes, 0, pair._2.getLength, params.charset)
+            new String(pair._2.getBytes, 0, pair._2.getLength, charset)
           }
         }
     }
@@ -98,6 +103,22 @@ private[csv] class CSVRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+    val conf = job.getConfiguration
+    Option(params.codec).foreach { codec =>
+      // Hadoop 1.x
+      conf.set("mapred.output.compress", "true")
+      conf.set("mapred.output.compression.codec", codec)
+      conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
+      conf.set("mapred.compress.map.output", "true")
+      conf.set("mapred.map.output.compression.codec", codec)
+      // Hadoop 2.x
+      conf.set("mapreduce.output.fileoutputformat.compress", "true")
+      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+      conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
+      conf.set("mapreduce.map.output.compress", "true")
+      conf.set("mapreduce.map.output.compress.codec", codec)
+    }
+
     new CSVOutputWriterFactory(params)
   }
 
