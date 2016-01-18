@@ -203,32 +203,41 @@ object HiveTypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    private def widenOutputTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if p.analyzed => p
+
+      case s @ SetOperation(left, right) if s.childrenResolved &&
+          left.output.length == right.output.length && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+        assert(newChildren.length == 2)
+        s.makeCopy(Array(newChildren.head, newChildren.last))
+
+      case s: Union if s.childrenResolved &&
+          s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
+        s.makeCopy(Array(newChildren))
+    }
+
+    /** Build new children with the widest types for each attribute among all the children */
+    private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
       require(children.forall(_.output.length == children.head.output.length))
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
       // in all the children
-      val castedTypes: Seq[DataType] =
-        getCastedTypes(children, attrIndex = 0, mutable.Queue[DataType]())
+      val targetTypes: Seq[DataType] =
+        getWidestTypes(children, attrIndex = 0, mutable.Queue[DataType]())
 
-      // Add extra Project for type promotion if necessary
-      if (castedTypes.isEmpty) children else children.map(castOutput(_, castedTypes))
-    }
-
-    // Add Project if the data types do not match
-    private def castOutput(
-        plan: LogicalPlan,
-        castedTypes: Seq[DataType]): LogicalPlan = {
-      val casted = plan.output.zip(castedTypes).map {
-        case (e, dt) if e.dataType != dt =>
-          Alias(Cast(e, dt), e.name)()
-        case (e, _) => e
+      if (targetTypes.nonEmpty) {
+        // Add an extra Project if the targetTypes are different from the original types.
+        children.map(widenTypes(_, targetTypes))
+      } else {
+        // Unable to find a target type to widen, then just return the original set.
+        children
       }
-      if (casted.exists(_.isInstanceOf[Alias])) Project(casted, plan) else plan
     }
 
-    // Get the widest type for each attribute in all the children
-    @tailrec private def getCastedTypes(
+    /** Get the widest type for each attribute in all the children */
+    @tailrec private def getWidestTypes(
         children: Seq[LogicalPlan],
         attrIndex: Int,
         castedTypes: mutable.Queue[DataType]): Seq[DataType] = {
@@ -242,23 +251,17 @@ object HiveTypeCoercion {
         // Otherwise, record the result in the queue and find the type for the next column
         case Some(widenType) =>
           castedTypes.enqueue(widenType)
-          getCastedTypes(children, attrIndex + 1, castedTypes)
+          getWidestTypes(children, attrIndex + 1, castedTypes)
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p if p.analyzed => p
-
-      case s @ SetOperation(left, right) if s.childrenResolved &&
-          left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = widenOutputTypes(left :: right :: Nil)
-        assert(newChildren.length == 2)
-        s.makeCopy(Array(newChildren.head, newChildren.last))
-
-      case s: Union if s.childrenResolved &&
-          s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = widenOutputTypes(s.children)
-        s.makeCopy(Array(newChildren))
+    /** Given a plan, add an extra project on top to widen some columns' data types. */
+    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
+      val casted = plan.output.zip(targetTypes).map {
+        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+        case (e, _) => e
+      }
+      if (casted.exists(_.isInstanceOf[Alias])) Project(casted, plan) else plan
     }
   }
 
