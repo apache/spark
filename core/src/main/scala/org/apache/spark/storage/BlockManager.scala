@@ -799,6 +799,11 @@ private[spark] class BlockManager(
           if (tellMaster) {
             reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
           }
+          Option(TaskContext.get()).foreach { taskContext =>
+            val metrics = taskContext.taskMetrics()
+            val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+            metrics.updatedBlocks = Some(lastUpdatedBlocks ++ Seq((blockId, putBlockStatus)))
+          }
         }
       } finally {
         // If we failed in putting the block to memory/disk, notify other possible readers
