@@ -72,20 +72,16 @@ object HashBenchmark {
       .add("timestamp", TimestampType)
     test("normal", normal, 128)
 
-    val structOfInt = new StructType().add("i", IntegerType)
-
     val arrayOfInt = ArrayType(IntegerType)
     val array = new StructType()
       .add("array", arrayOfInt)
       .add("arrayOfArray", ArrayType(arrayOfInt))
-      .add("arrayOfStruct", ArrayType(structOfInt))
     test("array", array, 64)
 
     val mapOfInt = MapType(IntegerType, IntegerType)
     val map = new StructType()
       .add("map", mapOfInt)
       .add("mapOfMap", MapType(IntegerType, mapOfInt))
-      .add("mapOfStruct", MapType(structOfInt, structOfInt))
     test("map", map, 64)
   }
 }
