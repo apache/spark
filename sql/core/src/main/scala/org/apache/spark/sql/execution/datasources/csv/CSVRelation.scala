@@ -55,12 +55,12 @@ private[csv] class CSVRelation(
   private var cachedRDD: Option[RDD[String]] = None
 
   private def readText(location: String): RDD[String] = {
-    if (Charset.forName(params.encoding) == Charset.forName("UTF-8")) {
+    if (Charset.forName(params.charset) == Charset.forName("UTF-8")) {
       sqlContext.sparkContext.textFile(location)
     } else {
       sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions { _.map { pair =>
-            new String(pair._2.getBytes, 0, pair._2.getLength, params.encoding)
+            new String(pair._2.getBytes, 0, pair._2.getLength, params.charset)
           }
         }
     }
@@ -199,11 +199,11 @@ object CSVRelation extends Logging {
       val requiredSize = requiredFields.length
       tokenizedRDD.flatMap { tokens =>
         if (params.dropMalformed && schemaFields.length != tokens.size) {
-          logWarning(s"Dropping malformed line: ${tokens.mkString(params.seq.toString)}")
+          logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
           None
         } else if (params.failFast && schemaFields.length != tokens.size) {
           throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
-            s"${tokens.mkString(params.seq.toString)}")
+            s"${tokens.mkString(params.delimiter.toString)}")
         } else {
           val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.size) {
             tokens ++ new Array[String](schemaFields.length - tokens.size)
@@ -229,7 +229,7 @@ object CSVRelation extends Logging {
           } catch {
             case NonFatal(e) if params.dropMalformed =>
               logWarning("Parse exception. " +
-                s"Dropping malformed line: ${tokens.mkString(params.seq.toString)}")
+                s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
               None
           }
         }

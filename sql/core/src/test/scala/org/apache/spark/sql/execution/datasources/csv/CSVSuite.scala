@@ -101,10 +101,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true, checkTypes = true)
   }
 
-  test("test with alternative seq and quote") {
+  test("test with alternative delimiter and quote") {
     val cars = sqlContext.read
       .format("csv")
-      .options(Map("quote" -> "\'", "seq" -> "|", "header" -> "true"))
+      .options(Map("quote" -> "\'", "delimiter" -> "|", "header" -> "true"))
       .load(testFile(carsAltFile))
 
     verifyCars(cars, withHeader = true)
@@ -115,7 +115,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       sqlContext
         .read
         .format("csv")
-        .option("encoding", "1-9588-osi")
+        .option("charset", "1-9588-osi")
         .load(testFile(carsFile8859))
     }
 
@@ -128,9 +128,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       s"""
          |CREATE TEMPORARY TABLE carsTable USING csv
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
-         |encoding "iso-8859-1", seq "þ")
+         |charset "iso-8859-1", delimiter "þ")
       """.stripMargin.replaceAll("\n", " "))
     //scalstyle:on
+
+    verifyCars(sqlContext.table("carsTable"), withHeader = true)
+  }
+
+  test("test aliases sep and encoding for delimiter and charset") {
+    sqlContext
+      .read
+      .format("csv")
+      .option("encoding", "iso-8859-1")
+      .option("sep", "þ")
+      .load(testFile(carsFile8859))
+      .registerTempTable("carsTable")
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
   }
@@ -139,7 +151,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     sqlContext.sql(
       s"""
          |CREATE TEMPORARY TABLE carsTable USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", seq "\t")
+         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
       """.stripMargin.replaceAll("\n", " "))
 
     verifyCars(sqlContext.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
@@ -152,7 +164,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
          |(yearMade double, makeName string, modelName string, priceTag decimal,
          | comments string, grp string)
          |USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", seq "\t")
+         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
       """.stripMargin.replaceAll("\n", " "))
 
     assert(
@@ -337,5 +349,4 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
-
 }
