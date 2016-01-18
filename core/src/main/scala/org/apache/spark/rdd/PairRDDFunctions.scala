@@ -1110,8 +1110,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
-      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
-      outputMetrics.setRecordsWritten(recordsWritten)
+      outputMetrics.foreach { om =>
+        bytesWrittenCallback.foreach { fn => om.setBytesWritten(fn()) }
+        om.setRecordsWritten(recordsWritten)
+      }
       1
     } : Int
 
@@ -1196,28 +1198,40 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         writer.close()
       }
       writer.commit()
-      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
-      outputMetrics.setRecordsWritten(recordsWritten)
+      outputMetrics.foreach { om =>
+        bytesWrittenCallback.foreach { fn => om.setBytesWritten(fn()) }
+        om.setRecordsWritten(recordsWritten)
+      }
     }
 
     self.context.runJob(self, writeToFile)
     writer.commitJob()
   }
 
-  private def initHadoopOutputMetrics(context: TaskContext): (OutputMetrics, Option[() => Long]) = {
+  // TODO: these don't seem like the right abstractions.
+  // We should abstract the duplicate code in a less awkward way.
+
+  private def initHadoopOutputMetrics(
+      context: TaskContext): (Option[OutputMetrics], Option[() => Long]) = {
     val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
-    val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
-    if (bytesWrittenCallback.isDefined) {
-      context.taskMetrics.outputMetrics = Some(outputMetrics)
-    }
+    val outputMetrics =
+      if (bytesWrittenCallback.isDefined) {
+        Some(context.taskMetrics().registerOutputMetrics(DataWriteMethod.Hadoop))
+      } else {
+        None
+      }
     (outputMetrics, bytesWrittenCallback)
   }
 
-  private def maybeUpdateOutputMetrics(bytesWrittenCallback: Option[() => Long],
-      outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
-    if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
-      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
-      outputMetrics.setRecordsWritten(recordsWritten)
+  private def maybeUpdateOutputMetrics(
+      bytesWrittenCallback: Option[() => Long],
+      outputMetrics: Option[OutputMetrics],
+      recordsWritten: Long): Unit = {
+    outputMetrics.foreach { om =>
+      if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
+        bytesWrittenCallback.foreach { fn => om.setBytesWritten(fn()) }
+        om.setRecordsWritten(recordsWritten)
+      }
     }
   }
 
