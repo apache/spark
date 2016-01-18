@@ -255,23 +255,6 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
-  /**
-   * Validate the initial coefficients of a model, return an Option, if not the expected size
-   * return None and log a warning.
-   */
-  private def validateCoefficients(modelOpt: Option[LogisticRegressionModel], numFeatures: Int): Option[Vector] = {
-    modelOpt.flatMap(model => {
-      val vec = model.coefficients
-      if (vec.size == numFeatures) {
-        Some(vec)
-      } else {
-        logWarning(
-          s"Initial coefficients provided (${vec}) did not match the expected size ${numFeatures}")
-        None
-      }
-    })
-  }
-
   override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
@@ -347,12 +330,24 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     val numFeaturesWithIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
-    val userSuppliedCoefficients = validateCoefficients(optInitialModel,
-      numFeaturesWithIntercept)
-    val initialCoefficientsWithIntercept = userSuppliedCoefficients.getOrElse(
-      Vectors.zeros(numFeaturesWithIntercept))
+    val initialCoefficientsWithIntercept =
+      Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
 
-    if ($(fitIntercept) && !userSuppliedCoefficients.isDefined) {
+    if (optInitialModel.isDefined && optInitialModel.get.coefficients != numFeatures) {
+      val vec = optInitialModel.get.coefficients
+      logWarning(
+        s"Initial coefficients provided (${vec}) did not match the expected size ${numFeatures}")
+    }
+
+    if (optInitialModel.isDefined && optInitialModel.get.coefficients == numFeatures) {
+      val initialCoefficientsWithInterceptArray = initialCoefficientsWithIntercept.toArray
+      optInitialModel.get.coefficients.foreachActive { case (index, value) =>
+        initialCoefficientsWithInterceptArray(index) = value
+      }
+      if ($(fitIntercept)) {
+        initialCoefficientsWithInterceptArray(numFeatures) == optInitialModel.get.intercept
+      }
+    } else if ($(fitIntercept)) {
       /*
          For binary logistic regression, when we initialize the coefficients as zeros,
          it will converge faster if we initialize the intercept such that
@@ -370,8 +365,8 @@ class LogisticRegression @Since("1.2.0") (
         = math.log(histogram(1) / histogram(0))
     }
 
-    val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+      val states = optimizer.iterations(new CachedDiffFunction(costFun),
+        initialCoefficientsWithIntercept.toBreeze.toDenseVector)
 
     val (coefficients, intercept, objectiveHistory) = {
       /*
