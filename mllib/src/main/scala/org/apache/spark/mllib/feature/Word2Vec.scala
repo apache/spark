@@ -571,7 +571,7 @@ class Word2VecModel private[spark] (
       .sortBy(- _._2)
       .take(num + 1)
       .tail
-      .map(v => (v._1, v._2 / vecNorm))
+      .map(v => (if (vecNorm == 0) v else (v._1, v._2 / vecNorm)))
       .toArray
   }
 
