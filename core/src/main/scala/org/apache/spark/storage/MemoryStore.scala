@@ -434,7 +434,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
-            blockManager.dropFromMemory(blockId, data)
+            blockManager.dropFromMemory(blockId, () => data)
           }
         }
         freedMemory
