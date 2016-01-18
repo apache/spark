@@ -670,13 +670,14 @@ abstract class HadoopFsRelation private[sql](
   }
 
   /**
-   * Groups the input files by bucket id, if bucketing is enabled and this data source is bucketed.
-   * Returns None if there exists any malformed bucket files.
+   * Groups the input files by bucket id, if bucketing is enabled and required, and this data
+   * source is bucketed.  Returns None if there exists any malformed bucket files.
    */
   private def groupBucketFiles(
-      files: Array[FileStatus]): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
+      files: Array[FileStatus],
+      bucketingRequired: Boolean): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
     malformedBucketFile = false
-    if (getBucketSpec.isDefined) {
+    if (getBucketSpec.isDefined && bucketingRequired) {
       val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
       var i = 0
       while (!malformedBucketFile && i < files.length) {
@@ -702,7 +703,8 @@ abstract class HadoopFsRelation private[sql](
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      bucketingRequired: Boolean): RDD[InternalRow] = {
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -717,7 +719,7 @@ abstract class HadoopFsRelation private[sql](
       }
     }
 
-    groupBucketFiles(inputStatuses).map { groupedBucketFiles =>
+    groupBucketFiles(inputStatuses, bucketingRequired).map { groupedBucketFiles =>
       // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket
       // id from file name. Then read these files into a RDD(use one-partition empty RDD for empty
       // bucket), and coalesce it to one partition. Finally union all bucket RDDs to one result.
