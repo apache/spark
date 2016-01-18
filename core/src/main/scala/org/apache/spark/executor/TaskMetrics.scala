@@ -101,13 +101,36 @@ class TaskMetrics extends Serializable {
   private[spark] def incDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled += value
   private[spark] def decDiskBytesSpilled(value: Long): Unit = _diskBytesSpilled -= value
 
-  /**
-   * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
-   * are stored here.
-   */
   private var _inputMetrics: Option[InputMetrics] = None
 
+  /**
+   * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
+   * data, defined only in tasks with input.
+   */
   def inputMetrics: Option[InputMetrics] = _inputMetrics
+
+  /**
+   * Get or create a new [[InputMetrics]] associated with this task.
+   */
+  private[spark] def registerInputMetrics(readMethod: DataReadMethod.Value): InputMetrics = {
+    synchronized {
+      val metrics = _inputMetrics.getOrElse {
+        val metrics = new InputMetrics(readMethod)
+        _inputMetrics = Some(metrics)
+        metrics
+      }
+      // If there already exists an InputMetric with the same read method, we can just return
+      // that one. Otherwise, if the read method is different from the one previously seen by
+      // this task, we return a new dummy one to avoid clobbering the values of the old metrics.
+      // In the future we should try to store input metrics from all different read methods at
+      // the same time (SPARK-5225).
+      if (metrics.readMethod == readMethod) {
+        metrics
+      } else {
+        new InputMetrics(readMethod)
+      }
+    }
+  }
 
   /**
    * This should only be used when recreating TaskMetrics, not when updating input metrics in
@@ -117,18 +140,37 @@ class TaskMetrics extends Serializable {
     _inputMetrics = inputMetrics
   }
 
-  /**
-   * If this task writes data externally (e.g. to a distributed filesystem), metrics on how much
-   * data was written are stored here.
-   */
-  var outputMetrics: Option[OutputMetrics] = None
+  private var _outputMetrics: Option[OutputMetrics] = None
 
   /**
-   * If this task reads from shuffle output, metrics on getting shuffle data will be collected here.
-   * This includes read metrics aggregated over all the task's shuffle dependencies.
+   * Metrics related to writing data externally (e.g. to a distributed filesystem),
+   * defined only in tasks with output.
    */
+  def outputMetrics: Option[OutputMetrics] = _outputMetrics
+
+  @deprecated("setting OutputMetrics is for internal use only", "2.0.0")
+  def outputMetrics_=(om: Option[OutputMetrics]): Unit = {
+    _outputMetrics = om
+  }
+
+  /**
+   * Get or create a new [[OutputMetrics]] associated with this task.
+   */
+  private[spark] def registerOutputMetrics(
+      writeMethod: DataWriteMethod.Value): OutputMetrics = synchronized {
+    _outputMetrics.getOrElse {
+      val metrics = new OutputMetrics(writeMethod)
+      _outputMetrics = Some(metrics)
+      metrics
+    }
+  }
+
   private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
 
+  /**
+   * Metrics related to shuffle read aggregated across all shuffle dependencies.
+   * This is defined only if there are shuffle dependencies in this task.
+   */
   def shuffleReadMetrics: Option[ShuffleReadMetrics] = _shuffleReadMetrics
 
   /**
@@ -140,33 +182,73 @@ class TaskMetrics extends Serializable {
   }
 
   /**
-   * ShuffleReadMetrics per dependency for collecting independently while task is in progress.
-   */
-  @transient private lazy val depsShuffleReadMetrics: ArrayBuffer[ShuffleReadMetrics] =
-    new ArrayBuffer[ShuffleReadMetrics]()
+   * Temporary list of [[ShuffleReadMetrics]], one per shuffle dependency.
+   *
+   * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
+   * issues from readers in different threads, in-progress tasks use a [[ShuffleReadMetrics]] for
+   * each dependency and merge these metrics before reporting them to the driver.
+  */
+  @transient private lazy val tempShuffleReadMetrics = new ArrayBuffer[ShuffleReadMetrics]
 
   /**
-   * If this task writes to shuffle output, metrics on the written shuffle data will be collected
-   * here
+   * Create a temporary [[ShuffleReadMetrics]] for a particular shuffle dependency.
+   *
+   * All usages are expected to be followed by a call to [[mergeShuffleReadMetrics]], which
+   * merges the temporary values synchronously. Otherwise, all temporary data collected will
+   * be lost.
    */
-  var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
+  private[spark] def registerTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
+    val readMetrics = new ShuffleReadMetrics
+    tempShuffleReadMetrics += readMetrics
+    readMetrics
+  }
+
+  /**
+   * Merge values across all temporary [[ShuffleReadMetrics]] into `_shuffleReadMetrics`.
+   * This is expected to be called on executor heartbeat and at the end of a task.
+   */
+  private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
+    if (tempShuffleReadMetrics.nonEmpty) {
+      val merged = new ShuffleReadMetrics
+      for (depMetrics <- tempShuffleReadMetrics) {
+        merged.incFetchWaitTime(depMetrics.fetchWaitTime)
+        merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
+        merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
+        merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
+        merged.incLocalBytesRead(depMetrics.localBytesRead)
+        merged.incRecordsRead(depMetrics.recordsRead)
+      }
+      _shuffleReadMetrics = Some(merged)
+    }
+  }
+
+  private var _shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
+
+  /**
+   * Metrics related to shuffle write, defined only in shuffle map stages.
+   */
+  def shuffleWriteMetrics: Option[ShuffleWriteMetrics] = _shuffleWriteMetrics
+
+  @deprecated("setting ShuffleWriteMetrics is for internal use only", "2.0.0")
+  def shuffleWriteMetrics_=(swm: Option[ShuffleWriteMetrics]): Unit = {
+    _shuffleWriteMetrics = swm
+  }
+
+  /**
+   * Get or create a new [[ShuffleWriteMetrics]] associated with this task.
+   */
+  private[spark] def registerShuffleWriteMetrics(): ShuffleWriteMetrics = synchronized {
+    _shuffleWriteMetrics.getOrElse {
+      val metrics = new ShuffleWriteMetrics
+      _shuffleWriteMetrics = Some(metrics)
+      metrics
+    }
+  }
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
-
-  /**
-   * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
-   * issues from readers in different threads, in-progress tasks use a ShuffleReadMetrics for each
-   * dependency, and merge these metrics before reporting them to the driver. This method returns
-   * a ShuffleReadMetrics for a dependency and registers it for merging later.
-   */
-  private [spark] def createShuffleReadMetricsForDependency(): ShuffleReadMetrics = synchronized {
-    val readMetrics = new ShuffleReadMetrics()
-    depsShuffleReadMetrics += readMetrics
-    readMetrics
-  }
 
   /**
    * Returns the input metrics object that the task should use. Currently, if
@@ -190,24 +272,6 @@ class TaskMetrics extends Serializable {
         case Some(InputMetrics(method)) =>
           new InputMetrics(readMethod)
       }
-    }
-  }
-
-  /**
-   * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
-   */
-  private[spark] def updateShuffleReadMetrics(): Unit = synchronized {
-    if (!depsShuffleReadMetrics.isEmpty) {
-      val merged = new ShuffleReadMetrics()
-      for (depMetrics <- depsShuffleReadMetrics) {
-        merged.incFetchWaitTime(depMetrics.fetchWaitTime)
-        merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
-        merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
-        merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
-        merged.incLocalBytesRead(depMetrics.localBytesRead)
-        merged.incRecordsRead(depMetrics.recordsRead)
-      }
-      _shuffleReadMetrics = Some(merged)
     }
   }
 
