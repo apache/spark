@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
 /**
- * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
+ * This class translates SQL to Catalyst [[LogicalPlan]]s or [[Expression]]s.
  */
 private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends ParserDialect {
   object Token {

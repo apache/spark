@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -33,13 +32,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
-import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
+import org.apache.spark.sql.catalyst.{InternalRow, _}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
@@ -206,30 +203,10 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser)
+  protected[sql] val sqlParser: ParserDialect = new SparkSQLParser(new SparkQl(conf))
 
   @transient
-  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect())
-
-  protected[sql] def getSQLDialect(): ParserDialect = {
-    try {
-      val clazz = Utils.classForName(dialectClassName)
-      clazz.getConstructor(classOf[ParserConf])
-        .newInstance(conf)
-        .asInstanceOf[ParserDialect]
-    } catch {
-      case NonFatal(e) =>
-        // Since we didn't find the available SQL Dialect, it will fail even for SET command:
-        // SET spark.sql.dialect=sql; Let's reset as default dialect automatically.
-        val dialect = conf.dialect
-        // reset the sql dialect
-        conf.unsetConf(SQLConf.DIALECT)
-        // throw out the exception, and the default sql dialect will take effect for next query.
-        throw new DialectException(
-          s"""Instantiating dialect '$dialect' failed.
-             |Reverting to default dialect '${conf.dialect}'""".stripMargin, e)
-    }
-  }
+  protected[sql] val ddlParser: DDLParser = new DDLParser(sqlParser)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
@@ -238,12 +215,6 @@ class SQLContext private[sql](
 
   protected[sql] def executePlan(plan: LogicalPlan) =
     new sparkexecution.QueryExecution(this, plan)
-
-  protected[sql] def dialectClassName = if (conf.dialect == "sql") {
-    classOf[SparkQl].getCanonicalName
-  } else {
-    conf.dialect
-  }
 
   /**
    * Add a jar to SQLContext
