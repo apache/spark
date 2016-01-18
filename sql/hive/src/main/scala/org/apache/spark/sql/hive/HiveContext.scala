@@ -546,7 +546,9 @@ class HiveContext private[hive](
   }
 
   @transient
-  protected[sql] override val sqlParser: ParserDialect = new ExtendedHiveQlParser(this)
+  protected[sql] override val sqlParser: ParserDialect = {
+    new SparkSQLParser(new ExtendedHiveQlParser(this))
+  }
 
   @transient
   private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
