@@ -1388,16 +1388,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withSQLConf(
         SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
         withTable("jt", "jt2") {
-          sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
-          sql("CREATE VIEW testView AS SELECT id FROM jt")
+          withView("testView") {
+            sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+            sql("CREATE VIEW testView AS SELECT id FROM jt")
 
-          val df = (1 until 10).map(i => i -> i).toDF("i", "j")
-          df.write.format("json").saveAsTable("jt2")
-          sql("ALTER VIEW testView AS SELECT * FROM jt2")
-          // make sure the view has been changed.
-          checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
-
-          sql("DROP VIEW testView")
+            val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+            df.write.format("json").saveAsTable("jt2")
+            sql("ALTER VIEW testView AS SELECT * FROM jt2")
+            // make sure the view has been changed.
+            checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
+          }
         }
       }
     }
@@ -1407,10 +1407,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withSQLConf(
         SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
         withTable("jt") {
-          sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
-          sql("CREATE VIEW testView AS SELECT id FROM jt")
-          checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
-          sql("DROP VIEW testView")
+          withView("testView") {
+            sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+            sql("CREATE VIEW testView AS SELECT id FROM jt")
+            checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+          }
         }
       }
     }
@@ -1420,11 +1421,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withSQLConf(
         SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
         withTable("parTable") {
-          val df = Seq(1 -> "a").toDF("i", "j")
-          df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
-          sql("CREATE VIEW testView AS SELECT i, j FROM parTable")
-          checkAnswer(sql("SELECT * FROM testView"), Row(1, "a"))
-          sql("DROP VIEW testView")
+          withView("testView") {
+            val df = Seq(1 -> "a").toDF("i", "j")
+            df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
+            sql("CREATE VIEW testView AS SELECT i, j FROM parTable")
+            checkAnswer(sql("SELECT * FROM testView"), Row(1, "a"))
+          }
         }
       }
     }
@@ -1433,9 +1435,36 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("CTE within view") {
     withSQLConf(
       SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> "true") {
-      sql("CREATE VIEW cte_view AS WITH w AS (SELECT 1 AS n) SELECT n FROM w")
-      checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
-      sql("DROP VIEW cte_view")
+      withView("cte_view") {
+        sql("CREATE VIEW cte_view AS WITH w AS (SELECT 1 AS n) SELECT n FROM w")
+        checkAnswer(sql("SELECT * FROM cte_view"), Row(1))
+      }
+    }
+  }
+
+  test("Using view after switching current database") {
+    withSQLConf(
+      SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> "true") {
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT * FROM src")
+        withTempDatabase { db =>
+          checkAnswer(sql("SELECT * FROM v"), sql("SELECT * FROM default.src"))
+        }
+      }
+    }
+  }
+
+  test("Using view after adding more columns") {
+    withSQLConf(
+      SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> "true") {
+      withTable("t") {
+        sqlContext.range(10).write.saveAsTable("t")
+        withView("v") {
+          sql("CREATE VIEW v AS SELECT * FROM t")
+          sqlContext.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("t")
+          checkAnswer(sql("SELECT * FROM v"), sqlContext.range(10))
+        }
+      }
     }
   }
 

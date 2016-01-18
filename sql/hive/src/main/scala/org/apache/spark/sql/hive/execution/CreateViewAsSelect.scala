@@ -49,12 +49,16 @@ private[hive] case class CreateViewAsSelect(
 
     hiveContext.catalog.tableExists(tableIdentifier) match {
       case true if allowExisting =>
-        // view already exists, will do nothing, to keep consistent with Hive
+        // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
+        // already exists.
 
       case true if orReplace =>
+        // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         hiveContext.catalog.client.alertView(prepareTable(sqlContext))
 
       case true =>
+        // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
+        // exists.
         throw new AnalysisException(s"View $tableIdentifier already exists. " +
           "If you want to update the view definition, please use ALTER VIEW AS or " +
           "CREATE OR REPLACE VIEW AS")
@@ -68,26 +72,27 @@ private[hive] case class CreateViewAsSelect(
 
   private def prepareTable(sqlContext: SQLContext): HiveTable = {
     val expandedText = if (sqlContext.conf.canonicalView) {
-      rebuildViewQueryString(sqlContext).getOrElse(expandViewText)
+      rebuildViewQueryString(sqlContext).getOrElse(wrapViewTextWithSelect)
     } else {
-      expandViewText
+      wrapViewTextWithSelect
     }
+
+    val viewSchema = {
+      if (tableDesc.schema.isEmpty) {
+        childSchema.map { attr =>
+          HiveColumn(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
+        }
+      } else {
+        childSchema.zip(tableDesc.schema).map { case (attr, col) =>
+          HiveColumn(col.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), col.comment)
+        }
+      }
+    }
+
     tableDesc.copy(schema = viewSchema, viewText = Some(expandedText))
   }
 
-  private def viewSchema: Seq[HiveColumn] = {
-    if (tableDesc.schema.isEmpty) {
-      childSchema.map { attr =>
-        HiveColumn(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
-      }
-    } else {
-      childSchema.zip(tableDesc.schema).map { case (attr, col) =>
-        HiveColumn(col.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), col.comment)
-      }
-    }
-  }
-
-  private def expandViewText: String = {
+  private def wrapViewTextWithSelect: String = {
     // When user specified column names for view, we should create a project to do the renaming.
     // When no column name specified, we still need to create a project to declare the columns
     // we need, to make us more robust to top level `*`s.

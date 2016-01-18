@@ -373,7 +373,7 @@ private[spark] object SQLConf {
     isPublic = false)
 
   val CANONICAL_NATIVE_VIEW = booleanConf("spark.sql.nativeView.canonical",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When this option and spark.sql.nativeView are both true, Spark SQL tries to handle " +
           "CREATE VIEW statement using SQL query string generated from view definition logical " +
           "plan.  If the logical plan doesn't have a SQL representation, we fallback to the " +
