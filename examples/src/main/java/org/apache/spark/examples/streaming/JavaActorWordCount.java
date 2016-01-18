@@ -151,10 +151,9 @@ class WordcountActorSystemFactory implements ActorSystemFactory {
   @Override
   public ActorSystem create() {
     String uniqueSystemName = "actor-wordcount-" + TaskContext.get().taskAttemptId();
-    Map<String, String> akkaConf = new HashMap<String, String>();
+    Map<String, Object> akkaConf = new HashMap<String, Object>();
     akkaConf.put("akka.actor.provider", "akka.remote.RemoteActorRefProvider");
-    akkaConf.put(
-        "akka.remote.netty.tcp.transport-class", "akka.remote.transport.netty.NettyTransport");
+    akkaConf.put("akka.remote.enabled-transports", Arrays.asList("akka.remote.netty.tcp"));
     return ActorSystem.create(uniqueSystemName, ConfigFactory.parseMap(akkaConf));
   }
 }
