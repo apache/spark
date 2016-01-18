@@ -298,8 +298,8 @@ class CustomActor extends JavaActorReceiver {
 }
 
 // A new input stream can be created with this custom actor as
-JavaStreamingContext ssc = ...
-JavaDStream<String> lines = AkkaUtils.<String>createStream(Props.create(CustomActor.class), "CustomReceiver")
+JavaStreamingContext ssc = ...;
+JavaDStream<String> lines = AkkaUtils.<String>createStream(Props.create(CustomActor.class), "CustomReceiver");
 
 {% endhighlight %}
 

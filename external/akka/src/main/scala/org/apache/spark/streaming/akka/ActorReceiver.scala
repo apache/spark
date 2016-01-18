@@ -110,7 +110,7 @@ abstract class ActorReceiver extends Actor {
  *  }
  *
  *  // Can be used with AkkaUtils.createStream as follows
- *  AkkaUtils.<String>createStream(Props.create(MyActor.class), "MyActorReceiver")
+ *  AkkaUtils.<String>createStream(Props.create(MyActor.class), "MyActorReceiver");
  *
  * }}}
  *
