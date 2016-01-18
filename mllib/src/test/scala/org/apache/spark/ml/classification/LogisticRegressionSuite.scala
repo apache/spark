@@ -884,25 +884,46 @@ class LogisticRegressionSuite
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
   }
 
-  test("logistic regression with fitIntercept=true and all labels the same") {
-    val lr = new LogisticRegression()
-      .setFitIntercept(true)
-      .setMaxIter(3)
+  test("logistic regression with all labels the same") {
     val sameLabels = dataset
       .withColumn("zeroLabel", lit(0.0))
       .withColumn("oneLabel", lit(1.0))
 
-    val allZeroModel = lr
+    // fitIntercept=true
+    val lrIntercept = new LogisticRegression()
+      .setFitIntercept(true)
+      .setMaxIter(3)
+
+    val allZeroInterceptModel = lrIntercept
       .setLabelCol("zeroLabel")
       .fit(sameLabels)
-    assert(allZeroModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
-    assert(allZeroModel.intercept === Double.NegativeInfinity)
+    assert(allZeroInterceptModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allZeroInterceptModel.intercept === Double.NegativeInfinity)
+    assert(allZeroInterceptModel.summary.totalIterations === 0)
 
-    val allOneModel = lr
+    val allOneInterceptModel = lrIntercept
       .setLabelCol("oneLabel")
       .fit(sameLabels)
-    assert(allOneModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
-    assert(allOneModel.intercept === Double.PositiveInfinity)
+    assert(allOneInterceptModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allOneInterceptModel.intercept === Double.PositiveInfinity)
+    assert(allOneInterceptModel.summary.totalIterations === 0)
+
+    // fitIntercept=false
+    val lrNoIntercept= new LogisticRegression()
+      .setFitIntercept(false)
+      .setMaxIter(3)
+
+    val allZeroNoInterceptModel = lrNoIntercept
+      .setLabelCol("zeroLabel")
+      .fit(sameLabels)
+    assert(allZeroNoInterceptModel.intercept === 0.0)
+    println(allZeroNoInterceptModel.summary.totalIterations > 0)
+
+    val allOneNoInterceptModel = lrNoIntercept
+      .setLabelCol("oneLabel")
+      .fit(sameLabels)
+    assert(allOneNoInterceptModel.intercept === 0.0)
+    println(allOneNoInterceptModel.summary.totalIterations > 0)
   }
 
   test("read/write") {
