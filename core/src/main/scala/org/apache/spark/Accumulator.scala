@@ -20,6 +20,8 @@ package org.apache.spark
 import scala.collection.{mutable, Map}
 import scala.ref.WeakReference
 
+import org.apache.spark.storage.{BlockId, BlockStatus}
+
 
 /**
  * A simpler value of [[Accumulable]] where the result type being accumulated is the same
@@ -156,5 +158,23 @@ object AccumulatorParam {
     def zero(initialValue: Float): Float = 0f
   }
 
-  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+  // Note: when merging values, this param just adopts the newer value. This is used only
+  // internally for things that shouldn't really be accumulated across tasks, like input
+  // read method, which should be the same across all tasks in the same stage.
+  private[spark] object StringAccumulatorParam extends AccumulatorParam[String] {
+    def addInPlace(t1: String, t2: String): String = t2
+    def zero(initialValue: String): String = ""
+  }
+
+  // Note: this is expensive as it makes a copy of the list every time the caller adds an item.
+  // A better way to use this is to first accumulate the values yourself then them all at once.
+  private[spark] class ListAccumulatorParam[T] extends AccumulatorParam[Seq[T]] {
+    def addInPlace(t1: Seq[T], t2: Seq[T]): Seq[T] = t1 ++ t2
+    def zero(initialValue: Seq[T]): Seq[T] = Seq.empty[T]
+  }
+
+  // For the internal metric that records what blocks are updated in a particular task
+  private[spark] object UpdatedBlockStatusesAccumulatorParam
+    extends ListAccumulatorParam[(BlockId, BlockStatus)]
+
 }
