@@ -2049,8 +2049,7 @@ private[spark] object Utils extends Logging {
           // try other
           startFromAvailable()
         }
-      }
-      else {
+      } else {
         // try random
         startFromAvailable(true)
       }

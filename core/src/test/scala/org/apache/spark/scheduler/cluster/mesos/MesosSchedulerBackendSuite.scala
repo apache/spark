@@ -26,9 +26,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.mesos.Protos.Value.{Ranges, Scalar, Range => MesosRange}
 import org.apache.mesos.Protos._
-import org.apache.mesos.Protos.Value.Scalar
+import org.apache.mesos.Protos.Value.{Range => MesosRange, Ranges, Scalar}
 import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
@@ -171,7 +170,8 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
       builder.addResourcesBuilder()
         .setName("ports")
         .setType(Value.Type.RANGES)
-        .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder().setBegin(ports._1).setEnd(ports._2).build()))
+        .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder()
+          .setBegin(ports._1).setEnd(ports._2).build()))
       builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
         .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
         .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
@@ -275,7 +275,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     when(sc.listenerBus).thenReturn(listenerBus)
 
     val id = 1
-    val (devPortBegin, devPortEnd) = (40000 , 40100)
+    val (devPortBegin, devPortEnd) = (40000, 40100)
     val (prodPortBegin, prodPortEnd) = (30000, 30100)
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
