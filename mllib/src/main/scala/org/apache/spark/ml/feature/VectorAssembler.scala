@@ -70,19 +70,19 @@ class VectorAssembler(override val uid: String)
           val group = AttributeGroup.fromStructField(field)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
-            group.attributes.get.map { attr =>
+            group.attributes.get.zipWithIndex.map { case (attr, i) =>
               if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)
               } else {
-                attr
+                attr.withName(c + "_" + i)
               }
             }
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
             val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
-            Array.fill(numAttrs)(NumericAttribute.defaultAttr)
+            Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
         case otherType =>
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
