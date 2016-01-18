@@ -386,7 +386,7 @@ class LogisticRegressionWithLBFGS
   }
 
   /**
-   * Run the algorithm with the configured parameters on an input RDD
+   * Run Logistic Regression with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
    * If a known updater is used calls the ml implementation, to avoid
    * applying a regularization penalty to the intercept, otherwise
@@ -395,11 +395,11 @@ class LogisticRegressionWithLBFGS
    * If using ml implementation, uses ml code to generate initial weights.
    */
   override def run(input: RDD[LabeledPoint]): LogisticRegressionModel = {
-    run(input, generateInitialWeights(input), false)
+    run(input, generateInitialWeights(input), userSuppliedWeights = false)
   }
 
   /**
-   * Run the algorithm with the configured parameters on an input RDD
+   * Run Logistic Regression with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
    * If a known updater is used calls the ml implementation, to avoid
    * applying a regularization penalty to the intercept, otherwise
@@ -408,18 +408,19 @@ class LogisticRegressionWithLBFGS
    * Uses user provided weights.
    */
   override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
-    run(input, initialWeights, true)
+    run(input, initialWeights, userSuppliedWeights = true)
   }
 
   private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSuppliedWeights: Boolean):
       LogisticRegressionModel = {
     // ml's Logisitic regression only supports binary classifcation currently.
-    if (numOfLinearPredictor == 1 && useFeatureScaling) {
+    if (numOfLinearPredictor == 1) {
       def runWithMlLogisitcRegression(elasticNetParam: Double) = {
         // Prepare the ml LogisticRegression based on our settings
         val lr = new org.apache.spark.ml.classification.LogisticRegression()
         lr.setRegParam(optimizer.getRegParam())
         lr.setElasticNetParam(elasticNetParam)
+        lr.setStandardization(useFeatureScaling)
         if (userSuppliedWeights) {
           val initialWeightsWithIntercept = if (addIntercept) {
             appendBias(initialWeights)
