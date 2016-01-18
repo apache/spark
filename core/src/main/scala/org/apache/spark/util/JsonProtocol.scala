@@ -319,13 +319,11 @@ private[spark] object JsonProtocol {
         ("Bytes Written" -> om.bytesWritten) ~
         ("Records Written" -> om.recordsWritten)
       }.getOrElse(JNothing)
-    val updatedBlocks: JValue =
-      taskMetrics.updatedBlocks.map { blocks =>
-        JArray(blocks.toList.map { case (id, status) =>
-          ("Block ID" -> id.toString) ~
-            ("Status" -> blockStatusToJson(status))
-        })
-      }.getOrElse(JNothing)
+    val updatedBlocks =
+      JArray(taskMetrics.updatedBlockStatuses.toList.map { case (id, status) =>
+        ("Block ID" -> id.toString) ~
+        ("Status" -> blockStatusToJson(status))
+      })
     ("Host Name" -> taskMetrics.hostname) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
@@ -751,14 +749,14 @@ private[spark] object JsonProtocol {
       inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
     }
 
-    metrics.updatedBlocks =
-      Utils.jsonOption(json \ "Updated Blocks").map { value =>
-        value.extract[List[JValue]].map { block =>
-          val id = BlockId((block \ "Block ID").extract[String])
-          val status = blockStatusFromJson(block \ "Status")
-          (id, status)
-        }
-      }
+    // Updated blocks
+    Utils.jsonOption(json \ "Updated Blocks").foreach { blocksJson =>
+      metrics.setUpdatedBlockStatuses(blocksJson.extract[List[JValue]].map { blockJson =>
+        val id = BlockId((blockJson \ "Block ID").extract[String])
+        val status = blockStatusFromJson(blockJson \ "Status")
+        (id, status)
+      })
+    }
 
     metrics
   }

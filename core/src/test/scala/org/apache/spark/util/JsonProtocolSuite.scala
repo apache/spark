@@ -557,7 +557,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       metrics1.shuffleWriteMetrics, metrics2.shuffleWriteMetrics, assertShuffleWriteEquals)
     assertOptionEquals(
       metrics1.inputMetrics, metrics2.inputMetrics, assertInputMetricsEquals)
-    assertOptionEquals(metrics1.updatedBlocks, metrics2.updatedBlocks, assertBlocksEquals)
+    assertBlocksEquals(metrics1.updatedBlockStatuses, metrics2.updatedBlockStatuses)
   }
 
   private def assertEquals(metrics1: ShuffleReadMetrics, metrics2: ShuffleReadMetrics) {
@@ -787,10 +787,9 @@ class JsonProtocolSuite extends SparkFunSuite {
       t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
-      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
+      val outputMetrics = t.registerOutputMetrics(DataWriteMethod.Hadoop)
       outputMetrics.setBytesWritten(a + b + c)
       outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c)/100 else -1)
-      t.outputMetrics = Some(outputMetrics)
     } else {
       val sw = t.registerShuffleWriteMetrics()
       sw.incShuffleBytesWritten(a + b + c)
@@ -798,7 +797,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       sw.setShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
     // Make at most 6 blocks
-    t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
+    t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
       (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
     }.toSeq)
     t

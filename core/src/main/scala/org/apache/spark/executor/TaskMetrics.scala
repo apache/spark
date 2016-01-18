@@ -245,10 +245,31 @@ class TaskMetrics extends Serializable {
     }
   }
 
+  private var _updatedBlockStatuses: Seq[(BlockId, BlockStatus)] =
+    Seq.empty[(BlockId, BlockStatus)]
+
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
-  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
+  def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = _updatedBlockStatuses
+
+  private[spark] def incUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit = {
+    _updatedBlockStatuses ++= v
+  }
+
+  private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit = {
+    _updatedBlockStatuses = v
+  }
+
+  @deprecated("use updatedBlockStatuses instead", "2.0.0")
+  def updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = {
+    if (_updatedBlockStatuses.nonEmpty) Some(_updatedBlockStatuses) else None
+  }
+
+  @deprecated("setting updated blocks is for internal use only", "2.0.0")
+  def updatedBlocks_=(ub: Option[Seq[(BlockId, BlockStatus)]]): Unit = {
+    _updatedBlockStatuses = ub.getOrElse(Seq.empty[(BlockId, BlockStatus)])
+  }
 
   /**
    * Returns the input metrics object that the task should use. Currently, if
