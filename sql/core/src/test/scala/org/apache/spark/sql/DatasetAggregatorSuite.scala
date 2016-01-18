@@ -24,7 +24,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
-class SumOf[I, N: Numeric](f: I => N) extends Aggregator[I, N, N] {
+class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {
   val numeric = implicitly[Numeric[N]]
 
   override def zero: N = numeric.zero
@@ -113,7 +113,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   import testImplicits._
 
-  def sum[I, N: Numeric: Encoder](f: I => N): TypedColumn[I, N] =
+  def sum[I, N : Numeric : Encoder](f: I => N): TypedColumn[I, N] =
     new SumOf(f).toColumn
 
   test("typed aggregation: TypedAggregator") {

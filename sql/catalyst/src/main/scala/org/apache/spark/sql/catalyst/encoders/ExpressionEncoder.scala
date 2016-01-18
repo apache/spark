@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  def apply[T: TypeTag](): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
@@ -205,6 +205,16 @@ case class ExpressionEncoder[T](
   def defaultBinding: ExpressionEncoder[T] = {
     val attrs = schema.toAttributes
     resolve(attrs, OuterScopes.outerScopes).bind(attrs)
+  }
+
+
+  /**
+   * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
+   * of this object.
+   */
+  def namedExpressions: Seq[NamedExpression] = schema.map(_.name).zip(toRowExpressions).map {
+    case (_, ne: NamedExpression) => ne.newInstance()
+    case (name, e) => Alias(e, name)()
   }
 
   /**

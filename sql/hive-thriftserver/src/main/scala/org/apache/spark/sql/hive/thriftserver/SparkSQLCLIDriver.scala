@@ -325,7 +325,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (ret != 0) {
             // For analysis exception, only the error is printed out to the console.
             rc.getException() match {
-              case e: AnalysisException =>
+              case e : AnalysisException =>
                 err.println(s"""Error in query: ${e.getMessage}""")
               case _ => err.println(rc.getErrorMessage())
             }

@@ -953,25 +953,6 @@ createTableStatement
       )
     ;
 
-createTableUsingStatement
-@init { pushMsg("create table using statement", state); }
-@after { popMsg(state); }
-    : KW_CREATE (temp=KW_TEMPORARY)? KW_TABLE ifNotExists? name=tableName
-     (   tableProvider
-         tableOpts?
-         (KW_AS selectStatementWithCTE)?
-      |  (LPAREN columnNameTypeList RPAREN)
-         tableProvider
-         tableOpts?
-     )
-    -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
-         columnNameTypeList?
-         tableProvider
-         tableOpts?
-         selectStatementWithCTE?
-        )
-    ;
-
 truncateTableStatement
 @init { pushMsg("truncate table statement", state); }
 @after { popMsg(state); }

@@ -38,7 +38,8 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
@@ -202,18 +203,20 @@ class SQLContext private[sql](
     }
 
   @transient
-  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
+  protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
+  protected[sql] val ddlParser = new DDLParser(sqlParser)
 
   @transient
-  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
+  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect())
 
   protected[sql] def getSQLDialect(): ParserDialect = {
     try {
       val clazz = Utils.classForName(dialectClassName)
-      clazz.newInstance().asInstanceOf[ParserDialect]
+      clazz.getConstructor(classOf[ParserConf])
+        .newInstance(conf)
+        .asInstanceOf[ParserDialect]
     } catch {
       case NonFatal(e) =>
         // Since we didn't find the available SQL Dialect, it will fail even for SET command:
@@ -237,7 +240,7 @@ class SQLContext private[sql](
     new sparkexecution.QueryExecution(this, plan)
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
-    classOf[DefaultParserDialect].getCanonicalName
+    classOf[SparkQl].getCanonicalName
   } else {
     conf.dialect
   }
@@ -409,7 +412,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   @Experimental
-  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -425,7 +428,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   @Experimental
-  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -498,7 +501,7 @@ class SQLContext private[sql](
   }
 
 
-  def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
@@ -507,7 +510,7 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
-  def createDataset[T: Encoder](data: RDD[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d))
@@ -516,7 +519,7 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
-  def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
 
@@ -682,7 +685,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -728,7 +731,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -833,7 +836,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(SqlParser.parseTableIdentifier(tableName))
+    table(sqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
@@ -901,7 +904,8 @@ class SQLContext private[sql](
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches = Seq(
-      Batch("Add exchange", Once, EnsureRequirements(self))
+      Batch("Add exchange", Once, EnsureRequirements(self)),
+      Batch("Whole stage codegen", Once, CollapseCodegenStages(self))
     )
   }
 

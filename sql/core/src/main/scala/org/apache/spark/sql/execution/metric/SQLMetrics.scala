@@ -64,7 +64,7 @@ private[sql] trait SQLMetricValue[T] extends Serializable {
 /**
  * A wrapper of Long to avoid boxing and unboxing when using Accumulator
  */
-private[sql] class LongSQLMetricValue(private var _value: Long) extends SQLMetricValue[Long] {
+private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
 
   def add(incr: Long): LongSQLMetricValue = {
     _value += incr
