@@ -101,10 +101,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true, checkTypes = true)
   }
 
-  test("test with alternative delimiter and quote") {
+  test("test with alternative seq and quote") {
     val cars = sqlContext.read
       .format("csv")
-      .options(Map("quote" -> "\'", "delimiter" -> "|", "header" -> "true"))
+      .options(Map("quote" -> "\'", "seq" -> "|", "header" -> "true"))
       .load(testFile(carsAltFile))
 
     verifyCars(cars, withHeader = true)
@@ -115,7 +115,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       sqlContext
         .read
         .format("csv")
-        .option("charset", "1-9588-osi")
+        .option("encoding", "1-9588-osi")
         .load(testFile(carsFile8859))
     }
 
@@ -128,7 +128,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       s"""
          |CREATE TEMPORARY TABLE carsTable USING csv
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
-         |charset "iso-8859-1", delimiter "þ")
+         |encoding "iso-8859-1", seq "þ")
       """.stripMargin.replaceAll("\n", " "))
     //scalstyle:on
 
@@ -139,7 +139,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     sqlContext.sql(
       s"""
          |CREATE TEMPORARY TABLE carsTable USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", seq "\t")
       """.stripMargin.replaceAll("\n", " "))
 
     verifyCars(sqlContext.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
@@ -152,7 +152,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
          |(yearMade double, makeName string, modelName string, priceTag decimal,
          | comments string, grp string)
          |USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", seq "\t")
       """.stripMargin.replaceAll("\n", " "))
 
     assert(

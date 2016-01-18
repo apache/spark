@@ -44,9 +44,9 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(parameters.getOrElse("delimiter", ","))
+  val seq = CSVTypeCast.toChar(parameters.getOrElse("seq", ","))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val charset = parameters.getOrElse("charset", Charset.forName("UTF-8").name())
+  val encoding = parameters.getOrElse("encoding", Charset.forName("UTF-8").name())
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')

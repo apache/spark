@@ -34,7 +34,7 @@ private[sql] abstract class CsvReader(params: CSVParameters, headers: Seq[String
   protected lazy val parser: CsvParser = {
     val settings = new CsvParserSettings()
     val format = settings.getFormat
-    format.setDelimiter(params.delimiter)
+    format.setDelimiter(params.seq)
     format.setLineSeparator(params.rowSeparator)
     format.setQuote(params.quote)
     format.setQuoteEscape(params.escape)
@@ -62,7 +62,7 @@ private[sql] class LineCsvWriter(params: CSVParameters, headers: Seq[String]) ex
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
 
-  format.setDelimiter(params.delimiter)
+  format.setDelimiter(params.seq)
   format.setLineSeparator(params.rowSeparator)
   format.setQuote(params.quote)
   format.setQuoteEscape(params.escape)
