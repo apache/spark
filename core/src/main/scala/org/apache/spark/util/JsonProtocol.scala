@@ -331,6 +331,7 @@ private[spark] object JsonProtocol {
     ("Total Records Read" -> shuffleReadMetrics.recordsRead)
   }
 
+  // TODO: Drop the redundant "Shuffle" since it's inconsistent with related classes.
   def shuffleWriteMetricsToJson(shuffleWriteMetrics: ShuffleWriteMetrics): JValue = {
     ("Shuffle Bytes Written" -> shuffleWriteMetrics.bytesWritten) ~
     ("Shuffle Write Time" -> shuffleWriteMetrics.writeTime) ~
