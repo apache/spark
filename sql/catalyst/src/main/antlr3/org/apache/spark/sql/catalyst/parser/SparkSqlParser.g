@@ -1800,7 +1800,8 @@ tableProvider
 @init { pushMsg("table's provider", state); }
 @after { popMsg(state); }
     :
-      KW_USING provider=Identifier  -> ^(TOK_TABLEPROVIDER $provider)
+      KW_USING Identifier (DOT Identifier)*
+    -> ^(TOK_TABLEPROVIDER Identifier+)
     ;
 
 optionKeyValue

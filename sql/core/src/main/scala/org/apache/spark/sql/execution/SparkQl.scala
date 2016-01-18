@@ -83,7 +83,6 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
               options.map {
                 case Token("TOK_TABLEOPTION", Token(key, _) :: Token(value, _) :: Nil) =>
                   (key, value.replaceAll("^\'|^\"|\"$|\'$", ""))
-                case _ => super.nodeToPlan(node)
               }.asInstanceOf[Seq[(String, String)]].toMap
           }
         }.getOrElse(Map.empty[String, String])
