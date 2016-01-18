@@ -1681,14 +1681,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     Utils.tryLogNonFatalError {
       _executorAllocationManager.foreach(_.stop())
     }
-    Utils.tryLogNonFatalError {
-      _eventLogger.foreach(_.stop())
-    }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
         _listenerBusStarted = false
       }
+    }
+    Utils.tryLogNonFatalError {
+      _eventLogger.foreach(_.stop())
     }
     if (_dagScheduler != null) {
       Utils.tryLogNonFatalError {
