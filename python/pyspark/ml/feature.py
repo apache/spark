@@ -1840,8 +1840,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     +----+--------------------+
     |word|          similarity|
     +----+--------------------+
-    |   b| 0.16782984556103436|
-    |   c|-0.46761559092107646|
+    |   b| 0.2505344027513247|
+    |   c|-0.6980510075367647|
     +----+--------------------+
     ...
     >>> model.transform(doc).head().model
