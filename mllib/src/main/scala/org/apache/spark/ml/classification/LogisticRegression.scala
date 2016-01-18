@@ -258,20 +258,20 @@ class LogisticRegression @Since("1.2.0") (
    * Validate the initial weights, return an Option, if not the expected size return None
    * and log a warning.
    */
-  private def validateWeights(vectorOpt: Option[Vector], numFeatures: Int): Option[Vector] = {
+  private def validateCoefficients(vectorOpt: Option[Vector], numFeatures: Int): Option[Vector] = {
     vectorOpt.flatMap(vec =>
       if (vec.size == numFeatures) {
         Some(vec)
       } else {
         logWarning(
-          s"""Initial weights provided (${vec})did not match the expected size ${numFeatures}""")
+          s"Initial coefficientss provided (${vec}) did not match the expected size ${numFeatures}")
         None
       })
   }
 
   override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
+    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
       case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
     }
@@ -344,7 +344,8 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     val numFeaturesWithIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
-    val userSuppliedCoefficients = validateWeights(optInitialCoefficients, numFeaturesWithIntercept)
+    val userSuppliedCoefficients = validateCoefficients(optInitialCoefficients,
+      numFeaturesWithIntercept)
     val initialCoefficientsWithIntercept = userSuppliedCoefficients.getOrElse(
       Vectors.zeros(numFeaturesWithIntercept))
 
