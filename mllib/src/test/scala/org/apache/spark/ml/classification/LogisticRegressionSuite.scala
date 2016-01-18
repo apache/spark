@@ -909,7 +909,7 @@ class LogisticRegressionSuite
     assert(allOneInterceptModel.summary.totalIterations === 0)
 
     // fitIntercept=false
-    val lrNoIntercept= new LogisticRegression()
+    val lrNoIntercept = new LogisticRegression()
       .setFitIntercept(false)
       .setMaxIter(3)
 
