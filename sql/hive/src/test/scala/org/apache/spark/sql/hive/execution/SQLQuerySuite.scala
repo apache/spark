@@ -1457,11 +1457,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("Using view after adding more columns") {
     withSQLConf(
       SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> "true") {
-      withTable("t") {
-        sqlContext.range(10).write.saveAsTable("t")
+      withTable("add_col") {
+        sqlContext.range(10).write.saveAsTable("add_col")
         withView("v") {
-          sql("CREATE VIEW v AS SELECT * FROM t")
-          sqlContext.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("t")
+          sql("CREATE VIEW v AS SELECT * FROM add_col")
+          sqlContext.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
           checkAnswer(sql("SELECT * FROM v"), sqlContext.range(10))
         }
       }
