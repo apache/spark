@@ -124,20 +124,15 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
   test("normalize and powerIter") {
     /*
      Test normalize() with the following graph:
-
      0 - 3
      | \ |
      1 - 2
-
      The affinity matrix (A) is
-
      0 1 1 1
      1 0 1 0
      1 1 0 1
      1 0 1 0
-
      D is diag(3, 2, 3, 2) and hence W is
-
        0 1/3 1/3 1/3
      1/2   0 1/2   0
      1/3 1/3   0 1/3
