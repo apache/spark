@@ -247,27 +247,29 @@ class LogisticRegression @Since("1.2.0") (
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
-  private var optInitialCoefficients: Option[Vector] = None
+  private var optInitialModel: Option[LogisticRegressionModel] = None
 
   /** @group setParam */
   private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
-    this.optInitialCoefficients = Some(model.coefficients)
+    this.optInitialModel = Some(model)
     this
   }
 
   /**
-   * Validate the initial coefficients, return an Option, if not the expected size return None
-   * and log a warning.
+   * Validate the initial coefficients of a model, return an Option, if not the expected size
+   * return None and log a warning.
    */
-  private def validateCoefficients(vectorOpt: Option[Vector], numFeatures: Int): Option[Vector] = {
-    vectorOpt.flatMap(vec =>
+  private def validateCoefficients(modelOpt: Option[LogisticRegressionModel], numFeatures: Int): Option[Vector] = {
+    modelOpt.flatMap(model => {
+      val vec = model.coefficients
       if (vec.size == numFeatures) {
         Some(vec)
       } else {
         logWarning(
           s"Initial coefficients provided (${vec}) did not match the expected size ${numFeatures}")
         None
-      })
+      }
+    })
   }
 
   override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
@@ -345,7 +347,7 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     val numFeaturesWithIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
-    val userSuppliedCoefficients = validateCoefficients(optInitialCoefficients,
+    val userSuppliedCoefficients = validateCoefficients(optInitialModel,
       numFeaturesWithIntercept)
     val initialCoefficientsWithIntercept = userSuppliedCoefficients.getOrElse(
       Vectors.zeros(numFeaturesWithIntercept))
