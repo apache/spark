@@ -32,7 +32,7 @@ private[spark] class TaskContextImpl(
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
     @transient private val metricsSystem: MetricsSystem,
-    internalAccumulators: Seq[Accumulator[Long]],
+    internalAccumulators: Seq[Accumulator[_]],
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
   with Logging {
@@ -105,10 +105,11 @@ private[spark] class TaskContextImpl(
     accumulators.mapValues(_.localValue).toMap
   }
 
+  // TODO: make this return Accumulator[_]
   private[spark] override val internalMetricsToAccumulators: Map[String, Accumulator[Long]] = {
     // Explicitly register internal accumulators here because these are
     // not captured in the task closure and are already deserialized
     internalAccumulators.foreach(registerAccumulator)
-    internalAccumulators.map { a => (a.name.get, a) }.toMap
+    internalAccumulators.map { a => (a.name.get, a.asInstanceOf[Accumulator[Long]]) }.toMap
   }
 }

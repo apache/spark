@@ -74,10 +74,10 @@ private[scheduler] abstract class Stage(
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
 
-  private var _internalAccumulators: Seq[Accumulator[Long]] = Seq.empty
+  private var _internalAccumulators: Seq[Accumulator[_]] = Seq.empty
 
   /** Internal accumulators shared across all tasks in this stage. */
-  def internalAccumulators: Seq[Accumulator[Long]] = _internalAccumulators
+  def internalAccumulators: Seq[Accumulator[_]] = _internalAccumulators
 
   /**
    * Re-initialize the internal accumulators associated with this stage.
