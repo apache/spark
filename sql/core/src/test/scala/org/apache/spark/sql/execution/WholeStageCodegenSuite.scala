@@ -15,25 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.test.SharedSQLContext
 
-/**
- * Root class of SQL Parser Dialect, and we don't guarantee the binary
- * compatibility for the future release, let's keep it as the internal
- * interface for advanced user.
- */
-@DeveloperApi
-trait ParserDialect {
-  /** Creates LogicalPlan for a given SQL string. */
-  def parsePlan(sqlText: String): LogicalPlan
+class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
-  /** Creates Expression for a given SQL string. */
-  def parseExpression(sqlText: String): Expression
+  test("range/filter should be combined") {
+    val df = sqlContext.range(10).filter("id = 1").selectExpr("id + 1")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.find(_.isInstanceOf[WholeStageCodegen]).isDefined)
 
-  /** Creates TableIdentifier for a given SQL string. */
-  def parseTableIdentifier(sqlText: String): TableIdentifier
+    checkThatPlansAgree(
+      sqlContext.range(100),
+      (p: SparkPlan) =>
+        WholeStageCodegen(Filter('a == 1, InputAdapter(p)), Seq()),
+      (p: SparkPlan) => Filter('a == 1, p),
+      sortAnswers = false
+    )
+  }
 }

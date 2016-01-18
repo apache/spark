@@ -152,21 +152,21 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
     val code = s"""
-      public java.lang.Object generate($exprType[] expr) {
-        return new SpecificSafeProjection(expr);
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificSafeProjection(references);
       }
 
       class SpecificSafeProjection extends ${classOf[BaseProjection].getName} {
 
-        private $exprType[] expressions;
-        private $mutableRowType mutableRow;
-        ${declareMutableStates(ctx)}
-        ${declareAddedFunctions(ctx)}
+        private Object[] references;
+        private MutableRow mutableRow;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
-        public SpecificSafeProjection($exprType[] expr) {
-          expressions = expr;
-          mutableRow = new $genericMutableRowType(${expressions.size});
-          ${initMutableStates(ctx)}
+        public SpecificSafeProjection(Object[] references) {
+          this.references = references;
+          mutableRow = (MutableRow) references[references.length - 1];
+          ${ctx.initMutableStates()}
         }
 
         public java.lang.Object apply(java.lang.Object _i) {
@@ -179,7 +179,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
-    c.generate(ctx.references.toArray).asInstanceOf[Projection]
+    val c = CodeGenerator.compile(code)
+    val resultRow = new SpecificMutableRow(expressions.map(_.dataType))
+    c.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
   }
 }

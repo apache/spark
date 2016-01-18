@@ -985,7 +985,7 @@ case class ScalaUDF(
     ctx.addMutableState(converterClassName, converterTerm,
       s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
-          s"expressions[$expressionIdx]).getChildren().apply($index))).dataType());")
+          s"references[$expressionIdx]).getChildren().apply($index))).dataType());")
     converterTerm
   }
 
@@ -1005,7 +1005,7 @@ case class ScalaUDF(
     val catalystConverterTermIdx = ctx.references.size - 1
     ctx.addMutableState(converterClassName, catalystConverterTerm,
       s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
-        s".createToCatalystConverter((($scalaUDFClassName)expressions" +
+        s".createToCatalystConverter((($scalaUDFClassName)references" +
           s"[$catalystConverterTermIdx]).dataType());")
 
     val resultTerm = ctx.freshName("result")
@@ -1020,7 +1020,7 @@ case class ScalaUDF(
     val funcTerm = ctx.freshName("udf")
     val funcExpressionIdx = ctx.references.size - 1
     ctx.addMutableState(funcClassName, funcTerm,
-      s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)expressions" +
+      s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)references" +
         s"[$funcExpressionIdx]).userDefinedFunc());")
 
     // codegen for children expressions

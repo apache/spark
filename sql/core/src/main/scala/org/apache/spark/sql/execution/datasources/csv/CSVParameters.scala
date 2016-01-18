@@ -27,7 +27,7 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
     val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
-      case Some(value) if value.length == 0 => '\0'
+      case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
       case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
     }
@@ -50,7 +50,7 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
-  val comment = getChar("comment", '\0')
+  val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
   val inferSchemaFlag = getBool("inferSchema")
@@ -77,7 +77,7 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 
   val inputBufferSize = 128
 
-  val isCommentSet = this.comment != '\0'
+  val isCommentSet = this.comment != '\u0000'
 
   val rowSeparator = "\n"
 }

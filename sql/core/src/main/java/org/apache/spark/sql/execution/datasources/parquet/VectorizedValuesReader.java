@@ -15,25 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.execution.datasources.parquet;
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.vectorized.ColumnVector;
 
 /**
- * Root class of SQL Parser Dialect, and we don't guarantee the binary
- * compatibility for the future release, let's keep it as the internal
- * interface for advanced user.
+ * Interface for value decoding that supports vectorized (aka batched) decoding.
+ * TODO: merge this into parquet-mr.
  */
-@DeveloperApi
-trait ParserDialect {
-  /** Creates LogicalPlan for a given SQL string. */
-  def parsePlan(sqlText: String): LogicalPlan
+public interface VectorizedValuesReader {
+  int readInteger();
 
-  /** Creates Expression for a given SQL string. */
-  def parseExpression(sqlText: String): Expression
+  /*
+   * Reads `total` values into `c` start at `c[rowId]`
+   */
+  void readIntegers(int total, ColumnVector c, int rowId);
 
-  /** Creates TableIdentifier for a given SQL string. */
-  def parseTableIdentifier(sqlText: String): TableIdentifier
+  // TODO: add all the other parquet types.
+
+  void skip(int n);
 }
