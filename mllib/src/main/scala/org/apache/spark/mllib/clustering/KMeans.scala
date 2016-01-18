@@ -233,9 +233,11 @@ class KMeans private (
 
     val samplePoint = data.take(1)(0)
     val dims = samplePoint.size
+    // TODO: make stack size can be configured.
+    val stackSize = 128
 
     val blockData = zippedData.mapPartitions { iter =>
-      iter.grouped(128).map { points =>
+      iter.grouped(stackSize).map { points =>
         val realSize = points.size
         val pointsArray = new Array[Double](realSize * dims)
         val pointsNormArray = new Array[Double](realSize)
