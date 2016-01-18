@@ -94,5 +94,4 @@ class WeightOfEvidenceSuite
     ))
     assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 6.3018 absTol 1E-3)
   }
-
 }

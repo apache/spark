@@ -34,8 +34,11 @@ import org.apache.spark.sql.types._
  * The WoE recoding of features is particularly well suited for subsequent modeling using
  * Logistic Regression or MLP.
  *
- * In addition, the information value or IV can be computed based on WoE, which is is a popular
+ * In addition, the information value or IV can be computed based on WoE, which is a popular
  * technique to select variables in a predictive model.
+ *
+ * TODO: Currently we support only calculation for categorical features. Add an estimator to
+ * estimate the proper grouping for continuous feature.
  */
 class WeightOfEvidence(override val uid: String) extends Transformer
 with HasInputCol with HasLabelCol with HasOutputCol  {
@@ -119,7 +122,6 @@ object WeightOfEvidence{
       s"1count/$total1 AS p1",
       s"0count/$total0 AS p0",
       s"LOG(($err + 1count) / $total1 * $total0 / (0count + $err)) AS woe")
-    tt.show()
     tt
   }
 }
