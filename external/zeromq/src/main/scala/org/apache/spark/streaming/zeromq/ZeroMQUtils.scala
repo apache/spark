@@ -24,10 +24,10 @@ import akka.actor.{ActorSystem, Props, SupervisorStrategy}
 import akka.util.ByteString
 import akka.zeromq.Subscribe
 
-import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.api.java.function.{Function => JFunction, Function0 => JFunction0}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.akka.{ActorSupervisorStrategy, ActorSystemFactory, AkkaUtils}
+import org.apache.spark.streaming.akka.{ActorSupervisorStrategy, AkkaUtils}
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
@@ -35,7 +35,8 @@ object ZeroMQUtils {
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
    * @param ssc StreamingContext object
-   * @param actorSystemCreator A function to create ActorSystem in executors
+   * @param actorSystemCreator A function to create ActorSystem in executors. `ActorSystem` will
+   *                           be shut down when the receiver is stopping.
    * @param publisherUrl Url of remote zeromq publisher
    * @param subscribe Topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic
@@ -66,7 +67,8 @@ object ZeroMQUtils {
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
    * @param jssc JavaStreamingContext object
-   * @param actorSystemFactory A factory to create ActorSystem in executors
+   * @param actorSystemCreator A function to create ActorSystem in executors. `ActorSystem` will
+   *                           be shut down when the receiver is stopping.
    * @param publisherUrl Url of remote ZeroMQ publisher
    * @param subscribe Topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
@@ -77,7 +79,7 @@ object ZeroMQUtils {
    */
   def createStream[T](
       jssc: JavaStreamingContext,
-      actorSystemFactory: ActorSystemFactory,
+      actorSystemCreator: JFunction0[ActorSystem],
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
@@ -90,7 +92,7 @@ object ZeroMQUtils {
       (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](
       jssc.ssc,
-      () => actorSystemFactory.create(),
+      () => actorSystemCreator.call(),
       publisherUrl,
       subscribe,
       fn,
@@ -101,7 +103,8 @@ object ZeroMQUtils {
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
    * @param jssc JavaStreamingContext object
-   * @param actorSystemFactory A factory to create ActorSystem in executors
+   * @param actorSystemCreator A function to create ActorSystem in executors. `ActorSystem` will
+   *                           be shut down when the receiver is stopping.
    * @param publisherUrl Url of remote zeromq publisher
    * @param subscribe Topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
@@ -112,7 +115,7 @@ object ZeroMQUtils {
    */
   def createStream[T](
       jssc: JavaStreamingContext,
-      actorSystemFactory: ActorSystemFactory,
+      actorSystemCreator: JFunction0[ActorSystem],
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
@@ -124,7 +127,7 @@ object ZeroMQUtils {
       (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](
       jssc.ssc,
-      () => actorSystemFactory.create(),
+      () => actorSystemCreator.call(),
       publisherUrl,
       subscribe,
       fn,
@@ -134,7 +137,8 @@ object ZeroMQUtils {
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
    * @param jssc JavaStreamingContext object
-   * @param actorSystemFactory A factory to create ActorSystem in executors
+   * @param actorSystemCreator A function to create ActorSystem in executors. `ActorSystem` will
+   *                           be shut down when the receiver is stopping.
    * @param publisherUrl Url of remote zeromq publisher
    * @param subscribe Topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
@@ -145,7 +149,7 @@ object ZeroMQUtils {
    */
   def createStream[T](
       jssc: JavaStreamingContext,
-      actorSystemFactory: ActorSystemFactory,
+      actorSystemCreator: JFunction0[ActorSystem],
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]]
@@ -154,6 +158,6 @@ object ZeroMQUtils {
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val fn =
       (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
-    createStream[T](jssc.ssc, () => actorSystemFactory.create(), publisherUrl, subscribe, fn)
+    createStream[T](jssc.ssc, () => actorSystemCreator.call(), publisherUrl, subscribe, fn)
   }
 }

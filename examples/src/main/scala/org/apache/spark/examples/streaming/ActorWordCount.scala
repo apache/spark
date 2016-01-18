@@ -124,6 +124,7 @@ object FeederActor {
 
 /**
  * A sample word count program demonstrating the use of plugging in
+ *
  * Actor as Receiver
  * Usage: ActorWordCount <hostname> <port>
  *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
@@ -149,14 +150,14 @@ object ActorWordCount {
     val ssc = new StreamingContext(sparkConf, Seconds(2))
 
     /*
-     * Following is the use of actorStream to plug in custom actor as receiver
+     * Following is the use of AkkaUtils.createStream to plug in custom actor as receiver
      *
      * An important point to note:
      * Since Actor may exist outside the spark framework, It is thus user's responsibility
      * to ensure the type safety, i.e type of data received and InputDStream
      * should be same.
      *
-     * For example: Both actorStream and SampleActorReceiver are parameterized
+     * For example: Both AkkaUtils.createStream and SampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
     def actorSystemCreator(): ActorSystem = {
@@ -171,8 +172,8 @@ object ActorWordCount {
     val lines = AkkaUtils.createStream[String](
       ssc,
       actorSystemCreator _,
-      Props(new SampleActorReceiver[String](
-        "akka.tcp://test@%s:%s/user/FeederActor".format(host, port.toInt))),
+      Props(classOf[SampleActorReceiver[String]],
+        "akka.tcp://test@%s:%s/user/FeederActor".format(host, port.toInt)),
       "SampleReceiver")
 
     // compute wordcount

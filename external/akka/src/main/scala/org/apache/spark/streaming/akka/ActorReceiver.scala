@@ -59,13 +59,13 @@ object ActorSupervisorStrategy {
  *      }
  *  }
  *
- *  // Can be used with an actorStream as follows
- *  ssc.actorStream[String](Props(new MyActor),"MyActorReceiver")
+ *  // Can be used with AkkaUtils.createStream as follows
+ *  AkkaUtils.createStream[String](Props[MyActor](),"MyActorReceiver")
  *
  * }}}
  *
  * @note Since Actor may exist outside the spark framework, It is thus user's responsibility
- *       to ensure the type safety, i.e parametrized type of push block and InputDStream
+ *       to ensure the type safety, i.e. parametrized type of push block and InputDStream
  *       should be same.
  */
 @DeveloperApi
@@ -109,13 +109,13 @@ abstract class ActorReceiver extends Actor {
  *      }
  *  }
  *
- *  // Can be used with an actorStream as follows
- *  ssc.actorStream[String](Props(new MyActor),"MyActorReceiver")
+ *  // Can be used with AkkaUtils.createStream as follows
+ *  AkkaUtils.<String>createStream(Props.create(MyActor.class), "MyActorReceiver")
  *
  * }}}
  *
  * @note Since Actor may exist outside the spark framework, It is thus user's responsibility
- *       to ensure the type safety, i.e parametrized type of push block and InputDStream
+ *       to ensure the type safety, i.e. parametrized type of push block and InputDStream
  *       should be same.
  */
 @DeveloperApi
@@ -148,8 +148,8 @@ abstract class JavaActorReceiver extends UntypedActor {
 /**
  * :: DeveloperApi ::
  * Statistics for querying the supervisor about state of workers. Used in
- * conjunction with `StreamingContext.actorStream` and
- * [[org.apache.spark.streaming.akka.ActorReceiver]].
+ * conjunction with `AkkaUtils.createStream` and
+ * [[org.apache.spark.streaming.akka.ActorReceiverSupervisor]].
  */
 @DeveloperApi
 case class Statistics(numberOfMsgs: Int,

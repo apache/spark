@@ -24,9 +24,9 @@ import akka.zeromq.Subscribe;
 import org.junit.Test;
 
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.Function0;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
-import org.apache.spark.streaming.akka.ActorSystemFactory;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 
 public class JavaZeroMQStreamSuite extends LocalJavaStreamingContext {
@@ -36,14 +36,14 @@ public class JavaZeroMQStreamSuite extends LocalJavaStreamingContext {
     String publishUrl = "abc";
     Subscribe subscribe = new Subscribe((ByteString)null);
     Function<byte[][], Iterable<String>> bytesToObjects = new BytesToObjects();
-    ActorSystemFactory actorSystemFactory = new ActorSystemFactoryForTest();
+    Function0<ActorSystem> actorSystemCreator = new ActorSystemCreatorForTest();
 
     JavaReceiverInputDStream<String> test1 = ZeroMQUtils.<String>createStream(
-      ssc, actorSystemFactory, publishUrl, subscribe, bytesToObjects);
+      ssc, actorSystemCreator, publishUrl, subscribe, bytesToObjects);
     JavaReceiverInputDStream<String> test2 = ZeroMQUtils.<String>createStream(
-      ssc, actorSystemFactory, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2());
+      ssc, actorSystemCreator, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2());
     JavaReceiverInputDStream<String> test3 = ZeroMQUtils.<String>createStream(
-      ssc, actorSystemFactory, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(),
+      ssc, actorSystemCreator, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(),
       SupervisorStrategy.defaultStrategy());
   }
 }
@@ -55,9 +55,9 @@ class BytesToObjects implements Function<byte[][], Iterable<String>> {
   }
 }
 
-class ActorSystemFactoryForTest implements ActorSystemFactory {
+class ActorSystemCreatorForTest implements Function0<ActorSystem> {
   @Override
-  public ActorSystem create() {
+  public ActorSystem call() {
     return null;
   }
 }

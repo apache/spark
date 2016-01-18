@@ -21,17 +21,17 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import akka.actor.ActorSystem;
-import com.typesafe.config.ConfigFactory;
-import org.apache.spark.TaskContext;
-import org.apache.spark.streaming.akka.ActorSystemFactory;
 import scala.Tuple2;
 
 import akka.actor.ActorSelection;
+import akka.actor.ActorSystem;
 import akka.actor.Props;
+import com.typesafe.config.ConfigFactory;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
+import org.apache.spark.api.java.function.Function0;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.streaming.Duration;
@@ -63,6 +63,7 @@ class JavaSampleActorReceiver<T> extends JavaActorReceiver {
     remotePublisher.tell(new SubscribeReceiver(getSelf()), getSelf());
   }
 
+  @Override
   public void onReceive(Object msg) throws Exception {
     store((T) msg);
   }
@@ -107,19 +108,19 @@ public class JavaActorWordCount {
     String feederActorURI = "akka.tcp://test@" + host + ":" + port + "/user/FeederActor";
 
     /*
-     * Following is the use of actorStream to plug in custom actor as receiver
+     * Following is the use of AkkaUtils.createStream to plug in custom actor as receiver
      *
      * An important point to note:
      * Since Actor may exist outside the spark framework, It is thus user's responsibility
      * to ensure the type safety, i.e type of data received and InputDstream
      * should be same.
      *
-     * For example: Both actorStream and JavaSampleActorReceiver are parameterized
+     * For example: Both AkkaUtils.createStream and JavaSampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
     JavaDStream<String> lines = AkkaUtils.createStream(
         jssc,
-        new WordcountActorSystemFactory(),
+        new WordcountActorSystemCreator(),
         Props.create(JavaSampleActorReceiver.class, feederActorURI),
         "SampleReceiver");
 
@@ -146,10 +147,10 @@ public class JavaActorWordCount {
   }
 }
 
-class WordcountActorSystemFactory implements ActorSystemFactory {
+class WordcountActorSystemCreator implements Function0<ActorSystem> {
 
   @Override
-  public ActorSystem create() {
+  public ActorSystem call() {
     String uniqueSystemName = "actor-wordcount-" + TaskContext.get().taskAttemptId();
     Map<String, Object> akkaConf = new HashMap<String, Object>();
     akkaConf.put("akka.actor.provider", "akka.remote.RemoteActorRefProvider");
