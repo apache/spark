@@ -166,7 +166,7 @@ configuring Flume agents.
 
 	Note that each input DStream can be configured to receive data from multiple sinks.
 
-3. **Deploying:** This is same as the first approach, for Scala, Java and Python.
+3. **Deploying:** This is same as the first approach.
 
 
 

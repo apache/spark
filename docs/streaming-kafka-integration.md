@@ -207,4 +207,4 @@ Next, we discuss how to use this approach in your streaming application.
 
 	Another thing to note is that since this approach does not use Receivers, the standard receiver-related (that is, [configurations](configuration.html) of the form `spark.streaming.receiver.*` ) will not apply to the input DStreams created by this approach (will apply to other input DStreams though). Instead, use the [configurations](configuration.html) `spark.streaming.kafka.*`. An important one is `spark.streaming.kafka.maxRatePerPartition` which is the maximum rate (in messages per second) at which each Kafka partition will be read by this direct API.
 
-3. **Deploying:** This is same as the first approach, for Scala, Java and Python.
+3. **Deploying:** This is same as the first approach.
