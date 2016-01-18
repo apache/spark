@@ -750,11 +750,12 @@ private[spark] class BlockManager(
       case _ => null
     }
 
+    var marked = false
+
     putBlockInfo.synchronized {
       logTrace("Put for block %s took %s to get into synchronized block"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
-      var marked = false
       try {
         // returnValues - Whether to return the values put
         // blockStore - The type of storage to put these values into
@@ -853,7 +854,7 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
 
-    true
+    marked
   }
 
   /**
