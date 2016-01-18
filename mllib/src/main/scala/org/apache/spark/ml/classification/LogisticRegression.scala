@@ -247,14 +247,15 @@ class LogisticRegression @Since("1.2.0") (
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
-  private var optInitialWeights: Option[Vector] = None
+  private var optInitialCoefficients: Option[Vector] = None
   /** @group setParam */
   private[spark] def setInitialWeights(value: Vector): this.type = {
-    this.optInitialWeights = Some(value)
+    this.optInitialCoefficients = Some(value)
     this
   }
 
-  /** Validate the initial weights, return an Option, if not the expected size return None
+  /**
+   * Validate the initial weights, return an Option, if not the expected size return None
    * and log a warning.
    */
   private def validateWeights(vectorOpt: Option[Vector], numFeatures: Int): Option[Vector] = {
@@ -343,7 +344,7 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     val numFeaturesWithIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
-    val userSuppliedWeights = validateWeights(optInitialWeights, numFeaturesWithIntercept)
+    val userSuppliedWeights = validateWeights(optInitialCoefficients, numFeaturesWithIntercept)
     val initialCoefficientsWithIntercept = userSuppliedWeights.getOrElse(
       Vectors.zeros(numFeaturesWithIntercept))
 
