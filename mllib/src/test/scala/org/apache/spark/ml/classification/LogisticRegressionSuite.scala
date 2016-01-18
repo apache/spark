@@ -917,13 +917,13 @@ class LogisticRegressionSuite
       .setLabelCol("zeroLabel")
       .fit(sameLabels)
     assert(allZeroNoInterceptModel.intercept === 0.0)
-    println(allZeroNoInterceptModel.summary.totalIterations > 0)
+    assert(allZeroNoInterceptModel.summary.totalIterations > 0)
 
     val allOneNoInterceptModel = lrNoIntercept
       .setLabelCol("oneLabel")
       .fit(sameLabels)
     assert(allOneNoInterceptModel.intercept === 0.0)
-    println(allOneNoInterceptModel.summary.totalIterations > 0)
+    assert(allOneNoInterceptModel.summary.totalIterations > 0)
   }
 
   test("read/write") {
