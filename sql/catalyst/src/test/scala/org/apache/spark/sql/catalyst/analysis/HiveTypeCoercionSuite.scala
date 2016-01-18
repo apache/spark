@@ -387,7 +387,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("WidenSetOperationTypes for union except and intersect") {
+  test("WidenSetOperationTypes for union, except, and intersect") {
     def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
       logical.output.zip(expectTypes).foreach { case (attr, dt) =>
         assert(attr.dataType === dt)
@@ -498,7 +498,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
     ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
   }
-
 
   /**
    * There are rules that need to not fire before child expressions get resolved.
