@@ -248,14 +248,15 @@ class LogisticRegression @Since("1.2.0") (
   override def getThresholds: Array[Double] = super.getThresholds
 
   private var optInitialCoefficients: Option[Vector] = None
+
   /** @group setParam */
-  private[spark] def setInitialWeights(value: Vector): this.type = {
-    this.optInitialCoefficients = Some(value)
+  private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
+    this.optInitialCoefficients = Some(model.coefficients)
     this
   }
 
   /**
-   * Validate the initial weights, return an Option, if not the expected size return None
+   * Validate the initial coefficients, return an Option, if not the expected size return None
    * and log a warning.
    */
   private def validateCoefficients(vectorOpt: Option[Vector], numFeatures: Int): Option[Vector] = {
@@ -264,7 +265,7 @@ class LogisticRegression @Since("1.2.0") (
         Some(vec)
       } else {
         logWarning(
-          s"Initial coefficientss provided (${vec}) did not match the expected size ${numFeatures}")
+          s"Initial coefficients provided (${vec}) did not match the expected size ${numFeatures}")
         None
       })
   }
@@ -440,7 +441,7 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
  */
 @Since("1.4.0")
 @Experimental
-class LogisticRegressionModel private[ml] (
+class LogisticRegressionModel private[spark] (
     @Since("1.4.0") override val uid: String,
     @Since("1.6.0") val coefficients: Vector,
     @Since("1.3.0") val intercept: Double)
