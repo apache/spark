@@ -116,16 +116,20 @@ TOK_DATELITERAL;
 TOK_DATETIME;
 TOK_TIMESTAMP;
 TOK_TIMESTAMPLITERAL;
+TOK_INTERVAL;
 TOK_INTERVAL_YEAR_MONTH;
 TOK_INTERVAL_YEAR_MONTH_LITERAL;
 TOK_INTERVAL_DAY_TIME;
 TOK_INTERVAL_DAY_TIME_LITERAL;
 TOK_INTERVAL_YEAR_LITERAL;
 TOK_INTERVAL_MONTH_LITERAL;
+TOK_INTERVAL_WEEK_LITERAL;
 TOK_INTERVAL_DAY_LITERAL;
 TOK_INTERVAL_HOUR_LITERAL;
 TOK_INTERVAL_MINUTE_LITERAL;
 TOK_INTERVAL_SECOND_LITERAL;
+TOK_INTERVAL_MILLISECOND_LITERAL;
+TOK_INTERVAL_MICROSECOND_LITERAL;
 TOK_STRING;
 TOK_CHAR;
 TOK_VARCHAR;
@@ -138,6 +142,7 @@ TOK_UNIONTYPE;
 TOK_COLTYPELIST;
 TOK_CREATEDATABASE;
 TOK_CREATETABLE;
+TOK_CREATETABLEUSING;
 TOK_TRUNCATETABLE;
 TOK_CREATEINDEX;
 TOK_CREATEINDEX_INDEXTBLNAME;
@@ -228,7 +233,6 @@ TOK_TMP_FILE;
 TOK_TABSORTCOLNAMEASC;
 TOK_TABSORTCOLNAMEDESC;
 TOK_STRINGLITERALSEQUENCE;
-TOK_CHARSETLITERAL;
 TOK_CREATEFUNCTION;
 TOK_DROPFUNCTION;
 TOK_RELOADFUNCTION;
@@ -369,6 +373,9 @@ TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
 TOK_REFRESHTABLE;
+TOK_TABLEPROVIDER;
+TOK_TABLEOPTIONS;
+TOK_TABLEOPTION;
 }
 
 
@@ -510,7 +517,9 @@ import java.util.HashMap;
     xlateMap.put("KW_UPDATE", "UPDATE");
     xlateMap.put("KW_VALUES", "VALUES");
     xlateMap.put("KW_PURGE", "PURGE");
-
+    xlateMap.put("KW_WEEK", "WEEK");
+    xlateMap.put("KW_MILLISECOND", "MILLISECOND");
+    xlateMap.put("KW_MICROSECOND", "MICROSECOND");
 
     // Operators
     xlateMap.put("DOT", ".");
@@ -887,12 +896,31 @@ createTableStatement
 @init { pushMsg("create table statement", state); }
 @after { popMsg(state); }
     : KW_CREATE (temp=KW_TEMPORARY)? (ext=KW_EXTERNAL)? KW_TABLE ifNotExists? name=tableName
-      (  like=KW_LIKE likeName=tableName
+      (
+         like=KW_LIKE likeName=tableName
          tableRowFormat?
          tableFileFormat?
          tableLocation?
          tablePropertiesPrefixed?
+      -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+         ^(TOK_LIKETABLE $likeName?)
+         tableRowFormat?
+         tableFileFormat?
+         tableLocation?
+         tablePropertiesPrefixed?
+         )
+      |
+         tableProvider
+         tableOpts?
+         (KW_AS selectStatementWithCTE)?
+      -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+          tableProvider
+          tableOpts?
+          selectStatementWithCTE?
+          )
        | (LPAREN columnNameTypeList RPAREN)?
+         (p=tableProvider?)
+         tableOpts?
          tableComment?
          tablePartition?
          tableBuckets?
@@ -902,8 +930,14 @@ createTableStatement
          tableLocation?
          tablePropertiesPrefixed?
          (KW_AS selectStatementWithCTE)?
-      )
-    -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+      -> {p != null}?
+         ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+         columnNameTypeList?
+         $p
+         tableOpts?
+         )
+      ->
+         ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
          ^(TOK_LIKETABLE $likeName?)
          columnNameTypeList?
          tableComment?
@@ -914,6 +948,26 @@ createTableStatement
          tableFileFormat?
          tableLocation?
          tablePropertiesPrefixed?
+         selectStatementWithCTE?
+         )
+      )
+    ;
+
+createTableUsingStatement
+@init { pushMsg("create table using statement", state); }
+@after { popMsg(state); }
+    : KW_CREATE (temp=KW_TEMPORARY)? KW_TABLE ifNotExists? name=tableName
+     (   tableProvider
+         tableOpts?
+         (KW_AS selectStatementWithCTE)?
+      |  (LPAREN columnNameTypeList RPAREN)
+         tableProvider
+         tableOpts?
+     )
+    -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+         columnNameTypeList?
+         tableProvider
+         tableOpts?
          selectStatementWithCTE?
         )
     ;
@@ -1760,6 +1814,28 @@ showStmtIdentifier
     : identifier
     | StringLiteral
     ;
+tableProvider
+@init { pushMsg("table's provider", state); }
+@after { popMsg(state); }
+    :
+      KW_USING provider=Identifier  -> ^(TOK_TABLEPROVIDER $provider)
+    ;
+
+optionKeyValue
+@init { pushMsg("table's option specification", state); }
+@after { popMsg(state); }
+    :
+       Identifier StringLiteral
+    -> ^(TOK_TABLEOPTION Identifier StringLiteral)
+    ;
+
+tableOpts
+@init { pushMsg("table's options", state); }
+@after { popMsg(state); }
+    :
+      KW_OPTIONS LPAREN optionKeyValue (COMMA optionKeyValue)* RPAREN
+    -> ^(TOK_TABLEOPTIONS optionKeyValue+)
+    ;
 
 tableComment
 @init { pushMsg("table's comment", state); }
@@ -2087,6 +2163,7 @@ primitiveType
     | KW_SMALLINT      ->    TOK_SMALLINT
     | KW_INT           ->    TOK_INT
     | KW_BIGINT        ->    TOK_BIGINT
+    | KW_LONG          ->    TOK_BIGINT
     | KW_BOOLEAN       ->    TOK_BOOLEAN
     | KW_FLOAT         ->    TOK_FLOAT
     | KW_DOUBLE        ->    TOK_DOUBLE

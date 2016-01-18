@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.datasources.RefreshTable
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.types.StructType
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
   /** Check if a command should not be explained. */
@@ -46,6 +48,77 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
       case Token("TOK_REFRESHTABLE", nameParts :: Nil) =>
         val tableIdent = extractTableIdent(nameParts)
         RefreshTable(tableIdent)
+
+      case Token("TOK_CREATETABLEUSING", createTableArgs) =>
+        val clauses = getClauses(
+            Seq("TEMPORARY", "TOK_IFNOTEXISTS", "TOK_TABNAME", "TOK_TABCOLLIST", "TOK_TABLEPROVIDER",
+              "TOK_TABLEOPTIONS", "TOK_QUERY"), createTableArgs)
+
+        val temp = clauses(0)
+        val allowExisting = clauses(1)
+        val Some(tabName) = clauses(2)
+        val tableCols = clauses(3)
+        val Some(tableProvider) = clauses(4)
+        val tableOpts = clauses(5)
+        val tableAs = clauses(6)
+
+        val tableIdent: TableIdentifier = tabName match {
+          case Token("TOK_TABNAME", Token(tableName, _) :: Nil) => TableIdentifier(tableName)
+        }
+
+        val columns = tableCols.map {
+          case Token("TOK_TABCOLLIST", fields) => StructType(fields.map(nodeToStructField))
+        }
+
+        val provider = tableProvider match {
+          case Token("TOK_TABLEPROVIDER", Token(provider, _) :: Nil) => provider
+        }
+
+        val options = tableOpts.map { opts =>
+          opts match {
+            case Token("TOK_TABLEOPTIONS", options) =>
+              options.map {
+                case Token("TOK_TABLEOPTION", Token(key, _) :: Token(value, _) :: Nil) =>
+                  (key, value)
+                case _ => super.nodeToPlan(node)
+              }.asInstanceOf[Seq[(String, String)]].toMap
+          }
+        }.getOrElse(Map.empty[String, String])
+
+        val asClause = tableAs.map(nodeToPlan(_))
+
+        if (temp.isDefined && allowExisting.isDefined) {
+          throw new DDLException(
+            "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.")
+        }
+
+        if (asClause.isDefined) {
+          val mode = if (allowExisting.isDefined) {
+            SaveMode.Ignore
+          } else if (temp.isDefined) {
+            SaveMode.Overwrite
+          } else {
+            SaveMode.ErrorIfExists
+          }
+
+          CreateTableUsingAsSelect(tableIdent,
+            provider,
+            temp.isDefined,
+            Array.empty[String],
+            bucketSpec = None,
+            mode,
+            options,
+            asClause.get)
+        } else {
+          CreateTableUsing(
+            tableIdent,
+            columns,
+            provider,
+            temp.isDefined,
+            options,
+            allowExisting.isDefined,
+            managedIfNoPath = false)
+        }
 
       case Token("TOK_DESCTABLE", describeArgs) =>
         // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL

@@ -22,25 +22,30 @@ import scala.util.matching.Regex
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, ParserDialect, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
 
-
 /**
  * A parser for foreign DDL commands.
  */
-class DDLParser(parseQuery: String => LogicalPlan)
+class DDLParser(fallback: => ParserDialect)
   extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
+  override def parseExpression(sql: String): Expression = fallback.parseExpression(sql)
+
+  override def parseTableIdentifier(sql: String): TableIdentifier =
+
+    fallback.parseTableIdentifier(sql)
   def parse(input: String, exceptionOnError: Boolean): LogicalPlan = {
     try {
-      parse(input)
+      parsePlan(input)
     } catch {
       case ddlException: DDLException => throw ddlException
-      case _ if !exceptionOnError => parseQuery(input)
+      case _ if !exceptionOnError => fallback.parsePlan(input)
       case x: Throwable => throw x
     }
   }
@@ -61,7 +66,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
   protected val COMMENT = Keyword("COMMENT")
   protected val REFRESH = Keyword("REFRESH")
 
-  protected lazy val ddl: Parser[LogicalPlan] = createTable
+  protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable | refreshTable
 
   protected def start: Parser[LogicalPlan] = ddl
 
@@ -104,7 +109,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
             SaveMode.ErrorIfExists
           }
 
-          val queryPlan = parseQuery(query.get)
+          val queryPlan = fallback.parsePlan(query.get)
           CreateTableUsingAsSelect(tableIdent,
             provider,
             temp.isDefined,
