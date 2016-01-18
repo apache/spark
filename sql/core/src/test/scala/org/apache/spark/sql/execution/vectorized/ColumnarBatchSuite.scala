@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
@@ -28,10 +29,10 @@ import org.apache.spark.unsafe.Platform
 
 class ColumnarBatchSuite extends SparkFunSuite {
   test("Null Apis") {
-    (false :: true :: Nil).foreach { offHeap => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val reference = mutable.ArrayBuffer.empty[Boolean]
 
-      val column = ColumnVector.allocate(1024, IntegerType, offHeap)
+      val column = ColumnVector.allocate(1024, IntegerType, memMode)
       var idx = 0
       assert(column.anyNullsSet() == false)
 
@@ -64,7 +65,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1 == column.getIsNull(v._2))
-        if (offHeap) {
+        if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.nullsNativeAddress()
           assert(v._1 == (Platform.getByte(null, addr + v._2) == 1), "index=" + v._2)
         }
@@ -74,12 +75,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Int Apis") {
-    (false :: true :: Nil).foreach { offHeap => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
       val reference = mutable.ArrayBuffer.empty[Int]
 
-      val column = ColumnVector.allocate(1024, IntegerType, offHeap)
+      val column = ColumnVector.allocate(1024, IntegerType, memMode)
       var idx = 0
 
       val values = (1 :: 2 :: 3 :: 4 :: 5 :: Nil).toArray
@@ -131,8 +132,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
 
       reference.zipWithIndex.foreach { v =>
-        assert(v._1 == column.getInt(v._2), "Seed = " + seed + " Off Heap=" + offHeap)
-        if (offHeap) {
+        assert(v._1 == column.getInt(v._2), "Seed = " + seed + " Mem Mode=" + memMode)
+        if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
           assert(v._1 == Platform.getInt(null, addr + 4 * v._2))
         }
@@ -142,12 +143,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Double APIs") {
-    (false :: true :: Nil).foreach { offHeap => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
       val reference = mutable.ArrayBuffer.empty[Double]
 
-      val column = ColumnVector.allocate(1024, DoubleType, offHeap)
+      val column = ColumnVector.allocate(1024, DoubleType, memMode)
       var idx = 0
 
       val values = (1.0 :: 2.0 :: 3.0 :: 4.0 :: 5.0 :: Nil).toArray
@@ -198,8 +199,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
 
       reference.zipWithIndex.foreach { v =>
-        assert(v._1 == column.getDouble(v._2), "Seed = " + seed + " Off Heap=" + offHeap)
-        if (offHeap) {
+        assert(v._1 == column.getDouble(v._2), "Seed = " + seed + " MemMode=" + memMode)
+        if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
           assert(v._1 == Platform.getDouble(null, addr + 8 * v._2))
         }
@@ -209,13 +210,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("ColumnarBatch basic") {
-    (false :: true :: Nil).foreach { offHeap => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val schema = new StructType()
         .add("intCol", IntegerType)
         .add("doubleCol", DoubleType)
         .add("intCol2", IntegerType)
 
-      val batch = ColumnarBatch.allocate(schema, offHeap)
+      val batch = ColumnarBatch.allocate(schema, memMode)
       assert(batch.numCols() == 3)
       assert(batch.numRows() == 0)
       assert(batch.numValidRows() == 0)

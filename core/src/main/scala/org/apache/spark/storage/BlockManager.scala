@@ -83,13 +83,8 @@ private[spark] class BlockManager(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private var externalBlockStoreInitialized = false
   private[spark] val memoryStore = new MemoryStore(this, memoryManager)
   private[spark] val diskStore = new DiskStore(this, diskBlockManager)
-  private[spark] lazy val externalBlockStore: ExternalBlockStore = {
-    externalBlockStoreInitialized = true
-    new ExternalBlockStore(this, executorId)
-  }
   memoryManager.setMemoryStore(memoryStore)
 
   // Note: depending on the memory manager, `maxStorageMemory` may actually vary over time.
@@ -313,8 +308,7 @@ private[spark] class BlockManager(
     blockInfo.asScala.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
       val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
-      // Assume that block is not in external block store
-      BlockStatus(info.level, memSize, diskSize, 0L)
+      BlockStatus(info.level, memSize = memSize, diskSize = diskSize)
     }
   }
 
@@ -363,10 +357,8 @@ private[spark] class BlockManager(
     if (info.tellMaster) {
       val storageLevel = status.storageLevel
       val inMemSize = Math.max(status.memSize, droppedMemorySize)
-      val inExternalBlockStoreSize = status.externalBlockStoreSize
       val onDiskSize = status.diskSize
-      master.updateBlockInfo(
-        blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inExternalBlockStoreSize)
+      master.updateBlockInfo(blockManagerId, blockId, storageLevel, inMemSize, onDiskSize)
     } else {
       true
     }
@@ -381,20 +373,17 @@ private[spark] class BlockManager(
     info.synchronized {
       info.level match {
         case null =>
-          BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+          BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
-          val inExternalBlockStore = level.useOffHeap && externalBlockStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
           val deserialized = if (inMem) level.deserialized else false
-          val replication = if (inMem || inExternalBlockStore || onDisk) level.replication else 1
+          val replication = if (inMem  || onDisk) level.replication else 1
           val storageLevel =
-            StorageLevel(onDisk, inMem, inExternalBlockStore, deserialized, replication)
+            StorageLevel(onDisk, inMem, deserialized, replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
-          val externalBlockStoreSize =
-            if (inExternalBlockStore) externalBlockStore.getSize(blockId) else 0L
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
-          BlockStatus(storageLevel, memSize, diskSize, externalBlockStoreSize)
+          BlockStatus(storageLevel, memSize, diskSize)
       }
     }
   }
@@ -472,25 +461,6 @@ private[spark] class BlockManager(
               return result
             case None =>
               logDebug(s"Block $blockId not found in memory")
-          }
-        }
-
-        // Look for the block in external block store
-        if (level.useOffHeap) {
-          logDebug(s"Getting block $blockId from ExternalBlockStore")
-          if (externalBlockStore.contains(blockId)) {
-            val result = if (asBlockResult) {
-              externalBlockStore.getValues(blockId)
-                .map(new BlockResult(_, DataReadMethod.Memory, info.size))
-            } else {
-              externalBlockStore.getBytes(blockId)
-            }
-            result match {
-              case Some(values) =>
-                return result
-              case None =>
-                logDebug(s"Block $blockId not found in ExternalBlockStore")
-            }
           }
         }
 
@@ -642,12 +612,16 @@ private[spark] class BlockManager(
     None
   }
 
+  /**
+   * @return true if the block was stored or false if the block was already stored or an
+   *         error occurred.
+   */
   def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
       tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
+      effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(values != null, "Values is null")
     doPut(blockId, IteratorValues(values), level, tellMaster, effectiveStorageLevel)
   }
@@ -671,28 +645,32 @@ private[spark] class BlockManager(
 
   /**
    * Put a new block of values to the block manager.
-   * Return a list of blocks updated as a result of this put.
+   *
+   * @return true if the block was stored or false if the block was already stored or an
+   *         error occurred.
    */
   def putArray(
       blockId: BlockId,
       values: Array[Any],
       level: StorageLevel,
       tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
+      effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(values != null, "Values is null")
     doPut(blockId, ArrayValues(values), level, tellMaster, effectiveStorageLevel)
   }
 
   /**
    * Put a new block of serialized bytes to the block manager.
-   * Return a list of blocks updated as a result of this put.
+   *
+   * @return true if the block was stored or false if the block was already stored or an
+   *         error occurred.
    */
   def putBytes(
       blockId: BlockId,
       bytes: ByteBuffer,
       level: StorageLevel,
       tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
+      effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(bytes != null, "Bytes is null")
     doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel)
   }
@@ -704,23 +682,22 @@ private[spark] class BlockManager(
    * The effective storage level refers to the level according to which the block will actually be
    * handled. This allows the caller to specify an alternate behavior of doPut while preserving
    * the original level specified by the user.
+   *
+   * @return true if the block was stored or false if the block was already stored or an
+   *         error occurred.
    */
   private def doPut(
       blockId: BlockId,
       data: BlockValues,
       level: StorageLevel,
       tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None)
-    : Seq[(BlockId, BlockStatus)] = {
+      effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
     effectiveStorageLevel.foreach { level =>
       require(level != null && level.isValid, "Effective StorageLevel is null or invalid")
     }
-
-    // Return value
-    val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
     /* Remember the block's storage level so that we can correctly drop it to disk if it needs
      * to be dropped right after it got put into memory. Note, however, that other threads will
@@ -732,7 +709,7 @@ private[spark] class BlockManager(
       if (oldBlockOpt.isDefined) {
         if (oldBlockOpt.get.waitForReady()) {
           logWarning(s"Block $blockId already exists on this machine; not re-adding it")
-          return updatedBlocks
+          return false
         }
         // TODO: So the block info exists - but previous attempt to load it (?) failed.
         // What do we do now ? Retry on it ?
@@ -773,11 +750,12 @@ private[spark] class BlockManager(
       case _ => null
     }
 
+    var marked = false
+
     putBlockInfo.synchronized {
       logTrace("Put for block %s took %s to get into synchronized block"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
-      var marked = false
       try {
         // returnValues - Whether to return the values put
         // blockStore - The type of storage to put these values into
@@ -786,9 +764,6 @@ private[spark] class BlockManager(
             // Put it in memory first, even if it also has useDisk set to true;
             // We will drop it to disk later if the memory store can't hold it.
             (true, memoryStore)
-          } else if (putLevel.useOffHeap) {
-            // Use external block store
-            (false, externalBlockStore)
           } else if (putLevel.useDisk) {
             // Don't get back the bytes from put unless we replicate them
             (putLevel.replication > 1, diskStore)
@@ -816,11 +791,6 @@ private[spark] class BlockManager(
           case _ =>
         }
 
-        // Keep track of which blocks are dropped from memory
-        if (putLevel.useMemory) {
-          result.droppedBlocks.foreach { updatedBlocks += _ }
-        }
-
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
         if (putBlockStatus.storageLevel != StorageLevel.NONE) {
           // Now that the block is in either the memory, externalBlockStore, or disk store,
@@ -830,7 +800,11 @@ private[spark] class BlockManager(
           if (tellMaster) {
             reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
           }
-          updatedBlocks += ((blockId, putBlockStatus))
+          Option(TaskContext.get()).foreach { taskContext =>
+            val metrics = taskContext.taskMetrics()
+            val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+            metrics.updatedBlocks = Some(lastUpdatedBlocks ++ Seq((blockId, putBlockStatus)))
+          }
         }
       } finally {
         // If we failed in putting the block to memory/disk, notify other possible readers
@@ -880,7 +854,7 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
 
-    updatedBlocks
+    marked
   }
 
   /**
@@ -909,8 +883,7 @@ private[spark] class BlockManager(
     val peersForReplication = new ArrayBuffer[BlockManagerId]
     val peersReplicatedTo = new ArrayBuffer[BlockManagerId]
     val peersFailedToReplicateTo = new ArrayBuffer[BlockManagerId]
-    val tLevel = StorageLevel(
-      level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
+    val tLevel = StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
     val startTime = System.currentTimeMillis
     val random = new Random(blockId.hashCode)
 
@@ -1001,19 +974,16 @@ private[spark] class BlockManager(
 
   /**
    * Write a block consisting of a single object.
+   *
+   * @return true if the block was stored or false if the block was already stored or an
+   *         error occurred.
    */
   def putSingle(
       blockId: BlockId,
       value: Any,
       level: StorageLevel,
-      tellMaster: Boolean = true): Seq[(BlockId, BlockStatus)] = {
+      tellMaster: Boolean = true): Boolean = {
     putIterator(blockId, Iterator(value), level, tellMaster)
-  }
-
-  def dropFromMemory(
-      blockId: BlockId,
-      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
-    dropFromMemory(blockId, () => data)
   }
 
   /**
@@ -1021,12 +991,10 @@ private[spark] class BlockManager(
    * store reaches its limit and needs to free up space.
    *
    * If `data` is not put on disk, it won't be created.
-   *
-   * Return the block status if the given block has been updated, else None.
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: () => Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
+      data: () => Either[Array[Any], ByteBuffer]): Unit = {
 
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId)
@@ -1039,10 +1007,10 @@ private[spark] class BlockManager(
         if (!info.waitForReady()) {
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure. Nothing to drop")
-          return None
+          return
         } else if (blockInfo.asScala.get(blockId).isEmpty) {
           logWarning(s"Block $blockId was already dropped.")
-          return None
+          return
         }
         var blockIsUpdated = false
         val level = info.level
@@ -1078,11 +1046,14 @@ private[spark] class BlockManager(
           blockInfo.remove(blockId)
         }
         if (blockIsUpdated) {
-          return Some(status)
+          Option(TaskContext.get()).foreach { taskContext =>
+            val metrics = taskContext.taskMetrics()
+            val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+            metrics.updatedBlocks = Some(lastUpdatedBlocks ++ Seq((blockId, status)))
+          }
         }
       }
     }
-    None
   }
 
   /**
@@ -1120,9 +1091,7 @@ private[spark] class BlockManager(
         // Removals are idempotent in disk store and memory store. At worst, we get a warning.
         val removedFromMemory = memoryStore.remove(blockId)
         val removedFromDisk = diskStore.remove(blockId)
-        val removedFromExternalBlockStore =
-          if (externalBlockStoreInitialized) externalBlockStore.remove(blockId) else false
-        if (!removedFromMemory && !removedFromDisk && !removedFromExternalBlockStore) {
+        if (!removedFromMemory && !removedFromDisk) {
           logWarning(s"Block $blockId could not be removed as it was not found in either " +
             "the disk, memory, or external block store")
         }
@@ -1212,9 +1181,6 @@ private[spark] class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
-    if (externalBlockStoreInitialized) {
-      externalBlockStore.clear()
-    }
     futureExecutionContext.shutdownNow()
     logInfo("BlockManager stopped")
   }

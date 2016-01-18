@@ -108,6 +108,7 @@ class CatalystQlSuite extends PlanTest {
     }
 
     assertRight("9.0e1", 90)
+    assertRight(".9e+2", 90)
     assertRight("0.9e+2", 90)
     assertRight("900e-1", 90)
     assertRight("900.0E-1", 90)

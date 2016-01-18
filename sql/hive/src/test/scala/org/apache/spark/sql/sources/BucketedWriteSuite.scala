@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -62,15 +63,6 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[IllegalArgumentException](df.write.bucketBy(2, "i").insertInto("tt"))
   }
 
-  private val testFileName = """.*-(\d+)$""".r
-  private val otherFileName = """.*-(\d+)\..*""".r
-  private def getBucketId(fileName: String): Int = {
-    fileName match {
-      case testFileName(bucketId) => bucketId.toInt
-      case otherFileName(bucketId) => bucketId.toInt
-    }
-  }
-
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
   private def testBucketing(
@@ -81,7 +73,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     val allBucketFiles = dataDir.listFiles().filterNot(f =>
       f.getName.startsWith(".") || f.getName.startsWith("_")
     )
-    val groupedBucketFiles = allBucketFiles.groupBy(f => getBucketId(f.getName))
+    val groupedBucketFiles = allBucketFiles.groupBy(f => BucketingUtils.getBucketId(f.getName).get)
     assert(groupedBucketFiles.size <= 8)
 
     for ((bucketId, bucketFiles) <- groupedBucketFiles) {
@@ -98,12 +90,12 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         val qe = readBack.select(bucketCols.map(col): _*).queryExecution
         val rows = qe.toRdd.map(_.copy()).collect()
-        val getHashCode = UnsafeProjection.create(
+        val getBucketId = UnsafeProjection.create(
           HashPartitioning(qe.analyzed.output, 8).partitionIdExpression :: Nil,
           qe.analyzed.output)
 
         for (row <- rows) {
-          val actualBucketId = getHashCode(row).getInt(0)
+          val actualBucketId = getBucketId(row).getInt(0)
           assert(actualBucketId == bucketId)
         }
       }
