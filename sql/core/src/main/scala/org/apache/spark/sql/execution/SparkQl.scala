@@ -76,7 +76,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }
 
       case Token("TOK_CACHETABLE", Token(tableName, Nil) :: args) =>
-       val lzy :: selectAst :: Nil = getClauses(Seq("LAZY", "TOK_QUERY"), args)
+       val Seq(lzy, selectAst) = getClauses(Seq("LAZY", "TOK_QUERY"), args)
         CacheTableCommand(tableName, selectAst.map(nodeToPlan), lzy.isDefined)
 
       case Token("TOK_UNCACHETABLE", Token(tableName, Nil) :: Nil) =>
