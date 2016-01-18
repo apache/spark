@@ -344,11 +344,11 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     val numFeaturesWithIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
-    val userSuppliedWeights = validateWeights(optInitialCoefficients, numFeaturesWithIntercept)
-    val initialCoefficientsWithIntercept = userSuppliedWeights.getOrElse(
+    val userSuppliedCoefficients = validateWeights(optInitialCoefficients, numFeaturesWithIntercept)
+    val initialCoefficientsWithIntercept = userSuppliedCoefficients.getOrElse(
       Vectors.zeros(numFeaturesWithIntercept))
 
-    if ($(fitIntercept) && !userSuppliedWeights.isDefined) {
+    if ($(fitIntercept) && !userSuppliedCoefficients.isDefined) {
       /*
          For binary logistic regression, when we initialize the coefficients as zeros,
          it will converge faster if we initialize the intercept such that
