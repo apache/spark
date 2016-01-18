@@ -51,8 +51,8 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
       case Token("TOK_CREATETABLEUSING", createTableArgs) =>
         val clauses = getClauses(
-            Seq("TEMPORARY", "TOK_IFNOTEXISTS", "TOK_TABNAME", "TOK_TABCOLLIST", "TOK_TABLEPROVIDER",
-              "TOK_TABLEOPTIONS", "TOK_QUERY"), createTableArgs)
+            Seq("TEMPORARY", "TOK_IFNOTEXISTS", "TOK_TABNAME", "TOK_TABCOLLIST",
+              "TOK_TABLEPROVIDER", "TOK_TABLEOPTIONS", "TOK_QUERY"), createTableArgs)
 
         val temp = clauses(0)
         val allowExisting = clauses(1)
@@ -63,7 +63,10 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         val tableAs = clauses(6)
 
         val tableIdent: TableIdentifier = tabName match {
-          case Token("TOK_TABNAME", Token(tableName, _) :: Nil) => TableIdentifier(tableName)
+          case Token("TOK_TABNAME", Token(dbName, _) :: Token(tableName, _) :: Nil) =>
+            new TableIdentifier(tableName, Some(dbName))
+          case Token("TOK_TABNAME", Token(tableName, _) :: Nil) =>
+            TableIdentifier(tableName)
         }
 
         val columns = tableCols.map {
@@ -79,7 +82,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             case Token("TOK_TABLEOPTIONS", options) =>
               options.map {
                 case Token("TOK_TABLEOPTION", Token(key, _) :: Token(value, _) :: Nil) =>
-                  (key, value)
+                  (key, value.replaceAll("^\'|^\"|\"$|\'$", ""))
                 case _ => super.nodeToPlan(node)
               }.asInstanceOf[Seq[(String, String)]].toMap
           }

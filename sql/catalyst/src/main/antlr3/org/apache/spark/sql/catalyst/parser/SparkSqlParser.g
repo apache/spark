@@ -1795,6 +1795,7 @@ showStmtIdentifier
     : identifier
     | StringLiteral
     ;
+
 tableProvider
 @init { pushMsg("table's provider", state); }
 @after { popMsg(state); }
