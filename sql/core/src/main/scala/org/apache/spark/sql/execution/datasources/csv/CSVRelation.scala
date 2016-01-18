@@ -101,13 +101,6 @@ private[csv] class CSVRelation(
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = job.getConfiguration
     Option(params.codec).foreach { codec =>
-      // Hadoop 1.x
-      conf.set("mapred.output.compress", "true")
-      conf.set("mapred.output.compression.codec", codec)
-      conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
-      conf.set("mapred.compress.map.output", "true")
-      conf.set("mapred.map.output.compression.codec", codec)
-      // Hadoop 2.x
       conf.set("mapreduce.output.fileoutputformat.compress", "true")
       conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
       conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
