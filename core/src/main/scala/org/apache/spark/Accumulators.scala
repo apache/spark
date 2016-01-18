@@ -18,15 +18,14 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.generic.Growable
-import scala.collection.Map
 import scala.collection.mutable
 import scala.ref.WeakReference
-import scala.reflect.ClassTag
 
-import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
+
 
 /**
  * A data type that can be accumulated, ie has an commutative and associative "add" operation,
@@ -37,40 +36,67 @@ import org.apache.spark.util.Utils
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
  *
+ * All accumulators created on the driver to be used on the executors must be registered with
+ * [[Accumulators]]. This is already done automatically for accumulators created by the user.
+ * Internal accumulators must be explicitly registered by the caller.
+ *
+ * Operations are not thread-safe.
+ *
+ * @param id ID of this accumulator; for internal use only.
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
  * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
  *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
  *                 thread safe so that they can be reported correctly.
+ * @param countFailedValues whether to accumulate values from failed tasks. This is set to true
+ *                          for system and time metrics like serialization time or bytes spilled,
+ *                          and false for things with absolute values like number of input rows.
+ *                          This should be used for internal metrics only.
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
-class Accumulable[R, T] private[spark] (
-    initialValue: R,
+class Accumulable[R, T] private (
+    val id: Long,
+    @transient initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    internal: Boolean)
+    internal: Boolean,
+    val countFailedValues: Boolean)
   extends Serializable {
 
   private[spark] def this(
-      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
-    this(initialValue, param, None, internal)
+      initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean,
+      countFailedValues: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues)
   }
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
+  private[spark] def this(
+      initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean) = {
+    this(initialValue, param, name, internal, false /* countFailedValues */)
+  }
+
+  def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
     this(initialValue, param, name, false)
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None)
+  def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
-  val id: Long = Accumulators.newId
-
-  @volatile @transient private var value_ : R = initialValue // Current value on master
-  val zero = param.zero(initialValue)  // Zero value to be passed to workers
+  @volatile @transient private var value_ : R = initialValue // Current value on driver
+  val zero = param.zero(initialValue)  // Zero value to be passed to executors
   private var deserialized = false
 
-  Accumulators.register(this)
+  // In many places we create internal accumulators without access to the active context cleaner,
+  // so if we register them here then we may never unregister these accumulators. To avoid memory
+  // leaks, we require the caller to explicitly register internal accumulators elsewhere.
+  if (!internal) {
+    Accumulators.register(this)
+  }
 
   /**
    * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
@@ -80,16 +106,27 @@ class Accumulable[R, T] private[spark] (
   private[spark] def isInternal: Boolean = internal
 
   /**
-   * Add more data to this accumulator / accumulable
-   * @param term the data to add
+   * Return a copy of this [[Accumulable]].
+   *
+   * The copy will have the same ID as the original and will not be registered with
+   * [[Accumulators]] again. This method exists so that the caller can avoid passing the
+   * same mutable instance around.
    */
-  def += (term: T) { value_ = param.addAccumulator(value_, term) }
+  private[spark] def copy(): Accumulable[R, T] = {
+    new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues)
+  }
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def add(term: T) { value_ = param.addAccumulator(value_, term) }
+  def += (term: T): Unit = { value_ = param.addAccumulator(value_, term) }
+
+  /**
+   * Add more data to this accumulator / accumulable
+   * @param term the data to add
+   */
+  def add(term: T): Unit = { value_ = param.addAccumulator(value_, term) }
 
   /**
    * Merge two accumulable objects together
@@ -97,7 +134,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) { value_ = param.addInPlace(value_, term)}
+  def ++= (term: R): Unit = { value_ = param.addInPlace(value_, term) }
 
   /**
    * Merge two accumulable objects together
@@ -105,10 +142,10 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { value_ = param.addInPlace(value_, term)}
+  def merge(term: R): Unit = { value_ = param.addInPlace(value_, term) }
 
   /**
-   * Access the accumulator's current value; only allowed on master.
+   * Access the accumulator's current value; only allowed on driver.
    */
   def value: R = {
     if (!deserialized) {
@@ -130,7 +167,7 @@ class Accumulable[R, T] private[spark] (
   def localValue: R = value_
 
   /**
-   * Set the accumulator's value; only allowed on master.
+   * Set the accumulator's value; only allowed on driver.
    */
   def value_= (newValue: R) {
     if (!deserialized) {
@@ -141,11 +178,15 @@ class Accumulable[R, T] private[spark] (
   }
 
   /**
-   * Set the accumulator's value; only allowed on master
+   * Set the accumulator's value. For internal use only.
    */
-  def setValue(newValue: R) {
-    this.value = newValue
-  }
+  private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
+
+  /**
+   * Set the accumulator's value.
+   * This is used to reconstruct [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
+   */
+  private[spark] def setValueAny(newValue: Any): Unit = { setValue(newValue.asInstanceOf[R]) }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
@@ -153,10 +194,8 @@ class Accumulable[R, T] private[spark] (
     value_ = zero
     deserialized = true
     // Automatically register the accumulator when it is deserialized with the task closure.
-    //
-    // Note internal accumulators sent with task are deserialized before the TaskContext is created
-    // and are registered in the TaskContext constructor. Other internal accumulators, such SQL
-    // metrics, still need to register here.
+    // This is for external accumulators and internal ones that do not represent task level
+    // metrics, e.g. internal SQL metrics, which are per-operator.
     val taskContext = TaskContext.get()
     if (taskContext != null) {
       taskContext.registerAccumulator(this)
@@ -166,64 +205,6 @@ class Accumulable[R, T] private[spark] (
   override def toString: String = if (value_ == null) "null" else value_.toString
 }
 
-/**
- * Helper object defining how to accumulate values of a particular type. An implicit
- * AccumulableParam needs to be available when you create [[Accumulable]]s of a specific type.
- *
- * @tparam R the full accumulated data (result type)
- * @tparam T partial data that can be added in
- */
-trait AccumulableParam[R, T] extends Serializable {
-  /**
-   * Add additional data to the accumulator value. Is allowed to modify and return `r`
-   * for efficiency (to avoid allocating objects).
-   *
-   * @param r the current value of the accumulator
-   * @param t the data to be added to the accumulator
-   * @return the new value of the accumulator
-   */
-  def addAccumulator(r: R, t: T): R
-
-  /**
-   * Merge two accumulated values together. Is allowed to modify and return the first value
-   * for efficiency (to avoid allocating objects).
-   *
-   * @param r1 one set of accumulated data
-   * @param r2 another set of accumulated data
-   * @return both data sets merged together
-   */
-  def addInPlace(r1: R, r2: R): R
-
-  /**
-   * Return the "zero" (identity) value for an accumulator type, given its initial value. For
-   * example, if R was a vector of N dimensions, this would return a vector of N zeroes.
-   */
-  def zero(initialValue: R): R
-}
-
-private[spark] class
-GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
-  extends AccumulableParam[R, T] {
-
-  def addAccumulator(growable: R, elem: T): R = {
-    growable += elem
-    growable
-  }
-
-  def addInPlace(t1: R, t2: R): R = {
-    t1 ++= t2
-    t1
-  }
-
-  def zero(initialValue: R): R = {
-    // We need to clone initialValue, but it's hard to specify that R should also be Cloneable.
-    // Instead we'll serialize it to a buffer and load it back.
-    val ser = new JavaSerializer(new SparkConf(false)).newInstance()
-    val copy = ser.deserialize[R](ser.serialize(initialValue))
-    copy.clear()   // In case it contained stuff
-    copy
-  }
-}
 
 /**
  * A simpler value of [[Accumulable]] where the result type being accumulated is the same
@@ -253,14 +234,18 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `T`
+ * @param name human-readable name associated with this accumulator
+ * @param internal whether this accumulator is used internally within Spark only
+ * @param countFailedValues whether to accumulate values from failed tasks
  * @tparam T result type
  */
 class Accumulator[T] private[spark] (
     @transient private[spark] val initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String],
-    internal: Boolean)
-  extends Accumulable[T, T](initialValue, param, name, internal) {
+    internal: Boolean,
+    override val countFailedValues: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(initialValue, param, name, false)
@@ -271,48 +256,6 @@ class Accumulator[T] private[spark] (
   }
 }
 
-/**
- * A simpler version of [[org.apache.spark.AccumulableParam]] where the only data type you can add
- * in is the same type as the accumulated value. An implicit AccumulatorParam object needs to be
- * available when you create Accumulators of a specific type.
- *
- * @tparam T type of value to accumulate
- */
-trait AccumulatorParam[T] extends AccumulableParam[T, T] {
-  def addAccumulator(t1: T, t2: T): T = {
-    addInPlace(t1, t2)
-  }
-}
-
-object AccumulatorParam {
-
-  // The following implicit objects were in SparkContext before 1.2 and users had to
-  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
-  // them automatically. However, as there are duplicate codes in SparkContext for backward
-  // compatibility, please update them accordingly if you modify the following implicit objects.
-
-  implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
-    def addInPlace(t1: Double, t2: Double): Double = t1 + t2
-    def zero(initialValue: Double): Double = 0.0
-  }
-
-  implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
-    def addInPlace(t1: Int, t2: Int): Int = t1 + t2
-    def zero(initialValue: Int): Int = 0
-  }
-
-  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
-    def addInPlace(t1: Long, t2: Long): Long = t1 + t2
-    def zero(initialValue: Long): Long = 0L
-  }
-
-  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
-    def addInPlace(t1: Float, t2: Float): Float = t1 + t2
-    def zero(initialValue: Float): Float = 0f
-  }
-
-  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
-}
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
@@ -321,79 +264,63 @@ private[spark] object Accumulators extends Logging {
    * This global map holds the original accumulator objects that are created on the driver.
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
+   * TODO: Don't use a global map; these should be tied to a SparkContext at the very least.
    */
+  @GuardedBy("Accumulators")
   val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
-  private var lastId: Long = 0
+  private val nextId = new AtomicLong(0L)
 
-  def newId(): Long = synchronized {
-    lastId += 1
-    lastId
-  }
+  /**
+   * Return a globally unique ID for a new [[Accumulable]].
+   * Note: Once you copy the [[Accumulable]] the ID is no longer unique.
+   */
+  def newId(): Long = nextId.getAndIncrement
 
+  /**
+   * Register an [[Accumulable]] created on the driver such that it can be used on the executors.
+   *
+   * All accumulators registered here can later be used as a container for accumulating partial
+   * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
+   * Note: if an accumulator is registered here, it should also be registered with the active
+   * context cleaner for cleanup so as to avoid memory leaks.
+   *
+   * If an [[Accumulable]] with the same ID was already registered, do nothing instead of
+   * overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
+   * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
+   */
   def register(a: Accumulable[_, _]): Unit = synchronized {
-    originals(a.id) = new WeakReference[Accumulable[_, _]](a)
-  }
-
-  def remove(accId: Long) {
-    synchronized {
-      originals.remove(accId)
-    }
-  }
-
-  // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        // Since we are now storing weak references, we must check whether the underlying data
-        // is valid.
-        originals(id).get match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
-          case None =>
-            throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
-        }
-      } else {
-        logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
-      }
-    }
-  }
-
-}
-
-private[spark] object InternalAccumulator {
-  val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
-  val TEST_ACCUMULATOR = "testAccumulator"
-
-  // For testing only.
-  // This needs to be a def since we don't want to reuse the same accumulator across stages.
-  private def maybeTestAccumulator: Option[Accumulator[Long]] = {
-    if (sys.props.contains("spark.testing")) {
-      Some(new Accumulator(
-        0L, AccumulatorParam.LongAccumulatorParam, Some(TEST_ACCUMULATOR), internal = true))
-    } else {
-      None
+    if (!originals.contains(a.id)) {
+      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
     }
   }
 
   /**
-   * Accumulators for tracking internal metrics.
-   *
-   * These accumulators are created with the stage such that all tasks in the stage will
-   * add to the same set of accumulators. We do this to report the distribution of accumulator
-   * values across all tasks within each stage.
+   * Unregister the [[Accumulable]] with the given ID, if any.
    */
-  def create(sc: SparkContext): Seq[Accumulator[Long]] = {
-    val internalAccumulators = Seq(
-        // Execution memory refers to the memory used by internal data structures created
-        // during shuffles, aggregations and joins. The value of this accumulator should be
-        // approximately the sum of the peak sizes across all such data structures created
-        // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
-        new Accumulator(
-          0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true)
-      ) ++ maybeTestAccumulator.toSeq
-    internalAccumulators.foreach { accumulator =>
-      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accumulator))
-    }
-    internalAccumulators
+  def remove(accId: Long): Unit = synchronized {
+    originals.remove(accId)
   }
+
+  /**
+   * Return the [[Accumulable]] registered with the given ID, if any.
+   */
+  def get(id: Long): Option[Accumulable[_, _]] = synchronized {
+    originals.get(id).map { weakRef =>
+      // Since we are storing weak references, we must check whether the underlying data is valid.
+      weakRef.get match {
+        case Some(accum) => accum
+        case None =>
+          throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
+      }
+    }
+  }
+
+  /**
+   * Clear all registered [[Accumulable]]s; for testing only.
+   */
+  def clear(): Unit = synchronized {
+    originals.clear()
+  }
+
 }

@@ -23,7 +23,6 @@ import scala.collection.Map
 import scala.language.existentials
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
@@ -73,9 +72,8 @@ private[scheduler] case class CompletionEvent(
     task: Task[_],
     reason: TaskEndReason,
     result: Any,
-    accumUpdates: Map[Long, Any],
-    taskInfo: TaskInfo,
-    taskMetrics: TaskMetrics)
+    accumUpdates: Seq[AccumulableInfo],
+    taskInfo: TaskInfo)
   extends DAGSchedulerEvent
 
 private[scheduler] case class ExecutorAdded(execId: String, host: String) extends DAGSchedulerEvent

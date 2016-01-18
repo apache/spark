@@ -404,12 +404,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +:
             getFormattedTimeQuantiles(gettingResultTimes)
 
-          val peakExecutionMemory = validTasks.map { case TaskUIData(info, _, _) =>
-            info.accumulables
-              .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-              .map { acc => acc.update.getOrElse("0").toLong }
-              .getOrElse(0L)
-              .toDouble
+          val peakExecutionMemory = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.peakExecutionMemory.toDouble
           }
           val peakExecutionMemoryQuantiles = {
             <td>
@@ -500,11 +496,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedSizeQuantiles(shuffleReadRemoteSizes)
 
           val shuffleWriteSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
+            metrics.get.shuffleWriteMetrics.map(_.bytesWritten).getOrElse(0L).toDouble
           }
 
           val shuffleWriteRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleWriteMetrics.map(_.shuffleRecordsWritten).getOrElse(0L).toDouble
+            metrics.get.shuffleWriteMetrics.map(_.recordsWritten).getOrElse(0L).toDouble
           }
 
           val shuffleWriteQuantiles = <td>Shuffle Write Size / Records</td> +:
@@ -619,7 +615,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         val shuffleReadTimeProportion = toProportion(shuffleReadTime)
         val shuffleWriteTime =
           (metricsOpt.flatMap(_.shuffleWriteMetrics
-            .map(_.shuffleWriteTime)).getOrElse(0L) / 1e6).toLong
+            .map(_.writeTime)).getOrElse(0L) / 1e6).toLong
         val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
 
         val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
@@ -891,15 +887,10 @@ private[ui] class TaskDataSource(
     val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
     val gettingResultTime = getGettingResultTime(info, currentTime)
 
-    val (taskInternalAccumulables, taskExternalAccumulables) =
-      info.accumulables.partition(_.internal)
-    val externalAccumulableReadable = taskExternalAccumulables.map { acc =>
-      StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")
-    }
-    val peakExecutionMemoryUsed = taskInternalAccumulables
-      .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-      .map { acc => acc.update.getOrElse("0").toLong }
-      .getOrElse(0L)
+    val externalAccumulableReadable = info.accumulables
+      .filterNot(_.internal)
+      .map { acc => StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}") }
+    val peakExecutionMemoryUsed = metrics.map(_.peakExecutionMemory).getOrElse(0L)
 
     val maybeInput = metrics.flatMap(_.inputMetrics)
     val inputSortable = maybeInput.map(_.bytesRead).getOrElse(0L)
@@ -930,13 +921,13 @@ private[ui] class TaskDataSource(
     val shuffleReadRemoteReadable = remoteShuffleBytes.map(Utils.bytesToString).getOrElse("")
 
     val maybeShuffleWrite = metrics.flatMap(_.shuffleWriteMetrics)
-    val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten).getOrElse(0L)
+    val shuffleWriteSortable = maybeShuffleWrite.map(_.bytesWritten).getOrElse(0L)
     val shuffleWriteReadable = maybeShuffleWrite
-      .map(m => s"${Utils.bytesToString(m.shuffleBytesWritten)}").getOrElse("")
+      .map(m => s"${Utils.bytesToString(m.bytesWritten)}").getOrElse("")
     val shuffleWriteRecords = maybeShuffleWrite
-      .map(_.shuffleRecordsWritten.toString).getOrElse("")
+      .map(_.recordsWritten.toString).getOrElse("")
 
-    val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
+    val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.writeTime)
     val writeTimeSortable = maybeWriteTime.getOrElse(0L)
     val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
       if (ms == 0) "" else UIUtils.formatDuration(ms)

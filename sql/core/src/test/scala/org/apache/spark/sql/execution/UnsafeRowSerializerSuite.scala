@@ -113,8 +113,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
         (i, converter(Row(i)))
       }
       val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0)
-      val taskContext = new TaskContextImpl(
-        0, 0, 0, 0, taskMemoryManager, null, InternalAccumulator.create(sc))
+      val taskContext = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, null)
 
       val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
         taskContext,
@@ -127,7 +126,6 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       assert(sorter.numSpills > 0)
 
       // Merging spilled files should not throw assertion error
-      taskContext.taskMetrics.shuffleWriteMetrics = Some(new ShuffleWriteMetrics)
       sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), outputFile)
     } {
       // Clean up

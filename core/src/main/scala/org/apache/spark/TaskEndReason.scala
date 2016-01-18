@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -115,8 +115,8 @@ case class ExceptionFailure(
     description: String,
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
-    metrics: Option[TaskMetrics],
-    private val exceptionWrapper: Option[ThrowableSerializationWrapper])
+    exceptionWrapper: Option[ThrowableSerializationWrapper],
+    accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo])
   extends TaskFailedReason {
 
   /**
@@ -124,13 +124,16 @@ case class ExceptionFailure(
    * driver. This may be set to `false` in the event that the exception is not in fact
    * serializable.
    */
-  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics], preserveCause: Boolean) {
-    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics,
-      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None)
+  private[spark] def this(
+      e: Throwable,
+      accumUpdates: Seq[AccumulableInfo],
+      preserveCause: Boolean) {
+    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
+      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
   }
 
-  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
-    this(e, metrics, preserveCause = true)
+  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
+    this(e, accumUpdates, preserveCause = true)
   }
 
   def exception: Option[Throwable] = exceptionWrapper.flatMap {

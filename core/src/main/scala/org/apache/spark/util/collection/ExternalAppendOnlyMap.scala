@@ -181,7 +181,7 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   override protected[this] def spill(collection: SizeTracker): Unit = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
-    curWriteMetrics = new ShuffleWriteMetrics()
+    curWriteMetrics = new ShuffleWriteMetrics
     var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0
 
@@ -193,8 +193,8 @@ class ExternalAppendOnlyMap[K, V, C](
       val w = writer
       writer = null
       w.commitAndClose()
-      _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
-      batchSizes.append(curWriteMetrics.shuffleBytesWritten)
+      _diskBytesSpilled += curWriteMetrics.bytesWritten
+      batchSizes.append(curWriteMetrics.bytesWritten)
       objectsWritten = 0
     }
 
@@ -208,7 +208,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
-          curWriteMetrics = new ShuffleWriteMetrics()
+          curWriteMetrics = new ShuffleWriteMetrics
           writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
         }
       }

@@ -21,7 +21,7 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.executor.{DataReadMethod, TaskMetrics}
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 
@@ -86,6 +86,6 @@ class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with Before
     cacheManager = sc.env.cacheManager
     val context = TaskContext.empty()
     cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
-    assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 2)
+    assert(context.taskMetrics.updatedBlockStatuses.size === 2)
   }
 }
