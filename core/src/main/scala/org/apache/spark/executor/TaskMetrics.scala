@@ -27,6 +27,7 @@ import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.Utils
 
+
 /**
  * :: DeveloperApi ::
  * Metrics tracked during the execution of a task.
@@ -241,6 +242,7 @@ class TaskMetrics extends Serializable {
   }
 }
 
+
 private[spark] object TaskMetrics {
   private val hostNameCache = new ConcurrentHashMap[String, String]()
 
@@ -250,188 +252,4 @@ private[spark] object TaskMetrics {
     val canonicalHost = hostNameCache.putIfAbsent(host, host)
     if (canonicalHost != null) canonicalHost else host
   }
-}
-
-/**
- * :: DeveloperApi ::
- * Method by which input data was read.  Network means that the data was read over the network
- * from a remote block manager (which may have stored the data on-disk or in-memory).
- */
-@DeveloperApi
-object DataReadMethod extends Enumeration with Serializable {
-  type DataReadMethod = Value
-  val Memory, Disk, Hadoop, Network = Value
-}
-
-/**
- * :: DeveloperApi ::
- * Method by which output data was written.
- */
-@DeveloperApi
-object DataWriteMethod extends Enumeration with Serializable {
-  type DataWriteMethod = Value
-  val Hadoop = Value
-}
-
-/**
- * :: DeveloperApi ::
- * Metrics about reading input data.
- */
-@DeveloperApi
-case class InputMetrics(readMethod: DataReadMethod.Value) {
-
-  /**
-   * This is volatile so that it is visible to the updater thread.
-   */
-  @volatile @transient var bytesReadCallback: Option[() => Long] = None
-
-  /**
-   * Total bytes read.
-   */
-  private var _bytesRead: Long = _
-  def bytesRead: Long = _bytesRead
-  def incBytesRead(bytes: Long): Unit = _bytesRead += bytes
-
-  /**
-   * Total records read.
-   */
-  private var _recordsRead: Long = _
-  def recordsRead: Long = _recordsRead
-  def incRecordsRead(records: Long): Unit = _recordsRead += records
-
-  /**
-   * Invoke the bytesReadCallback and mutate bytesRead.
-   */
-  def updateBytesRead() {
-    bytesReadCallback.foreach { c =>
-      _bytesRead = c()
-    }
-  }
-
- /**
-  * Register a function that can be called to get up-to-date information on how many bytes the task
-  * has read from an input source.
-  */
-  def setBytesReadCallback(f: Option[() => Long]) {
-    bytesReadCallback = f
-  }
-}
-
-/**
- * :: DeveloperApi ::
- * Metrics about writing output data.
- */
-@DeveloperApi
-case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
-  /**
-   * Total bytes written
-   */
-  private var _bytesWritten: Long = _
-  def bytesWritten: Long = _bytesWritten
-  private[spark] def setBytesWritten(value : Long): Unit = _bytesWritten = value
-
-  /**
-   * Total records written
-   */
-  private var _recordsWritten: Long = 0L
-  def recordsWritten: Long = _recordsWritten
-  private[spark] def setRecordsWritten(value: Long): Unit = _recordsWritten = value
-}
-
-/**
- * :: DeveloperApi ::
- * Metrics pertaining to shuffle data read in a given task.
- */
-@DeveloperApi
-class ShuffleReadMetrics extends Serializable {
-  /**
-   * Number of remote blocks fetched in this shuffle by this task
-   */
-  private var _remoteBlocksFetched: Int = _
-  def remoteBlocksFetched: Int = _remoteBlocksFetched
-  private[spark] def incRemoteBlocksFetched(value: Int) = _remoteBlocksFetched += value
-  private[spark] def decRemoteBlocksFetched(value: Int) = _remoteBlocksFetched -= value
-
-  /**
-   * Number of local blocks fetched in this shuffle by this task
-   */
-  private var _localBlocksFetched: Int = _
-  def localBlocksFetched: Int = _localBlocksFetched
-  private[spark] def incLocalBlocksFetched(value: Int) = _localBlocksFetched += value
-  private[spark] def decLocalBlocksFetched(value: Int) = _localBlocksFetched -= value
-
-  /**
-   * Time the task spent waiting for remote shuffle blocks. This only includes the time
-   * blocking on shuffle input data. For instance if block B is being fetched while the task is
-   * still not finished processing block A, it is not considered to be blocking on block B.
-   */
-  private var _fetchWaitTime: Long = _
-  def fetchWaitTime: Long = _fetchWaitTime
-  private[spark] def incFetchWaitTime(value: Long) = _fetchWaitTime += value
-  private[spark] def decFetchWaitTime(value: Long) = _fetchWaitTime -= value
-
-  /**
-   * Total number of remote bytes read from the shuffle by this task
-   */
-  private var _remoteBytesRead: Long = _
-  def remoteBytesRead: Long = _remoteBytesRead
-  private[spark] def incRemoteBytesRead(value: Long) = _remoteBytesRead += value
-  private[spark] def decRemoteBytesRead(value: Long) = _remoteBytesRead -= value
-
-  /**
-   * Shuffle data that was read from the local disk (as opposed to from a remote executor).
-   */
-  private var _localBytesRead: Long = _
-  def localBytesRead: Long = _localBytesRead
-  private[spark] def incLocalBytesRead(value: Long) = _localBytesRead += value
-
-  /**
-   * Total bytes fetched in the shuffle by this task (both remote and local).
-   */
-  def totalBytesRead: Long = _remoteBytesRead + _localBytesRead
-
-  /**
-   * Number of blocks fetched in this shuffle by this task (remote or local)
-   */
-  def totalBlocksFetched: Int = _remoteBlocksFetched + _localBlocksFetched
-
-  /**
-   * Total number of records read from the shuffle by this task
-   */
-  private var _recordsRead: Long = _
-  def recordsRead: Long = _recordsRead
-  private[spark] def incRecordsRead(value: Long) = _recordsRead += value
-  private[spark] def decRecordsRead(value: Long) = _recordsRead -= value
-}
-
-/**
- * :: DeveloperApi ::
- * Metrics pertaining to shuffle data written in a given task.
- */
-@DeveloperApi
-class ShuffleWriteMetrics extends Serializable {
-  /**
-   * Number of bytes written for the shuffle by this task
-   */
-  @volatile private var _shuffleBytesWritten: Long = _
-  def shuffleBytesWritten: Long = _shuffleBytesWritten
-  private[spark] def incShuffleBytesWritten(value: Long) = _shuffleBytesWritten += value
-  private[spark] def decShuffleBytesWritten(value: Long) = _shuffleBytesWritten -= value
-
-  /**
-   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
-   */
-  @volatile private var _shuffleWriteTime: Long = _
-  def shuffleWriteTime: Long = _shuffleWriteTime
-  private[spark] def incShuffleWriteTime(value: Long) = _shuffleWriteTime += value
-  private[spark] def decShuffleWriteTime(value: Long) = _shuffleWriteTime -= value
-
-  /**
-   * Total number of records written to the shuffle by this task
-   */
-  @volatile private var _shuffleRecordsWritten: Long = _
-  def shuffleRecordsWritten: Long = _shuffleRecordsWritten
-  private[spark] def incShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten += value
-  private[spark] def decShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten -= value
-  private[spark] def setShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten = value
 }
