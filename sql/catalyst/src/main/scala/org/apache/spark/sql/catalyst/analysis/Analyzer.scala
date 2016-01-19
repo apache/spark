@@ -147,7 +147,7 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr transform {
+          expr transformUp {
             case u @ UnresolvedAlias(child, optionalAliasName) => child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
@@ -1213,6 +1213,10 @@ object CleanupAliases extends Rule[LogicalPlan] {
         windowExprs.map(e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression])
       Window(projectList, cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
+
+    // Operators that operate on objects should only have expressions from encoders, which should
+    // never have extra aliases.
+    case o: ObjectOperator => o
 
     case other =>
       var stop = false

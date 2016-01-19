@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -33,10 +32,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
-import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
+import org.apache.spark.sql.catalyst.{InternalRow, _}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
@@ -205,28 +203,10 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
+  protected[sql] val sqlParser: ParserInterface = new SparkSQLParser(new SparkQl(conf))
 
   @transient
-  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
-
-  protected[sql] def getSQLDialect(): ParserDialect = {
-    try {
-      val clazz = Utils.classForName(dialectClassName)
-      clazz.newInstance().asInstanceOf[ParserDialect]
-    } catch {
-      case NonFatal(e) =>
-        // Since we didn't find the available SQL Dialect, it will fail even for SET command:
-        // SET spark.sql.dialect=sql; Let's reset as default dialect automatically.
-        val dialect = conf.dialect
-        // reset the sql dialect
-        conf.unsetConf(SQLConf.DIALECT)
-        // throw out the exception, and the default sql dialect will take effect for next query.
-        throw new DialectException(
-          s"""Instantiating dialect '$dialect' failed.
-             |Reverting to default dialect '${conf.dialect}'""".stripMargin, e)
-    }
-  }
+  protected[sql] val ddlParser: DDLParser = new DDLParser(sqlParser)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
@@ -235,12 +215,6 @@ class SQLContext private[sql](
 
   protected[sql] def executePlan(plan: LogicalPlan) =
     new sparkexecution.QueryExecution(this, plan)
-
-  protected[sql] def dialectClassName = if (conf.dialect == "sql") {
-    classOf[DefaultParserDialect].getCanonicalName
-  } else {
-    conf.dialect
-  }
 
   /**
    * Add a jar to SQLContext
@@ -682,7 +656,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -728,7 +702,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -833,7 +807,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(SqlParser.parseTableIdentifier(tableName))
+    table(sqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
@@ -901,7 +875,8 @@ class SQLContext private[sql](
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches = Seq(
-      Batch("Add exchange", Once, EnsureRequirements(self))
+      Batch("Add exchange", Once, EnsureRequirements(self)),
+      Batch("Whole stage codegen", Once, CollapseCodegenStages(self))
     )
   }
 

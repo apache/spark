@@ -315,6 +315,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           } else {
             arg
           }
+        case tuple @ (arg1: TreeNode[_], arg2: TreeNode[_]) =>
+          val newChild1 = nextOperation(arg1.asInstanceOf[BaseType], rule)
+          val newChild2 = nextOperation(arg2.asInstanceOf[BaseType], rule)
+          if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
+            changed = true
+            (newChild1, newChild2)
+          } else {
+            tuple
+          }
         case other => other
       }
       case nonChild: AnyRef => nonChild
@@ -443,7 +452,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
    * `lastChildren` for the root node should be empty.
    */
-  protected def generateTreeString(
+  def generateTreeString(
       depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
