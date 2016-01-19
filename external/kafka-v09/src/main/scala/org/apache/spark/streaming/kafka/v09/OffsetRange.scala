@@ -83,12 +83,13 @@ final class OffsetRange private(
   }
 
   override def toString(): String = {
-    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset])"
+    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset], " +
+      s"leaderHost: '$leaderHost')"
   }
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[streaming]
-  def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset)
+  def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset, leaderHost)
 }
 
 /**
@@ -124,7 +125,7 @@ object OffsetRange {
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[kafka]
-  type OffsetRangeTuple = (String, Int, Long, Long)
+  type OffsetRangeTuple = (String, Int, Long, Long, String)
 
   private[kafka]
   def apply(t: OffsetRangeTuple) =
