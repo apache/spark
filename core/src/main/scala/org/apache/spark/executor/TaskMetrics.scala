@@ -190,7 +190,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
   private[spark] def registerInputMetrics(readMethod: DataReadMethod.Value): InputMetrics = {
     synchronized {
       val metrics = _inputMetrics.getOrElse {
-        val metrics = new InputMetrics(initialAccumsMap.toMap)
+        val metrics = new InputMetrics(initialAccumsMap)
         metrics.setReadMethod(readMethod)
         _inputMetrics = Some(metrics)
         metrics
@@ -229,7 +229,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
   private[spark] def registerOutputMetrics(
       writeMethod: DataWriteMethod.Value): OutputMetrics = synchronized {
     _outputMetrics.getOrElse {
-      val metrics = new OutputMetrics(initialAccumsMap.toMap)
+      val metrics = new OutputMetrics(initialAccumsMap)
       metrics.setWriteMethod(writeMethod)
       _outputMetrics = Some(metrics)
       metrics
@@ -277,7 +277,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
     if (tempShuffleReadMetrics.nonEmpty) {
-      val merged = new ShuffleReadMetrics
+      val merged = new ShuffleReadMetrics(initialAccumsMap)
       for (depMetrics <- tempShuffleReadMetrics) {
         merged.incFetchWaitTime(depMetrics.fetchWaitTime)
         merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
@@ -306,7 +306,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    */
   private[spark] def registerShuffleWriteMetrics(): ShuffleWriteMetrics = synchronized {
     _shuffleWriteMetrics.getOrElse {
-      val metrics = new ShuffleWriteMetrics(initialAccumsMap.toMap)
+      val metrics = new ShuffleWriteMetrics(initialAccumsMap)
       _shuffleWriteMetrics = Some(metrics)
       metrics
     }
