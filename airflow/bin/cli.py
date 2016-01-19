@@ -127,6 +127,7 @@ def run(args):
         filename=filename,
         level=settings.LOGGING_LEVEL,
         format=settings.LOG_FORMAT)
+
     if not args.pickle:
         dagbag = DagBag(subdir)
         if args.dag_id not in dagbag.dags:

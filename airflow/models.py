@@ -214,7 +214,8 @@ class DagBag(LoggingMixin):
 
             for dag in list(m.__dict__.values()):
                 if isinstance(dag, DAG):
-                    dag.full_filepath = filepath
+                    if not dag.full_filepath:
+                        dag.full_filepath = filepath
                     dag.is_subdag = False
                     self.bag_dag(dag, parent_dag=dag, root_dag=dag)
                     found_dags.append(dag)
@@ -599,7 +600,10 @@ class TaskInstance(Base):
         cmd += "--raw " if raw else ""
         if task_start_date:
             cmd += "-s " + task_start_date.isoformat() + ' '
-        if not pickle_id and self.task.dag and self.task.dag.full_filepath:
+        if (
+                not pickle_id and self.task.dag and
+                self.task.dag.full_filepath and
+                not os.path.isabs(self.task.dag.full_filepath)):
             cmd += "-sd DAGS_FOLDER/{self.task.dag.filepath} "
         return cmd.format(**locals())
 
@@ -684,6 +688,8 @@ class TaskInstance(Base):
             self.start_date = ti.start_date
             self.end_date = ti.end_date
             self.try_number = ti.try_number
+        else:
+            self.state = None
 
         if not main_session:
             session.commit()
@@ -947,14 +953,11 @@ class TaskInstance(Base):
             )
         elif force or self.state in State.runnable():
             HR = "\n" + ("-" * 80) + "\n"  # Line break
-            if self.state == State.UP_FOR_RETRY:
-                msg = (
-                    "Retry run {self.try_number} out of {task.retries} "
-                    "starting @{iso}")
-                self.try_number += 1
-            else:
-                msg = "New run starting @{iso}"
-                self.try_number = 1
+            attempts = task.retries + 1
+            msg = (
+                "Starting run {self.try_number} out of {attempts}, "
+                "starting @{iso}")
+            self.try_number += 1
             msg = msg.format(**locals())
             logging.info(HR + msg + HR)
             self.start_date = datetime.now()
