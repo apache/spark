@@ -257,31 +257,6 @@ class TaskMetrics extends Serializable {
     if (_updatedBlockStatuses.nonEmpty) Some(_updatedBlockStatuses) else None
   }
 
-  /**
-   * Returns the input metrics object that the task should use. Currently, if
-   * there exists an input metric with the same readMethod, we return that one
-   * so the caller can accumulate bytes read. If the readMethod is different
-   * than previously seen by this task, we return a new InputMetric but don't
-   * record it.
-   *
-   * Once https://issues.apache.org/jira/browse/SPARK-5225 is addressed,
-   * we can store all the different inputMetrics (one per readMethod).
-   */
-  private[spark] def getInputMetricsForReadMethod(readMethod: DataReadMethod): InputMetrics = {
-    synchronized {
-      _inputMetrics match {
-        case None =>
-          val metrics = new InputMetrics(readMethod)
-          _inputMetrics = Some(metrics)
-          metrics
-        case Some(metrics @ InputMetrics(method)) if method == readMethod =>
-          metrics
-        case Some(InputMetrics(method)) =>
-          new InputMetrics(readMethod)
-      }
-    }
-  }
-
   private[spark] def updateInputMetrics(): Unit = synchronized {
     inputMetrics.foreach(_.updateBytesRead())
   }
