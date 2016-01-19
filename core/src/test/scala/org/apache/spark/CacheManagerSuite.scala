@@ -88,7 +88,7 @@ class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with Before
     try {
       TaskContext.setTaskContext(context)
       cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
-      assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 2)
+      assert(context.taskMetrics.updatedBlockStatuses.size === 2)
     } finally {
       TaskContext.unset()
     }

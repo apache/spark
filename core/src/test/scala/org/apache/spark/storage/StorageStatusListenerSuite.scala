@@ -85,8 +85,8 @@ class StorageStatusListenerSuite extends SparkFunSuite {
     val block1 = (RDDBlockId(1, 1), BlockStatus(StorageLevel.DISK_ONLY, 0L, 100L))
     val block2 = (RDDBlockId(1, 2), BlockStatus(StorageLevel.DISK_ONLY, 0L, 200L))
     val block3 = (RDDBlockId(4, 0), BlockStatus(StorageLevel.DISK_ONLY, 0L, 300L))
-    taskMetrics1.updatedBlocks = Some(Seq(block1, block2))
-    taskMetrics2.updatedBlocks = Some(Seq(block3))
+    taskMetrics1.setUpdatedBlockStatuses(Seq(block1, block2))
+    taskMetrics2.setUpdatedBlockStatuses(Seq(block3))
 
     // Task end with new blocks
     assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
@@ -108,8 +108,8 @@ class StorageStatusListenerSuite extends SparkFunSuite {
     val droppedBlock1 = (RDDBlockId(1, 1), BlockStatus(StorageLevel.NONE, 0L, 0L))
     val droppedBlock2 = (RDDBlockId(1, 2), BlockStatus(StorageLevel.NONE, 0L, 0L))
     val droppedBlock3 = (RDDBlockId(4, 0), BlockStatus(StorageLevel.NONE, 0L, 0L))
-    taskMetrics1.updatedBlocks = Some(Seq(droppedBlock1, droppedBlock3))
-    taskMetrics2.updatedBlocks = Some(Seq(droppedBlock2, droppedBlock3))
+    taskMetrics1.setUpdatedBlockStatuses(Seq(droppedBlock1, droppedBlock3))
+    taskMetrics2.setUpdatedBlockStatuses(Seq(droppedBlock2, droppedBlock3))
 
     listener.onTaskEnd(SparkListenerTaskEnd(1, 0, "obliteration", Success, taskInfo1, taskMetrics1))
     assert(listener.executorIdToStorageStatus("big").numBlocks === 1)
@@ -133,8 +133,8 @@ class StorageStatusListenerSuite extends SparkFunSuite {
     val block1 = (RDDBlockId(1, 1), BlockStatus(StorageLevel.DISK_ONLY, 0L, 100L))
     val block2 = (RDDBlockId(1, 2), BlockStatus(StorageLevel.DISK_ONLY, 0L, 200L))
     val block3 = (RDDBlockId(4, 0), BlockStatus(StorageLevel.DISK_ONLY, 0L, 300L))
-    taskMetrics1.updatedBlocks = Some(Seq(block1, block2))
-    taskMetrics2.updatedBlocks = Some(Seq(block3))
+    taskMetrics1.setUpdatedBlockStatuses(Seq(block1, block2))
+    taskMetrics2.setUpdatedBlockStatuses(Seq(block3))
     listener.onTaskEnd(SparkListenerTaskEnd(1, 0, "obliteration", Success, taskInfo1, taskMetrics1))
     listener.onTaskEnd(SparkListenerTaskEnd(1, 0, "obliteration", Success, taskInfo1, taskMetrics2))
     assert(listener.executorIdToStorageStatus("big").numBlocks === 3)

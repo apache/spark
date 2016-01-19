@@ -127,7 +127,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Task end with a few new persisted blocks, some from the same RDD
     val metrics1 = new TaskMetrics
-    metrics1.updatedBlocks = Some(Seq(
+    metrics1.setUpdatedBlockStatuses(Seq(
       (RDDBlockId(0, 100), BlockStatus(memAndDisk, 400L, 0L)),
       (RDDBlockId(0, 101), BlockStatus(memAndDisk, 0L, 400L)),
       (RDDBlockId(1, 20), BlockStatus(memAndDisk, 0L, 240L))
@@ -146,7 +146,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Task end with a few dropped blocks
     val metrics2 = new TaskMetrics
-    metrics2.updatedBlocks = Some(Seq(
+    metrics2.setUpdatedBlockStatuses(Seq(
       (RDDBlockId(0, 100), BlockStatus(none, 0L, 0L)),
       (RDDBlockId(1, 20), BlockStatus(none, 0L, 0L)),
       (RDDBlockId(2, 40), BlockStatus(none, 0L, 0L)), // doesn't actually exist
@@ -173,8 +173,8 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     val taskMetrics1 = new TaskMetrics
     val block0 = (RDDBlockId(0, 1), BlockStatus(memOnly, 100L, 0L))
     val block1 = (RDDBlockId(1, 1), BlockStatus(memOnly, 200L, 0L))
-    taskMetrics0.updatedBlocks = Some(Seq(block0))
-    taskMetrics1.updatedBlocks = Some(Seq(block1))
+    taskMetrics0.setUpdatedBlockStatuses(Seq(block0))
+    taskMetrics1.setUpdatedBlockStatuses(Seq(block1))
     bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener.rddInfoList.size === 0)

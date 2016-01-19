@@ -119,8 +119,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleId = dep.shuffleId();
     this.serializer = Serializer.getSerializer(dep.serializer()).newInstance();
     this.partitioner = dep.partitioner();
-    this.writeMetrics = new ShuffleWriteMetrics();
-    taskContext.taskMetrics().shuffleWriteMetrics_$eq(Option.apply(writeMetrics));
+    this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);

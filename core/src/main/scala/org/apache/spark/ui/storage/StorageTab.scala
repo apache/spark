@@ -63,8 +63,8 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
    */
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val metrics = taskEnd.taskMetrics
-    if (metrics != null && metrics.updatedBlocks.isDefined) {
-      updateRDDInfo(metrics.updatedBlocks.get)
+    if (metrics != null && metrics.updatedBlockStatuses.nonEmpty) {
+      updateRDDInfo(metrics.updatedBlockStatuses)
     }
   }
 
