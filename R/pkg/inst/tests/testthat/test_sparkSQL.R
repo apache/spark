@@ -933,7 +933,7 @@ test_that("column functions", {
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- variance(c)
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
-  c14 <- cume_dist() + ntile(1) + corr(c, c1)
+  c14 <- cume_dist() + ntile(1) + corr(c, c1) + covar_samp(c, c1) + covar_pop(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
 

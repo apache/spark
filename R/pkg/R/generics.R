@@ -424,6 +424,14 @@ setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
 #' @export
 setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_samp", function(x, ...) {standardGeneric("covar_samp") })
+
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_pop", function(x, ...) {standardGeneric("covar_pop") })
+
 #' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })

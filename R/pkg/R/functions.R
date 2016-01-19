@@ -275,6 +275,38 @@ setMethod("corr", signature(x = "Column"),
             column(jc)
           })
 
+#' covar_pop
+#'
+#' Compute the population covariance between two expressions.
+#'
+#' @rdname covar_pop
+#' @name covar_pop
+#' @family math_funcs
+#' @export
+#' @examples \dontrun{covar_pop(df$c, df$d)}
+setMethod("covar_pop", signature(x = "Column"),
+          function(x, col2) {
+            stopifnot(class(col2) == "Column")
+            jc <- callJStatic("org.apache.spark.sql.functions", "covar_pop", x@jc, col2@jc)
+            column(jc)
+          })
+
+#' covar_samp
+#'
+#' Compute the sample covariance between two expressions.
+#'
+#' @rdname covar_samp
+#' @name covar_samp
+#' @family math_funcs
+#' @export
+#' @examples \dontrun{covar_samp(df$c, df$d)}
+setMethod("covar_samp", signature(x = "Column"),
+          function(x, col2) {
+            stopifnot(class(col2) == "Column")
+            jc <- callJStatic("org.apache.spark.sql.functions", "covar_samp", x@jc, col2@jc)
+            column(jc)
+          })
+
 #' cos
 #'
 #' Computes the cosine of the given value.
