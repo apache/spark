@@ -847,4 +847,32 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     sqlContext.sql("""use default""")
     sqlContext.sql("""drop database if exists testdb8156 CASCADE""")
   }
+
+  test("skip hive metadata on table creation") {
+    val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
+
+    catalog.createDataSourceTable(
+      tableIdent = TableIdentifier("not_skip_hive_metadata"),
+      userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
+      bucketSpec = None,
+      provider = "parquet",
+      options = Map("path" -> "just a dummy path", "skip_hive_metadata" -> "false"),
+      isExternal = false)
+
+    assert(catalog.client.getTable("default", "not_skip_hive_metadata").schema
+      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == StringType))
+
+    catalog.createDataSourceTable(
+      tableIdent = TableIdentifier("skip_hive_metadata"),
+      userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
+      bucketSpec = None,
+      provider = "parquet",
+      options = Map("path" -> "just a dummy path", "skip_hive_metadata" -> "true"),
+      isExternal = false)
+
+    assert(catalog.client.getTable("default", "skip_hive_metadata").schema
+      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == ArrayType(StringType)))
+  }
 }
