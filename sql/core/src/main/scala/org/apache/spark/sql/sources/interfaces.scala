@@ -403,7 +403,7 @@ abstract class OutputWriter {
  * [[Row]] objects. In addition, when reading from Hive style partitioned tables stored in file
  * systems, it's able to discover partitioning information from the paths of input directories, and
  * perform partition pruning before start reading the data. Subclasses of [[HadoopFsRelation()]]
- * must override one of the three `buildScan` methods to implement the read path.
+ * must override one of the four `buildScan` methods to implement the read path.
  *
  * For the write path, it provides the ability to write to both non-partitioned and partitioned
  * tables.  Directory layout of the partitioned tables is compatible with Hive.
