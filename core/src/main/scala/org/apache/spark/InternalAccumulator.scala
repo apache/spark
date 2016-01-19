@@ -95,7 +95,7 @@ private[spark] object InternalAccumulator {
       case p @ UpdatedBlockStatusesAccumulatorParam =>
         newMetric[Seq[(BlockId, BlockStatus)]](Seq(), name, p)
       case p => throw new IllegalArgumentException(
-        s"unsupported accumulator param '${p.getClass.getSimpleName}' for internal metrics.")
+        s"unsupported accumulator param '${p.getClass.getSimpleName}' for metric '$name'.")
     }
   }
 

@@ -65,8 +65,8 @@ class Accumulable[R, T] private[spark] (
   val id: Long = Accumulators.newId()
 
   // TODO: after SPARK-12896, we should mark this transient again
-  @volatile private var value_ : R = initialValue // Current value on master
-  val zero = param.zero(initialValue)  // Zero value to be passed to workers
+  @volatile private var value_ : R = initialValue
+  val zero = param.zero(initialValue)
 
   // TODO: currently, this is not set. After SPARK-12896, this will be set in `readObject`.
   // For more detail, read the comment there.

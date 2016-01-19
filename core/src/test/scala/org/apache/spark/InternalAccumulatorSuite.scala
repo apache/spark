@@ -55,6 +55,8 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     assert(getParam(output.WRITE_METHOD) === StringAccumulatorParam)
     assert(getParam(output.RECORDS_WRITTEN) === LongAccumulatorParam)
     assert(getParam(output.BYTES_WRITTEN) === LongAccumulatorParam)
+    // default to Long
+    assert(getParam(METRICS_PREFIX + "anything") === LongAccumulatorParam)
     intercept[AssertionError] {
       getParam("something that does not start with the right prefix")
     }
@@ -76,6 +78,9 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     updatedBlockStatuses.setValueAny(Seq.empty[(BlockId, BlockStatus)])
     assert(shuffleRemoteBlocksRead.value.isInstanceOf[Int])
     assert(inputReadMethod.value.isInstanceOf[String])
+    // default to Long
+    val anything = create(METRICS_PREFIX + "anything")
+    assert(anything.value.isInstanceOf[Long])
   }
 
   test("create") {
@@ -166,6 +171,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
     }
     rdd.count()
+    listener.maybeThrowException()
   }
 
   test("internal accumulators in multiple stages") {
@@ -178,19 +184,19 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
-      iter
-    }
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
+        iter
+      }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
-      iter
-    }
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
+        iter
+      }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
-      iter
-    }
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
+        iter
+      }
     // Register asserts in job completion callback to avoid flakiness
     listener.registerJobCompletionCallback { _ =>
     // We ran 3 stages, and the accumulator values should be distinct
@@ -205,6 +211,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(thirdStageAccum.value.toLong === numPartitions * 2 * 100)
     }
     rdd.count()
+    listener.maybeThrowException()
   }
 
   test("internal accumulators in fully resubmitted stages") {
@@ -268,6 +275,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
     }
     rdd.count()
+    listener.maybeThrowException()
   }
 
 }

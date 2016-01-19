@@ -20,14 +20,17 @@ package org.apache.spark
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
+import scala.util.control.NonFatal
 
 import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.scheduler._
+import org.apache.spark.serializer.JavaSerializer
 
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
+  import AccumulatorParam._
 
   implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
     new AccumulableParam[mutable.Set[A], A] {
@@ -160,6 +163,46 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(!Accumulators.originals.get(accId).isDefined)
   }
 
+  test("only external accums are automatically registered") {
+    val accEx = new Accumulator(0, IntAccumulatorParam, Some("external"), internal = false)
+    val accIn = new Accumulator(0, IntAccumulatorParam, Some("internal"), internal = true)
+    assert(!accEx.isInternal)
+    assert(accIn.isInternal)
+    assert(Accumulators.originals.contains(accEx.id))
+    assert(!Accumulators.originals.contains(accIn.id))
+  }
+
+  test("value is reset on the executors") {
+    val acc1 = new Accumulator(0, IntAccumulatorParam, Some("thing"), internal = false)
+    val acc2 = new Accumulator(0L, LongAccumulatorParam, Some("thing2"), internal = false)
+    val externalAccums = Seq(acc1, acc2)
+    val internalAccums = InternalAccumulator.create()
+    // Set some values; these should not be observed later on the "executors"
+    acc1.setValue(10)
+    acc2.setValue(20L)
+    internalAccums
+      .find(_.name == Some(InternalAccumulator.TEST_ACCUM))
+      .get.asInstanceOf[Accumulator[Long]]
+      .setValue(30L)
+    // Simulate the task being serialized and sent to the executors.
+    val dummyTask = new DummyTask(internalAccums, externalAccums)
+    val serInstance = new JavaSerializer(new SparkConf).newInstance()
+    val taskSer = Task.serializeWithDependencies(
+      dummyTask, mutable.HashMap(), mutable.HashMap(), serInstance)
+    // Now we're on the executors.
+    // Deserialize the task and assert that its accumulators are zero'ed out.
+    val (_, _, taskBytes) = Task.deserializeWithDependencies(taskSer)
+    val taskDeser = serInstance.deserialize[DummyTask](
+      taskBytes, Thread.currentThread.getContextClassLoader)
+    // TODO: no need to explicitly register the accums here once SPARK-12896 is resolved
+    val taskContext = new TaskContextImpl(
+      taskDeser.stageId, taskDeser.partitionId, 0, 0, null, null, taskDeser.internalAccums)
+    taskDeser.externalAccums.foreach(taskContext.registerAccumulator)
+    // Assert that executors see only zeros
+    taskDeser.externalAccums.foreach { a => assert(a.localValue == a.zero) }
+    taskDeser.internalAccums.foreach { a => assert(a.localValue == a.zero) }
+  }
+
 }
 
 private[spark] object AccumulatorSuite {
@@ -193,6 +236,7 @@ private class SaveInfoListener extends SparkListener {
   private val completedStageInfos: ArrayBuffer[StageInfo] = new ArrayBuffer[StageInfo]
   private val completedTaskInfos: ArrayBuffer[TaskInfo] = new ArrayBuffer[TaskInfo]
   private var jobCompletionCallback: (Int => Unit) = null // parameter is job ID
+  private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
   def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.toArray.toSeq
@@ -202,10 +246,20 @@ private class SaveInfoListener extends SparkListener {
     jobCompletionCallback = callback
   }
 
+  /** Throw a stored exception, if any. */
+  def maybeThrowException(): Unit = {
+    if (exception != null) { throw exception }
+  }
+
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     if (jobCompletionCallback != null) {
-      // TODO: exceptions thrown here do not actually fail the test!
-      jobCompletionCallback(jobEnd.jobId)
+      try {
+        jobCompletionCallback(jobEnd.jobId)
+      } catch {
+        // Store any exception thrown here so we can throw them later in the main thread.
+        // Otherwise, if `jobCompletionCallback` threw something it wouldn't fail the test.
+        case NonFatal(e) => exception = e
+      }
     }
   }
 
@@ -216,4 +270,15 @@ private class SaveInfoListener extends SparkListener {
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
     completedTaskInfos += taskEnd.taskInfo
   }
+}
+
+
+/**
+ * A dummy [[Task]] that contains internal and external [[Accumulator]]s.
+ */
+private[spark] class DummyTask(
+    val internalAccums: Seq[Accumulator[_]],
+    val externalAccums: Seq[Accumulator[_]])
+  extends Task[Int](0, 0, 0, internalAccums) {
+  override def runTask(c: TaskContext): Int = 1
 }
