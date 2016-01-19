@@ -140,24 +140,18 @@
             </goals>
             <configuration>
               <target>
-                <macrodef name="exists">
+                <macrodef name="shaded">
                   <attribute name="resource"/>
                   <sequential>
-                    <fail message="not found: @{resource}">
+                    <fail message="Not found ${shade}@{resource}">
                       <condition>
                         <not>
                           <resourceexists>
-                            <zipentry zipfile="${shuffle.jar}" name="@{resource}"/>
+                            <zipentry zipfile="${shuffle.jar}" name="${shade}@{resource}"/>
                           </resourceexists>
                         </not>
                       </condition>
                     </fail>
-                  </sequential>
-                </macrodef>
-                <macrodef name="shaded">
-                  <attribute name="resource"/>
-                  <sequential>
-                    <exists resource="${shade}@{resource}"/>
                   </sequential>
                 </macrodef>
                 <echo>Verifying dependency shading</echo>
@@ -166,7 +160,6 @@
                 <shaded resource="com/fasterxml/jackson/databind/JsonSerializer.class" />
                 <shaded resource="io/netty/channel/AbstractChannel.class" />
                 <shaded resource="javax/annotation/Nullable.class" />
-                <exists resource="org/fusesource/leveldbjni/JniDBFactory.class" />
               </target>
             </configuration>
           </execution>
