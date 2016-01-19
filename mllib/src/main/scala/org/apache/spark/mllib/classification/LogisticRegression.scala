@@ -387,7 +387,8 @@ class LogisticRegressionWithLBFGS
 
   /**
    * Run Logistic Regression with the configured parameters on an input RDD
-   * of LabeledPoint entries starting from the initial weights provided.
+   * of LabeledPoint entries.
+   *
    * If a known updater is used calls the ml implementation, to avoid
    * applying a regularization penalty to the intercept, otherwise
    * defaults to the mllib implementation. If more than two classes
@@ -401,6 +402,7 @@ class LogisticRegressionWithLBFGS
   /**
    * Run Logistic Regression with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
+   *
    * If a known updater is used calls the ml implementation, to avoid
    * applying a regularization penalty to the intercept, otherwise
    * defaults to the mllib implementation. If more than two classes
@@ -422,11 +424,6 @@ class LogisticRegressionWithLBFGS
         lr.setElasticNetParam(elasticNetParam)
         lr.setStandardization(useFeatureScaling)
         if (userSuppliedWeights) {
-          val initialWeightsWithIntercept = if (addIntercept) {
-            appendBias(initialWeights)
-          } else {
-            initialWeights
-          }
           val uid = Identifiable.randomUID("logreg-static")
           lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(
             uid, initialWeights, 1.0))

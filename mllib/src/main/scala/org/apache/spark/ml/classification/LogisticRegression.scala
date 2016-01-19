@@ -329,7 +329,6 @@ class LogisticRegression @Since("1.2.0") (
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
     }
 
-    val numFeaturesWithIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
     val initialCoefficientsWithIntercept =
       Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
 
@@ -365,8 +364,8 @@ class LogisticRegression @Since("1.2.0") (
         = math.log(histogram(1) / histogram(0))
     }
 
-      val states = optimizer.iterations(new CachedDiffFunction(costFun),
-        initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+    val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      initialCoefficientsWithIntercept.toBreeze.toDenseVector)
 
     val (coefficients, intercept, objectiveHistory) = {
       /*
