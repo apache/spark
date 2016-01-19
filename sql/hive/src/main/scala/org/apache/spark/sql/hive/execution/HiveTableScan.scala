@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.util.Utils
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -134,10 +136,14 @@ case class HiveTableScan(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val rdd = if (!relation.hiveQlTable.isPartitioned) {
-      hadoopReader.makeRDDForTable(relation.hiveQlTable)
+      Utils.withDummyCallSite(sqlContext.sparkContext) {
+        hadoopReader.makeRDDForTable(relation.hiveQlTable)
+      }
     } else {
-      hadoopReader.makeRDDForPartitionedTable(
-        prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+      Utils.withDummyCallSite(sqlContext.sparkContext) {
+        hadoopReader.makeRDDForPartitionedTable(
+          prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+      }
     }
     rdd.mapPartitionsInternal { iter =>
       val proj = UnsafeProjection.create(schema)
