@@ -17,16 +17,40 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerEvent}
+import org.apache.spark.util.ListenerBus
 
 /**
- * A SparkListener adapter for StreamingListener that will dispatch the Streaming events to
- * the underlying StreamingListener.
+ * Wrap StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark listener bus.
  */
-private[spark] class StreamingSparkListenerAdapter(listener: StreamingListener)
-  extends SparkListener {
+private[streaming] case class WrappedStreamingListenerEvent(
+    streamingListenerEvent: StreamingListenerEvent) extends SparkListenerEvent {
+
+  // TODO once SPARK-12140 is resolved this will be true as well
+  protected[spark] override def logEvent: Boolean = false
+}
+
+/**
+ * A Streaming listener bus to forward events in WrappedStreamingListenerEvent to StreamingListeners
+ */
+private[streaming] class StreamingListenerForwardingBus(sparkListenerBus: LiveListenerBus)
+  extends SparkListener with ListenerBus[StreamingListener, StreamingListenerEvent] {
+
+  sparkListenerBus.addListener(this)    // for getting callbacks on spark events
+
+  def post(event: StreamingListenerEvent) {
+    sparkListenerBus.post(new WrappedStreamingListenerEvent(event))
+  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
+    event match {
+      case WrappedStreamingListenerEvent(e) =>
+        postToAll(e)
+      case _ =>
+    }
+  }
+
+  override def onPostEvent(listener: StreamingListener, event: StreamingListenerEvent): Unit = {
     event match {
       case receiverStarted: StreamingListenerReceiverStarted =>
         listener.onReceiverStarted(receiverStarted)

@@ -43,7 +43,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiverSupervisor, ActorSupervisorStrategy, Receiver}
-import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener, StreamingSparkListenerAdapter}
+import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
@@ -535,7 +535,7 @@ class StreamingContext private[streaming] (
     * receiving system events related to streaming.
     */
   def addStreamingListener(streamingListener: StreamingListener) {
-    scheduler.listenerBus.addListener(new StreamingSparkListenerAdapter(streamingListener))
+    scheduler.listenerBus.addListener(streamingListener)
   }
 
   private def validate() {

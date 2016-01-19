@@ -28,10 +28,7 @@ import org.apache.spark.util.Distribution
  * Base trait for events related to StreamingListener
  */
 @DeveloperApi
-sealed trait StreamingListenerEvent extends SparkListenerEvent {
-  // TODO once SPARK-12140 is resolved this will be true as well
-  protected[spark] override def logEvent: Boolean = false
-}
+sealed trait StreamingListenerEvent
 
 @DeveloperApi
 case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
