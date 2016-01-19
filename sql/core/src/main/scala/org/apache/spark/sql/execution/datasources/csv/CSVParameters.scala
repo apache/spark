@@ -46,7 +46,7 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
-  
+
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
