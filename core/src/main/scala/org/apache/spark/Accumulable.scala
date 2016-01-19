@@ -68,9 +68,9 @@ class Accumulable[R, T] private[spark] (
   @volatile private var value_ : R = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
 
-  // TODO: after SPARK-12896, this will be set in `readObject`.
+  // TODO: currently, this is not set. After SPARK-12896, this will be set in `readObject`.
   // For more detail, read the comment there.
-  private val deserialized = false
+  private var deserialized = false
 
   // In many places we create internal accumulators without access to the active context cleaner,
   // so if we register them here then we may never unregister these accumulators. To avoid memory
