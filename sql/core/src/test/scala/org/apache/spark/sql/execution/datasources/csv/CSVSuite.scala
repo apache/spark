@@ -124,7 +124,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(exception.getMessage.contains("1-9588-osi"))
   }
 
-  ignore("test different encoding") {
+  test("test different encoding") {
     // scalastyle:off
     sqlContext.sql(
       s"""
@@ -135,6 +135,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     //scalstyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
+  }
+
+  test("test aliases sep and encoding for delimiter and charset") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("header", "true")
+      .option("encoding", "iso-8859-1")
+      .option("sep", "þ")
+      .load(testFile(carsFile8859))
+
+    verifyCars(cars, withHeader = true)
   }
 
   test("DDL test with tab separated file") {
