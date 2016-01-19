@@ -331,10 +331,11 @@ private[spark] object JsonProtocol {
     ("Total Records Read" -> shuffleReadMetrics.recordsRead)
   }
 
+  // TODO: Drop the redundant "Shuffle" since it's inconsistent with related classes.
   def shuffleWriteMetricsToJson(shuffleWriteMetrics: ShuffleWriteMetrics): JValue = {
-    ("Shuffle Bytes Written" -> shuffleWriteMetrics.shuffleBytesWritten) ~
-    ("Shuffle Write Time" -> shuffleWriteMetrics.shuffleWriteTime) ~
-    ("Shuffle Records Written" -> shuffleWriteMetrics.shuffleRecordsWritten)
+    ("Shuffle Bytes Written" -> shuffleWriteMetrics.bytesWritten) ~
+    ("Shuffle Write Time" -> shuffleWriteMetrics.writeTime) ~
+    ("Shuffle Records Written" -> shuffleWriteMetrics.recordsWritten)
   }
 
   def inputMetricsToJson(inputMetrics: InputMetrics): JValue = {
@@ -752,9 +753,9 @@ private[spark] object JsonProtocol {
 
   def shuffleWriteMetricsFromJson(json: JValue): ShuffleWriteMetrics = {
     val metrics = new ShuffleWriteMetrics
-    metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
-    metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
-    metrics.setShuffleRecordsWritten((json \ "Shuffle Records Written")
+    metrics.incBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
+    metrics.incWriteTime((json \ "Shuffle Write Time").extract[Long])
+    metrics.setRecordsWritten((json \ "Shuffle Records Written")
       .extractOpt[Long].getOrElse(0))
     metrics
   }
