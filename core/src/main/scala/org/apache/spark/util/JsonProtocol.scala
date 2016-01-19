@@ -324,7 +324,6 @@ private[spark] object JsonProtocol {
         ("Block ID" -> id.toString) ~
         ("Status" -> blockStatusToJson(status))
       })
-    ("Host Name" -> taskMetrics.hostname) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Result Size" -> taskMetrics.resultSize) ~
@@ -702,7 +701,6 @@ private[spark] object JsonProtocol {
       return TaskMetrics.empty
     }
     val metrics = new TaskMetrics
-    metrics.setHostname((json \ "Host Name").extract[String])
     metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setResultSize((json \ "Result Size").extract[Long])
@@ -745,7 +743,7 @@ private[spark] object JsonProtocol {
     Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
       val readMethod = DataReadMethod.withName((inJson \ "Data Read Method").extract[String])
       val inputMetrics = metrics.registerInputMetrics(readMethod)
-      inputMetrics.incBytesRead((inJson \ "Bytes Read").extract[Long])
+      inputMetrics.setBytesRead((inJson \ "Bytes Read").extract[Long])
       inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
     }
 

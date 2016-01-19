@@ -426,7 +426,6 @@ private[spark] class Executor(
       if (taskRunner.task != null) {
         taskRunner.task.metrics.foreach { metrics =>
           metrics.mergeShuffleReadMetrics()
-          metrics.updateInputMetrics()
           metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
           metrics.updateAccumulators()
 

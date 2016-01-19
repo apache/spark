@@ -139,11 +139,15 @@ class Accumulable[R, T] private[spark] (
   }
 
   /**
-   * Set the accumulator's value; only allowed on master
+   * Set the accumulator's value. For internal use only.
    */
-  def setValue(newValue: R) {
-    this.value = newValue
-  }
+  private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
+
+  /**
+   * Set the accumulator's value.
+   * This is used to reconstruct [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
+   */
+  private[spark] def setValueAny(newValue: Any): Unit = { setValue(newValue.asInstanceOf[R]) }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {

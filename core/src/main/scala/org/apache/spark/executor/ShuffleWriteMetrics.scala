@@ -17,37 +17,64 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.{Accumulator, InternalAccumulator}
 import org.apache.spark.annotation.DeveloperApi
 
 
 /**
  * :: DeveloperApi ::
- * Metrics pertaining to shuffle data written in a given task.
+ * A collection of accumulators that represent metrics about writing shuffle data.
  */
 @DeveloperApi
-class ShuffleWriteMetrics extends Serializable {
-  /**
-   * Number of bytes written for the shuffle by this task
-   */
-  @volatile private var _shuffleBytesWritten: Long = _
-  def shuffleBytesWritten: Long = _shuffleBytesWritten
-  private[spark] def incShuffleBytesWritten(value: Long) = _shuffleBytesWritten += value
-  private[spark] def decShuffleBytesWritten(value: Long) = _shuffleBytesWritten -= value
+class ShuffleWriteMetrics private (
+    _bytesWritten: Accumulator[Long],
+    _recordsWritten: Accumulator[Long],
+    _writeTime: Accumulator[Long])
+  extends Serializable {
+
+  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
+    this(
+      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.BYTES_WRITTEN),
+      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.RECORDS_WRITTEN),
+      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.WRITE_TIME))
+  }
 
   /**
-   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
+   * Create a new [[ShuffleWriteMetrics]] that is not associated with any particular task.
+   *
+   * This mainly exists for legacy reasons, because we use dummy [[ShuffleWriteMetrics]] in
+   * many places only to merge their values together later. In the future, we should revisit
+   * whether this is needed.
+   *
+   * A better alternative is [[TaskMetrics.registerShuffleWriteMetrics]].
    */
-  @volatile private var _shuffleWriteTime: Long = _
-  def shuffleWriteTime: Long = _shuffleWriteTime
-  private[spark] def incShuffleWriteTime(value: Long) = _shuffleWriteTime += value
-  private[spark] def decShuffleWriteTime(value: Long) = _shuffleWriteTime -= value
+  private[spark] def this() {
+    this(InternalAccumulator.createShuffleWriteAccums().map { a => (a.name.get, a) }.toMap)
+  }
 
   /**
-   * Total number of records written to the shuffle by this task
+   * Number of bytes written for the shuffle by this task.
    */
-  @volatile private var _shuffleRecordsWritten: Long = _
-  def shuffleRecordsWritten: Long = _shuffleRecordsWritten
-  private[spark] def incShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten += value
-  private[spark] def decShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten -= value
-  private[spark] def setShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten = value
+  def shuffleBytesWritten: Long = _bytesWritten.localValue
+
+  /**
+   * Total number of records written to the shuffle by this task.
+   */
+  def shuffleRecordsWritten: Long = _recordsWritten.localValue
+
+  /**
+   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
+   */
+  def shuffleWriteTime: Long = _writeTime.localValue
+
+  private[spark] def incShuffleBytesWritten(v: Long): Unit = _bytesWritten.add(v)
+  private[spark] def incShuffleRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
+  private[spark] def incShuffleWriteTime(v: Long): Unit = _writeTime.add(v)
+  private[spark] def decShuffleBytesWritten(v: Long): Unit = {
+    _bytesWritten.setValue(shuffleBytesWritten - v)
+  }
+  private[spark] def decShuffleRecordsWritten(v: Long): Unit = {
+    _recordsWritten.setValue(shuffleRecordsWritten - v)
+  }
+
 }
