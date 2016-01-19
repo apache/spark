@@ -1009,7 +1009,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
     -inf
-    >>> round(splits[1], 1)
+    >>> print("%2.1f" % round(splits[1], 1))
     0.4
     >>> bucketed = bucketizer.transform(df).head()
     >>> bucketed.buckets
