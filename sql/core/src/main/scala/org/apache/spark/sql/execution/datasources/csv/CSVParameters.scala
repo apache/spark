@@ -136,6 +136,6 @@ private[csv] object CSVCompressionCodecs {
       case e: ClassNotFoundException => None
     }
     codecClassName.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] " +
-      s"is not available. Available codecs: ${shortCompressionCodecNames.keys.mkString(", ")}"))
+      s"is not available. Available codecs are ${shortCompressionCodecNames.keys.mkString(", ")}."))
   }
 }
