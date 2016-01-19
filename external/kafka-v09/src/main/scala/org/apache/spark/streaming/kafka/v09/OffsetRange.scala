@@ -42,6 +42,7 @@ trait HasOffsetRanges {
  * @param partition Kafka partition id
  * @param fromOffset Inclusive starting offset
  * @param untilOffset Exclusive ending offset
+ * @param leaderHost preferred kafka host, i.e. the leader at the time the rdd was created
  */
 final class OffsetRange private(
     val topic: String,
