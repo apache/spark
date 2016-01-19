@@ -306,3 +306,5 @@ JavaDStream<String> lines = AkkaUtils.<String>createStream(Props.create(CustomAc
 See [JavaActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/JavaActorWordCount.scala) for an end-to-end example.
 </div>
 </div>
+
+<span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala libraries, AkkaUtils is not available in the Python API.
