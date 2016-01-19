@@ -26,8 +26,9 @@ import scala.reflect.ClassTag
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
+import com.typesafe.config.ConfigFactory
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.receiver.Receiver
@@ -37,12 +38,21 @@ import org.apache.spark.streaming.receiver.Receiver
  * A helper with set of defaults for supervisor strategy
  */
 @DeveloperApi
-object ActorSupervisorStrategy {
+object ActorReceiver {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
     15 millis) {
     case _: RuntimeException => Restart
     case _: Exception => Escalate
+  }
+
+  def defaultActorSystemCreator(): ActorSystem = {
+    val uniqueSystemName = s"streaming-actor-system-${TaskContext.get().taskAttemptId()}"
+    val akkaConf = ConfigFactory.parseString(
+      s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+         |akka.remote.enabled-transports = ["akka.remote.netty.tcp"]
+         |""".stripMargin)
+    ActorSystem(uniqueSystemName, akkaConf)
   }
 }
 
@@ -59,7 +69,7 @@ object ActorSupervisorStrategy {
  *      }
  *  }
  *
- *  AkkaUtils.createStream[String](Props[MyActor](),"MyActorReceiver")
+ *  AkkaUtils.createStream[String](ssc, Props[MyActor](),"MyActorReceiver")
  *
  * }}}
  *
@@ -109,7 +119,7 @@ abstract class ActorReceiver extends Actor {
  *      }
  *  }
  *
- *  AkkaUtils.<String>createStream(Props.create(MyActor.class), "MyActorReceiver");
+ *  AkkaUtils.<String>createStream(jssc, Props.create(MyActor.class), "MyActorReceiver");
  *
  * }}}
  *

@@ -39,12 +39,19 @@ public class JavaZeroMQStreamSuite extends LocalJavaStreamingContext {
     Function0<ActorSystem> actorSystemCreator = new ActorSystemCreatorForTest();
 
     JavaReceiverInputDStream<String> test1 = ZeroMQUtils.<String>createStream(
-      ssc, actorSystemCreator, publishUrl, subscribe, bytesToObjects);
+      ssc, publishUrl, subscribe, bytesToObjects, actorSystemCreator);
     JavaReceiverInputDStream<String> test2 = ZeroMQUtils.<String>createStream(
-      ssc, actorSystemCreator, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2());
+      ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(), actorSystemCreator);
     JavaReceiverInputDStream<String> test3 = ZeroMQUtils.<String>createStream(
-      ssc, actorSystemCreator, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(),
+      ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(), actorSystemCreator,
       SupervisorStrategy.defaultStrategy());
+    JavaReceiverInputDStream<String> test4 = ZeroMQUtils.<String>createStream(
+        ssc, publishUrl, subscribe, bytesToObjects);
+    JavaReceiverInputDStream<String> test5 = ZeroMQUtils.<String>createStream(
+        ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaReceiverInputDStream<String> test6 = ZeroMQUtils.<String>createStream(
+        ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(),
+        SupervisorStrategy.defaultStrategy());
   }
 }
 

@@ -18,20 +18,14 @@
 package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 import scala.Tuple2;
 
 import akka.actor.ActorSelection;
-import akka.actor.ActorSystem;
 import akka.actor.Props;
-import com.typesafe.config.ConfigFactory;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.Function0;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.streaming.Duration;
@@ -120,7 +114,6 @@ public class JavaActorWordCount {
      */
     JavaDStream<String> lines = AkkaUtils.createStream(
         jssc,
-        new WordcountActorSystemCreator(),
         Props.create(JavaSampleActorReceiver.class, feederActorURI),
         "SampleReceiver");
 
@@ -144,17 +137,5 @@ public class JavaActorWordCount {
 
     jssc.start();
     jssc.awaitTermination();
-  }
-}
-
-class WordcountActorSystemCreator implements Function0<ActorSystem> {
-
-  @Override
-  public ActorSystem call() {
-    String uniqueSystemName = "actor-wordcount-" + TaskContext.get().taskAttemptId();
-    Map<String, Object> akkaConf = new HashMap<String, Object>();
-    akkaConf.put("akka.actor.provider", "akka.remote.RemoteActorRefProvider");
-    akkaConf.put("akka.remote.enabled-transports", Arrays.asList("akka.remote.netty.tcp"));
-    return ActorSystem.create(uniqueSystemName, ConfigFactory.parseMap(akkaConf));
   }
 }

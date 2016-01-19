@@ -25,7 +25,7 @@ import scala.util.Random
 import akka.actor._
 import com.typesafe.config.ConfigFactory
 
-import org.apache.spark.{SparkConf, TaskContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.akka.{ActorReceiver, AkkaUtils}
 
@@ -78,7 +78,7 @@ class FeederActor extends Actor {
  *
  * @see [[org.apache.spark.examples.streaming.FeederActor]]
  */
-class SampleActorReceiver[T: ClassTag](urlOfPublisher: String) extends ActorReceiver {
+class SampleActorReceiver[T](urlOfPublisher: String) extends ActorReceiver {
 
   lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
@@ -160,18 +160,8 @@ object ActorWordCount {
      * For example: Both AkkaUtils.createStream and SampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
-    def actorSystemCreator(): ActorSystem = {
-      val uniqueSystemName = s"actor-wordcount-${TaskContext.get().taskAttemptId()}"
-      val akkaConf = ConfigFactory.parseString(
-        s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
-           |akka.remote.enabled-transports = ["akka.remote.netty.tcp"]
-           |""".stripMargin)
-      ActorSystem(uniqueSystemName, akkaConf)
-    }
-
     val lines = AkkaUtils.createStream[String](
       ssc,
-      actorSystemCreator _,
       Props(classOf[SampleActorReceiver[String]],
         "akka.tcp://test@%s:%s/user/FeederActor".format(host, port.toInt)),
       "SampleReceiver")

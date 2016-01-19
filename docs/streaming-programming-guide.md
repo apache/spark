@@ -659,7 +659,7 @@ methods for creating DStreams from files and Akka actors as input sources.
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
 - **Streams based on Custom Actors:** DStreams can be created with data streams received through Akka
-  actors by using `AkkaUtils.createStream(actorProps, actor-name)`. See the [Custom Receiver
+  actors by using `AkkaUtils.createStream(ssc, actorProps, actor-name)`. See the [Custom Receiver
   Guide](streaming-custom-receivers.html) for more details.
 
   <span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala
