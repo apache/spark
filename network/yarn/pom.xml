@@ -128,7 +128,7 @@
                         <not>
                           <resourceexists>
                             <zipentry zipfile="${shuffle.jar}"
-                              name="/@{resource}"/>
+                              name="@{resource}"/>
                           </resourceexists>
                         </not>
                       </condition>
@@ -138,15 +138,7 @@
                 <macrodef name="shaded">
                   <attribute name="resource"/>
                   <sequential>
-                    <fail message="Not found ${shade}@{resource}">
-                      <condition>
-                        <not>
-                          <resourceexists>
-                            <zipentry zipfile="${shuffle.jar}" name="${shade}@{resource}"/>
-                          </resourceexists>
-                        </not>
-                      </condition>
-                    </fail>
+                    <exists resource="${shade}@{resource}"/>
                   </sequential>
                 </macrodef>
                 <shaded resource="com/fasterxml/jackson/core/JsonParser.class" />
