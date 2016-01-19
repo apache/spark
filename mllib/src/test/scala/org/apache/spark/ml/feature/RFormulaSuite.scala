@@ -143,6 +143,44 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(attrs === expectedAttrs)
   }
 
+  test("vector attribute generation") {
+    val formula = new RFormula().setFormula("id ~ vec")
+    val original = sqlContext.createDataFrame(
+      Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
+    ).toDF("id", "vec")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array[Attribute](
+        new NumericAttribute(Some("vec_0"), Some(1)),
+        new NumericAttribute(Some("vec_1"), Some(2))))
+    assert(attrs === expectedAttrs)
+  }
+
+  test("vector attribute generation with unnamed input attrs") {
+    val formula = new RFormula().setFormula("id ~ vec2")
+    val base = sqlContext.createDataFrame(
+      Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
+    ).toDF("id", "vec")
+    val metadata = new AttributeGroup(
+      "vec2",
+      Array[Attribute](
+        NumericAttribute.defaultAttr,
+        NumericAttribute.defaultAttr)).toMetadata
+    val original = base.select(base.col("id"), base.col("vec").as("vec2", metadata))
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array[Attribute](
+        new NumericAttribute(Some("vec2_0"), Some(1)),
+        new NumericAttribute(Some("vec2_1"), Some(2))))
+    assert(attrs === expectedAttrs)
+  }
+
   test("numeric interaction") {
     val formula = new RFormula().setFormula("a ~ b:c:d")
     val original = sqlContext.createDataFrame(

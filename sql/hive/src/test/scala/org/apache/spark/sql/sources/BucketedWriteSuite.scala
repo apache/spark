@@ -65,39 +65,55 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
+  /**
+   * A helper method to check the bucket write functionality in low level, i.e. check the written
+   * bucket files to see if the data are correct.  User should pass in a data dir that these bucket
+   * files are written to, and the format of data(parquet, json, etc.), and the bucketing
+   * information.
+   */
   private def testBucketing(
       dataDir: File,
       source: String,
+      numBuckets: Int,
       bucketCols: Seq[String],
       sortCols: Seq[String] = Nil): Unit = {
     val allBucketFiles = dataDir.listFiles().filterNot(f =>
       f.getName.startsWith(".") || f.getName.startsWith("_")
     )
-    val groupedBucketFiles = allBucketFiles.groupBy(f => BucketingUtils.getBucketId(f.getName).get)
-    assert(groupedBucketFiles.size <= 8)
 
-    for ((bucketId, bucketFiles) <- groupedBucketFiles) {
-      for (bucketFilePath <- bucketFiles.map(_.getAbsolutePath)) {
-        val types = df.select((bucketCols ++ sortCols).map(col): _*).schema.map(_.dataType)
-        val columns = (bucketCols ++ sortCols).zip(types).map {
-          case (colName, dt) => col(colName).cast(dt)
-        }
-        val readBack = sqlContext.read.format(source).load(bucketFilePath).select(columns: _*)
+    for (bucketFile <- allBucketFiles) {
+      val bucketId = BucketingUtils.getBucketId(bucketFile.getName).get
+      assert(bucketId >= 0 && bucketId < numBuckets)
 
-        if (sortCols.nonEmpty) {
-          checkAnswer(readBack.sort(sortCols.map(col): _*), readBack.collect())
-        }
+      // We may loss the type information after write(e.g. json format doesn't keep schema
+      // information), here we get the types from the original dataframe.
+      val types = df.select((bucketCols ++ sortCols).map(col): _*).schema.map(_.dataType)
+      val columns = (bucketCols ++ sortCols).zip(types).map {
+        case (colName, dt) => col(colName).cast(dt)
+      }
 
-        val qe = readBack.select(bucketCols.map(col): _*).queryExecution
-        val rows = qe.toRdd.map(_.copy()).collect()
-        val getBucketId = UnsafeProjection.create(
-          HashPartitioning(qe.analyzed.output, 8).partitionIdExpression :: Nil,
-          qe.analyzed.output)
+      // Read the bucket file into a dataframe, so that it's easier to test.
+      val readBack = sqlContext.read.format(source)
+        .load(bucketFile.getAbsolutePath)
+        .select(columns: _*)
 
-        for (row <- rows) {
-          val actualBucketId = getBucketId(row).getInt(0)
-          assert(actualBucketId == bucketId)
-        }
+      // If we specified sort columns while writing bucket table, make sure the data in this
+      // bucket file is already sorted.
+      if (sortCols.nonEmpty) {
+        checkAnswer(readBack.sort(sortCols.map(col): _*), readBack.collect())
+      }
+
+      // Go through all rows in this bucket file, calculate bucket id according to bucket column
+      // values, and make sure it equals to the expected bucket id that inferred from file name.
+      val qe = readBack.select(bucketCols.map(col): _*).queryExecution
+      val rows = qe.toRdd.map(_.copy()).collect()
+      val getBucketId = UnsafeProjection.create(
+        HashPartitioning(qe.analyzed.output, numBuckets).partitionIdExpression :: Nil,
+        qe.analyzed.output)
+
+      for (row <- rows) {
+        val actualBucketId = getBucketId(row).getInt(0)
+        assert(actualBucketId == bucketId)
       }
     }
   }
@@ -113,7 +129,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
         for (i <- 0 until 5) {
-          testBucketing(new File(tableDir, s"i=$i"), source, Seq("j", "k"))
+          testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j", "k"))
         }
       }
     }
@@ -131,7 +147,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
         for (i <- 0 until 5) {
-          testBucketing(new File(tableDir, s"i=$i"), source, Seq("j"), Seq("k"))
+          testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j"), Seq("k"))
         }
       }
     }
@@ -146,7 +162,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           .saveAsTable("bucketed_table")
 
         val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
-        testBucketing(tableDir, source, Seq("i", "j"))
+        testBucketing(tableDir, source, 8, Seq("i", "j"))
       }
     }
   }
@@ -161,7 +177,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           .saveAsTable("bucketed_table")
 
         val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
-        testBucketing(tableDir, source, Seq("i", "j"), Seq("k"))
+        testBucketing(tableDir, source, 8, Seq("i", "j"), Seq("k"))
       }
     }
   }

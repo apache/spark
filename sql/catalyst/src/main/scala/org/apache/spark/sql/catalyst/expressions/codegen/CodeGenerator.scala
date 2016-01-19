@@ -56,6 +56,12 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
+    * Holding a list of generated columns as input of current operator, will be used by
+    * BoundReference to generate code.
+    */
+  var currentVars: Seq[ExprCode] = null
+
+  /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
    * 3-tuple: java type, variable name, code to init it.
    * As an example, ("int", "count", "count = 0;") will produce code:
@@ -75,6 +81,16 @@ class CodegenContext {
 
   def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
     mutableStates += ((javaType, variableName, initCode))
+  }
+
+  def declareMutableStates(): String = {
+    mutableStates.map { case (javaType, variableName, _) =>
+      s"private $javaType $variableName;"
+    }.mkString("\n")
+  }
+
+  def initMutableStates(): String = {
+    mutableStates.map(_._3).mkString("\n")
   }
 
   /**
@@ -111,6 +127,10 @@ class CodegenContext {
   // The collection of sub-exression result resetting methods that need to be called on each row.
   val subExprResetVariables = mutable.ArrayBuffer.empty[String]
 
+  def declareAddedFunctions(): String = {
+    addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+  }
+
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -120,7 +140,7 @@ class CodegenContext {
   final val JAVA_DOUBLE = "double"
 
   /** The variable name of the input row in generated code. */
-  final val INPUT_ROW = "i"
+  final var INPUT_ROW = "i"
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -476,20 +496,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
-  protected def declareMutableStates(ctx: CodegenContext): String = {
-    ctx.mutableStates.map { case (javaType, variableName, _) =>
-      s"private $javaType $variableName;"
-    }.mkString("\n")
-  }
-
-  protected def initMutableStates(ctx: CodegenContext): String = {
-    ctx.mutableStates.map(_._3).mkString("\n")
-  }
-
-  protected def declareAddedFunctions(ctx: CodegenContext): String = {
-    ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n").trim
-  }
-
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.
@@ -505,16 +511,33 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   /** Binds an input expression to a given input schema */
   protected def bind(in: InType, inputSchema: Seq[Attribute]): InType
 
+  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
+  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
+    generate(bind(expressions, inputSchema))
+
+  /** Generates the requested evaluator given already bound expression(s). */
+  def generate(expressions: InType): OutType = create(canonicalize(expressions))
+
   /**
-   * Compile the Java source code into a Java class, using Janino.
+   * Create a new codegen context for expression evaluator, used to store those
+   * expressions that don't support codegen
    */
-  protected def compile(code: String): GeneratedClass = {
+  def newCodeGenContext(): CodegenContext = {
+    new CodegenContext
+  }
+}
+
+object CodeGenerator extends Logging {
+  /**
+    * Compile the Java source code into a Java class, using Janino.
+    */
+  def compile(code: String): GeneratedClass = {
     cache.get(code)
   }
 
   /**
-   * Compile the Java source code into a Java class, using Janino.
-   */
+    * Compile the Java source code into a Java class, using Janino.
+    */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
@@ -577,19 +600,4 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           result
         }
       })
-
-  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
-  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
-    generate(bind(expressions, inputSchema))
-
-  /** Generates the requested evaluator given already bound expression(s). */
-  def generate(expressions: InType): OutType = create(canonicalize(expressions))
-
-  /**
-   * Create a new codegen context for expression evaluator, used to store those
-   * expressions that don't support codegen
-   */
-  def newCodeGenContext(): CodegenContext = {
-    new CodegenContext
-  }
 }
