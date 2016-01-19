@@ -36,7 +36,7 @@
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
     <hadoop.deps.scope>provided</hadoop.deps.scope>
     <shuffle.jar>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
-    <shaded.jackson>org/spark-project/com/fasterxml/jackson</shaded.jackson>
+    <shade>org/spark-project/</shade>
   </properties>
 
   <dependencies>
@@ -108,6 +108,7 @@
         </executions>
       </plugin>
 
+      <!-- probes to validate that those dependencies which must be shaded are  -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
@@ -119,37 +120,39 @@
             </goals>
             <configuration>
               <target>
-                <fail message="Not found: ${shaded.jackson}/core/JsonParser.class">
-                  <condition>
-                    <not>
-                      <resourceexists>
-                        <zipentry zipfile="${shuffle.jar}"
-                          name="${shaded.jackson}/core/JsonParser.class"/>
-                      </resourceexists>
-                    </not>
-                  </condition>
-                </fail>
-                <fail message="Not found: ${shaded.jackson}/annotation/JacksonAnnotation.class">
-                  <condition>
-                    <not>
-                      <resourceexists>
-                        <zipentry zipfile="${shuffle.jar}"
-                          name="${shaded.jackson}/annotation/JacksonAnnotation.class"/>
-                      </resourceexists>
-                    </not>
-                  </condition>
-                </fail>
-                <fail message="Not found: ${shaded.jackson}/databind/JsonSerializer.class">
-                  <condition>
-                    <not>
-                      <resourceexists>
-                        <zipentry zipfile="${shuffle.jar}"
-                          name="${shaded.jackson}/databind/JsonSerializer.class"/>
-                      </resourceexists>
-                    </not>
-                  </condition>
-                </fail>
-                <echo>Verified shading of Jackson ${fasterxml.jackson.version}</echo>
+                <macrodef name="exists">
+                  <attribute name="resource"/>
+                  <sequential>
+                    <fail message="/@{resource}">
+                      <condition>
+                        <not>
+                          <resourceexists>
+                            <zipentry zipfile="${shuffle.jar}"
+                              name="/@{resource}"/>
+                          </resourceexists>
+                        </not>
+                      </condition>
+                    </fail>
+                  </sequential>
+                </macrodef>
+                <macrodef name="shaded">
+                  <attribute name="resource"/>
+                  <sequential>
+                    <fail message="Not found ${shade}@{resource}">
+                      <condition>
+                        <not>
+                          <resourceexists>
+                            <zipentry zipfile="${shuffle.jar}" name="${shade}@{resource}"/>
+                          </resourceexists>
+                        </not>
+                      </condition>
+                    </fail>
+                  </sequential>
+                </macrodef>
+                <shaded resource="com/fasterxml/jackson/core/JsonParser.class" />
+                <shaded resource="com/fasterxml/jackson/annotation/JacksonAnnotation.class" />
+                <shaded resource="com/fasterxml/jackson/databind/JsonSerializer.class" />
+                <echo>Verified dependency shading</echo>
               </target>
             </configuration>
           </execution>
@@ -157,4 +160,13 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>leveldb-provided</id>
+      <dependencies>
+
+      </dependencies>
+    </profile>
+  </profiles>
 </project>
