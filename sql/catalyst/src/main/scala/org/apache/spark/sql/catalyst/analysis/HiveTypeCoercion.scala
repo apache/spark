@@ -277,7 +277,7 @@ object HiveTypeCoercion {
         case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
         case (e, _) => e
       }
-      if (casted.exists(_.isInstanceOf[Alias])) Project(casted, plan) else plan
+      Project(casted, plan)
     }
   }
 

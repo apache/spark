@@ -465,7 +465,7 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     assert(unionRelation.children.head.isInstanceOf[Project])
     assert(unionRelation.children(1).isInstanceOf[Project])
-    assert(unionRelation.children(2).isInstanceOf[LocalRelation])
+    assert(unionRelation.children(2).isInstanceOf[Project])
     assert(unionRelation.children(3).isInstanceOf[Project])
   }
 
