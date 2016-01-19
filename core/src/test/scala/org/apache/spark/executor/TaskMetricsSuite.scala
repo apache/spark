@@ -22,7 +22,7 @@ import org.apache.spark.SparkFunSuite
 class TaskMetricsSuite extends SparkFunSuite {
   test("[SPARK-5701] updateShuffleReadMetrics: ShuffleReadMetrics not added when no shuffle deps") {
     val taskMetrics = new TaskMetrics()
-    taskMetrics.updateShuffleReadMetrics()
+    taskMetrics.mergeShuffleReadMetrics()
     assert(taskMetrics.shuffleReadMetrics.isEmpty)
   }
 }

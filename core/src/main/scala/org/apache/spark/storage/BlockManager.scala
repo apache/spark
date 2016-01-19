@@ -800,10 +800,8 @@ private[spark] class BlockManager(
           if (tellMaster) {
             reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
           }
-          Option(TaskContext.get()).foreach { taskContext =>
-            val metrics = taskContext.taskMetrics()
-            val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
-            metrics.updatedBlocks = Some(lastUpdatedBlocks ++ Seq((blockId, putBlockStatus)))
+          Option(TaskContext.get()).foreach { c =>
+            c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
           }
         }
       } finally {
@@ -1046,10 +1044,8 @@ private[spark] class BlockManager(
           blockInfo.remove(blockId)
         }
         if (blockIsUpdated) {
-          Option(TaskContext.get()).foreach { taskContext =>
-            val metrics = taskContext.taskMetrics()
-            val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
-            metrics.updatedBlocks = Some(lastUpdatedBlocks ++ Seq((blockId, status)))
+          Option(TaskContext.get()).foreach { c =>
+            c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
           }
         }
       }
