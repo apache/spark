@@ -35,19 +35,19 @@ LIB_DIR="$FWDIR/lib"
 mkdir -p $LIB_DIR
 
 pushd $FWDIR > /dev/null
-if [ ! -z "$1" ]
+if [ ! -z "$R_HOME" ]
   then
-    R_HOME="$1/bin"
+    R_SCRIPT_PATH="$R_HOME/bin"
    else
-    R_HOME="$(dirname $(which R))"
+    R_SCRIPT_PATH="$(dirname $(which R))"
 fi
 echo "USING R_HOME = $R_HOME"
 
 # Generate Rd files if devtools is installed
-"$R_HOME/"Rscript -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'
+"$R_SCRIPT_PATH/"Rscript -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'
 
 # Install SparkR to $LIB_DIR
-"$R_HOME/"R CMD INSTALL --library=$LIB_DIR $FWDIR/pkg/
+"$R_SCRIPT_PATH/"R CMD INSTALL --library=$LIB_DIR $FWDIR/pkg/
 
 # Zip the SparkR package so that it can be distributed to worker nodes on YARN
 cd $LIB_DIR
