@@ -55,6 +55,12 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>org.fusesource.leveldbjni</groupId>
+          <artifactId>leveldbjni-all</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -96,6 +102,20 @@
                 <include>com.fasterxml.jackson.**</include>
               </includes>
             </relocation>
+            <relocation>
+              <pattern>io.netty</pattern>
+              <shadedPattern>org.spark-project.io.netty</shadedPattern>
+              <includes>
+                <include>io.netty.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>javax.annotation</pattern>
+              <shadedPattern>org.spark-project.javax.annotation</shadedPattern>
+              <includes>
+                <include>javax.annotation.**</include>
+              </includes>
+            </relocation>
           </relocations>
         </configuration>
         <executions>
@@ -123,12 +143,11 @@
                 <macrodef name="exists">
                   <attribute name="resource"/>
                   <sequential>
-                    <fail message="/@{resource}">
+                    <fail message="not found: @{resource}">
                       <condition>
                         <not>
                           <resourceexists>
-                            <zipentry zipfile="${shuffle.jar}"
-                              name="@{resource}"/>
+                            <zipentry zipfile="${shuffle.jar}" name="@{resource}"/>
                           </resourceexists>
                         </not>
                       </condition>
@@ -141,10 +160,13 @@
                     <exists resource="${shade}@{resource}"/>
                   </sequential>
                 </macrodef>
+                <echo>Verifying dependency shading</echo>
                 <shaded resource="com/fasterxml/jackson/core/JsonParser.class" />
                 <shaded resource="com/fasterxml/jackson/annotation/JacksonAnnotation.class" />
                 <shaded resource="com/fasterxml/jackson/databind/JsonSerializer.class" />
-                <echo>Verified dependency shading</echo>
+                <shaded resource="io/netty/channel/AbstractChannel.class" />
+                <shaded resource="javax/annotation/Nullable.class" />
+                <exists resource="org/fusesource/leveldbjni/JniDBFactory.class" />
               </target>
             </configuration>
           </execution>
@@ -157,7 +179,17 @@
     <profile>
       <id>leveldb-provided</id>
       <dependencies>
-
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-network-shuffle_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.fusesource.leveldbjni</groupId>
+              <artifactId>leveldbjni-all</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>
