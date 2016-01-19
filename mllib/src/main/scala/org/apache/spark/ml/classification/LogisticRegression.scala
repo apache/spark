@@ -357,18 +357,18 @@ class LogisticRegression @Since("1.2.0") (
             initialCoefficientsWithInterceptArray(numFeatures) == optInitialModel.get.intercept
           }
         } else if ($(fitIntercept)) {
-          /*
-             For binary logistic regression, when we initialize the coefficients as zeros,
-             it will converge faster if we initialize the intercept such that
-             it follows the distribution of the labels.
+          /**
+           * For binary logistic regression, when we initialize the coefficients as zeros,
+           * it will converge faster if we initialize the intercept such that
+           * it follows the distribution of the labels.
 
-             {{{
-             P(0) = 1 / (1 + \exp(b)), and
-             P(1) = \exp(b) / (1 + \exp(b))
-             }}}, hence
-             {{{
-             b = \log{P(1) / P(0)} = \log{count_1 / count_0}
-             }}}
+           * {{{
+           * P(0) = 1 / (1 + \exp(b)), and
+           * P(1) = \exp(b) / (1 + \exp(b))
+           * }}}, hence
+           * {{{
+           * b = \log{P(1) / P(0)} = \log{count_1 / count_0}
+           * }}}
            */
           initialCoefficientsWithIntercept.toArray(numFeatures)
           = math.log(histogram(1) / histogram(0))
@@ -377,10 +377,10 @@ class LogisticRegression @Since("1.2.0") (
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
           initialCoefficientsWithIntercept.toBreeze.toDenseVector)
 
-        /*
-           Note that in Logistic Regression, the objective history (loss + regularization)
-           is log-likelihood which is invariance under feature standardization. As a result,
-           the objective history from optimizer is the same as the one in the original space.
+        /**
+         * Note that in Logistic Regression, the objective history (loss + regularization)
+         * is log-likelihood which is invariance under feature standardization. As a result,
+         * the objective history from optimizer is the same as the one in the original space.
          */
         val arrayBuilder = mutable.ArrayBuilder.make[Double]
         var state: optimizer.State = null
@@ -395,11 +395,11 @@ class LogisticRegression @Since("1.2.0") (
           throw new SparkException(msg)
         }
 
-        /*
-           The coefficients are trained in the scaled space; we're converting them back to
-           the original space.
-           Note that the intercept in scaled space and original space is the same;
-           as a result, no scaling is needed.
+        /**
+         * The coefficients are trained in the scaled space; we're converting them back to
+         * the original space.
+         * Note that the intercept in scaled space and original space is the same;
+         * as a result, no scaling is needed.
          */
         val rawCoefficients = state.x.toArray.clone()
         var i = 0
