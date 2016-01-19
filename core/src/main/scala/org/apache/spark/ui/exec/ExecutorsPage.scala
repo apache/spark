@@ -120,7 +120,6 @@ private[ui] class ExecutorsPage(
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
-
     <tr>
       <td>{info.id}</td>
       <td>{info.hostPort}</td>
@@ -132,7 +131,7 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={diskUsed.toString}>
         {Utils.bytesToString(diskUsed)}
       </td>
-      {coloredData(info.maxTasks, info.activeTasks, info.failedTasks, info.completedTasks,
+      {taskData(info.maxTasks, info.activeTasks, info.failedTasks, info.completedTasks,
       info.totalTasks, info.totalDuration, info.totalGCTime)}
       <td sorttable_customkey={info.totalInputBytes.toString}>
         {Utils.bytesToString(info.totalInputBytes)}
@@ -189,7 +188,7 @@ private[ui] class ExecutorsPage(
         <td sorttable_customkey={diskUsed.toString}>
           {Utils.bytesToString(diskUsed)}
         </td>
-        {coloredData(execInfo.map(_.maxTasks).sum,
+        {taskData(execInfo.map(_.maxTasks).sum,
         execInfo.map(_.activeTasks).sum,
         execInfo.map(_.failedTasks).sum,
         execInfo.map(_.completedTasks).sum,
@@ -231,7 +230,7 @@ private[ui] class ExecutorsPage(
     </table>
   }
 
-  private def coloredData(maxTasks: Int,
+  private def taskData(maxTasks: Int,
                         activeTasks: Int,
                         failedTasks: Int,
                         completedTasks: Int,
@@ -240,7 +239,7 @@ private[ui] class ExecutorsPage(
                         totalGCTime: Long):
   Seq[Node] = {
     // Determine Color Opacity from 0.5-1
-    // activeTasks range from 0 to all cores
+    // activeTasks range from 0 to maxTasks
     val activeTasksAlpha =
       if (maxTasks > 0) {
         (activeTasks.toDouble / maxTasks) * 0.5 + 0.5
@@ -248,13 +247,11 @@ private[ui] class ExecutorsPage(
         1
       }
     // failedTasks range max at 10% failure, alpha max = 1
-    // completedTasks range ignores 90% of tasks
-    val (failedTasksAlpha, completedTasksAlpha) =
+    val failedTasksAlpha =
       if (totalTasks > 0) {
-        (math.min (10 * failedTasks.toDouble / totalTasks, 1) * 0.5 + 0.5,
-          math.max (((10 * completedTasks.toDouble / totalTasks) - 9) * 0.5 + 0.5, 0.5) )
+        math.min (10 * failedTasks.toDouble / totalTasks, 1) * 0.5 + 0.5
       } else {
-        (1, 1)
+        1
       }
     // totalDuration range from 0 to 50% GC time, alpha max = 1
     val totalDurationAlpha =
@@ -279,13 +276,7 @@ private[ui] class ExecutorsPage(
         ""
       }
       }>{failedTasks}</td>
-    <td style={
-      if (completedTasks > 0) {
-        "background:hsla(120, 100%, 25%, " + completedTasksAlpha + ");color:white"
-      } else {
-        ""
-      }
-      }>{completedTasks}</td>
+    <td>{completedTasks}</td>
     <td>{totalTasks}</td>
     <td sorttable_customkey={totalDuration.toString} style={
       // Red if GC time over GCTimePercent of total time
