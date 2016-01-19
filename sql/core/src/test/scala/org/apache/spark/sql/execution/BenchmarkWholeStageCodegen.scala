@@ -54,7 +54,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  test("benchmark") {
+  ignore("benchmark") {
     testWholeStage(1024 * 1024 * 200)
   }
 }
