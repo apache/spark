@@ -762,9 +762,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
-    val t = new TaskMetrics {
-      override def hostname: String = "localhost"
-    }
+    val t = new TaskMetrics { override def hostname: String = "localhost" }
     t.setExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)

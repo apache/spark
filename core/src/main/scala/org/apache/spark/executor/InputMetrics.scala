@@ -80,8 +80,9 @@ class InputMetrics private (
    */
   def readMethod: DataReadMethod.Value = DataReadMethod.withName(_readMethod.localValue)
 
-  private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)
+  private[spark] def incBytesRead(v: Long): Unit = _bytesRead.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
+  private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)
   private[spark] def setReadMethod(v: DataReadMethod.Value): Unit =
     _readMethod.setValue(v.toString)
 

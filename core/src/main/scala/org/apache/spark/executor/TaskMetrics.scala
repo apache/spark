@@ -335,9 +335,7 @@ private[spark] object TaskMetrics {
   /**
    * Get an accumulator from the given map by name, assuming it exists.
    */
-  def getAccum[T](
-      accumMap: Map[String, Accumulator[_]],
-      name: String): Accumulator[T] = {
+  def getAccum[T](accumMap: Map[String, Accumulator[_]], name: String): Accumulator[T] = {
     assert(accumMap.contains(name), s"metric '$name' is missing")
     val accum = accumMap(name)
     try {

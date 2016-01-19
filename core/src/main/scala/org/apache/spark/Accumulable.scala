@@ -62,14 +62,22 @@ class Accumulable[R, T] private[spark] (
   def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
     this(initialValue, param, None)
 
-  val id: Long = Accumulators.newId
+  val id: Long = Accumulators.newId()
 
-  // TODO: make this transient after SPARK-12896
+  // TODO: after SPARK-12896, we should mark this transient again
   @volatile private var value_ : R = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
-  private var deserialized = false
 
-  Accumulators.register(this)
+  // TODO: after SPARK-12896, this will be set in `readObject`.
+  // For more detail, read the comment there.
+  private val deserialized = false
+
+  // In many places we create internal accumulators without access to the active context cleaner,
+  // so if we register them here then we may never unregister these accumulators. To avoid memory
+  // leaks, we require the caller to explicitly register internal accumulators elsewhere.
+  if (!internal) {
+    Accumulators.register(this)
+  }
 
   /**
    * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
@@ -142,21 +150,20 @@ class Accumulable[R, T] private[spark] (
   /**
    * Set the accumulator's value. For internal use only.
    */
-  private[spark] def setValue(newValue: R): Unit = { value_ = newValue }
+  def setValue(newValue: R): Unit = { value_ = newValue }
 
   /**
-   * Set the accumulator's value.
-   * This is used to reconstruct [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
+   * Set the accumulator's value. For internal use only.
    */
   private[spark] def setValueAny(newValue: Any): Unit = { setValue(newValue.asInstanceOf[R]) }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    // TODO: right now we send accumulators from the executor to the driver through TaskMetrics.
-    // If we set the value to zero here we would zero out all values on the driver, which is not
-    // what we want. Let's comment this out for now until SPARK-12896, which allows us to avoid
-    // sending TaskMetrics to the driver.
+    // TODO: As of SPARK-12895 we send accumulators both ways between executors and the driver.
+    // If we set the value to zero here we would zero out all accumulator updates on the driver,
+    // which is not what we want. Let's comment this out for now until SPARK-12896, which allows
+    // us to avoid sending accumulators from the executors to the driver.
     // value_ = zero
     // deserialized = true
 
