@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -30,7 +31,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
-import org.scalatest.exceptions.TestFailedException
 
 class JsonProtocolSuite extends SparkFunSuite {
 
@@ -640,8 +640,11 @@ class JsonProtocolSuite extends SparkFunSuite {
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
     val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
     if (formatJsonString(expected) != formatJsonString(actual)) {
+      // scalastyle:off
+      // This prints something useful if the JSON strings don't match
       println("=== EXPECTED ===\n" + pretty(parse(expected)) + "\n")
       println("=== ACTUAL ===\n" + pretty(parse(actual)) + "\n")
+      // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }
   }
