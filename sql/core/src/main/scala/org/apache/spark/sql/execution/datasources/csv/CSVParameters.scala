@@ -71,7 +71,7 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
-  val codec = parameters.getOrElse("codec", parameters.getOrElse("compression", null))
+  val codec = parameters.getOrElse("compression", parameters.getOrElse("codec", null))
 
   val maxColumns = 20480
 
