@@ -22,7 +22,7 @@ import scala.util.matching.Regex
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, ParserDialect, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, ParserInterface, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 /**
  * A parser for foreign DDL commands.
  */
-class DDLParser(fallback: => ParserDialect)
+class DDLParser(fallback: => ParserInterface)
   extends AbstractSparkSQLParser with DataTypeParser with Logging {
 
   override def parseExpression(sql: String): Expression = fallback.parseExpression(sql)
