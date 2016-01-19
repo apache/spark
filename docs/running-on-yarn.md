@@ -207,10 +207,6 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
     The number of cores to use on each executor. For YARN and standalone mode only.
-
-    In standalone mode, setting this parameter allows an application to run multiple executors on
-    the same worker, provided that there are enough cores on that worker. Otherwise, only one
-    executor per application will run on each worker.
   </td>
 </tr>
 <tr>
