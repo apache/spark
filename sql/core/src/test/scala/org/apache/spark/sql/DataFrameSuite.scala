@@ -337,6 +337,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
   }
 
+  test("intersect - nullability") {
+    val nonNullableInts = Seq(Tuple1(1), Tuple1(3)).toDF()
+    assert(nonNullableInts.schema.forall(_.nullable == false))
+
+    val df1 = nonNullableInts.intersect(nullInts)
+    checkAnswer(df1, Row(1) :: Row(3) :: Nil)
+    assert(df1.schema.forall(_.nullable == false))
+
+    val df2 = nullInts.intersect(nonNullableInts)
+    checkAnswer(df2, Row(1) :: Row(3) :: Nil)
+    assert(df2.schema.forall(_.nullable == false))
+
+    val df3 = nullInts.intersect(nullInts)
+    checkAnswer(df3, Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
+    assert(df3.schema.forall(_.nullable == true))
+
+    val df4 = nonNullableInts.intersect(nonNullableInts)
+    checkAnswer(df4, Row(1) :: Row(3) :: Nil)
+    assert(df4.schema.forall(_.nullable == false))
+  }
+
   test("udf") {
     val foo = udf((a: Int, b: String) => a.toString + b)
 
@@ -1007,6 +1028,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-10743: keep the name of expression if possible when do cast") {
     val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
     assert(df.select($"src.i".cast(StringType)).columns.head === "i")
+    assert(df.select($"src.i".cast(StringType).cast(IntegerType)).columns.head === "i")
   }
 
   test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
@@ -1227,5 +1249,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(df("*")), Row("a", "b"))
     checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
     checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
+  }
+
+  test("SPARK-12841: cast in filter") {
+    checkAnswer(
+      Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
+      Row(1, "a"))
   }
 }

@@ -42,7 +42,7 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
-import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect}
+import org.apache.spark.sql.catalyst.{InternalRow, ParserInterface}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -546,7 +546,7 @@ class HiveContext private[hive](
   }
 
   @transient
-  protected[sql] override val sqlParser: ParserDialect = {
+  protected[sql] override val sqlParser: ParserInterface = {
     new SparkSQLParser(new ExtendedHiveQlParser(this))
   }
 
