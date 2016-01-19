@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.{InputAdapter, SparkPlanInfo, WholeStageCodegen}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -41,6 +41,16 @@ private[ui] case class SparkPlanGraph(
     dotFile.append("}")
     dotFile.toString()
   }
+
+  /**
+    * All the SparkPlanGraphNodes, including those inside of WholeStageCodegen.
+    */
+  val allNodes: Seq[SparkPlanGraphNode] = {
+    nodes.flatMap {
+      case cluster: SparkPlanGraphCluster => cluster.nodes :+ cluster
+      case node => Seq(node)
+    }
+  }
 }
 
 private[sql] object SparkPlanGraph {
@@ -52,7 +62,7 @@ private[sql] object SparkPlanGraph {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges)
+    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null)
     new SparkPlanGraph(nodes, edges)
   }
 
@@ -60,22 +70,40 @@ private[sql] object SparkPlanGraph {
       planInfo: SparkPlanInfo,
       nodeIdGenerator: AtomicLong,
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
-      edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
-    val metrics = planInfo.metrics.map { metric =>
-      SQLPlanMetric(metric.name, metric.accumulatorId,
-        SQLMetrics.getMetricParam(metric.metricParam))
-    }
-    val node = SparkPlanGraphNode(
-      nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
-      planInfo.simpleString, planInfo.metadata, metrics)
+      edges: mutable.ArrayBuffer[SparkPlanGraphEdge],
+      parent: SparkPlanGraphNode,
+      subgraph: SparkPlanGraphCluster): Unit = {
+    if (planInfo.nodeName == classOf[WholeStageCodegen].getSimpleName) {
+      val cluster = new SparkPlanGraphCluster(
+        nodeIdGenerator.getAndIncrement(),
+        planInfo.nodeName,
+        planInfo.simpleString,
+        mutable.ArrayBuffer[SparkPlanGraphNode]())
+      nodes += cluster
+      buildSparkPlanGraphNode(
+        planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster)
+    } else if (planInfo.nodeName == classOf[InputAdapter].getSimpleName) {
+      buildSparkPlanGraphNode(planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null)
+    } else {
+      val metrics = planInfo.metrics.map { metric =>
+        SQLPlanMetric(metric.name, metric.accumulatorId,
+          SQLMetrics.getMetricParam(metric.metricParam))
+      }
+      val node = new SparkPlanGraphNode(
+        nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
+        planInfo.simpleString, planInfo.metadata, metrics)
+      if (subgraph == null) {
+        nodes += node
+      } else {
+        subgraph.nodes += node
+      }
 
-    nodes += node
-    val childrenNodes = planInfo.children.map(
-      child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))
-    for (child <- childrenNodes) {
-      edges += SparkPlanGraphEdge(child.id, node.id)
+      if (parent != null) {
+        edges += SparkPlanGraphEdge(node.id, parent.id)
+      }
+      planInfo.children.foreach(
+        buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph))
     }
-    node
   }
 }
 
@@ -86,12 +114,12 @@ private[sql] object SparkPlanGraph {
  * @param name the name of this SparkPlan node
  * @param metrics metrics that this SparkPlan node will track
  */
-private[ui] case class SparkPlanGraphNode(
-    id: Long,
-    name: String,
-    desc: String,
-    metadata: Map[String, String],
-    metrics: Seq[SQLPlanMetric]) {
+private[ui] class SparkPlanGraphNode(
+    val id: Long,
+    val name: String,
+    val desc: String,
+    val metadata: Map[String, String],
+    val metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
     val builder = new mutable.StringBuilder(name)
@@ -116,6 +144,27 @@ private[ui] case class SparkPlanGraphNode(
     s"""  $id [label="${builder.toString()}"];"""
   }
 }
+
+/**
+  * Represent a tree of SparkPlan for WholeStageCodegen.
+  */
+private[ui] class SparkPlanGraphCluster(
+    id: Long,
+    name: String,
+    desc: String,
+    val nodes: mutable.ArrayBuffer[SparkPlanGraphNode])
+  extends SparkPlanGraphNode(id, name, desc, Map.empty, Nil) {
+
+  override def makeDotNode(metricsValue: Map[Long, String]): String = {
+    s"""
+       |  subgraph cluster${id} {
+       |    label=${name};
+       |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
+       |  }
+     """.stripMargin
+  }
+}
+
 
 /**
  * Represent an edge in the SparkPlan tree. `fromId` is the parent node id, and `toId` is the child

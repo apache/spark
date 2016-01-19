@@ -84,7 +84,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       // If we can track all jobs, check the metric values
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       val actualMetrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
-        df.queryExecution.executedPlan)).nodes.filter { node =>
+        df.queryExecution.executedPlan)).allNodes.filter { node =>
         expectedMetrics.contains(node.id)
       }.map { node =>
         val nodeMetrics = node.metrics.map { metric =>
@@ -129,6 +129,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       0L -> ("Filter", Map(
         "number of input rows" -> 2L,
         "number of output rows" -> 1L)))
+    )
+  }
+
+  test("WholeStageCodegen metrics") {
+    // Assume the execution plan is
+    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
+    val df = sqlContext.range(10).filter('id < 5)
+    testSparkPlanMetrics(df, 1, Map(
+      1L -> ("Filter", Map(
+        "number of input rows" -> 10L,
+        "number of output rows" -> 5L
+      )))
     )
   }
 
