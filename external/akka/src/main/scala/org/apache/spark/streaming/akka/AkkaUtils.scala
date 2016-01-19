@@ -70,37 +70,6 @@ object AkkaUtils {
    * @param propsForActor Props object defining creation of the actor
    * @param actorName Name of the actor
    * @param storageLevel Storage level to use for storing the received objects
-   * @param supervisorStrategy the supervisor strategy
-   *
-   * @note An important point to note:
-   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
-   *       to ensure the type safety, i.e. parametrized type of data received and createStream
-   *       should be same.
-   */
-  def createStream[T](
-      jssc: JavaStreamingContext,
-      propsForActor: Props,
-      actorName: String,
-      storageLevel: StorageLevel,
-      supervisorStrategy: SupervisorStrategy
-    ): JavaReceiverInputDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    createStream[T](
-      jssc.ssc,
-      propsForActor,
-      actorName,
-      storageLevel,
-      supervisorStrategy = supervisorStrategy)
-  }
-
-  /**
-   * Create an input stream with a user-defined actor. See [[JavaActorReceiver]] for more details.
-   *
-   * @param jssc The StreamingContext instance
-   * @param propsForActor Props object defining creation of the actor
-   * @param actorName Name of the actor
-   * @param storageLevel Storage level to use for storing the received objects
    * @param actorSystemCreator A function to create ActorSystem in executors. `ActorSystem` will
    *                           be shut down when the receiver is stopping.
    * @param supervisorStrategy the supervisor strategy
@@ -154,34 +123,6 @@ object AkkaUtils {
   }
 
   /**
-   * Create an input stream with a user-defined actor. See [[JavaActorReceiver]] for more details.
-   *
-   * @param jssc The StreamingContext instance
-   * @param propsForActor Props object defining creation of the actor
-   * @param actorName Name of the actor
-   * @param storageLevel Storage level to use for storing the received objects
-   * @param actorSystemCreator A function to create ActorSystem in executors. `ActorSystem` will
-   *                           be shut down when the receiver is stopping.
-   *
-   * @note An important point to note:
-   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
-   *       to ensure the type safety, i.e. parametrized type of data received and createStream
-   *       should be same.
-   */
-  def createStream[T](
-      jssc: JavaStreamingContext,
-      propsForActor: Props,
-      actorName: String,
-      storageLevel: StorageLevel,
-      actorSystemCreator: JFunction0[ActorSystem]
-    ): JavaReceiverInputDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    createStream[T](
-      jssc.ssc, propsForActor, actorName, storageLevel, () => actorSystemCreator.call())
-  }
-
-  /**
    * Create an input stream with a user-defined actor. Storage level of the data will be the default
    * StorageLevel.MEMORY_AND_DISK_SER_2. See [[JavaActorReceiver]] for more details.
    *
@@ -203,35 +144,4 @@ object AkkaUtils {
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     createStream[T](jssc.ssc, propsForActor, actorName)
   }
-
-  /**
-   * Create an input stream with a user-defined actor. Storage level of the data will be the default
-   * StorageLevel.MEMORY_AND_DISK_SER_2. See [[JavaActorReceiver]] for more details.
-   *
-   * @param jssc The StreamingContext instance
-   * @param propsForActor Props object defining creation of the actor
-   * @param actorName Name of the actor
-   * @param actorSystemCreator A function to create ActorSystem in executors. `ActorSystem` will
-   *                           be shut down when the receiver is stopping.
-   *
-   * @note An important point to note:
-   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
-   *       to ensure the type safety, i.e. parametrized type of data received and createStream
-   *       should be same.
-   */
-  def createStream[T](
-      jssc: JavaStreamingContext,
-      propsForActor: Props,
-      actorName: String,
-      actorSystemCreator: JFunction0[ActorSystem]
-    ): JavaReceiverInputDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    createStream[T](
-      jssc.ssc,
-      propsForActor,
-      actorName,
-      actorSystemCreator = () => actorSystemCreator.call())
-  }
-
 }
