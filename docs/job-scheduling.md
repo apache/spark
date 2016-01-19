@@ -40,7 +40,7 @@ Resource allocation can be configured as follows, based on the cluster type:
   You should also set `spark.executor.memory` to control the executor memory.
 * **YARN:** The `--num-executors` option to the Spark YARN client controls how many executors it will allocate
   on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
-  (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores`) configuration
+  (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
   [YARN Spark Properties](running-on-yarn.html).
 
