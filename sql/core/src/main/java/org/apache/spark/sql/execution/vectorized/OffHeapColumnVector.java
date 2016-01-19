@@ -22,6 +22,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DoubleType;
 import org.apache.spark.sql.types.IntegerType;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.bitset.BitSetMethods;
 
 
 import org.apache.commons.lang.NotImplementedException;
@@ -41,7 +42,7 @@ public final class OffHeapColumnVector extends ColumnVector {
       throw new NotImplementedException("Only little endian is supported.");
     }
 
-    this.nulls = Platform.allocateMemory(capacity);
+    this.nulls = Platform.allocateMemory(((capacity + 63) / 64) * 8);
     if (type instanceof IntegerType) {
       this.data = Platform.allocateMemory(capacity * 4);
     } else if (type instanceof DoubleType) {
@@ -77,21 +78,20 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putNotNull(int rowId) {
-    Platform.putByte(null, nulls + rowId, (byte) 0);
+    BitSetMethods.unset(null, nulls, rowId);
   }
 
   @Override
   public final void putNull(int rowId) {
-    Platform.putByte(null, nulls + rowId, (byte) 1);
+    BitSetMethods.set(null, nulls, rowId);
     ++numNulls;
     anyNullsSet = true;
   }
 
   @Override
   public final void putNulls(int rowId, int count) {
-    long offset = nulls + rowId;
-    for (int i = 0; i < count; ++i, ++offset) {
-      Platform.putByte(null, offset, (byte) 1);
+    for (int i = 0; i < count; ++i) {
+      BitSetMethods.set(null, nulls, rowId + i);
     }
     anyNullsSet = true;
     numNulls += count;
@@ -100,15 +100,14 @@ public final class OffHeapColumnVector extends ColumnVector {
   @Override
   public final void putNotNulls(int rowId, int count) {
     if (!anyNullsSet) return;
-    long offset = nulls + rowId;
-    for (int i = 0; i < count; ++i, ++offset) {
-      Platform.putByte(null, offset, (byte) 0);
+    for (int i = 0; i < count; ++i) {
+      BitSetMethods.unset(null, nulls, rowId + i);
     }
   }
 
   @Override
   public final boolean getIsNull(int rowId) {
-    return Platform.getByte(null, nulls + rowId) == 1;
+    return BitSetMethods.isSet(null, nulls, rowId);
   }
 
   //

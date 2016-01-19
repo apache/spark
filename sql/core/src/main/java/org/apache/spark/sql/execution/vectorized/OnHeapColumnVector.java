@@ -20,6 +20,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DoubleType;
 import org.apache.spark.sql.types.IntegerType;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.util.collection.BitSet;
 
 import java.nio.ByteBuffer;
 import java.nio.DoubleBuffer;
@@ -33,8 +34,8 @@ public final class OnHeapColumnVector extends ColumnVector {
   // The data stored in these arrays need to maintain binary compatible. We can
   // directly pass this buffer to external components.
 
-  // This is faster than a boolean array and we optimize this over memory footprint.
-  private byte[] nulls;
+  // We use BitSet to reduce memory footprint
+  private BitSet nulls;
 
   // Array for each type. Only 1 is populated for any type.
   private int[] intData;
@@ -49,7 +50,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       throw new RuntimeException("Unhandled " + type);
     }
-    this.nulls = new byte[capacity];
+    this.nulls = new BitSet(capacity);
     reset();
   }
 
@@ -76,12 +77,12 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putNotNull(int rowId) {
-    nulls[rowId] = (byte)0;
+    nulls.unset(rowId);
   }
 
   @Override
   public final void putNull(int rowId) {
-    nulls[rowId] = (byte)1;
+    nulls.set(rowId);
     ++numNulls;
     anyNullsSet = true;
   }
@@ -89,7 +90,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   @Override
   public final void putNulls(int rowId, int count) {
     for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)1;
+      nulls.set(rowId + i);
     }
     anyNullsSet = true;
     numNulls += count;
@@ -99,13 +100,13 @@ public final class OnHeapColumnVector extends ColumnVector {
   public final void putNotNulls(int rowId, int count) {
     if (!anyNullsSet) return;
     for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)0;
+      nulls.unset(rowId + i);
     }
   }
 
   @Override
   public final boolean getIsNull(int rowId) {
-    return nulls[rowId] == 1;
+    return nulls.get(rowId);
   }
 
   //

@@ -26,6 +26,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.bitset.BitSetMethods;
 
 class ColumnarBatchSuite extends SparkFunSuite {
   test("Null Apis") {
@@ -67,7 +68,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(v._1 == column.getIsNull(v._2))
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.nullsNativeAddress()
-          assert(v._1 == (Platform.getByte(null, addr + v._2) == 1), "index=" + v._2)
+          assert(v._1 == BitSetMethods.isSet(null, addr, v._2),  "index=" + v._2)
         }
       }
       column.close
