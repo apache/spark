@@ -149,11 +149,6 @@ class TaskMetrics extends Serializable {
    */
   def outputMetrics: Option[OutputMetrics] = _outputMetrics
 
-  @deprecated("setting OutputMetrics is for internal use only", "2.0.0")
-  def outputMetrics_=(om: Option[OutputMetrics]): Unit = {
-    _outputMetrics = om
-  }
-
   /**
    * Get or create a new [[OutputMetrics]] associated with this task.
    */
@@ -230,11 +225,6 @@ class TaskMetrics extends Serializable {
    */
   def shuffleWriteMetrics: Option[ShuffleWriteMetrics] = _shuffleWriteMetrics
 
-  @deprecated("setting ShuffleWriteMetrics is for internal use only", "2.0.0")
-  def shuffleWriteMetrics_=(swm: Option[ShuffleWriteMetrics]): Unit = {
-    _shuffleWriteMetrics = swm
-  }
-
   /**
    * Get or create a new [[ShuffleWriteMetrics]] associated with this task.
    */
@@ -265,11 +255,6 @@ class TaskMetrics extends Serializable {
   @deprecated("use updatedBlockStatuses instead", "2.0.0")
   def updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = {
     if (_updatedBlockStatuses.nonEmpty) Some(_updatedBlockStatuses) else None
-  }
-
-  @deprecated("setting updated blocks is for internal use only", "2.0.0")
-  def updatedBlocks_=(ub: Option[Seq[(BlockId, BlockStatus)]]): Unit = {
-    _updatedBlockStatuses = ub.getOrElse(Seq.empty[(BlockId, BlockStatus)])
   }
 
   /**
