@@ -55,26 +55,35 @@ class ShuffleWriteMetrics private (
   /**
    * Number of bytes written for the shuffle by this task.
    */
-  def shuffleBytesWritten: Long = _bytesWritten.localValue
+  def bytesWritten: Long = _bytesWritten.localValue
 
   /**
    * Total number of records written to the shuffle by this task.
    */
-  def shuffleRecordsWritten: Long = _recordsWritten.localValue
+  def recordsWritten: Long = _recordsWritten.localValue
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
-  def shuffleWriteTime: Long = _writeTime.localValue
+  def writeTime: Long = _writeTime.localValue
 
-  private[spark] def incShuffleBytesWritten(v: Long): Unit = _bytesWritten.add(v)
-  private[spark] def incShuffleRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
-  private[spark] def incShuffleWriteTime(v: Long): Unit = _writeTime.add(v)
-  private[spark] def decShuffleBytesWritten(v: Long): Unit = {
-    _bytesWritten.setValue(shuffleBytesWritten - v)
+  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
+  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
+  private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
+  private[spark] def decBytesWritten(v: Long): Unit = {
+    _bytesWritten.setValue(bytesWritten - v)
   }
-  private[spark] def decShuffleRecordsWritten(v: Long): Unit = {
-    _recordsWritten.setValue(shuffleRecordsWritten - v)
+  private[spark] def decRecordsWritten(v: Long): Unit = {
+    _recordsWritten.setValue(recordsWritten - v)
   }
+
+  // Legacy methods for backward compatibility.
+  // TODO: remove these once we make this class private.
+  @deprecated("use bytesWritten instead", "2.0.0")
+  def shuffleBytesWritten: Long = bytesWritten
+  @deprecated("use writeTime instead", "2.0.0")
+  def shuffleWriteTime: Long = writeTime
+  @deprecated("use recordsWritten instead", "2.0.0")
+  def shuffleRecordsWritten: Long = recordsWritten
 
 }

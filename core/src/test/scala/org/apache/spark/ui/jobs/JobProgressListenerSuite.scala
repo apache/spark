@@ -279,7 +279,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
       taskMetrics.mergeShuffleReadMetrics()
       val shuffleWriteMetrics = taskMetrics.registerShuffleWriteMetrics()
-      shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
+      shuffleWriteMetrics.incBytesWritten(base + 3)
       val inputMetrics = taskMetrics.registerInputMetrics(DataReadMethod.Hadoop)
       inputMetrics.setBytesRead(base + 7)
       val outputMetrics = taskMetrics.registerOutputMetrics(DataWriteMethod.Hadoop)

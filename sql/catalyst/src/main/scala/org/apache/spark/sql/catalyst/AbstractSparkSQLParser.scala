@@ -26,7 +26,7 @@ import scala.util.parsing.input.CharArrayReader.EofCh
 import org.apache.spark.sql.catalyst.plans.logical._
 
 private[sql] abstract class AbstractSparkSQLParser
-  extends StandardTokenParsers with PackratParsers with ParserDialect {
+  extends StandardTokenParsers with PackratParsers with ParserInterface {
 
   def parsePlan(input: String): LogicalPlan = synchronized {
     // Initialize the Keywords.

@@ -303,9 +303,9 @@ private[spark] object JsonProtocol {
       }.getOrElse(JNothing)
     val shuffleWriteMetrics: JValue =
       taskMetrics.shuffleWriteMetrics.map { wm =>
-        ("Shuffle Bytes Written" -> wm.shuffleBytesWritten) ~
-        ("Shuffle Write Time" -> wm.shuffleWriteTime) ~
-        ("Shuffle Records Written" -> wm.shuffleRecordsWritten)
+        ("Shuffle Bytes Written" -> wm.bytesWritten) ~
+        ("Shuffle Write Time" -> wm.writeTime) ~
+        ("Shuffle Records Written" -> wm.recordsWritten)
       }.getOrElse(JNothing)
     val inputMetrics: JValue =
       taskMetrics.inputMetrics.map { im =>
@@ -725,10 +725,10 @@ private[spark] object JsonProtocol {
     // TODO: Drop the redundant "Shuffle" since it's inconsistent with related classes.
     Utils.jsonOption(json \ "Shuffle Write Metrics").foreach { writeJson =>
       val writeMetrics = metrics.registerShuffleWriteMetrics()
-      writeMetrics.incShuffleBytesWritten((writeJson \ "Shuffle Bytes Written").extract[Long])
-      writeMetrics.incShuffleRecordsWritten((writeJson \ "Shuffle Records Written")
+      writeMetrics.incBytesWritten((writeJson \ "Shuffle Bytes Written").extract[Long])
+      writeMetrics.incRecordsWritten((writeJson \ "Shuffle Records Written")
         .extractOpt[Long].getOrElse(0L))
-      writeMetrics.incShuffleWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
+      writeMetrics.incWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
     }
 
     // Output metrics
