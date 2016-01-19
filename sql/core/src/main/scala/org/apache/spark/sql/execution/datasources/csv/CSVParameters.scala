@@ -22,6 +22,7 @@ import java.nio.charset.Charset
 import org.apache.hadoop.io.compress._
 
 import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 private[sql] case class CSVParameters(@transient parameters: Map[String, String]) extends Logging {
 
@@ -45,14 +46,6 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
-
-  // Available compression codec list
-  val shortCompressionCodecNames = Map(
-    "bzip2" -> classOf[BZip2Codec].getName,
-    "gzip" -> classOf[GzipCodec].getName,
-    "lz4" -> classOf[Lz4Codec].getName,
-    "snappy" -> classOf[SnappyCodec].getName)
-
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
@@ -82,10 +75,12 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
-  val compressionCodec: String = {
-    val maybeCodecName =
-      Option(parameters.getOrElse("compression", parameters.getOrElse("codec", null)))
-    maybeCodecName.map(_.toLowerCase).map(shortCompressionCodecNames).orNull
+  val compressionCodecName =
+    parameters.getOrElse("compression", parameters.getOrElse("codec", null))
+  val compressionCodec = if (compressionCodecName != null) {
+    CSVCompressionCodecs.getCodecClassName(compressionCodecName)
+  } else {
+    null
   }
 
   val maxColumns = 20480
@@ -100,7 +95,6 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 }
 
 private[csv] object ParseModes {
-
   val PERMISSIVE_MODE = "PERMISSIVE"
   val DROP_MALFORMED_MODE = "DROPMALFORMED"
   val FAIL_FAST_MODE = "FAILFAST"
@@ -120,5 +114,30 @@ private[csv] object ParseModes {
     mode.toUpperCase == PERMISSIVE_MODE
   } else {
     true // We default to permissive is the mode string is not valid
+  }
+}
+
+private[csv] object CSVCompressionCodecs {
+  val shortCompressionCodecNames = Map(
+    "bzip2" -> classOf[BZip2Codec].getName,
+    "gzip" -> classOf[GzipCodec].getName,
+    "lz4" -> classOf[Lz4Codec].getName,
+    "snappy" -> classOf[SnappyCodec].getName)
+
+  /**
+   * Return the full version of the given codec class.
+   * If it is already a class name, just return it.
+   */
+  def getCodecClassName(name: String): String = {
+    val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
+    val codecClassName = try {
+      // Validate the codec name
+      Utils.classForName(codecName)
+      Some(codecName)
+    } catch {
+      case e: ClassNotFoundException => None
+    }
+    codecClassName.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] " +
+      s"is not available. Available codecs are ${shortCompressionCodecNames.keys.mkString(",")}."))
   }
 }
