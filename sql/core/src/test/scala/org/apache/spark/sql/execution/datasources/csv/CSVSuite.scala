@@ -21,8 +21,6 @@ import java.io.File
 import java.nio.charset.UnsupportedCharsetException
 import java.sql.Timestamp
 
-import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -363,7 +361,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       cars.coalesce(1).write
         .format("csv")
         .option("header", "true")
-        .option("compression", classOf[GzipCodec].getCanonicalName)
+        .option("compression", "gZiP")
         .save(csvDir)
 
       val compressedFiles = new File(csvDir).listFiles()

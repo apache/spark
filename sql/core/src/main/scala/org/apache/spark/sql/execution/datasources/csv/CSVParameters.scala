@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.Charset
 
+import org.apache.hadoop.io.compress._
+
 import org.apache.spark.Logging
 
 private[sql] case class CSVParameters(@transient parameters: Map[String, String]) extends Logging {
@@ -35,7 +37,7 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
     val param = parameters.getOrElse(paramName, default.toString)
-    if (param.toLowerCase() == "true") {
+    if (param.toLowerCase == "true") {
       true
     } else if (param.toLowerCase == "false") {
       false
@@ -43,6 +45,13 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
+
+  // Available compression codec list
+  val shortCompressionCodecNames = Map(
+    "bzip2" -> classOf[BZip2Codec].getName,
+    "gzip" -> classOf[GzipCodec].getName,
+    "lz4" -> classOf[Lz4Codec].getName,
+    "snappy" -> classOf[SnappyCodec].getName)
 
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
@@ -73,7 +82,11 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
-  val codec = parameters.getOrElse("compression", parameters.getOrElse("codec", null))
+  val compressionCodec: String = {
+    val maybeCodecName =
+      Option(parameters.getOrElse("compression", parameters.getOrElse("codec", null)))
+    maybeCodecName.map(_.toLowerCase).map(shortCompressionCodecNames).orNull
+  }
 
   val maxColumns = 20480
 

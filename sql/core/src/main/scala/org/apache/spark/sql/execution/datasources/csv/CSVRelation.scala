@@ -101,7 +101,7 @@ private[csv] class CSVRelation(
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = job.getConfiguration
-    Option(params.codec).foreach { codec =>
+    Option(params.compressionCodec).foreach { codec =>
       conf.set("mapreduce.output.fileoutputformat.compress", "true")
       conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
       conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
