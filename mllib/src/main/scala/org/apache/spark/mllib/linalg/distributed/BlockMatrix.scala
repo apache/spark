@@ -23,7 +23,7 @@ import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -262,14 +262,32 @@ class BlockMatrix @Since("1.3.0") (
     }
     new CoordinateMatrix(entryRDD, numRows(), numCols())
   }
-
+  
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   @Since("1.3.0")
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
       s"numCols: ${numCols()}")
-    // TODO: This implementation may be optimized
-    toCoordinateMatrix().toIndexedRowMatrix()
+
+    val rows = blocks.map(block => (block._1._1, (block._1._2, block._2)))
+      .groupByKey()
+      .flatMap { case (row, matricesItr) =>
+
+        val rows = matricesItr.head._2.numRows
+        val res = BDM.zeros[Double](rows, numCols.toInt)
+
+        matricesItr.foreach { case ((idx: Int, mat: Matrix)) =>
+          val offset = colsPerBlock * idx
+          res(0 until mat.numRows, offset until offset + mat.numCols) := mat.toBreeze
+        }
+
+        (0 until rows).map(idx => new IndexedRow(
+          (row * rowsPerBlock) + idx,
+          Vectors.dense(res.t(::, idx).toArray)
+        ))
+      }
+
+    new IndexedRowMatrix(rows)
   }
 
   /** Collect the distributed matrix on the driver as a `DenseMatrix`. */
