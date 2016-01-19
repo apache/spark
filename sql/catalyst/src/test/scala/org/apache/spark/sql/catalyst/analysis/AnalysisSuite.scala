@@ -118,10 +118,10 @@ class AnalysisSuite extends AnalysisTest {
 
     // Case 1: join itself can resolve all the missing attributes
     val plan1 = testRelation2.join(testRelation3)
-      .where('a > 0).select('a, 'b)
+      .where('a > "str").select('a, 'b)
       .sortBy('c.desc, 'h.asc)
     val expected1 = testRelation2.join(testRelation3)
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c, h)
+      .where(a > "str").select(a, b, c, h)
       .sortBy(c.desc, h.asc)
       .select(a, b)
     checkAnalysis(plan1, expected1)
@@ -129,40 +129,40 @@ class AnalysisSuite extends AnalysisTest {
     // Case 2: join itself can resolve partial missing attributes
     // and the remaining ones are resolvable in its left tree
     val plan2 = testRelation2.select('a, 'b).join(testRelation3)
-      .where('a > 0).select('a, 'b)
+      .where('a > "str").select('a, 'b)
       .sortBy('c.desc, 'h.asc)
     val expected2 = testRelation2.select(a, b, c).join(testRelation3)
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, h, c)
+      .where(a > "str").select(a, b, h, c)
       .sortBy(c.desc, h.asc)
       .select(a, b, h).select(a, b)
     checkAnalysis(plan2, expected2)
 
     // Case 3: both trees are needed to resolve all the missing attribute
     val plan3 = testRelation2.select('a, 'b).join(testRelation3.select('f))
-      .where('a > 0).select('a, 'b)
+      .where('a > "str").select('a, 'b)
       .sortBy('c.desc, 'h.asc)
     val expected3 = testRelation2.select(a, b, c).join(testRelation3.select(f, h))
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c, h)
+      .where(a > "str").select(a, b, c, h)
       .sortBy(c.desc, h.asc)
       .select(a, b, c).select(a, b)
     checkAnalysis(plan3, expected3)
 
     // Case 4: right tree does not resolve any missing attribute
     val plan4 = testRelation2.select('a, 'b).join(testRelation3.select('f))
-      .where('a > 0).select('a, 'b)
+      .where('a > "str").select('a, 'b)
       .sortBy('h.asc)
     val expected4 = testRelation2.select(a, b).join(testRelation3.select(f, h))
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, h)
+      .where(a > "str").select(a, b, h)
       .sortBy(h.asc)
       .select(a, b)
     checkAnalysis(plan4, expected4)
 
     // Case 5: left tree does not resolve any missing attribute
     val plan5 = testRelation2.select('a, 'b).join(testRelation3.select('f))
-      .where('a > 0).select('a, 'b)
+      .where('a > "str").select('a, 'b)
       .sortBy('c.desc)
     val expected5 = testRelation2.select(a, b, c).join(testRelation3.select(f))
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
+      .where(a > "str").select(a, b, c)
       .sortBy(c.desc)
       .select(a, b)
     checkAnalysis(plan5, expected5)
