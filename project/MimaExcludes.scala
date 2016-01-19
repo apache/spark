@@ -310,7 +310,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.package$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRelation")
       ) ++ Seq(
-        // SPARK-4751 Dynamic allocation for standalone mode
+        // SPARK-4751 elastic scaling for standalone mode
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.supportDynamicAllocation")
       ) ++ Seq(

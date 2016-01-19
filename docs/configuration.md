@@ -459,7 +459,7 @@ Apart from these, the following properties are also available, and may be useful
     executors so the executors can be safely removed. This must be enabled if
     <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
     must be set up in order to enable it. See
-    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
+    <a href="job-scheduling.html#configuration-and-setup">elastic scaling
     configuration and setup documentation</a> for more information.
   </td>
 </tr>
@@ -1242,7 +1242,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Dynamic Allocation
+#### Elastic Scaling
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1265,7 +1265,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
   <td>60s</td>
   <td>
-    If dynamic allocation is enabled and an executor has been idle for more than this duration,
+    If elastic scaling is enabled and an executor has been idle for more than this duration,
     the executor will be removed. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
@@ -1274,7 +1274,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.cachedExecutorIdleTimeout</code></td>
   <td>infinity</td>
   <td>
-    If dynamic allocation is enabled and an executor which has cached data blocks has been idle for more than this duration,
+    If elastic scaling is enabled and an executor which has cached data blocks has been idle for more than this duration,
     the executor will be removed. For more details, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
@@ -1283,28 +1283,28 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.initialExecutors</code></td>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
   <td>
-    Initial number of executors to run if dynamic allocation is enabled.
+    Initial number of executors to run if elastic scaling is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.maxExecutors</code></td>
   <td>infinity</td>
   <td>
-    Upper bound for the number of executors if dynamic allocation is enabled.
+    Upper bound for the number of executors if elastic scaling is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
   <td>0</td>
   <td>
-    Lower bound for the number of executors if dynamic allocation is enabled.
+    Lower bound for the number of executors if elastic scaling is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
   <td>1s</td>
   <td>
-    If dynamic allocation is enabled and there have been pending tasks backlogged for more than
+    If elastic scaling is enabled and there have been pending tasks backlogged for more than
     this duration, new executors will be requested. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>

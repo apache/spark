@@ -108,7 +108,7 @@ and request executors.
 
 #### Request Policy
 
-A Spark application with dynamic allocation enabled requests additional executors when it has
+A Spark application with elastic scaling enabled requests additional executors when it has
 pending tasks waiting to be scheduled. This condition necessarily implies that the existing set
 of executors is insufficient to simultaneously saturate all tasks that have been submitted but
 not yet finished.
@@ -135,9 +135,9 @@ an executor should not be idle if there are still pending tasks to be scheduled.
 
 ### Graceful Decommission of Executors
 
-Before dynamic allocation, a Spark executor exits either on failure or when the associated
+Before elastic scaling, a Spark executor exits either on failure or when the associated
 application has also exited. In both scenarios, all state associated with the executor is no
-longer needed and can be safely discarded. With dynamic allocation, however, the application
+longer needed and can be safely discarded. With elastic scaling, however, the application
 is still running when an executor is explicitly removed. If the application attempts to access
 state stored in or written by the executor, it will have to perform a recompute the state. Thus,
 Spark needs a mechanism to decommission an executor gracefully by preserving its state before
@@ -146,7 +146,7 @@ removing it.
 This requirement is especially important for shuffles. During a shuffle, the Spark executor first
 writes its own map outputs locally to disk, and then acts as the server for those files when other
 executors attempt to fetch them. In the event of stragglers, which are tasks that run for much
-longer than their peers, dynamic allocation may remove an executor before the shuffle completes,
+longer than their peers, elastic scaling may remove an executor before the shuffle completes,
 in which case the shuffle files written by that executor must be recomputed unnecessarily.
 
 The solution for preserving shuffle files is to use an external shuffle service, also introduced

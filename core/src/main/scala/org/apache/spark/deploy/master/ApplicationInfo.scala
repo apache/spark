@@ -45,7 +45,7 @@ private[spark] class ApplicationInfo(
 
   // A cap on the number of executors this application can have at any given time.
   // By default, this is infinite. Only after the first allocation request is issued by the
-  // application will this be set to a finite value. This is used for dynamic allocation.
+  // application will this be set to a finite value. This is used for elastic scaling.
   @transient private[master] var executorLimit: Int = _
 
   @transient private var nextExecutorId: Int = _
