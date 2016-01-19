@@ -143,7 +143,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
+    UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
