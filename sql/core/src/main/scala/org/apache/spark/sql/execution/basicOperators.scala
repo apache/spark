@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
@@ -42,14 +42,11 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
-    val numRows = termForLongMetric(ctx, "numRows")
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
     val output = exprs.map(_.gen(ctx))
     s"""
-       | // Projection
-       | $numRows.add(1);
        | ${output.map(_.code).mkString("\n")}
        |
        | ${consume(ctx, output)}
@@ -84,18 +81,13 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
   }
 
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
-    val numInputTerm = termForLongMetric(ctx, "numInputRows")
-    val numOutputTerm = termForLongMetric(ctx, "numOutputRows")
     val expr = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(condition, child.output))
     ctx.currentVars = input
     val eval = expr.gen(ctx)
     s"""
-       | // Filter
-       | $numInputTerm.add(1);
        | ${eval.code}
        | if (!${eval.isNull} && ${eval.value}) {
-       |   $numOutputTerm.add(1);
        |   ${consume(ctx, ctx.currentVars)}
        | }
      """.stripMargin

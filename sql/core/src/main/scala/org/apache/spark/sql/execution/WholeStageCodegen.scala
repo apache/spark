@@ -22,10 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 /**
   * An interface for those physical operators that support codegen.
@@ -91,20 +90,8 @@ trait CodegenSupport extends SparkPlan {
     *   }
     */
   def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String
-
-  /**
-    * Return a term for a LongSQLMetric specified by given name.
-    */
-  protected def termForLongMetric(ctx: CodegenContext, name: String): String = {
-    val metric = longMetric(name)
-    val idx = ctx.references.length
-    ctx.references += metric
-    val term = ctx.freshName(name)
-    val clsName = classOf[LongSQLMetric].getName
-    ctx.addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
-    term
-  }
 }
+
 
 /**
   * InputAdapter is used to hide a SparkPlan from a subtree that support codegen.
