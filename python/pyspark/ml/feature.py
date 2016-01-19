@@ -135,9 +135,9 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
               "specified will be treated as errors.")
 
     @keyword_only
-    def __init__(self, splits=None, inputCol=None, outputCol=None, _java_model=None):
+    def __init__(self, splits=None, inputCol=None, outputCol=None):
         """
-        __init__(self, splits=None, inputCol=None, outputCol=None, _java_model=None)
+        __init__(self, splits=None, inputCol=None, outputCol=None)
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
@@ -155,7 +155,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
                   "provided to cover all Double values; otherwise, values outside the splits " +
                   "specified will be treated as errors.")
         kwargs = self.__init__._input_kwargs
-        kwargs.pop("_java_model", None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -1012,8 +1011,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     -inf
     >>> int(splits[1]*10)
     4
-    >>> bucketed = bucketizer.transform(df).collect()
-    >>> bucketed[0].buckets
+    >>> bucketed = bucketizer.transform(df).head()
+    >>> bucketed.buckets
     0.0
 
     .. versionadded:: 2.0.0
@@ -1044,7 +1043,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     def setParams(self, numBuckets=2, inputCol=None, outputCol=None):
         """
         setParams(self, numBuckets=2, inputCol=None, outputCol=None)
-        Set the params for the QuantileDiscertizerBase
+        Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
@@ -1070,8 +1069,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
         """
         return Bucketizer(splits=list(java_model.getSplits()),
                           inputCol=self.getInputCol(),
-                          outputCol=self.getOutputCol(),
-                          _java_model=java_model)
+                          outputCol=self.getOutputCol())
 
 
 @inherit_doc
