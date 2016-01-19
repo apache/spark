@@ -94,7 +94,7 @@ class SparkSQLParser(fallback: => ParserInterface) extends AbstractSparkSQLParse
 
   private lazy val setRole: Parser[LogicalPlan] =
     SET ~ ROLE ~ ident ^^ {
-      case set ~ role ~ roleName => fallback(List(set, role, roleName).mkString(" "))
+      case set ~ role ~ roleName => fallback.parsePlan(List(set, role, roleName).mkString(" "))
     }
 
   private lazy val set: Parser[LogicalPlan] =
