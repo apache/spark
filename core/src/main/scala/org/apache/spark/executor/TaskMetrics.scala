@@ -317,21 +317,15 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    |        OTHER THINGS        |
    * ========================== */
 
-  private var _accumulatorUpdates: Map[Long, Any] = Map.empty
-  @transient private var _accumulatorsUpdater: () => Map[Long, Any] = null
-
-  private[spark] def updateAccumulators(): Unit = synchronized {
-    _accumulatorUpdates = _accumulatorsUpdater()
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
+    accums += a
   }
-
   /**
    * Return the latest updates of accumulators in this task.
    */
-  def accumulatorUpdates(): Map[Long, Any] = _accumulatorUpdates
+  private[spark] def accumulatorUpdates(): Map[Long, Any] =
+    accums.map { a => (a.id, a.localValue) }.toMap[Long, Any]
 
-  private[spark] def setAccumulatorsUpdater(accumulatorsUpdater: () => Map[Long, Any]): Unit = {
-    _accumulatorsUpdater = accumulatorsUpdater
-  }
 }
 
 private[spark] object TaskMetrics {

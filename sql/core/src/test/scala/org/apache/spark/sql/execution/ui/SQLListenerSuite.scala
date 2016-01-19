@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
 
+import org.mockito.Mockito.{mock, when}
+
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
@@ -67,9 +69,10 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   )
 
   private def createTaskMetrics(accumulatorUpdates: Map[Long, Long]): TaskMetrics = {
-    val metrics = new TaskMetrics
-    metrics.setAccumulatorsUpdater(() => accumulatorUpdates.mapValues(new LongSQLMetricValue(_)))
-    metrics.updateAccumulators()
+    val metrics = mock(classOf[TaskMetrics])
+    when(metrics.accumulatorUpdates()).thenReturn(accumulatorUpdates.map { case (id, update) =>
+      (id, new LongSQLMetricValue(update))
+    }.toMap[Long, Any])
     metrics
   }
 

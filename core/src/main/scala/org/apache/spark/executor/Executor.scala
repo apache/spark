@@ -249,7 +249,6 @@ private[spark] class Executor(
           m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
           m.setJvmGCTime(computeTotalGcTime() - startGCTime)
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
-          m.updateAccumulators()
         }
 
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
@@ -301,7 +300,6 @@ private[spark] class Executor(
             task.metrics.map { m =>
               m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
               m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-              m.updateAccumulators()
               m
             }
           }
@@ -427,7 +425,6 @@ private[spark] class Executor(
         taskRunner.task.metrics.foreach { metrics =>
           metrics.mergeShuffleReadMetrics()
           metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-          metrics.updateAccumulators()
 
           if (isLocal) {
             // JobProgressListener will hold an reference of it during

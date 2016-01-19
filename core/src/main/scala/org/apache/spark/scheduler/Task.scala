@@ -80,13 +80,12 @@ private[spark] abstract class Task[T](
       metricsSystem,
       initialAccumulators)
     TaskContext.setTaskContext(context)
-    context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
     try {
-      (runTask(context), context.collectAccumulators())
+      (runTask(context), context.taskMetrics.accumulatorUpdates())
     } finally {
       context.markTaskCompleted()
       try {
