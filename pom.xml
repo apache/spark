@@ -86,6 +86,7 @@
   </mailingLists>
 
   <modules>
+    <module>common/sketch</module>
     <module>tags</module>
     <module>core</module>
     <module>graphx</module>
@@ -97,7 +98,6 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>sketch</module>
     <module>docker-integration-tests</module>
     <module>unsafe</module>
     <module>assembly</module>
