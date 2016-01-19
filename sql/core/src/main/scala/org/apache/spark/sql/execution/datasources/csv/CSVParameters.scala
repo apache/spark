@@ -76,12 +76,9 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
-  val compressionCodecName =
-    parameters.getOrElse("compression", parameters.getOrElse("codec", null))
-  val compressionCodec = if (compressionCodecName != null) {
-    CSVCompressionCodecs.getCodecClassName(compressionCodecName)
-  } else {
-    null
+  val compressionCodec: Option[String] = {
+    val name = parameters.get("compression").orElse(parameters.get("codec"))
+    name.map(CSVCompressionCodecs.getCodecClassName)
   }
 
   val maxColumns = 20480
@@ -119,7 +116,7 @@ private[csv] object ParseModes {
 }
 
 private[csv] object CSVCompressionCodecs {
-  val shortCompressionCodecNames = Map(
+  private val shortCompressionCodecNames = Map(
     "bzip2" -> classOf[BZip2Codec].getName,
     "gzip" -> classOf[GzipCodec].getName,
     "lz4" -> classOf[Lz4Codec].getName,
@@ -138,7 +135,7 @@ private[csv] object CSVCompressionCodecs {
     } catch {
       case e: ClassNotFoundException => None
     }
-    codecClassName.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] " +
-      s"is not available. Available codecs are ${shortCompressionCodecNames.keys.mkString(",")}."))
+    codecClassName.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName]" +
+      s" is not available. Available codecs are ${shortCompressionCodecNames.keys.mkString(",")}."))
   }
 }
