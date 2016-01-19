@@ -392,6 +392,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.reducer.maxReqsInFlight</code></td>
+  <td>20</td>
+  <td>
+    spark.reducer.maxMbInFlight puts a bound on the in flight data in terms of size.
+    But this is not always sufficient when the number of hosts in the cluster increase,
+    this can lead to very large number of in-bound connections to one
+    or more nodes, causing workers to fail under the load. This configuration
+    limits the number of remote blocks to fetches at any given point.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
