@@ -181,7 +181,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         public InternalRow next() {
           currentRow += 1;
           bufferHolder.reset();
-          rowWriter.zeroOutNullBites();
+          rowWriter.zeroOutNullBytes();
           ${extractors.mkString("\n")}
           unsafeRow.setTotalSize(bufferHolder.totalSize());
           return unsafeRow;

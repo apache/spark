@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * to also call `reset` of this class before writing, to update the `startingOffset` and clear out
  * null bits.  Note that if we use it to write data into the result unsafe row, which means we will
  * always write from the very beginning of the global row buffer, we don't need to update
- * `startingOffset` and can just call `zeroOutNullBites` before writing new record.
+ * `startingOffset` and can just call `zeroOutNullBytes` before writing new record.
  */
 public class UnsafeRowWriter {
 
@@ -50,10 +50,10 @@ public class UnsafeRowWriter {
     holder.grow(fixedSize);
     holder.cursor += fixedSize;
 
-    zeroOutNullBites();
+    zeroOutNullBytes();
   }
 
-  public void zeroOutNullBites() {
+  public void zeroOutNullBytes() {
     for (int i = 0; i < nullBitsSize; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }

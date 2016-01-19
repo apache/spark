@@ -86,7 +86,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         // need to clear it out every time.
         ""
       } else {
-        s"$rowWriter.zeroOutNullBites();"
+        s"$rowWriter.zeroOutNullBytes();"
       }
     } else {
       s"$rowWriter.reset();"
@@ -300,8 +300,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val exprTypes = expressions.map(_.dataType)
 
     val numVarLenFields = exprTypes.count {
-      case dt if ctx.isPrimitiveType(dt) => false
-      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => false
+      case dt if UnsafeRow.isFixedLength(dt) => false
       // TODO: consider large decimal and interval type
       case _ => true
     }
