@@ -189,7 +189,7 @@ private[sql] trait SQLTestUtils
       .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
       .child
       .execute()
-      .map(row => Row.fromSeq(row.toSeq(schema)))
+      .map(row => Row.fromSeq(row.copy().toSeq(schema)))
 
     sqlContext.createDataFrame(childRDD, schema)
   }
