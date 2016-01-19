@@ -21,7 +21,6 @@ import scala.language.implicitConversions
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.SqlParser._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -133,6 +132,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
     case func: UnresolvedFunction => UnresolvedAlias(func, Some(func.prettyString))
+
+    // If we have a top level Cast, there is a chance to give it a better alias, if there is a
+    // NamedExpression under this Cast.
+    case c: Cast => c.transformUp {
+      case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
+    } match {
+      case ne: NamedExpression => ne
+      case other => Alias(expr, expr.prettyString)()
+    }
 
     case expr: Expression => Alias(expr, expr.prettyString)()
   }
@@ -922,13 +930,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: DataType): Column = withExpr {
-    expr match {
-      // keeps the name of expression if possible when do cast.
-      case ne: NamedExpression => UnresolvedAlias(Cast(expr, to))
-      case _ => Cast(expr, to)
-    }
-  }
+  def cast(to: DataType): Column = withExpr { Cast(expr, to) }
 
   /**
    * Casts the column to a different data type, using the canonical string representation

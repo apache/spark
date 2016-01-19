@@ -21,13 +21,13 @@ import java.nio.charset.Charset
 
 import org.apache.spark.Logging
 
-private[sql] case class CSVParameters(parameters: Map[String, String]) extends Logging {
+private[sql] case class CSVParameters(@transient parameters: Map[String, String]) extends Logging {
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
-      case Some(value) if value.length == 0 => '\0'
+      case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
       case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
     }
@@ -44,13 +44,15 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(parameters.getOrElse("delimiter", ","))
+  val delimiter = CSVTypeCast.toChar(
+    parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val charset = parameters.getOrElse("charset", Charset.forName("UTF-8").name())
+  val charset = parameters.getOrElse("encoding",
+    parameters.getOrElse("charset", Charset.forName("UTF-8").name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
-  val comment = getChar("comment", '\0')
+  val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
   val inferSchemaFlag = getBool("inferSchema")
@@ -77,7 +79,7 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 
   val inputBufferSize = 128
 
-  val isCommentSet = this.comment != '\0'
+  val isCommentSet = this.comment != '\u0000'
 
   val rowSeparator = "\n"
 }

@@ -58,9 +58,10 @@ private[csv] class CSVRelation(
     if (Charset.forName(params.charset) == Charset.forName("UTF-8")) {
       sqlContext.sparkContext.textFile(location)
     } else {
+      val charset = params.charset
       sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions { _.map { pair =>
-            new String(pair._2.getBytes, 0, pair._2.getLength, params.charset)
+            new String(pair._2.getBytes, 0, pair._2.getLength, charset)
           }
         }
     }
