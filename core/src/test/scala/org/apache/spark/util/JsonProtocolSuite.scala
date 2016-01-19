@@ -30,6 +30,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
+import org.scalatest.exceptions.TestFailedException
 
 class JsonProtocolSuite extends SparkFunSuite {
 
@@ -383,10 +384,10 @@ class JsonProtocolSuite extends SparkFunSuite {
    | Helper test running methods |
    * --------------------------- */
 
-  private def testEvent(event: SparkListenerEvent, jsonString: String) {
+  private def testEvent(event: SparkListenerEvent, expectedJsonString: String) {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
     val newEvent = JsonProtocol.sparkEventFromJson(parse(actualJsonString))
-    assertJsonStringEquals(jsonString, actualJsonString)
+    assertJsonStringEquals(expectedJsonString, actualJsonString, event.getClass.getSimpleName)
     assertEquals(event, newEvent)
   }
 
@@ -636,10 +637,13 @@ class JsonProtocolSuite extends SparkFunSuite {
       assertStackTraceElementEquals)
   }
 
-  private def assertJsonStringEquals(json1: String, json2: String) {
+  private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
     val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    assert(formatJsonString(json1) === formatJsonString(json2),
-      s"input ${formatJsonString(json1)} got ${formatJsonString(json2)}")
+    if (formatJsonString(expected) != formatJsonString(actual)) {
+      println("=== EXPECTED ===\n" + pretty(parse(expected)) + "\n")
+      println("=== ACTUAL ===\n" + pretty(parse(actual)) + "\n")
+      throw new TestFailedException(s"$metadata JSON did not equal", 1)
+    }
   }
 
   private def assertSeqEquals[T](seq1: Seq[T], seq2: Seq[T], assertEquals: (T, T) => Unit) {
@@ -746,7 +750,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
-    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id, internal)
+    AccumulableInfo(id, "Accumulable" + id, Some("delta" + id), "val" + id, internal)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -762,7 +766,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
-    val t = new TaskMetrics { override def hostname: String = "localhost" }
+    val t = new TaskMetrics
     t.setExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)
@@ -1028,7 +1032,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1115,7 +1118,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1199,7 +1201,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1271,14 +1272,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1329,14 +1330,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1403,14 +1404,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1493,14 +1494,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1665,7 +1666,6 @@ class JsonProtocolSuite extends SparkFunSuite {
      |    "Stage ID": 2,
      |    "Stage Attempt ID": 3,
      |    "Task Metrics": {
-     |    "Host Name": "localhost",
      |    "Executor Deserialize Time": 300,
      |    "Executor Run Time": 400,
      |    "Result Size": 500,
