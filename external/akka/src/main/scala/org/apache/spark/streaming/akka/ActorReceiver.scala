@@ -59,7 +59,6 @@ object ActorSupervisorStrategy {
  *      }
  *  }
  *
- *  // Can be used with AkkaUtils.createStream as follows
  *  AkkaUtils.createStream[String](Props[MyActor](),"MyActorReceiver")
  *
  * }}}
@@ -104,12 +103,12 @@ abstract class ActorReceiver extends Actor {
  *
  * @example {{{
  *  class MyActor extends JavaActorReceiver {
- *      def receive {
- *          case anything: String => store(anything)
+ *      @Override
+ *      public void onReceive(Object msg) throws Exception {
+ *          store((String) msg);
  *      }
  *  }
  *
- *  // Can be used with AkkaUtils.createStream as follows
  *  AkkaUtils.<String>createStream(Props.create(MyActor.class), "MyActorReceiver");
  *
  * }}}
