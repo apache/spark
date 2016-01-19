@@ -86,8 +86,7 @@ class Analyzer(
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
-      PullOutNondeterministic,
-      ComputeCurrentTime),
+      PullOutNondeterministic),
     Batch("UDF", Once,
       HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
@@ -148,7 +147,7 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr transform {
+          expr transformUp {
             case u @ UnresolvedAlias(child, optionalAliasName) => child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
@@ -1215,6 +1214,10 @@ object CleanupAliases extends Rule[LogicalPlan] {
       Window(projectList, cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
+    // Operators that operate on objects should only have expressions from encoders, which should
+    // never have extra aliases.
+    case o: ObjectOperator => o
+
     case other =>
       var stop = false
       other transformExpressionsDown {
@@ -1226,23 +1229,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
           c.copy(children = c.children.map(trimNonTopLevelAliases))
         case Alias(child, _) if !stop => child
       }
-  }
-}
-
-/**
- * Computes the current date and time to make sure we return the same result in a single query.
- */
-object ComputeCurrentTime extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val dateExpr = CurrentDate()
-    val timeExpr = CurrentTimestamp()
-    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
-    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
-
-    plan transformAllExpressions {
-      case CurrentDate() => currentDate
-      case CurrentTimestamp() => currentTime
-    }
   }
 }
 

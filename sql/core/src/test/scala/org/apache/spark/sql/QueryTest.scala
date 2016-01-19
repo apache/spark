@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
@@ -191,10 +192,10 @@ abstract class QueryTest extends PlanTest {
     val logicalPlan = df.queryExecution.analyzed
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
-      case _: MapPartitions[_, _] => return
-      case _: MapGroups[_, _, _] => return
-      case _: AppendColumns[_, _] => return
-      case _: CoGroup[_, _, _, _] => return
+      case _: MapPartitions => return
+      case _: MapGroups => return
+      case _: AppendColumns => return
+      case _: CoGroup => return
       case _: LogicalRelation => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
@@ -206,7 +207,7 @@ abstract class QueryTest extends PlanTest {
     val jsonString = try {
       logicalPlan.toJSON
     } catch {
-      case e =>
+      case NonFatal(e) =>
         fail(
           s"""
              |Failed to parse logical plan to JSON:
@@ -231,7 +232,7 @@ abstract class QueryTest extends PlanTest {
     val jsonBackPlan = try {
       TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
     } catch {
-      case e =>
+      case NonFatal(e) =>
         fail(
           s"""
              |Failed to rebuild the logical plan from JSON:

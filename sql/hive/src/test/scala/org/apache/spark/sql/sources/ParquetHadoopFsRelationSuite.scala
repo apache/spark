@@ -149,7 +149,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       sqlContext.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
       val df = sqlContext.read.parquet(path).filter('a === 0).select('b)
-      val physicalPlan = df.queryExecution.executedPlan
+      val physicalPlan = df.queryExecution.sparkPlan
 
       assert(physicalPlan.collect { case p: execution.Project => p }.length === 1)
       assert(physicalPlan.collect { case p: execution.Filter => p }.length === 1)

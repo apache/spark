@@ -143,7 +143,13 @@ case class Exchange(
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
-      case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
+      case HashPartitioning(_, n) =>
+        new Partitioner {
+          override def numPartitions: Int = n
+          // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
+          // `HashPartitioning.partitionIdExpression` to produce partitioning key.
+          override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+        }
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
@@ -173,7 +179,9 @@ case class Exchange(
           position += 1
           position
         }
-      case HashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
+      case h: HashPartitioning =>
+        val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, child.output)
+        row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
@@ -223,7 +231,7 @@ case class Exchange(
     new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     coordinator match {
       case Some(exchangeCoordinator) =>
         val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)

@@ -48,7 +48,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   // TODO: if the nullability of field is correct, we can use it to save null check.
   private def writeStructToBuffer(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       input: String,
       fieldTypes: Seq[DataType],
       bufferHolder: String): String = {
@@ -56,7 +56,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       val fieldName = ctx.freshName("fieldName")
       val code = s"final ${ctx.javaType(dt)} $fieldName = ${ctx.getValue(input, dt, i.toString)};"
       val isNull = s"$input.isNullAt($i)"
-      GeneratedExpressionCode(code, isNull, fieldName)
+      ExprCode(code, isNull, fieldName)
     }
 
     s"""
@@ -69,9 +69,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   private def writeExpressionsToBuffer(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       row: String,
-      inputs: Seq[GeneratedExpressionCode],
+      inputs: Seq[ExprCode],
       inputTypes: Seq[DataType],
       bufferHolder: String): String = {
     val rowWriter = ctx.freshName("rowWriter")
@@ -160,7 +160,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   // TODO: if the nullability of array element is correct, we can use it to save null check.
   private def writeArrayToBuffer(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       input: String,
       elementType: DataType,
       bufferHolder: String): String = {
@@ -232,7 +232,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   // TODO: if the nullability of value element is correct, we can use it to save null check.
   private def writeMapToBuffer(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       input: String,
       keyType: DataType,
       valueType: DataType,
@@ -270,7 +270,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
    * If the input is already in unsafe format, we don't need to go through all elements/fields,
    * we can directly write it.
    */
-  private def writeUnsafeData(ctx: CodeGenContext, input: String, bufferHolder: String) = {
+  private def writeUnsafeData(ctx: CodegenContext, input: String, bufferHolder: String) = {
     val sizeInBytes = ctx.freshName("sizeInBytes")
     s"""
       final int $sizeInBytes = $input.getSizeInBytes();
@@ -282,9 +282,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   def createCode(
-      ctx: CodeGenContext,
+      ctx: CodegenContext,
       expressions: Seq[Expression],
-      useSubexprElimination: Boolean = false): GeneratedExpressionCode = {
+      useSubexprElimination: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprTypes = expressions.map(_.dataType)
 
@@ -305,7 +305,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         $result.pointTo($bufferHolder.buffer, $bufferHolder.totalSize());
       """
-    GeneratedExpressionCode(code, "false", result)
+    ExprCode(code, "false", result)
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
@@ -320,8 +320,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     create(canonicalize(expressions), subexpressionEliminationEnabled)
   }
 
-  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
-    create(expressions, subexpressionEliminationEnabled = false)
+  protected def create(references: Seq[Expression]): UnsafeProjection = {
+    create(references, subexpressionEliminationEnabled = false)
   }
 
   private def create(
@@ -331,21 +331,19 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
     val code = s"""
-      public java.lang.Object generate($exprType[] exprs) {
-        return new SpecificUnsafeProjection(exprs);
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificUnsafeProjection(references);
       }
 
       class SpecificUnsafeProjection extends ${classOf[UnsafeProjection].getName} {
 
-        private $exprType[] expressions;
+        private Object[] references;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
-        ${declareMutableStates(ctx)}
-
-        ${declareAddedFunctions(ctx)}
-
-        public SpecificUnsafeProjection($exprType[] expressions) {
-          this.expressions = expressions;
-          ${initMutableStates(ctx)}
+        public SpecificUnsafeProjection(Object[] references) {
+          this.references = references;
+          ${ctx.initMutableStates()}
         }
 
         // Scala.Function1 need this
@@ -362,7 +360,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
   }
 }

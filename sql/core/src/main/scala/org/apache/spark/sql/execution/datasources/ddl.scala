@@ -76,6 +76,7 @@ case class CreateTableUsingAsSelect(
     provider: String,
     temporary: Boolean,
     partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     mode: SaveMode,
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
@@ -90,7 +91,7 @@ case class CreateTempTableUsing(
 
   def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(
-      sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
+      sqlContext, userSpecifiedSchema, Array.empty[String], bucketSpec = None, provider, options)
     sqlContext.catalog.registerTable(
       tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
@@ -109,7 +110,14 @@ case class CreateTempTableUsingAsSelect(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
+    val resolved = ResolvedDataSource(
+      sqlContext,
+      provider,
+      partitionColumns,
+      bucketSpec = None,
+      mode,
+      options,
+      df)
     sqlContext.catalog.registerTable(
       tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)

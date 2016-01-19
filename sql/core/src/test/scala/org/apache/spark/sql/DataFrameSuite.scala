@@ -308,6 +308,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       mapData.toDF().limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+
+    // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
+    checkAnswer(
+      sqlContext.range(2).limit(2147483638),
+      Row(0) :: Row(1) :: Nil
+    )
   }
 
   test("except") {
@@ -1001,6 +1007,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-10743: keep the name of expression if possible when do cast") {
     val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
     assert(df.select($"src.i".cast(StringType)).columns.head === "i")
+    assert(df.select($"src.i".cast(StringType).cast(IntegerType)).columns.head === "i")
   }
 
   test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
@@ -1077,17 +1084,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // Walk each partition and verify that it is sorted descending and does not contain all
     // the values.
     df4.rdd.foreachPartition { p =>
-      var previousValue: Int = -1
-      var allSequential: Boolean = true
-      p.foreach { r =>
-        val v: Int = r.getInt(1)
-        if (previousValue != -1) {
-          if (previousValue < v) throw new SparkException("Partition is not ordered.")
-          if (v + 1 != previousValue) allSequential = false
+      // Skip empty partition
+      if (p.hasNext) {
+        var previousValue: Int = -1
+        var allSequential: Boolean = true
+        p.foreach { r =>
+          val v: Int = r.getInt(1)
+          if (previousValue != -1) {
+            if (previousValue < v) throw new SparkException("Partition is not ordered.")
+            if (v + 1 != previousValue) allSequential = false
+          }
+          previousValue = v
         }
-        previousValue = v
+        if (allSequential) throw new SparkException("Partition should not be globally ordered")
       }
-      if (allSequential) throw new SparkException("Partition should not be globally ordered")
     }
 
     // Distribute and order by with multiple order bys
@@ -1218,5 +1228,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(df("*")), Row("a", "b"))
     checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
     checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
+  }
+
+  test("SPARK-12841: cast in filter") {
+    checkAnswer(
+      Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
+      Row(1, "a"))
   }
 }

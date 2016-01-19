@@ -62,6 +62,28 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("randomSplit on reordered partitions") {
+    // This test ensures that randomSplit does not create overlapping splits even when the
+    // underlying dataframe (such as the one below) doesn't guarantee a deterministic ordering of
+    // rows in each partition.
+    val data =
+      sparkContext.parallelize(1 to 600, 2).mapPartitions(scala.util.Random.shuffle(_)).toDF("id")
+    val splits = data.randomSplit(Array[Double](2, 3), seed = 1)
+
+    assert(splits.length == 2, "wrong number of splits")
+
+    // Verify that the splits span the entire dataset
+    assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
+
+    // Verify that the splits don't overalap
+    assert(splits(0).intersect(splits(1)).collect().isEmpty)
+
+    // Verify that the results are deterministic across multiple runs
+    val firstRun = splits.toSeq.map(_.collect().toSeq)
+    val secondRun = data.randomSplit(Array[Double](2, 3), seed = 1).toSeq.map(_.collect().toSeq)
+    assert(firstRun == secondRun)
+  }
+
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
     val corr1 = df.stat.corr("a", "b", "pearson")

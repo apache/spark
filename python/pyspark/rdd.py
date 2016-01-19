@@ -861,7 +861,7 @@ class RDD(object):
         def func(iterator):
             acc = zeroValue
             for obj in iterator:
-                acc = op(obj, acc)
+                acc = op(acc, obj)
             yield acc
         # collecting result of mapPartitions here ensures that the copy of
         # zeroValue provided to each partition is unique from the one provided
