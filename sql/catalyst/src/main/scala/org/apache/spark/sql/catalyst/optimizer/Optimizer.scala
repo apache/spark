@@ -645,7 +645,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         if (newBranches.isEmpty) {
           elseValue.getOrElse(Literal.create(null, e.dataType))
         } else {
-          e.copy(branches = branches.filter(_._1 != FalseLiteral))
+          e.copy(branches = newBranches)
         }
 
       case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
