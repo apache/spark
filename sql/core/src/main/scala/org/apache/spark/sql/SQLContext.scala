@@ -206,9 +206,6 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser)
-
-  @transient
   protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect())
 
   protected[sql] def getSQLDialect(): ParserDialect = {
@@ -231,7 +228,7 @@ class SQLContext private[sql](
     }
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
+  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String):
     org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))

@@ -935,6 +935,7 @@ createTableStatement
          columnNameTypeList?
          $p
          tableOpts?
+         selectStatementWithCTE?
          )
       ->
          ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
@@ -1808,8 +1809,8 @@ optionKeyValue
 @init { pushMsg("table's option specification", state); }
 @after { popMsg(state); }
     :
-       Identifier StringLiteral
-    -> ^(TOK_TABLEOPTION Identifier StringLiteral)
+       looseIdentifier StringLiteral
+    -> ^(TOK_TABLEOPTION looseIdentifier StringLiteral)
     ;
 
 tableOpts

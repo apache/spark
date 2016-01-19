@@ -105,7 +105,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    val message = intercept[DDLException]{
+    val message = intercept[AnalysisException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
@@ -156,7 +156,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {
-    val message = intercept[DDLException]{
+    val message = intercept[AnalysisException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
@@ -173,7 +173,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   test("a CTAS statement with column definitions is not allowed") {
-    intercept[DDLException]{
+    intercept[AnalysisException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)

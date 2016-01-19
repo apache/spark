@@ -98,6 +98,11 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }
 
         if (asClause.isDefined) {
+          if (columns.isDefined) {
+            throw new DDLException(
+              "a CREATE TABLE AS SELECT statement does not allow column definitions.")
+          }
+
           val mode = if (allowExisting.isDefined) {
             SaveMode.Ignore
           } else if (temp.isDefined) {

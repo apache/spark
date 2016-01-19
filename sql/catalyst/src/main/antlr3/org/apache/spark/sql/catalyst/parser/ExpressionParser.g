@@ -493,6 +493,15 @@ descFuncNames
     | functionIdentifier
     ;
 
+looseIdentifier
+    :
+    Identifier
+    | looseNonReserved -> Identifier[$looseNonReserved.text]
+    // If it decides to support SQL11 reserved keywords, i.e., useSQL11ReservedKeywordsForIdentifier()=false,
+    // the sql11keywords in existing q tests will NOT be added back.
+    | {useSQL11ReservedKeywordsForIdentifier()}? sql11ReservedKeywordsUsedAsIdentifier -> Identifier[$sql11ReservedKeywordsUsedAsIdentifier.text]
+    ;
+
 identifier
     :
     Identifier
@@ -516,6 +525,10 @@ principalIdentifier
 @after { gParent.popMsg(state); }
     : identifier
     | QuotedIdentifier
+    ;
+
+looseNonReserved
+    : nonReserved | KW_FROM | KW_TO
     ;
 
 //The new version of nonReserved + sql11ReservedKeywordsUsedAsIdentifier = old version of nonReserved
