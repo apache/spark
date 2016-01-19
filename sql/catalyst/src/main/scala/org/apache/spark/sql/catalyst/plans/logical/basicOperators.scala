@@ -144,6 +144,15 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  override def constraint: Option[Expression] = {
+    (extractConstraintFromChild(left), extractConstraintFromChild(right)) match {
+      case (Some(p1), Some(p2)) => Some(Or(p1, p2))
+      case (None, Some(p2)) => None
+      case (Some(p1), None) => None
+      case (None, None) => None
+    }
+  }
 }
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -152,11 +161,22 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
+
+  override def constraint: Option[Expression] = {
+    (extractConstraintFromChild(left), extractConstraintFromChild(right)) match {
+      case (Some(p1), Some(p2)) => Some(And(p1, p2))
+      case (None, Some(p2)) => Some(p2)
+      case (Some(p1), None) => Some(p1)
+      case (None, None) => None
+    }
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
+
+  override def constraint: Option[Expression] = extractConstraintFromChild(left)
 }
 
 case class Join(

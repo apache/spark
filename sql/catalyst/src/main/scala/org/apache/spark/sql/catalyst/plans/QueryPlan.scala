@@ -30,7 +30,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
   /**
    * Extracts the output property from a given child.
    */
-  def extractConstraintFromChild(child: QueryPlan[PlanType]): Option[Expression] = {
+  def extractConstraintFromChild(child: QueryPlan[PlanType]): Seq[Expression] = {
     child.constraint.flatMap { predicate =>
       val conjunctivePredicates = splitConjunctivePredicates(predicate)
       conjunctivePredicates.flatMap { p =>
@@ -45,11 +45,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
   }
 
   /**
-   * An expression that describes the data property of the output rows of this operator.
-   * For example, if the output of this operator is column `a`, an example `constraint`
-   * expression can be `a > 10`.
+   * An sequence of expressions that describes the data property of the output rows of this
+   * operator. For example, if the output of this operator is column `a`, an example `constraint`
+   * can be `Seq(a > 10, a < 20)`.
    */
-  def constraint: Option[Expression] = None
+  def constraint: Seq[Expression] = Nil
 
 
   /**
