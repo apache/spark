@@ -143,10 +143,12 @@ object MimaExcludes {
         ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.streaming.receiver.ActorReceiver")
       ) ++ Seq(
         // SPARK-12895 Implement TaskMetrics using accumulators
-        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$value__="),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.internalMetricsToAccumulators"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.collectInternalAccumulators"),
-        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.collectAccumulators")
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.collectAccumulators"),
+        // TODO: remove these once SPARK-12896 is merged
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$value__="),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$deserialized_=")
       ) ++ Seq(
         // SPARK-12692 Scala style: Fix the style violation (Space before "," or ":")
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.SparkSink.org$apache$spark$streaming$flume$sink$Logging$$log_"),
