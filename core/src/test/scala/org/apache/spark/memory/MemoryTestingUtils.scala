@@ -31,7 +31,6 @@ object MemoryTestingUtils {
       taskAttemptId = 0,
       attemptNumber = 0,
       taskMemoryManager = taskMemoryManager,
-      metricsSystem = env.metricsSystem,
-      internalAccumulators = Seq.empty)
+      metricsSystem = env.metricsSystem)
   }
 }

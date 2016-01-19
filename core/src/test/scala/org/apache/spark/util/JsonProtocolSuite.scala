@@ -774,7 +774,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
     if (hasHadoopInput) {
       val inputMetrics = t.registerInputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.incBytesRead(d + e + f)
+      inputMetrics.setBytesRead(d + e + f)
       inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
     } else {
       val sr = t.registerTempShuffleReadMetrics()
@@ -794,7 +794,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       val sw = t.registerShuffleWriteMetrics()
       sw.incShuffleBytesWritten(a + b + c)
       sw.incShuffleWriteTime(b + c + d)
-      sw.setShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
+      sw.incShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
     // Make at most 6 blocks
     t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
