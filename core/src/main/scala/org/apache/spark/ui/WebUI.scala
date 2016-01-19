@@ -26,7 +26,7 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
@@ -38,6 +38,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class WebUI(
     val securityManager: SecurityManager,
+    val sslOptions: SSLOptions,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
@@ -133,7 +134,7 @@ private[spark] abstract class WebUI(
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
+      serverInfo = Some(startJettyServer("0.0.0.0", port, sslOptions, handlers, conf, name))
       logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
     } catch {
       case e: Exception =>
