@@ -294,7 +294,7 @@ object SparkBuild extends PomBuild {
 
     sparkPackage := {
       import complete.DefaultParsers._
-      val packages :: className :: otherArgs = spaceDelimited("<arg>").parsed.toList
+      val packages :: className :: otherArgs = spaceDelimited("<group:artifact:version> <MainClass> [args]").parsed.toList
       val scalaRun = (runner in run).value
       val classpath = (fullClasspath in Runtime).value
       val args = Seq("--packages", packages, "--class", className, (Keys.`package` in Compile in "core").value.getCanonicalPath) ++ otherArgs
@@ -307,7 +307,6 @@ object SparkBuild extends PomBuild {
     sparkSql := {
       (runMain in Compile).toTask(" org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver").value
     }
-
   ))(assembly)
 
   enable(Seq(sparkShell := sparkShell in "assembly"))(spark)
