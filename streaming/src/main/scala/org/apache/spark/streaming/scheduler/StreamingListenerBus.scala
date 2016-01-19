@@ -21,19 +21,9 @@ import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListener
 import org.apache.spark.util.ListenerBus
 
 /**
- * Wrap StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark listener bus.
- */
-private[streaming] case class WrappedStreamingListenerEvent(
-    streamingListenerEvent: StreamingListenerEvent) extends SparkListenerEvent {
-
-  // TODO once SPARK-12140 is resolved this will be true as well
-  protected[spark] override def logEvent: Boolean = false
-}
-
-/**
  * A Streaming listener bus to forward events in WrappedStreamingListenerEvent to StreamingListeners
  */
-private[streaming] class StreamingListenerForwardingBus(sparkListenerBus: LiveListenerBus)
+private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
   extends SparkListener with ListenerBus[StreamingListener, StreamingListenerEvent] {
 
   sparkListenerBus.addListener(this)    // for getting callbacks on spark events
@@ -70,5 +60,17 @@ private[streaming] class StreamingListenerForwardingBus(sparkListenerBus: LiveLi
         listener.onOutputOperationCompleted(outputOperationCompleted)
       case _ =>
     }
+  }
+
+  /**
+   * Wrap StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark listener
+   * bus.
+   */
+  case class WrappedStreamingListenerEvent(
+    streamingListenerEvent: StreamingListenerEvent) extends SparkListenerEvent {
+
+    // Do not log streaming events in event log as history server does not support streaming
+    // events (SPARK-12140). TODO Once SPARK-12140 is resolved we should set it to true.
+    protected[spark] override def logEvent: Boolean = false
   }
 }
