@@ -30,12 +30,12 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
   import hiveContext._
 
   def rddIdOf(tableName: String): Int = {
-    val executedPlan = table(tableName).queryExecution.executedPlan
-    executedPlan.collect {
+    val plan = table(tableName).queryExecution.sparkPlan
+    plan.collect {
       case InMemoryColumnarTableScan(_, _, relation) =>
         relation.cachedColumnBuffers.id
       case _ =>
-        fail(s"Table $tableName is not cached\n" + executedPlan)
+        fail(s"Table $tableName is not cached\n" + plan)
     }.head
   }
 
