@@ -64,7 +64,8 @@ class Accumulable[R, T] private[spark] (
 
   val id: Long = Accumulators.newId
 
-  @volatile @transient private var value_ : R = initialValue // Current value on master
+  // TODO: make this transient after SPARK-12896
+  @volatile private var value_ : R = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
 
@@ -152,8 +153,13 @@ class Accumulable[R, T] private[spark] (
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    value_ = zero
-    deserialized = true
+    // TODO: right now we send accumulators from the executor to the driver through TaskMetrics.
+    // If we set the value to zero here we would zero out all values on the driver, which is not
+    // what we want. Let's comment this out for now until SPARK-12896, which allows us to avoid
+    // sending TaskMetrics to the driver.
+    // value_ = zero
+    // deserialized = true
+
     // Automatically register the accumulator when it is deserialized with the task closure.
     //
     // Note internal accumulators sent with task are deserialized before the TaskContext is created
