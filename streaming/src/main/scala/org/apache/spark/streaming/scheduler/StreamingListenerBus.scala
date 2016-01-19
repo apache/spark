@@ -21,13 +21,18 @@ import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListener
 import org.apache.spark.util.ListenerBus
 
 /**
- * A Streaming listener bus to forward events in WrappedStreamingListenerEvent to StreamingListeners
+ * A Streaming listener bus to forward events to StreamingListeners. This one will wrap received
+ * Streaming events as WrappedStreamingListenerEvent and send them to Spark listener bus. It also
+ * registers itself with Spark listener bus, so that it can receive WrappedStreamingListenerEvents,
+ * unwrap them as StreamingListenerEvent and dispatch them to StreamingListeners.
  */
 private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
   extends SparkListener with ListenerBus[StreamingListener, StreamingListenerEvent] {
 
-  sparkListenerBus.addListener(this)    // for getting callbacks on spark events
-
+  /**
+   * Post a StreamingListenerEvent to the Spark listener bus asynchronously. This event will be
+   * dispatched to all StreamingListeners in the thread of the Spark listener bus.
+   */
   def post(event: StreamingListenerEvent) {
     sparkListenerBus.post(new WrappedStreamingListenerEvent(event))
   }
@@ -40,7 +45,8 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
     }
   }
 
-  override def onPostEvent(listener: StreamingListener, event: StreamingListenerEvent): Unit = {
+  protected override def doPostEvent(
+      listener: StreamingListener, event: StreamingListenerEvent): Unit = {
     event match {
       case receiverStarted: StreamingListenerReceiverStarted =>
         listener.onReceiverStarted(receiverStarted)
@@ -63,8 +69,24 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
   }
 
   /**
-   * Wrap StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark listener
-   * bus.
+   * Register this one with the Spark listener bus so that it can receive Streaming events and
+   * forward them to StreamingListeners.
+   */
+  def start(): Unit = {
+    sparkListenerBus.addListener(this) // for getting callbacks on spark events
+  }
+
+  /**
+   * Unregister this one with the Spark listener bus and all StreamingListeners won't receive any
+   * events after that.
+   */
+  def stop(): Unit = {
+    sparkListenerBus.removeListener(this)
+  }
+
+  /**
+   * Wrapper for StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark
+   * listener bus.
    */
   case class WrappedStreamingListenerEvent(
     streamingListenerEvent: StreamingListenerEvent) extends SparkListenerEvent {

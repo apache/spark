@@ -76,6 +76,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       rateController <- inputDStream.rateController
     } ssc.addStreamingListener(rateController)
 
+    listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
     receiverTracker.start()
@@ -112,6 +113,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logDebug("Stopped job executor")
 
     // Stop everything else
+    listenerBus.stop()
     eventLoop.stop()
     eventLoop = null
     logInfo("Stopped JobScheduler")
