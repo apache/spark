@@ -274,7 +274,11 @@ object SparkBuild extends PomBuild {
    * Usage: `build/sbt sparkShell`
    */
   val sparkShell = taskKey[Unit]("start a spark-shell.")
-  val sparkPackage = inputKey[Unit]("download and run a spark package")
+  val sparkPackage = inputKey[Unit](
+    s"""
+       |Download and run a spark package.
+       |Usage `builds/sbt "sparkPackage <group:artifact:version> <MainClass> [args]
+     """.stripMargin)
   val sparkSql = taskKey[Unit]("starts the spark sql CLI.")
 
   enable(Seq(
