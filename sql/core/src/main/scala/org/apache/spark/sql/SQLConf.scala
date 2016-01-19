@@ -278,11 +278,6 @@ private[spark] object SQLConf {
     doc = "When true, common subexpressions will be eliminated.",
     isPublic = false)
 
-  val DIALECT = stringConf(
-    "spark.sql.dialect",
-    defaultValue = Some("sql"),
-    doc = "The default SQL dialect to use.")
-
   val CASE_SENSITIVE = booleanConf("spark.sql.caseSensitive",
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
@@ -524,21 +519,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
-  // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
-
-  /**
-   * The SQL dialect that is used when parsing queries.  This defaults to 'sql' which uses
-   * a simple SQL parser provided by Spark SQL.  This is currently the only option for users of
-   * SQLContext.
-   *
-   * When using a HiveContext, this value defaults to 'hiveql', which uses the Hive 0.12.0 HiveQL
-   * parser.  Users can change this to 'sql' if they want to run queries that aren't supported by
-   * HiveQL (e.g., SELECT 1).
-   *
-   * Note that the choice of dialect does not affect things like what tables are available or
-   * how query execution is performed.
-   */
-  private[spark] def dialect: String = getConf(DIALECT)
 
   private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
