@@ -81,6 +81,7 @@ password = [
     'flask-bcrypt>=0.7.1',
 ]
 github_enterprise = ['Flask-OAuthlib>=0.9.1']
+qds = ['qds-sdk>=1.9.0']
 
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica
 devel = all_dbs + doc + samba + s3 + ['nose'] + slack + crypto + oracle
@@ -143,6 +144,7 @@ setup(
         'kerberos': kerberos,
         'password': password,
         'github_enterprise': github_enterprise,
+        'qds': qds
     },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
