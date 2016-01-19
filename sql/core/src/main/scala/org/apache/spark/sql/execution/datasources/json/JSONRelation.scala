@@ -193,7 +193,7 @@ private[json] class JsonOutputWriter(
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
-        val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+        val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
       }
     }.getRecordWriter(context)
