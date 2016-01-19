@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.net.URI
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -65,6 +66,11 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
+  def tableDir: File = {
+    val identifier = hiveContext.sqlParser.parseTableIdentifier("bucketed_table")
+    new File(URI.create(hiveContext.catalog.hiveDefaultTableFilePath(identifier)))
+  }
+
   /**
    * A helper method to check the bucket write functionality in low level, i.e. check the written
    * bucket files to see if the data are correct.  User should pass in a data dir that these bucket
@@ -82,7 +88,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       dataDir.isDirectory
       throw new NullPointerException(s"""
            |dataDir.listFiles() is NULL
-           |== Directory(isDirectory=${dataDir.isDirectory}) ==
+           |== Directory(isDirectory=${dataDir.isDirectory} exists=${dataDir.exists}) ==
            |$dataDir
            |== Hive Warehouse(isDirectory=${hiveContext.warehousePath.isDirectory}) ==
            |${hiveContext.warehousePath}
@@ -139,7 +145,6 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           .bucketBy(8, "j", "k")
           .saveAsTable("bucketed_table")
 
-        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
         for (i <- 0 until 5) {
           testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j", "k"))
         }
@@ -157,7 +162,6 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           .sortBy("k")
           .saveAsTable("bucketed_table")
 
-        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
         for (i <- 0 until 5) {
           testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j"), Seq("k"))
         }
@@ -173,7 +177,6 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           .bucketBy(8, "i", "j")
           .saveAsTable("bucketed_table")
 
-        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
         testBucketing(tableDir, source, 8, Seq("i", "j"))
       }
     }
@@ -188,7 +191,6 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           .sortBy("k")
           .saveAsTable("bucketed_table")
 
-        val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
         testBucketing(tableDir, source, 8, Seq("i", "j"), Seq("k"))
       }
     }
