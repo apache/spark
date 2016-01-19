@@ -30,8 +30,7 @@ import org.apache.spark.sql.types._
 
 
 /**
-<<<<<<< HEAD
- * A collection of [[Rule Rules]] that can be used to coerce differing types that participate in
+ * A collection of [[Rule]] that can be used to coerce differing types that participate in
  * operations into compatible ones.
  *
  * Most of these rules are based on Hive semantics, but they do not introduce any dependencies on
@@ -45,12 +44,6 @@ import org.apache.spark.sql.types._
  * some acceptable loss of precision (e.g. there is no common type for double and decimal because
  * double's range is larger than decimal, and yet decimal is more precise than double, but in
  * union we would cast the decimal into double).
-=======
- * A collection of [[Rule]] that can be used to coerce differing types that
- * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
- * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
- * Catalyst until we have a more standard set of coercions.
->>>>>>> unionAllMCMergedNewNew
  */
 object HiveTypeCoercion {
 
