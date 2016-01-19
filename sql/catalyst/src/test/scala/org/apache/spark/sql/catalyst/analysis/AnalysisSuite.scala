@@ -242,4 +242,23 @@ class AnalysisSuite extends AnalysisTest {
     val plan = relation.select(CaseWhen(Seq((Literal(true), 'a.attr)), 'b).as("val"))
     assertAnalysisSuccess(plan)
   }
+
+  test("intersect - nullability") {
+    val nullableRelation =
+      LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
+    val nonNullableRelation =
+      LocalRelation(AttributeReference("a", IntegerType, nullable = false)())
+
+    val plan1 = nonNullableRelation.intersect(nullableRelation)
+    assert(plan1.schema.forall(_.nullable == false))
+
+    val plan2 = nullableRelation.intersect(nonNullableRelation)
+    assert(plan2.schema.forall(_.nullable == false))
+
+    val plan3 = nullableRelation.intersect(nullableRelation)
+    assert(plan3.schema.forall(_.nullable == true))
+
+    val plan4 = nonNullableRelation.intersect(nonNullableRelation)
+    assert(plan4.schema.forall(_.nullable == false))
+  }
 }

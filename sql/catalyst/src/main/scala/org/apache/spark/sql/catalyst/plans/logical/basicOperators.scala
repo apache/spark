@@ -91,11 +91,6 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output: Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
-      leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
-    }
-
   final override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
@@ -107,6 +102,11 @@ private[sql] object SetOperation {
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+
+  override def output: Seq[Attribute] =
+    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
+      leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
+    }
 
   override def statistics: Statistics = {
     val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
