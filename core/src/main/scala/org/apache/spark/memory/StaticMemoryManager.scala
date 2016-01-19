@@ -17,10 +17,8 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.storage.BlockId
 
 /**
  * A [[MemoryManager]] that statically partitions the heap space into disjoint regions.
@@ -53,24 +51,18 @@ private[spark] class StaticMemoryManager(
     (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
-  override def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
     if (numBytes > maxStorageMemory) {
       // Fail fast if the block simply won't fit
       logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
         s"memory limit ($maxStorageMemory bytes)")
       false
     } else {
-      storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+      storageMemoryPool.acquireMemory(blockId, numBytes)
     }
   }
 
-  override def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
     val currentUnrollMemory = storageMemoryPool.memoryStore.currentUnrollMemory
     val freeMemory = storageMemoryPool.memoryFree
     // When unrolling, we will use all of the existing free memory, and, if necessary,
@@ -80,7 +72,7 @@ private[spark] class StaticMemoryManager(
     val maxNumBytesToFree = math.max(0, maxUnrollMemory - currentUnrollMemory - freeMemory)
     // Keep it within the range 0 <= X <= maxNumBytesToFree
     val numBytesToFree = math.max(0, math.min(maxNumBytesToFree, numBytes - freeMemory))
-    storageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
+    storageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree)
   }
 
   private[memory]

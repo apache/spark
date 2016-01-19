@@ -71,7 +71,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
 
     var numRecords: Option[Long] = None
 
-    val putResult: Seq[(BlockId, BlockStatus)] = block match {
+    val putSucceeded: Boolean = block match {
       case ArrayBufferBlock(arrayBuffer) =>
         numRecords = Some(arrayBuffer.size.toLong)
         blockManager.putIterator(blockId, arrayBuffer.iterator, storageLevel,
@@ -88,7 +88,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
         throw new SparkException(
           s"Could not store $blockId to block manager, unexpected block type ${o.getClass.getName}")
     }
-    if (!putResult.map { _._1 }.contains(blockId)) {
+    if (!putSucceeded) {
       throw new SparkException(
         s"Could not store $blockId to block manager with storage level $storageLevel")
     }
@@ -184,9 +184,9 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Store the block in block manager
     val storeInBlockManagerFuture = Future {
-      val putResult =
+      val putSucceeded =
         blockManager.putBytes(blockId, serializedBlock, effectiveStorageLevel, tellMaster = true)
-      if (!putResult.map { _._1 }.contains(blockId)) {
+      if (!putSucceeded) {
         throw new SparkException(
           s"Could not store $blockId to block manager with storage level $storageLevel")
       }

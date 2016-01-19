@@ -17,12 +17,37 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.annotation.DeveloperApi
 
-class TaskMetricsSuite extends SparkFunSuite {
-  test("[SPARK-5701] updateShuffleReadMetrics: ShuffleReadMetrics not added when no shuffle deps") {
-    val taskMetrics = new TaskMetrics()
-    taskMetrics.mergeShuffleReadMetrics()
-    assert(taskMetrics.shuffleReadMetrics.isEmpty)
-  }
+
+/**
+ * :: DeveloperApi ::
+ * Method by which output data was written.
+ */
+@DeveloperApi
+object DataWriteMethod extends Enumeration with Serializable {
+  type DataWriteMethod = Value
+  val Hadoop = Value
+}
+
+
+/**
+ * :: DeveloperApi ::
+ * Metrics about writing output data.
+ */
+@DeveloperApi
+case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
+  /**
+   * Total bytes written
+   */
+  private var _bytesWritten: Long = _
+  def bytesWritten: Long = _bytesWritten
+  private[spark] def setBytesWritten(value : Long): Unit = _bytesWritten = value
+
+  /**
+   * Total records written
+   */
+  private var _recordsWritten: Long = 0L
+  def recordsWritten: Long = _recordsWritten
+  private[spark] def setRecordsWritten(value: Long): Unit = _recordsWritten = value
 }

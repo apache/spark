@@ -41,14 +41,8 @@ class TestMemoryManager(conf: SparkConf)
       grant
     }
   }
-  override def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = true
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = true
   override def releaseStorageMemory(numBytes: Long): Unit = {}
   override private[memory] def releaseExecutionMemory(
       numBytes: Long,
