@@ -21,7 +21,7 @@ import java.nio.charset.Charset
 
 import org.apache.spark.Logging
 
-private[sql] case class CSVParameters(parameters: Map[String, String]) extends Logging {
+private[sql] case class CSVParameters(@transient parameters: Map[String, String]) extends Logging {
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -44,9 +44,11 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(parameters.getOrElse("delimiter", ","))
+  val delimiter = CSVTypeCast.toChar(
+    parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val charset = parameters.getOrElse("charset", Charset.forName("UTF-8").name())
+  val charset = parameters.getOrElse("encoding",
+    parameters.getOrElse("charset", Charset.forName("UTF-8").name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
