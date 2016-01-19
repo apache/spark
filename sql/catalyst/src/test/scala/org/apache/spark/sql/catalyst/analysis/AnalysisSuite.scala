@@ -83,13 +83,13 @@ class AnalysisSuite extends AnalysisTest {
 
     // Case 1: one missing attribute is in the leaf node and another is in the unary node
     val plan1 = testRelation2
-      .where('a > 0).select('a, 'b)
-      .where('b > 0).select('a)
+      .where('a > "str").select('a, 'b)
+      .where('b > "str").select('a)
       .limit(4)
       .sortBy('b.asc, 'c.desc)
     val expected1 = testRelation2
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
-      .where(b.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
+      .where(a > "str").select(a, b, c)
+      .where(b > "str").select(a, b, c)
       .limit(4)
       .sortBy(b.asc, c.desc)
       .select(a, b).select(a)
@@ -97,12 +97,12 @@ class AnalysisSuite extends AnalysisTest {
 
     // Case 2: all the missing attributes are in the leaf node
     val plan2 = testRelation2
-      .where('a > 0).select('a)
-      .where('a > 0).select('a)
+      .where('a > "str").select('a)
+      .where('a > "str").select('a)
       .sortBy('b.asc, 'c.desc)
     val expected2 = testRelation2
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
-      .where(a.cast(DoubleType) > Literal(0).cast(DoubleType)).select(a, b, c)
+      .where(a > "str").select(a, b, c)
+      .where(a > "str").select(a, b, c)
       .sortBy(b.asc, c.desc)
       .select(a)
     checkAnalysis(plan2, expected2)
