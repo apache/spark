@@ -114,6 +114,19 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.memory</code></td>
+  <td>1g</td>
+  <td>
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>1g</code>, <code>2g</code>).
+
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-memory</code> command line option
+    or in your default properties file.
+  </td>
+</tr>
+<tr>
   <td><code>spark.driver.cores</code></td>
   <td><code>1</code></td>
   <td>
