@@ -64,6 +64,28 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     longAcc.value should be (210L + maxInt * 20)
   }
 
+  test ("basic accumulation flatMap"){
+    sc = new SparkContext("local", "test")
+    val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
+
+    val d = sc.parallelize(1 to 20)
+    d.mapWithAccumulator{case (ui, x) => acc += (ui, x)}.count()
+    acc.value should be (210)
+
+    val longAcc = sc.consistentAccumulator(0L)
+    val maxInt = Integer.MAX_VALUE.toLong
+    val c = d.flatMapWithAccumulator{case (ui, x) =>
+      longAcc += (ui, maxInt + x)
+      if (x % 2 == 0) {
+        Some(x)
+      } else {
+        None
+      }
+    }.count()
+    longAcc.value should be (210L + maxInt * 20)
+    c should be (10)
+  }
+
   test("map + map + count") {
     sc = new SparkContext("local", "test")
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)

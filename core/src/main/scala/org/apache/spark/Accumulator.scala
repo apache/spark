@@ -76,7 +76,7 @@ private[spark] object Accumulators extends Logging {
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
    */
-  val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
+  val originals = mutable.Map[Long, WeakReference[GenericAccumulable[_, _, _]]]()
 
   private var lastId: Long = 0
 
@@ -85,8 +85,8 @@ private[spark] object Accumulators extends Logging {
     lastId
   }
 
-  def register(a: Accumulable[_, _]): Unit = synchronized {
-    originals(a.id) = new WeakReference[Accumulable[_, _]](a)
+  def register(a: GenericAccumulable[_, _, _]): Unit = synchronized {
+    originals(a.id) = new WeakReference[GenericAccumulable[_, _, _]](a)
   }
 
   def remove(accId: Long) {
@@ -102,7 +102,7 @@ private[spark] object Accumulators extends Logging {
         // Since we are now storing weak references, we must check whether the underlying data
         // is valid.
         originals(id).get match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
+          case Some(accum) => accum.asInstanceOf[GenericAccumulable[Any, Any, Any]] ++= value
           case None =>
             throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
         }

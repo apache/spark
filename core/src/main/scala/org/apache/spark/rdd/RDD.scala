@@ -345,6 +345,18 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return a new RDD by applying a function to all elements of this RDD and flattening the results.
+   */
+  def flatMapWithAccumulator[U: ClassTag](f: (UpdateInfo, T) => TraversableOnce[U]): RDD[U] =
+    withScope {
+    val cleanF = sc.clean(f)
+    new MapPartitionsRDD[U, T](this, {(context, rid, pid, iter) =>
+      val ui = UpdateInfo(rid, pid)
+      iter.flatMap(cleanF(ui, _))})
+  }
+
+
+  /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: T => Boolean): RDD[T] = withScope {
