@@ -27,10 +27,20 @@ import org.apache.spark.sql.types._
 
 
 /**
- * A collection of [[Rule Rules]] that can be used to coerce differing types that
- * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
- * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
- * Catalyst until we have a more standard set of coercions.
+ * A collection of [[Rule Rules]] that can be used to coerce differing types that participate in
+ * operations into compatible ones.
+ *
+ * Most of these rules are based on Hive semantics, but they do not introduce any dependencies on
+ * the hive codebase.
+ *
+ * Notes about type widening / tightest common types: Broadly, there are two cases when we need
+ * to widen data types (e.g. union, binary comparison). In case 1, we are looking for a common
+ * data type for two or more data types, and in this case no loss of precision is allowed. Examples
+ * include type inference in JSON (e.g. what's the column's data type if one row is an integer
+ * while the other row is a long?). In case 2, we are looking for a widened data type with
+ * some acceptable loss of precision (e.g. there is no common type for double and decimal because
+ * double's range is larger than decimal, and yet decimal is more precise than double, but in
+ * union we would cast the decimal into double).
  */
 object HiveTypeCoercion {
 
@@ -63,6 +73,8 @@ object HiveTypeCoercion {
       DoubleType)
 
   /**
+   * Case 1 type widening (see the classdoc comment above for HiveTypeCoercion).
+   *
    * Find the tightest common type of two types that might be used in a binary expression.
    * This handles all numeric types except fixed-precision decimals interacting with each other or
    * with primitive types, because in that case the precision and scale of the result depends on
@@ -118,6 +130,12 @@ object HiveTypeCoercion {
     })
   }
 
+  /**
+   * Case 2 type widening (see the classdoc comment above for HiveTypeCoercion).
+   *
+   * i.e. the main difference with [[findTightestCommonTypeOfTwo]] is that here we allow some
+   * loss of precision when widening decimal and double.
+   */
   private def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = (t1, t2) match {
     case (t1: DecimalType, t2: DecimalType) =>
       Some(DecimalPrecision.widerDecimalType(t1, t2))
@@ -125,9 +143,7 @@ object HiveTypeCoercion {
       Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
     case (d: DecimalType, t: IntegralType) =>
       Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
-    case (t: FractionalType, d: DecimalType) =>
-      Some(DoubleType)
-    case (d: DecimalType, t: FractionalType) =>
+    case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
       Some(DoubleType)
     case _ =>
       findTightestCommonTypeToString(t1, t2)
@@ -200,41 +216,37 @@ object HiveTypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    private[this] def widenOutputTypes(
-        planName: String,
-        left: LogicalPlan,
-        right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
-      require(left.output.length == right.output.length)
-
-      val castedTypes = left.output.zip(right.output).map {
-        case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-          findWiderTypeForTwo(lhs.dataType, rhs.dataType)
-        case other => None
-      }
-
-      def castOutput(plan: LogicalPlan): LogicalPlan = {
-        val casted = plan.output.zip(castedTypes).map {
-          case (e, Some(dt)) if e.dataType != dt =>
-            Alias(Cast(e, dt), e.name)()
-          case (e, _) => e
-        }
-        Project(casted, plan)
-      }
-
-      if (castedTypes.exists(_.isDefined)) {
-        (castOutput(left), castOutput(right))
-      } else {
-        (left, right)
-      }
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if p.analyzed => p
 
       case s @ SetOperation(left, right) if s.childrenResolved
           && left.output.length == right.output.length && !s.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(s.nodeName, left, right)
-        s.makeCopy(Array(newLeft, newRight))
+
+        // Tracks the list of data types to widen.
+        // Some(dataType) means the right-hand side and the left-hand side have different types,
+        // and there is a target type to widen both sides to.
+        val targetTypes: Seq[Option[DataType]] = left.output.zip(right.output).map {
+          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
+            findWiderTypeForTwo(lhs.dataType, rhs.dataType)
+          case other => None
+        }
+
+        if (targetTypes.exists(_.isDefined)) {
+          // There is at least one column to widen.
+          s.makeCopy(Array(widenTypes(left, targetTypes), widenTypes(right, targetTypes)))
+        } else {
+          // If we cannot find any column to widen, then just return the original set.
+          s
+        }
+    }
+
+    /** Given a plan, add an extra project on top to widen some columns' data types. */
+    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[Option[DataType]]): LogicalPlan = {
+      val casted = plan.output.zip(targetTypes).map {
+        case (e, Some(dt)) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+        case (e, _) => e
+      }
+      Project(casted, plan)
     }
   }
 
@@ -372,8 +384,6 @@ object HiveTypeCoercion {
    * - INT gets turned into DECIMAL(10, 0)
    * - LONG gets turned into DECIMAL(20, 0)
    * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE
-   *
-   * Note: Union/Except/Interact is handled by WidenTypes
    */
   // scalastyle:on
   object DecimalPrecision extends Rule[LogicalPlan] {
