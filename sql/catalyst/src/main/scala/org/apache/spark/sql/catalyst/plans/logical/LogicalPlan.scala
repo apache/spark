@@ -301,10 +301,14 @@ abstract class LeafNode extends LogicalPlan {
 /**
  * A logical plan node with single child.
  */
-abstract class UnaryNode extends LogicalPlan {
+abstract class UnaryNode extends LogicalPlan with PredicateHelper {
   def child: LogicalPlan
 
   override def children: Seq[LogicalPlan] = child :: Nil
+
+  override def constraint: Option[Expression] = {
+    extractConstraintFromChild(child)
+  }
 }
 
 /**

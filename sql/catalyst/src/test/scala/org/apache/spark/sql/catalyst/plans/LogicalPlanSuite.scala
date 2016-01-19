@@ -21,6 +21,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 
 /**
  * This suite is used to test [[LogicalPlan]]'s `resolveOperators` and make sure it can correctly
@@ -69,5 +71,16 @@ class LogicalPlanSuite extends SparkFunSuite {
     plan2 resolveOperators function
 
     assert(invocationCount === 1)
+  }
+
+  test("propagating constraint in filter") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+    assert(tr.analyze.constraint.isEmpty)
+    assert(tr.select('a.attr).analyze.constraint.isEmpty)
+    assert(tr.where('a.attr > 10).analyze.constraint.get == ('a > 10))
+    assert(tr.where('a.attr > 10).select('c.attr).analyze.constraint.get == ('a > 10))
+    assert(tr.where('a.attr > 10).select('c.attr, 'a.attr).where('c.attr < 100)
+      .analyze.constraint.get == And('a > 10, 'c < 100))
+    assert(tr.where('a.attr > 10).select('c.attr, 'b.attr).analyze.constraint.isEmpty)
   }
 }

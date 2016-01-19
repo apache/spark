@@ -17,14 +17,40 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
+abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
+  extends TreeNode[PlanType] with PredicateHelper {
   self: PlanType =>
 
   def output: Seq[Attribute]
+
+  /**
+   * Extracts the output property from a given child.
+   */
+  def extractConstraintFromChild(child: QueryPlan[PlanType]): Option[Expression] = {
+    child.constraint.flatMap { predicate =>
+      val conjunctivePredicates = splitConjunctivePredicates(predicate)
+      conjunctivePredicates.flatMap { p =>
+        if (p.references.subsetOf(outputSet)) {
+          // We only keep predicates that are composed by attributes in the outputSet.
+          Some(p)
+        } else {
+          None
+        }
+      }.reduceOption(And)
+    }
+  }
+
+  /**
+   * An expression that describes the data property of the output rows of this operator.
+   * For example, if the output of this operator is column `a`, an example `constraint`
+   * expression can be `a > 10`.
+   */
+  def constraint: Option[Expression] = None
+
 
   /**
    * Returns the set of attributes that are output by this node.

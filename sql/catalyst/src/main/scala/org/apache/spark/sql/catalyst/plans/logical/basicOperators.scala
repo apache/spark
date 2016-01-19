@@ -37,6 +37,21 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
+
+  override def constraint: Option[Expression] = {
+    extractConstraintFromChild(child) match {
+      case Some(constraint) =>
+        splitConjunctivePredicates(constraint).flatMap { p =>
+          if (p.references.subsetOf(outputSet)) {
+            Some(p)
+          } else {
+            None
+          }
+        }.reduceOption(And)
+      case None =>
+        None
+    }
+  }
 }
 
 /**
@@ -88,6 +103,23 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def constraint: Option[Expression] = {
+    val conjunctivePredicates = splitConjunctivePredicates(condition)
+    val newProperty = conjunctivePredicates.flatMap { p =>
+      if (p.references.subsetOf(outputSet)) {
+        Some(p)
+      } else {
+        None
+      }
+    }.reduceOption(And)
+    (newProperty, extractConstraintFromChild(child)) match {
+      case (Some(p1), Some(p2)) => Some(And(p1, p2))
+      case (None, Some(p2)) => Some(p2)
+      case (Some(p1), None) => Some(p1)
+      case (None, None) => None
+    }
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
