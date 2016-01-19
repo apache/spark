@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
@@ -35,6 +35,13 @@ private[spark] class TaskContextImpl(
     initialAccumulators: Seq[Accumulator[_]] = InternalAccumulator.create())
   extends TaskContext
   with Logging {
+
+  // We only want partial updates from the executors, so just initialize all accumulators
+  // registered on the executors to zero. We could just do this when we deserialize the
+  // accumulator, but currently we send accumulators from the executors to the driver as
+  // well and we don't want to zero out the values there.
+  // TODO: once we fix SPARK-12896 we don't need to set this to zero here
+  initialAccumulators.foreach { a => a.setValueAny(a.zero) }
 
   /**
    * Metrics associated with this task.
@@ -96,6 +103,8 @@ private[spark] class TaskContextImpl(
     metricsSystem.getSourcesByName(sourceName)
 
   private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = {
+    // TODO: once we fix SPARK-12896 we don't need to set this to zero here
+    a.setValueAny(a.zero)
     taskMetrics.registerAccumulator(a)
   }
 
