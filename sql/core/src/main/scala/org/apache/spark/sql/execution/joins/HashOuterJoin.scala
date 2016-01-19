@@ -78,8 +78,11 @@ trait HashOuterJoin {
 
   @transient private[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
   @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
-  @transient private[this] lazy val boundCondition =
+  @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+  } else {
+    (row: InternalRow) => true
+  }
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.
