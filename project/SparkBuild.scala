@@ -274,6 +274,7 @@ object SparkBuild extends PomBuild {
    * Usage: `build/sbt sparkShell`
    */
   val sparkShell = taskKey[Unit]("start a spark-shell.")
+  val sparkPackage = inputKey[Unit]("download and run a spark package")
   val sparkSql = taskKey[Unit]("starts the spark sql CLI.")
 
   enable(Seq(
@@ -287,11 +288,22 @@ object SparkBuild extends PomBuild {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
     },
 
+    sparkPackage := {
+      import complete.DefaultParsers._
+      val packages :: className :: otherArgs = spaceDelimited("<arg>").parsed.toList
+      val scalaRun = (runner in run).value
+      val classpath = (fullClasspath in Runtime).value
+      val args = Seq("--packages", packages, "--class", className, (Keys.`package` in Compile in "core").value.getCanonicalPath) ++ otherArgs
+      println(args)
+      scalaRun.run("org.apache.spark.deploy.SparkSubmit", classpath.map(_.data), args, streams.value.log)
+    },
+
     javaOptions in Compile += "-Dspark.master=local",
 
     sparkSql := {
       (runMain in Compile).toTask(" org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver").value
     }
+
   ))(assembly)
 
   enable(Seq(sparkShell := sparkShell in "assembly"))(spark)
