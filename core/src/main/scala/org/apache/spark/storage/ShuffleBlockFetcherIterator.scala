@@ -305,7 +305,7 @@ final class ShuffleBlockFetcherIterator(
         bytesInFlight -= size
         if (isNetworkReqDone) {
           reqsInFlight -= 1
-          logInfo("Number of requests in flight " + reqsInFlight)
+          logDebug("Number of requests in flight " + reqsInFlight)
         }
       }
       case _ =>
