@@ -2008,6 +2008,7 @@ class NumPyTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if not _have_numpy:
