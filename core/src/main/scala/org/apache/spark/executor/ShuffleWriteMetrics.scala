@@ -26,28 +26,39 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 class ShuffleWriteMetrics extends Serializable {
+
   /**
    * Number of bytes written for the shuffle by this task
    */
-  @volatile private var _shuffleBytesWritten: Long = _
-  def shuffleBytesWritten: Long = _shuffleBytesWritten
-  private[spark] def incShuffleBytesWritten(value: Long) = _shuffleBytesWritten += value
-  private[spark] def decShuffleBytesWritten(value: Long) = _shuffleBytesWritten -= value
+  @volatile private var _bytesWritten: Long = _
+  def bytesWritten: Long = _bytesWritten
+  private[spark] def incBytesWritten(value: Long) = _bytesWritten += value
+  private[spark] def decBytesWritten(value: Long) = _bytesWritten -= value
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
-  @volatile private var _shuffleWriteTime: Long = _
-  def shuffleWriteTime: Long = _shuffleWriteTime
-  private[spark] def incShuffleWriteTime(value: Long) = _shuffleWriteTime += value
-  private[spark] def decShuffleWriteTime(value: Long) = _shuffleWriteTime -= value
+  @volatile private var _writeTime: Long = _
+  def writeTime: Long = _writeTime
+  private[spark] def incWriteTime(value: Long) = _writeTime += value
+  private[spark] def decWriteTime(value: Long) = _writeTime -= value
 
   /**
    * Total number of records written to the shuffle by this task
    */
-  @volatile private var _shuffleRecordsWritten: Long = _
-  def shuffleRecordsWritten: Long = _shuffleRecordsWritten
-  private[spark] def incShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten += value
-  private[spark] def decShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten -= value
-  private[spark] def setShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten = value
+  @volatile private var _recordsWritten: Long = _
+  def recordsWritten: Long = _recordsWritten
+  private[spark] def incRecordsWritten(value: Long) = _recordsWritten += value
+  private[spark] def decRecordsWritten(value: Long) = _recordsWritten -= value
+  private[spark] def setRecordsWritten(value: Long) = _recordsWritten = value
+
+  // Legacy methods for backward compatibility.
+  // TODO: remove these once we make this class private.
+  @deprecated("use bytesWritten instead", "2.0.0")
+  def shuffleBytesWritten: Long = bytesWritten
+  @deprecated("use writeTime instead", "2.0.0")
+  def shuffleWriteTime: Long = writeTime
+  @deprecated("use recordsWritten instead", "2.0.0")
+  def shuffleRecordsWritten: Long = recordsWritten
+
 }

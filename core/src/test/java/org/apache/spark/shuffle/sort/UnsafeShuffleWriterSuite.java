@@ -279,8 +279,8 @@ public class UnsafeShuffleWriterSuite {
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleRecordsWritten());
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleBytesWritten());
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().recordsWritten());
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().bytesWritten());
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
   }
@@ -311,10 +311,10 @@ public class UnsafeShuffleWriterSuite {
       HashMultiset.create(readRecordsFromFile()));
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   private void testMergingSpills(
@@ -354,11 +354,11 @@ public class UnsafeShuffleWriterSuite {
     assertEquals(HashMultiset.create(dataToWrite), HashMultiset.create(readRecordsFromFile()));
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
     assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   @Test
@@ -416,11 +416,11 @@ public class UnsafeShuffleWriterSuite {
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
     assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   @Test
@@ -437,11 +437,11 @@ public class UnsafeShuffleWriterSuite {
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
     assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   @Test
