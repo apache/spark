@@ -114,6 +114,13 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
+  /**
+   * Clear all registered [[Accumulable]]s. For testing only.
+   */
+  def clear(): Unit = synchronized {
+    originals.clear()
+  }
+
 }
 
 

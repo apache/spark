@@ -139,6 +139,11 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     assert(accumUpdates.size > 0)
     val testAccum = taskContext.taskMetrics.getAccum(TEST_ACCUM)
     assert(accumUpdates.keys.exists(_ == testAccum.id))
+    assert(accumUpdates(testAccum.id) === 0L)
+    testAccum += 200L
+    val accumUpdates2 = taskContext.taskMetrics.accumulatorUpdates()
+    assert(accumUpdates2.keys.exists(_ == testAccum.id))
+    assert(accumUpdates2(testAccum.id) === 200L)
   }
 
   test("internal accumulators in a stage") {
