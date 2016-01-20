@@ -126,8 +126,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = getConf(isDriverSide = false)
 
-      val inputMetrics = context.taskMetrics
-        .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
+      val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
 
       // Sets the thread local variable for the file's name
       split.serializableHadoopSplit.value match {

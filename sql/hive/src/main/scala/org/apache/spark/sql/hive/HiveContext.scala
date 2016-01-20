@@ -42,7 +42,7 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
-import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect}
+import org.apache.spark.sql.catalyst.{InternalRow, ParserInterface}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -542,16 +542,12 @@ class HiveContext private[hive](
   }
 
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  protected[sql] override def getSQLDialect(): ParserDialect = {
-    if (conf.dialect == "hiveql") {
-      new ExtendedHiveQlParser(this)
-    } else {
-      super.getSQLDialect()
-    }
+  @transient
+  protected[sql] override val sqlParser: ParserInterface = {
+    new SparkSQLParser(new ExtendedHiveQlParser(this))
   }
 
   @transient
