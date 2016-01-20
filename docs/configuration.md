@@ -392,11 +392,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.reducer.maxReqsInFlight</td>
+  <td><code>spark.reducer.maxReqsInFlight</code></td>
   <td>Int.MaxValue</td>
   <td>
-    "spark.reducer.maxReqsInFlight" configuration limits the number of remote blocks to fetches at any given point.
-     Although "spark.reducer.maxSizeInFlight" puts a bound on the in flight data in terms of size, this is not always sufficient
+    <code>spark.reducer.maxReqsInFlight</code> configuration limits the number of remote blocks to fetches at any given point.
+     Although <code>spark.reducer.maxSizeInFlight</code> puts a bound on the in flight data in terms of size, this is not always sufficient
      when the number of hosts in the cluster increase, this can lead to very large number of in-bound connections to one
      or more nodes, causing workers to fail under the load. Hence, "spark.reducer.maxReqsInFlight" is required.
   </td>
