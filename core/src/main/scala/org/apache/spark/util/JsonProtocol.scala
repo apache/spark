@@ -303,9 +303,9 @@ private[spark] object JsonProtocol {
       }.getOrElse(JNothing)
     val shuffleWriteMetrics: JValue =
       taskMetrics.shuffleWriteMetrics.map { wm =>
-        ("Shuffle Bytes Written" -> wm.shuffleBytesWritten) ~
-        ("Shuffle Write Time" -> wm.shuffleWriteTime) ~
-        ("Shuffle Records Written" -> wm.shuffleRecordsWritten)
+        ("Shuffle Bytes Written" -> wm.bytesWritten) ~
+        ("Shuffle Write Time" -> wm.writeTime) ~
+        ("Shuffle Records Written" -> wm.recordsWritten)
       }.getOrElse(JNothing)
     val inputMetrics: JValue =
       taskMetrics.inputMetrics.map { im =>
@@ -324,7 +324,6 @@ private[spark] object JsonProtocol {
         ("Block ID" -> id.toString) ~
         ("Status" -> blockStatusToJson(status))
       })
-    ("Host Name" -> taskMetrics.hostname) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Result Size" -> taskMetrics.resultSize) ~
@@ -702,7 +701,6 @@ private[spark] object JsonProtocol {
       return TaskMetrics.empty
     }
     val metrics = new TaskMetrics
-    metrics.setHostname((json \ "Host Name").extract[String])
     metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setResultSize((json \ "Result Size").extract[Long])

@@ -62,13 +62,22 @@ class Accumulable[R, T] private[spark] (
   def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
     this(initialValue, param, None)
 
-  val id: Long = Accumulators.newId
+  val id: Long = Accumulators.newId()
 
-  @volatile @transient private var value_ : R = initialValue // Current value on master
-  val zero = param.zero(initialValue)  // Zero value to be passed to workers
+  // TODO: after SPARK-12896, we should mark this transient again
+  @volatile private var value_ : R = initialValue
+  val zero = param.zero(initialValue)
+
+  // TODO: currently, this is not set. After SPARK-12896, this will be set in `readObject`.
+  // For more detail, read the comment there.
   private var deserialized = false
 
-  Accumulators.register(this)
+  // In many places we create internal accumulators without access to the active context cleaner,
+  // so if we register them here then we may never unregister these accumulators. To avoid memory
+  // leaks, we require the caller to explicitly register internal accumulators elsewhere.
+  if (!internal) {
+    Accumulators.register(this)
+  }
 
   /**
    * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
@@ -106,7 +115,7 @@ class Accumulable[R, T] private[spark] (
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
-   * Access the accumulator's current value; only allowed on master.
+   * Access the accumulator's current value; only allowed on driver.
    */
   def value: R = {
     if (!deserialized) {
@@ -128,7 +137,7 @@ class Accumulable[R, T] private[spark] (
   def localValue: R = value_
 
   /**
-   * Set the accumulator's value; only allowed on master.
+   * Set the accumulator's value; only allowed on driver.
    */
   def value_= (newValue: R) {
     if (!deserialized) {
@@ -139,22 +148,28 @@ class Accumulable[R, T] private[spark] (
   }
 
   /**
-   * Set the accumulator's value; only allowed on master
+   * Set the accumulator's value. For internal use only.
    */
-  def setValue(newValue: R) {
-    this.value = newValue
-  }
+  def setValue(newValue: R): Unit = { value_ = newValue }
+
+  /**
+   * Set the accumulator's value. For internal use only.
+   */
+  private[spark] def setValueAny(newValue: Any): Unit = { setValue(newValue.asInstanceOf[R]) }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    value_ = zero
-    deserialized = true
+    // TODO: As of SPARK-12895 we send accumulators both ways between executors and the driver.
+    // If we set the value to zero here we would zero out all accumulator updates on the driver,
+    // which is not what we want. Let's comment this out for now until SPARK-12896, which allows
+    // us to avoid sending accumulators from the executors to the driver.
+    // value_ = zero
+    // deserialized = true
+
     // Automatically register the accumulator when it is deserialized with the task closure.
-    //
-    // Note internal accumulators sent with task are deserialized before the TaskContext is created
-    // and are registered in the TaskContext constructor. Other internal accumulators, such SQL
-    // metrics, still need to register here.
+    // This is for external accumulators and internal ones that do not represent task level
+    // metrics, e.g. internal SQL metrics, which are per-operator.
     val taskContext = TaskContext.get()
     if (taskContext != null) {
       taskContext.registerAccumulator(this)

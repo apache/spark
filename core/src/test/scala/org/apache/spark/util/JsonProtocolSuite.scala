@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -32,12 +33,7 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
-
-  val jobSubmissionTime = 1421191042750L
-  val jobCompletionTime = 1421191296660L
-
-  val executorAddedTime = 1421458410000L
-  val executorRemovedTime = 1421458922000L
+  import JsonProtocolSuite._
 
   test("SparkListenerEvent") {
     val stageSubmitted =
@@ -378,15 +374,20 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
     assert(false === oldInfo.internal)
   }
+}
 
-  /** -------------------------- *
-   | Helper test running methods |
-   * --------------------------- */
 
-  private def testEvent(event: SparkListenerEvent, jsonString: String) {
+// This extends SparkFunSuite only because we want its `assert` method.
+private[spark] object JsonProtocolSuite extends SparkFunSuite {
+  private val jobSubmissionTime = 1421191042750L
+  private val jobCompletionTime = 1421191296660L
+  private val executorAddedTime = 1421458410000L
+  private val executorRemovedTime = 1421458922000L
+
+  private def testEvent(event: SparkListenerEvent, expectedJsonString: String) {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
     val newEvent = JsonProtocol.sparkEventFromJson(parse(actualJsonString))
-    assertJsonStringEquals(jsonString, actualJsonString)
+    assertJsonStringEquals(expectedJsonString, actualJsonString, event.getClass.getSimpleName)
     assertEquals(event, newEvent)
   }
 
@@ -444,7 +445,7 @@ class JsonProtocolSuite extends SparkFunSuite {
    | Util methods for comparing events |
    * --------------------------------- */
 
-  private def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
+  private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
     (event1, event2) match {
       case (e1: SparkListenerStageSubmitted, e2: SparkListenerStageSubmitted) =>
         assert(e1.properties === e2.properties)
@@ -544,7 +545,6 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
-    assert(metrics1.hostname === metrics2.hostname)
     assert(metrics1.executorDeserializeTime === metrics2.executorDeserializeTime)
     assert(metrics1.resultSize === metrics2.resultSize)
     assert(metrics1.jvmGCTime === metrics2.jvmGCTime)
@@ -637,10 +637,16 @@ class JsonProtocolSuite extends SparkFunSuite {
       assertStackTraceElementEquals)
   }
 
-  private def assertJsonStringEquals(json1: String, json2: String) {
+  private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
     val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    assert(formatJsonString(json1) === formatJsonString(json2),
-      s"input ${formatJsonString(json1)} got ${formatJsonString(json2)}")
+    if (formatJsonString(expected) != formatJsonString(actual)) {
+      // scalastyle:off
+      // This prints something useful if the JSON strings don't match
+      println("=== EXPECTED ===\n" + pretty(parse(expected)) + "\n")
+      println("=== ACTUAL ===\n" + pretty(parse(actual)) + "\n")
+      // scalastyle:on
+      throw new TestFailedException(s"$metadata JSON did not equal", 1)
+    }
   }
 
   private def assertSeqEquals[T](seq1: Seq[T], seq2: Seq[T], assertEquals: (T, T) => Unit) {
@@ -747,7 +753,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
-    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id, internal)
+    AccumulableInfo(id, "Accumulable" + id, Some("delta" + id), "val" + id, internal)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -764,7 +770,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
     val t = new TaskMetrics
-    t.setHostname("localhost")
     t.setExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)
@@ -774,7 +779,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
     if (hasHadoopInput) {
       val inputMetrics = t.registerInputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.incBytesRead(d + e + f)
+      inputMetrics.setBytesRead(d + e + f)
       inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
     } else {
       val sr = t.registerTempShuffleReadMetrics()
@@ -794,7 +799,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       val sw = t.registerShuffleWriteMetrics()
       sw.incBytesWritten(a + b + c)
       sw.incWriteTime(b + c + d)
-      sw.setRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
+      sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
     // Make at most 6 blocks
     t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
@@ -1030,7 +1035,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1117,7 +1121,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1201,7 +1204,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1273,14 +1275,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1331,14 +1333,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1405,14 +1407,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1495,14 +1497,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false
@@ -1667,7 +1669,6 @@ class JsonProtocolSuite extends SparkFunSuite {
      |    "Stage ID": 2,
      |    "Stage Attempt ID": 3,
      |    "Task Metrics": {
-     |    "Host Name": "localhost",
      |    "Executor Deserialize Time": 300,
      |    "Executor Run Time": 400,
      |    "Result Size": 500,
