@@ -243,7 +243,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       ExceptionFailure("Exception", "description", null, null, None, None),
       TaskResultLost,
       TaskKilled,
-      ExecutorLostFailure("0"),
+      ExecutorLostFailure("0", true, Some("Induced failure")),
       UnknownReason)
     var failCount = 0
     for (reason <- taskFailedReasons) {
@@ -277,7 +277,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incLocalBytesRead(base + 9)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
-      shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
+      shuffleWriteMetrics.incBytesWritten(base + 3)
       taskMetrics.setExecutorRunTime(base + 4)
       taskMetrics.incDiskBytesSpilled(base + 5)
       taskMetrics.incMemoryBytesSpilled(base + 6)

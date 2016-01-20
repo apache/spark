@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{NullType, BooleanType, DataType}
+import org.apache.spark.sql.types._
 
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -45,14 +45,14 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def dataType: DataType = trueValue.dataType
 
   override def eval(input: InternalRow): Any = {
-    if (true == predicate.eval(input)) {
+    if (java.lang.Boolean.TRUE.equals(predicate.eval(input))) {
       trueValue.eval(input)
     } else {
       falseValue.eval(input)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val condEval = predicate.gen(ctx)
     val trueEval = trueValue.gen(ctx)
     val falseEval = falseValue.gen(ctx)
@@ -60,253 +60,183 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     s"""
       ${condEval.code}
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${condEval.isNull} && ${condEval.primitive}) {
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${condEval.isNull} && ${condEval.value}) {
         ${trueEval.code}
         ${ev.isNull} = ${trueEval.isNull};
-        ${ev.primitive} = ${trueEval.primitive};
+        ${ev.value} = ${trueEval.value};
       } else {
         ${falseEval.code}
         ${ev.isNull} = ${falseEval.isNull};
-        ${ev.primitive} = ${falseEval.primitive};
+        ${ev.value} = ${falseEval.value};
       }
     """
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
+
+  override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
 }
 
-trait CaseWhenLike extends Expression {
+/**
+ * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
+ * When a = true, returns b; when c = true, returns d; else returns e.
+ *
+ * @param branches seq of (branch condition, branch value)
+ * @param elseValue optional value for the else branch
+ */
+case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[Expression] = None)
+  extends Expression {
 
-  // Note that `branches` are considered in consecutive pairs (cond, val), and the optional last
-  // element is the value for the default catch-all case (if provided).
-  // Hence, `branches` consists of at least two elements, and can have an odd or even length.
-  def branches: Seq[Expression]
-
-  @transient lazy val whenList =
-    branches.sliding(2, 2).collect { case Seq(whenExpr, _) => whenExpr }.toSeq
-  @transient lazy val thenList =
-    branches.sliding(2, 2).collect { case Seq(_, thenExpr) => thenExpr }.toSeq
-  val elseValue = if (branches.length % 2 == 0) None else Option(branches.last)
+  override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
   // both then and else expressions should be considered.
-  def valueTypes: Seq[DataType] = (thenList ++ elseValue).map(_.dataType)
-  def valueTypesEqual: Boolean = valueTypes.distinct.size == 1
+  def valueTypes: Seq[DataType] = branches.map(_._2.dataType) ++ elseValue.map(_.dataType)
+
+  def valueTypesEqual: Boolean = valueTypes.size <= 1 || valueTypes.sliding(2, 1).forall {
+    case Seq(dt1, dt2) => dt1.sameType(dt2)
+  }
+
+  override def dataType: DataType = branches.head._2.dataType
+
+  override def nullable: Boolean = {
+    // Result is nullable if any of the branch is nullable, or if the else value is nullable
+    branches.exists(_._2.nullable) || elseValue.map(_.nullable).getOrElse(true)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    // Make sure all branch conditions are boolean types.
     if (valueTypesEqual) {
-      checkTypesInternal()
+      if (branches.forall(_._1.dataType == BooleanType)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        val index = branches.indexWhere(_._1.dataType != BooleanType)
+        TypeCheckResult.TypeCheckFailure(
+          s"WHEN expressions in CaseWhen should all be boolean type, " +
+            s"but the ${index + 1}th when expression's type is ${branches(index)._1}")
+      }
     } else {
       TypeCheckResult.TypeCheckFailure(
         "THEN and ELSE expressions should all be same type or coercible to a common type")
     }
   }
 
-  protected def checkTypesInternal(): TypeCheckResult
-
-  override def dataType: DataType = thenList.head.dataType
-
-  override def nullable: Boolean = {
-    // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
-    thenList.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
-  }
-}
-
-// scalastyle:off
-/**
- * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
- * Refer to this link for the corresponding semantics:
- * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
- */
-// scalastyle:on
-case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
-
-  // Use private[this] Array to speed up evaluation.
-  @transient private[this] lazy val branchesArr = branches.toArray
-
-  override def children: Seq[Expression] = branches
-
-  override protected def checkTypesInternal(): TypeCheckResult = {
-    if (whenList.forall(_.dataType == BooleanType)) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      val index = whenList.indexWhere(_.dataType != BooleanType)
-      TypeCheckResult.TypeCheckFailure(
-        s"WHEN expressions in CaseWhen should all be boolean type, " +
-          s"but the ${index + 1}th when expression's type is ${whenList(index)}")
-    }
-  }
-
-  /** Written in imperative fashion for performance considerations. */
   override def eval(input: InternalRow): Any = {
-    val len = branchesArr.length
     var i = 0
-    // If all branches fail and an elseVal is not provided, the whole statement
-    // defaults to null, according to Hive's semantics.
-    while (i < len - 1) {
-      if (branchesArr(i).eval(input) == true) {
-        return branchesArr(i + 1).eval(input)
+    while (i < branches.size) {
+      if (java.lang.Boolean.TRUE.equals(branches(i)._1.eval(input))) {
+        return branches(i)._2.eval(input)
       }
-      i += 2
+      i += 1
     }
-    var res: Any = null
-    if (i == len - 1) {
-      res = branchesArr(i).eval(input)
+    if (elseValue.isDefined) {
+      return elseValue.get.eval(input)
+    } else {
+      return null
     }
-    return res
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val len = branchesArr.length
-    val got = ctx.freshName("got")
-
-    val cases = (0 until len/2).map { i =>
-      val cond = branchesArr(i * 2).gen(ctx)
-      val res = branchesArr(i * 2 + 1).gen(ctx)
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    // Generate code that looks like:
+    //
+    // condA = ...
+    // if (condA) {
+    //   valueA
+    // } else {
+    //   condB = ...
+    //   if (condB) {
+    //     valueB
+    //   } else {
+    //     condC = ...
+    //     if (condC) {
+    //       valueC
+    //     } else {
+    //       elseValue
+    //     }
+    //   }
+    // }
+    val cases = branches.map { case (condExpr, valueExpr) =>
+      val cond = condExpr.gen(ctx)
+      val res = valueExpr.gen(ctx)
       s"""
-        if (!$got) {
-          ${cond.code}
-          if (!${cond.isNull} && ${cond.primitive}) {
-            $got = true;
-            ${res.code}
-            ${ev.isNull} = ${res.isNull};
-            ${ev.primitive} = ${res.primitive};
-          }
-        }
-      """
-    }.mkString("\n")
-
-    val other = if (len % 2 == 1) {
-      val res = branchesArr(len - 1).gen(ctx)
-      s"""
-        if (!$got) {
+        ${cond.code}
+        if (!${cond.isNull} && ${cond.value}) {
           ${res.code}
           ${ev.isNull} = ${res.isNull};
-          ${ev.primitive} = ${res.primitive};
+          ${ev.value} = ${res.value};
         }
       """
-    } else {
-      ""
     }
 
+    var generatedCode = cases.mkString("", "\nelse {\n", "\nelse {\n")
+
+    elseValue.foreach { elseExpr =>
+      val res = elseExpr.gen(ctx)
+      generatedCode +=
+        s"""
+          ${res.code}
+          ${ev.isNull} = ${res.isNull};
+          ${ev.value} = ${res.value};
+        """
+    }
+
+    generatedCode += "}\n" * cases.size
+
     s"""
-      boolean $got = false;
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      $cases
-      $other
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      $generatedCode
     """
   }
 
   override def toString: String = {
-    "CASE" + branches.sliding(2, 2).map {
-      case Seq(cond, value) => s" WHEN $cond THEN $value"
-      case Seq(elseValue) => s" ELSE $elseValue"
-    }.mkString
+    val cases = branches.map { case (c, v) => s" WHEN $c THEN $v" }.mkString
+    val elseCase = elseValue.map(" ELSE " + _).getOrElse("")
+    "CASE" + cases + elseCase + " END"
+  }
+
+  override def sql: String = {
+    val cases = branches.map { case (c, v) => s" WHEN ${c.sql} THEN ${v.sql}" }.mkString
+    val elseCase = elseValue.map(" ELSE " + _.sql).getOrElse("")
+    "CASE" + cases + elseCase + " END"
   }
 }
 
-// scalastyle:off
+/** Factory methods for CaseWhen. */
+object CaseWhen {
+
+  def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
+    CaseWhen(branches, Option(elseValue))
+  }
+
+  /**
+   * A factory method to faciliate the creation of this expression when used in parsers.
+   * @param branches Expressions at even position are the branch conditions, and expressions at odd
+   *                 position are branch values.
+   */
+  def createFromParser(branches: Seq[Expression]): CaseWhen = {
+    val cases = branches.grouped(2).flatMap {
+      case cond :: value :: Nil => Some((cond, value))
+      case value :: Nil => None
+    }.toArray.toSeq  // force materialization to make the seq serializable
+    val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
+    CaseWhen(cases, elseValue)
+  }
+}
+
+
 /**
  * Case statements of the form "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END".
- * Refer to this link for the corresponding semantics:
- * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
+ * When a = b, returns c; when a = d, returns e; else returns f.
  */
-// scalastyle:on
-case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseWhenLike {
-
-  // Use private[this] Array to speed up evaluation.
-  @transient private[this] lazy val branchesArr = branches.toArray
-
-  override def children: Seq[Expression] = key +: branches
-
-  override protected def checkTypesInternal(): TypeCheckResult = {
-    if ((key +: whenList).map(_.dataType).distinct.size > 1) {
-      TypeCheckResult.TypeCheckFailure(
-        "key and WHEN expressions should all be same type or coercible to a common type")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
-
-  private def evalElse(input: InternalRow): Any = {
-    if (branchesArr.length % 2 == 0) {
-      null
-    } else {
-      branchesArr(branchesArr.length - 1).eval(input)
-    }
-  }
-
-  /** Written in imperative fashion for performance considerations. */
-  override def eval(input: InternalRow): Any = {
-    val evaluatedKey = key.eval(input)
-    // If key is null, we can just return the else part or null if there is no else.
-    // If key is not null but doesn't match any when part, we need to return
-    // the else part or null if there is no else, according to Hive's semantics.
-    if (evaluatedKey != null) {
-      val len = branchesArr.length
-      var i = 0
-      while (i < len - 1) {
-        if (evaluatedKey ==  branchesArr(i).eval(input)) {
-          return branchesArr(i + 1).eval(input)
-        }
-        i += 2
-      }
-    }
-    evalElse(input)
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val keyEval = key.gen(ctx)
-    val len = branchesArr.length
-    val got = ctx.freshName("got")
-
-    val cases = (0 until len/2).map { i =>
-      val cond = branchesArr(i * 2).gen(ctx)
-      val res = branchesArr(i * 2 + 1).gen(ctx)
-      s"""
-        if (!$got) {
-          ${cond.code}
-          if (!${cond.isNull} && ${ctx.genEqual(key.dataType, keyEval.primitive, cond.primitive)}) {
-            $got = true;
-            ${res.code}
-            ${ev.isNull} = ${res.isNull};
-            ${ev.primitive} = ${res.primitive};
-          }
-        }
-      """
-    }.mkString("\n")
-
-    val other = if (len % 2 == 1) {
-      val res = branchesArr(len - 1).gen(ctx)
-      s"""
-        if (!$got) {
-          ${res.code}
-          ${ev.isNull} = ${res.isNull};
-          ${ev.primitive} = ${res.primitive};
-        }
-      """
-    } else {
-      ""
-    }
-
-    s"""
-      boolean $got = false;
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${keyEval.code}
-      if (!${keyEval.isNull}) {
-        $cases
-      }
-      $other
-    """
-  }
-
-  override def toString: String = {
-    s"CASE $key" + branches.sliding(2, 2).map {
-      case Seq(cond, value) => s" WHEN $cond THEN $value"
-      case Seq(elseValue) => s" ELSE $elseValue"
-    }.mkString
+object CaseKeyWhen {
+  def apply(key: Expression, branches: Seq[Expression]): CaseWhen = {
+    val cases = branches.grouped(2).flatMap {
+      case cond :: value :: Nil => Some((EqualTo(key, cond), value))
+      case value :: Nil => None
+    }.toArray.toSeq  // force materialization to make the seq serializable
+    val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
+    CaseWhen(cases, elseValue)
   }
 }
 
@@ -346,21 +276,25 @@ case class Least(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    def updateEval(i: Int): String =
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: ExprCode): String = {
       s"""
-        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} < 0)) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
           ${ev.isNull} = false;
-          ${ev.primitive} = ${evalChildren(i).primitive};
+          ${ev.value} = ${eval.value};
         }
       """
+    }
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${children.indices.map(updateEval).mkString("\n")}
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
@@ -401,21 +335,26 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    def updateEval(i: Int): String =
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: ExprCode): String = {
       s"""
-        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} > 0)) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
           ${ev.isNull} = false;
-          ${ev.primitive} = ${evalChildren(i).primitive};
+          ${ev.value} = ${eval.value};
         }
       """
+    }
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${children.indices.map(updateEval).mkString("\n")}
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
+

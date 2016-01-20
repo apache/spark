@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.plans.PlanTest
-
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -251,6 +250,29 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("greatest/least cast") {
+    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+      ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1.0)
+          :: Literal(1)
+          :: Literal.create(1.0, FloatType)
+          :: Nil),
+        operator(Cast(Literal(1.0), DoubleType)
+          :: Cast(Literal(1), DoubleType)
+          :: Cast(Literal.create(1.0, FloatType), DoubleType)
+          :: Nil))
+      ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1L)
+          :: Literal(1)
+          :: Literal(new java.math.BigDecimal("1000000000000000000000"))
+          :: Nil),
+        operator(Cast(Literal(1L), DecimalType(22, 0))
+          :: Cast(Literal(1), DecimalType(22, 0))
+          :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+          :: Nil))
+    }
+  }
+
   test("nanvl casts") {
     ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
@@ -277,7 +299,7 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("type coercion for CaseKeyWhen") {
-    ruleTest(HiveTypeCoercion.CaseWhenCoercion,
+    ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
@@ -286,19 +308,44 @@ class HiveTypeCoercionSuite extends PlanTest {
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq(Literal(true), Literal(1.2), Literal.create(1, DecimalType(7, 2)))),
-      CaseWhen(Seq(
-        Literal(true), Literal(1.2), Cast(Literal.create(1, DecimalType(7, 2)), DoubleType)))
+      CaseWhen(Seq((Literal(true), Literal(1.2))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(1.2))),
+        Cast(Literal.create(1, DecimalType(7, 2)), DoubleType))
     )
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq(Literal(true), Literal(100L), Literal.create(1, DecimalType(7, 2)))),
-      CaseWhen(Seq(
-        Literal(true), Cast(Literal(100L), DecimalType(22, 2)),
-        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2))))
+      CaseWhen(Seq((Literal(true), Literal(100L))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
+        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
     )
   }
 
-  test("type coercion simplification for equal to") {
+  test("BooleanEquality type cast") {
+    val be = HiveTypeCoercion.BooleanEquality
+    // Use something more than a literal to avoid triggering the simplification rules.
+    val one = Add(Literal(Decimal(1)), Literal(Decimal(0)))
+
+    ruleTest(be,
+      EqualTo(Literal(true), one),
+      EqualTo(Cast(Literal(true), one.dataType), one)
+    )
+
+    ruleTest(be,
+      EqualTo(one, Literal(true)),
+      EqualTo(one, Cast(Literal(true), one.dataType))
+    )
+
+    ruleTest(be,
+      EqualNullSafe(Literal(true), one),
+      EqualNullSafe(Cast(Literal(true), one.dataType), one)
+    )
+
+    ruleTest(be,
+      EqualNullSafe(one, Literal(true)),
+      EqualNullSafe(one, Cast(Literal(true), one.dataType))
+    )
+  }
+
+  test("BooleanEquality simplification") {
     val be = HiveTypeCoercion.BooleanEquality
 
     ruleTest(be,
@@ -340,7 +387,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("WidenSetOperationTypes for union except and intersect") {
+  test("WidenSetOperationTypes for union, except, and intersect") {
     def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
       logical.output.zip(expectTypes).foreach { case (attr, dt) =>
         assert(attr.dataType === dt)
@@ -404,7 +451,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     val expectedTypes = Seq(DecimalType(10, 5), DecimalType(10, 5), DecimalType(15, 5),
       DecimalType(25, 5), DoubleType, DoubleType)
 
-    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+    rightTypes.zip(expectedTypes).foreach { case (rType, expectedType) =>
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 
@@ -452,7 +499,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
   }
 
-
   /**
    * There are rules that need to not fire before child expressions get resolved.
    * We use this test to make sure those rules do not fire early.
@@ -470,7 +516,8 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Cast(Literal("a"), StringType),
+        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
   }
 }

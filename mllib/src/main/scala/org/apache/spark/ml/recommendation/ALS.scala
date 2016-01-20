@@ -26,16 +26,17 @@ import scala.util.Sorting
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.netlib.util.intW
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -161,6 +162,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     val ratingType = schema($(ratingCol)).dataType
@@ -178,22 +180,27 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
  * @param itemFactors a DataFrame that stores item factors in two columns: `id` and `features`
  */
 @Experimental
+@Since("1.3.0")
 class ALSModel private[ml] (
-    override val uid: String,
-    val rank: Int,
+    @Since("1.4.0") override val uid: String,
+    @Since("1.4.0") val rank: Int,
     @transient val userFactors: DataFrame,
     @transient val itemFactors: DataFrame)
-  extends Model[ALSModel] with ALSModelParams {
+  extends Model[ALSModel] with ALSModelParams with MLWritable {
 
   /** @group setParam */
+  @Since("1.4.0")
   def setUserCol(value: String): this.type = set(userCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setItemCol(value: String): this.type = set(itemCol, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  @Since("1.3.0")
   override def transform(dataset: DataFrame): DataFrame = {
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
@@ -211,18 +218,66 @@ class ALSModel private[ml] (
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
   }
 
+  @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): ALSModel = {
     val copied = new ALSModel(uid, rank, userFactors, itemFactors)
     copyValues(copied, extra).setParent(parent)
   }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 }
 
+@Since("1.6.0")
+object ALSModel extends MLReadable[ALSModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[ALSModel] = new ALSModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): ALSModel = super.load(path)
+
+  private[ALSModel] class ALSModelWriter(instance: ALSModel) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val extraMetadata = "rank" -> instance.rank
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      val userPath = new Path(path, "userFactors").toString
+      instance.userFactors.write.format("parquet").save(userPath)
+      val itemPath = new Path(path, "itemFactors").toString
+      instance.itemFactors.write.format("parquet").save(itemPath)
+    }
+  }
+
+  private class ALSModelReader extends MLReader[ALSModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[ALSModel].getName
+
+    override def load(path: String): ALSModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      implicit val format = DefaultFormats
+      val rank = (metadata.metadata \ "rank").extract[Int]
+      val userPath = new Path(path, "userFactors").toString
+      val userFactors = sqlContext.read.format("parquet").load(userPath)
+      val itemPath = new Path(path, "itemFactors").toString
+      val itemFactors = sqlContext.read.format("parquet").load(itemPath)
+
+      val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+}
 
 /**
  * :: Experimental ::
@@ -255,69 +310,88 @@ class ALSModel private[ml] (
  * preferences rather than explicit ratings given to items.
  */
 @Experimental
-class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
+@Since("1.3.0")
+class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
+  with DefaultParamsWritable {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("als"))
 
   /** @group setParam */
+  @Since("1.3.0")
   def setRank(value: Int): this.type = set(rank, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setNumUserBlocks(value: Int): this.type = set(numUserBlocks, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setNumItemBlocks(value: Int): this.type = set(numItemBlocks, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setImplicitPrefs(value: Boolean): this.type = set(implicitPrefs, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setAlpha(value: Double): this.type = set(alpha, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setUserCol(value: String): this.type = set(userCol, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setItemCol(value: String): this.type = set(itemCol, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setRatingCol(value: String): this.type = set(ratingCol, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** @group setParam */
+  @Since("1.3.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    * @group setParam
    */
+  @Since("1.3.0")
   def setNumBlocks(value: Int): this.type = {
     setNumUserBlocks(value)
     setNumItemBlocks(value)
     this
   }
 
+  @Since("1.3.0")
   override def fit(dataset: DataFrame): ALSModel = {
     import dataset.sqlContext.implicits._
+    val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType),
-        col($(ratingCol)).cast(FloatType))
+      .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
@@ -332,12 +406,15 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
     copyValues(model)
   }
 
+  @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 }
+
 
 /**
  * :: DeveloperApi ::
@@ -348,7 +425,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
  * than 2 billion.
  */
 @DeveloperApi
-object ALS extends Logging {
+object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * :: DeveloperApi ::
@@ -356,6 +433,9 @@ object ALS extends Logging {
    */
   @DeveloperApi
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
+
+  @Since("1.6.0")
+  override def load(path: String): ALS = super.load(path)
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
@@ -365,8 +445,6 @@ object ALS extends Logging {
 
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
-
-    private val upper = "U"
 
     /**
      * Solves a least squares problem with L2 regularization:
@@ -387,10 +465,7 @@ object ALS extends Logging {
         i += j
         j += 1
       }
-      val info = new intW(0)
-      lapack.dppsv(upper, k, 1, ne.ata, ne.atb, k, info)
-      val code = info.`val`
-      assert(code == 0, s"lapack.dppsv returned $code.")
+      CholeskyDecomposition.solve(ne.ata, ne.atb)
       val x = new Array[Float](k)
       i = 0
       while (i < k) {
@@ -561,7 +636,7 @@ object ALS extends Logging {
     var itemFactors = initialize(itemInBlocks, rank, seedGen.nextLong())
     var previousCheckpointFile: Option[String] = None
     val shouldCheckpoint: Int => Boolean = (iter) =>
-      sc.checkpointDir.isDefined && (iter % checkpointInterval == 0)
+      sc.checkpointDir.isDefined && checkpointInterval != -1 && (iter % checkpointInterval == 0)
     val deletePreviousCheckpointFile: () => Unit = () =>
       previousCheckpointFile.foreach { file =>
         try {

@@ -22,14 +22,13 @@ import java.nio.ByteBuffer
 import java.util.Collections
 
 import org.apache.cassandra.hadoop.ConfigHelper
-import org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat
 import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlOutputFormat
+import org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkContext}
-
 
 /*
   Need to create following keyspace and column family in cassandra before running this example
@@ -79,8 +78,9 @@ object CassandraCQLTest {
     val InputColumnFamily = "ordercf"
     val OutputColumnFamily = "salecount"
 
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[CqlPagingInputFormat])
+    val configuration = job.getConfiguration
     ConfigHelper.setInputInitialAddress(job.getConfiguration(), cHost)
     ConfigHelper.setInputRpcPort(job.getConfiguration(), cPort)
     ConfigHelper.setInputColumnFamily(job.getConfiguration(), KeySpace, InputColumnFamily)

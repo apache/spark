@@ -70,7 +70,7 @@ GIT_REF=${GIT_REF:-master}
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-SSH="ssh -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
+SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
 GPG="gpg --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
@@ -99,6 +99,7 @@ fi
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 USER_HOST="$ASF_USERNAME@people.apache.org"
 
+git clean -d -f -x
 rm .gitignore
 rm -rf .git
 cd ..
@@ -140,8 +141,12 @@ if [[ "$1" == "package" ]]; then
 
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
-    ./make-distribution.sh --name $NAME --tgz $FLAGS -DzincPort=$ZINC_PORT 2>&1 > \
-      ../binary-release-$NAME.log
+
+    # Get maven home set by MVN
+    MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
+
+    ./make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
+      -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
     cd ..
     cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
 
@@ -161,12 +166,10 @@ if [[ "$1" == "package" ]]; then
 
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  make_binary_release "hadoop1" "-Psparkr -Phadoop-1 -Phive -Phive-thriftserver" "3030" &
-  make_binary_release "hadoop1-scala2.11" "-Psparkr -Phadoop-1 -Phive -Dscala-2.11" "3031" &
-  make_binary_release "cdh4" "-Psparkr -Phadoop-1 -Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
   make_binary_release "hadoop2.3" "-Psparkr -Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
   make_binary_release "hadoop2.4" "-Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
-  make_binary_release "hadoop2.6" "-Psparkr -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn" "3034" &
+  make_binary_release "hadoop2.6" "-Psparkr -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn" "3035" &
+  make_binary_release "hadoop2.7" "-Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pyarn" "3036" &
   make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn" "3037" &
   make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn" "3038" &
   wait

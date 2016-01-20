@@ -17,14 +17,15 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Boolean => JBoolean}
 import java.io.{Closeable, InputStream}
+import java.lang.{Boolean => JBoolean}
 import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import akka.actor.{Props, SupervisorStrategy}
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
@@ -37,10 +38,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.scheduler.StreamingListener
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.scheduler.StreamingListener
 
 /**
  * A Java-friendly version of [[org.apache.spark.streaming.StreamingContext]] which is the main
@@ -222,8 +222,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files with fixed record lengths,
    * yielding byte arrays
@@ -234,7 +232,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param directory HDFS directory to monitor for new files
    * @param recordLength The length at which to split the records
    */
-  @Experimental
   def binaryRecordsStream(directory: String, recordLength: Int): JavaDStream[Array[Byte]] = {
     ssc.binaryRecordsStream(directory, recordLength)
   }
@@ -698,9 +695,9 @@ object JavaStreamingContext {
    *
    * @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
    */
-  @deprecated("use getOrCreate without JavaStreamingContextFactor", "1.4.0")
+  @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
       checkpointPath: String,
       factory: JavaStreamingContextFactory
@@ -721,7 +718,7 @@ object JavaStreamingContext {
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
    * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
    *                       file system
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
    */
   @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(
@@ -747,7 +744,7 @@ object JavaStreamingContext {
    *                       file system
    * @param createOnError  Whether to create a new JavaStreamingContext if there is an
    *                       error in reading checkpoint data.
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactor.
+   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
    */
   @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
   def getOrCreate(

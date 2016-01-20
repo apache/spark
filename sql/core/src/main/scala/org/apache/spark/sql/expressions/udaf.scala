@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.{Column, Row}
-import org.apache.spark.sql.types._
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
+import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.types._
 
 /**
  * :: Experimental ::
@@ -109,7 +109,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
     val aggregateExpression =
-      AggregateExpression2(
+      AggregateExpression(
         ScalaUDAF(exprs.map(_.expr), this),
         Complete,
         isDistinct = false)
@@ -123,7 +123,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   @scala.annotation.varargs
   def distinct(exprs: Column*): Column = {
     val aggregateExpression =
-      AggregateExpression2(
+      AggregateExpression(
         ScalaUDAF(exprs.map(_.expr), this),
         Complete,
         isDistinct = true)

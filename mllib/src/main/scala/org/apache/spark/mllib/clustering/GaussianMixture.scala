@@ -21,7 +21,7 @@ import scala.collection.mutable.IndexedSeq
 
 import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, Vector => BV}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
@@ -30,8 +30,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
- *
  * This class performs expectation maximization for multivariate Gaussian
  * Mixture Models (GMMs).  A GMM represents a composite distribution of
  * independent Gaussian distributions with associated "mixing" weights
@@ -52,7 +50,6 @@ import org.apache.spark.util.Utils
  * is considered to have occurred.
  * @param maxIterations The maximum number of iterations to perform
  */
-@Experimental
 @Since("1.3.0")
 class GaussianMixture private (
     private var k: Int,

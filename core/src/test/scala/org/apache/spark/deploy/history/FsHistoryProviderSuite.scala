@@ -23,19 +23,25 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
+import scala.concurrent.duration._
 import scala.io.Source
+import scala.language.postfixOps
 
 import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{doReturn, mock, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{JsonProtocol, ManualClock, Utils}
+import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
@@ -407,6 +413,53 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
+  test("provider correctly checks whether fs is in safe mode") {
+    val provider = spy(new FsHistoryProvider(createTestConf()))
+    val dfs = mock(classOf[DistributedFileSystem])
+    // Asserts that safe mode is false because we can't really control the return value of the mock,
+    // since the API is different between hadoop 1 and 2.
+    assert(!provider.isFsInSafeMode(dfs))
+  }
+
+  test("provider waits for safe mode to finish before initializing") {
+    val clock = new ManualClock()
+    val provider = new SafeModeTestProvider(createTestConf(), clock)
+    val initThread = provider.initialize()
+    try {
+      provider.getConfig().keys should contain ("HDFS State")
+
+      clock.setTime(5000)
+      provider.getConfig().keys should contain ("HDFS State")
+
+      provider.inSafeMode = false
+      clock.setTime(10000)
+
+      eventually(timeout(1 second), interval(10 millis)) {
+        provider.getConfig().keys should not contain ("HDFS State")
+      }
+    } finally {
+      provider.stop()
+    }
+  }
+
+  test("provider reports error after FS leaves safe mode") {
+    testDir.delete()
+    val clock = new ManualClock()
+    val provider = new SafeModeTestProvider(createTestConf(), clock)
+    val errorHandler = mock(classOf[Thread.UncaughtExceptionHandler])
+    val initThread = provider.startSafeModeCheckThread(Some(errorHandler))
+    try {
+      provider.inSafeMode = false
+      clock.setTime(10000)
+
+      eventually(timeout(1 second), interval(10 millis)) {
+        verify(errorHandler).uncaughtException(any(), any())
+      }
+    } finally {
+      provider.stop()
+    }
+  }
+
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
    * app list. Example:
@@ -463,6 +516,18 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
 
     log
+  }
+
+  private class SafeModeTestProvider(conf: SparkConf, clock: Clock)
+    extends FsHistoryProvider(conf, clock) {
+
+    @volatile var inSafeMode = true
+
+    // Skip initialization so that we can manually start the safe mode check thread.
+    private[history] override def initialize(): Thread = null
+
+    private[history] override def isFsInSafeMode(): Boolean = inSafeMode
+
   }
 
 }

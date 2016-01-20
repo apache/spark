@@ -20,7 +20,7 @@ package org.apache.spark.ml.attribute
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.types.{DoubleType, NumericType, Metadata, MetadataBuilder, StructField}
+import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
 
 /**
  * :: DeveloperApi ::
@@ -124,18 +124,28 @@ private[attribute] trait AttributeFactory {
   private[attribute] def fromMetadata(metadata: Metadata): Attribute
 
   /**
-   * Creates an [[Attribute]] from a [[StructField]] instance.
+   * Creates an [[Attribute]] from a [[StructField]] instance, optionally preserving name.
    */
-  def fromStructField(field: StructField): Attribute = {
+  private[ml] def decodeStructField(field: StructField, preserveName: Boolean): Attribute = {
     require(field.dataType.isInstanceOf[NumericType])
     val metadata = field.metadata
     val mlAttr = AttributeKeys.ML_ATTR
     if (metadata.contains(mlAttr)) {
-      fromMetadata(metadata.getMetadata(mlAttr)).withName(field.name)
+      val attr = fromMetadata(metadata.getMetadata(mlAttr))
+      if (preserveName) {
+        attr
+      } else {
+        attr.withName(field.name)
+      }
     } else {
       UnresolvedAttribute
     }
   }
+
+  /**
+   * Creates an [[Attribute]] from a [[StructField]] instance.
+   */
+  def fromStructField(field: StructField): Attribute = decodeStructField(field, false)
 }
 
 /**

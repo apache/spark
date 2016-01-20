@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
-import org.apache.avro.{SchemaNormalization, Schema}
+import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
@@ -418,16 +418,35 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     // Validate memory fractions
-    val memoryKeys = Seq(
+    val deprecatedMemoryKeys = Seq(
       "spark.storage.memoryFraction",
       "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
       "spark.storage.unrollFraction",
       "spark.storage.safetyFraction")
+    val memoryKeys = Seq(
+      "spark.memory.fraction",
+      "spark.memory.storageFraction") ++
+      deprecatedMemoryKeys
     for (key <- memoryKeys) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
-        throw new IllegalArgumentException("$key should be between 0 and 1 (was '$value').")
+        throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
+      }
+    }
+
+    // Warn against deprecated memory fractions (unless legacy memory management mode is enabled)
+    val legacyMemoryManagementKey = "spark.memory.useLegacyMode"
+    val legacyMemoryManagement = getBoolean(legacyMemoryManagementKey, false)
+    if (!legacyMemoryManagement) {
+      val keyset = deprecatedMemoryKeys.toSet
+      val detected = settings.keys().asScala.filter(keyset.contains)
+      if (detected.nonEmpty) {
+        logWarning("Detected deprecated memory fraction settings: " +
+          detected.mkString("[", ", ", "]") + ". As of Spark 1.6, execution and storage " +
+          "memory management are unified. All memory fractions used in the old model are " +
+          "now deprecated and no longer read. If you wish to use the old memory management, " +
+          s"you may explicitly enable `$legacyMemoryManagementKey` (not recommended).")
       }
     }
 
@@ -525,7 +544,8 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
-          "are no longer accepted. To specify the equivalent now, one may use '64k'.")
+          "are no longer accepted. To specify the equivalent now, one may use '64k'."),
+      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -576,7 +596,11 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.lookupTimeout" -> Seq(
       AlternateConfig("spark.akka.lookupTimeout", "1.4")),
     "spark.streaming.fileStream.minRememberDuration" -> Seq(
-      AlternateConfig("spark.streaming.minRememberDuration", "1.5"))
+      AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
+    "spark.yarn.max.executor.failures" -> Seq(
+      AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
+    "spark.memory.offHeap.enabled" -> Seq(
+      AlternateConfig("spark.unsafe.offHeap", "1.6"))
     )
 
   /**
@@ -600,7 +624,7 @@ private[spark] object SparkConf extends Logging {
   /**
    * Return whether the given config should be passed to an executor on start-up.
    *
-   * Certain akka and authentication configs are required of the executor when it connects to
+   * Certain akka and authentication configs are required from the executor when it connects to
    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
    */
   def isExecutorStartupConf(name: String): Boolean = {
@@ -608,6 +632,7 @@ private[spark] object SparkConf extends Logging {
     name.startsWith("spark.akka") ||
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
     name.startsWith("spark.ssl") ||
+    name.startsWith("spark.rpc") ||
     isSparkPortConf(name)
   }
 

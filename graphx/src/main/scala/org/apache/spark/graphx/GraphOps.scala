@@ -21,10 +21,8 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.SparkException
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-
 import org.apache.spark.graphx.lib._
+import org.apache.spark.rdd.RDD
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -282,7 +280,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Convert bi-directional edges into uni-directional ones.
    * Some graph algorithms (e.g., TriangleCount) assume that an input graph
    * has its edges in canonical direction.
-   * This function rewrites the vertex ids of edges so that srcIds are bigger
+   * This function rewrites the vertex ids of edges so that srcIds are smaller
    * than dstIds, and merges the duplicated edges.
    *
    * @param mergeFunc the user defined reduce function which should
@@ -380,7 +378,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @see [[org.apache.spark.graphx.lib.PageRank$#runUntilConvergenceWithOptions]]
    */
   def personalizedPageRank(src: VertexId, tol: Double,
-    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runUntilConvergenceWithOptions(graph, tol, resetProb, Some(src))
   }
 
@@ -393,7 +391,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @see [[org.apache.spark.graphx.lib.PageRank$#runWithOptions]]
    */
   def staticPersonalizedPageRank(src: VertexId, numIter: Int,
-    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runWithOptions(graph, numIter, resetProb, Some(src))
   }
 

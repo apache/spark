@@ -19,14 +19,22 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
 
-abstract sealed class SortDirection
-case object Ascending extends SortDirection
-case object Descending extends SortDirection
+abstract sealed class SortDirection {
+  def sql: String
+}
+
+case object Ascending extends SortDirection {
+  override def sql: String = "ASC"
+}
+
+case object Descending extends SortDirection {
+  override def sql: String = "DESC"
+}
 
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
@@ -61,9 +69,9 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val childCode = child.child.gen(ctx)
-    val input = childCode.primitive
+    val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
 
@@ -97,10 +105,10 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
     childCode.code +
     s"""
-      |long ${ev.primitive} = ${nullValue}L;
+      |long ${ev.value} = ${nullValue}L;
       |boolean ${ev.isNull} = false;
       |if (!${childCode.isNull}) {
-      |  ${ev.primitive} = $prefixCode;
+      |  ${ev.value} = $prefixCode;
       |}
     """.stripMargin
   }

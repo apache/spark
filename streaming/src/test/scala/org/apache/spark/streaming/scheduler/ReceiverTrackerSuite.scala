@@ -22,6 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart, TaskLocality}
+import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
@@ -80,11 +82,33 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       }
     }
   }
+
+  test("SPARK-11063: TaskSetManager should use Receiver RDD's preferredLocations") {
+    // Use ManualClock to prevent from starting batches so that we can make sure the only task is
+    // for starting the Receiver
+    val _conf = conf.clone.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
+    withStreamingContext(new StreamingContext(_conf, Milliseconds(100))) { ssc =>
+      @volatile var receiverTaskLocality: TaskLocality = null
+      ssc.sparkContext.addSparkListener(new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          receiverTaskLocality = taskStart.taskInfo.taskLocality
+        }
+      })
+      val input = ssc.receiverStream(new TestReceiver)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      eventually(timeout(10 seconds), interval(10 millis)) {
+        // If preferredLocations is set correctly, receiverTaskLocality should be PROCESS_LOCAL
+        assert(receiverTaskLocality === TaskLocality.PROCESS_LOCAL)
+      }
+    }
+  }
 }
 
 /** An input DStream with for testing rate controlling */
-private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext)
-  extends ReceiverInputDStream[Int](ssc_) {
+private[streaming] class RateTestInputDStream(@transient _ssc: StreamingContext)
+  extends ReceiverInputDStream[Int](_ssc) {
 
   override def getReceiver(): Receiver[Int] = new RateTestReceiver(id)
 

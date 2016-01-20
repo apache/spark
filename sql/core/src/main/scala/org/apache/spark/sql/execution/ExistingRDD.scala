@@ -17,20 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.{Row, SQLContext}
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
     data.mapPartitions { iterator =>
@@ -78,6 +74,8 @@ private[sql] case class LogicalRDD(
 
   override def children: Seq[LogicalPlan] = Nil
 
+  override protected final def otherCopyArgs: Seq[AnyRef] = sqlContext :: Nil
+
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
 
@@ -85,6 +83,8 @@ private[sql] case class LogicalRDD(
     case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
     case _ => false
   }
+
+  override def producedAttributes: AttributeSet = outputSet
 
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
@@ -97,40 +97,59 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    extraInformation: String) extends LeafNode {
+    override val nodeName: String,
+    override val metadata: Map[String, String] = Map.empty,
+    isUnsafeRow: Boolean = false,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0))
+  extends LeafNode {
 
-  protected override def doExecute(): RDD[InternalRow] = rdd
+  protected override def doExecute(): RDD[InternalRow] = {
+    if (isUnsafeRow) {
+      rdd
+    } else {
+      rdd.mapPartitionsInternal { iter =>
+        val proj = UnsafeProjection.create(schema)
+        iter.map(proj)
+      }
+    }
+  }
 
-  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
+  override def simpleString: String = {
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
+    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+  }
 }
 
 private[sql] object PhysicalRDD {
+  // Metadata keys
+  val INPUT_PATHS = "InputPaths"
+  val PUSHED_FILTERS = "PushedFilters"
+
   def createFromDataSource(
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
-      relation: BaseRelation): PhysicalRDD = {
-    PhysicalRDD(output, rdd, relation.toString)
+      relation: BaseRelation,
+      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
+    // All HadoopFsRelations output UnsafeRows
+    val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
+
+    val bucketSpec = relation match {
+      case r: HadoopFsRelation => r.getBucketSpec
+      case _ => None
+    }
+
+    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
+      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
+        s"(${output.map(_.name).mkString(", ")})")
+    }
+
+    bucketSpec.map { spec =>
+      val numBuckets = spec.numBuckets
+      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
+      val partitioning = HashPartitioning(bucketColumns, numBuckets)
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
+    }.getOrElse {
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+    }
   }
-}
-
-/** Logical plan node for scanning data from a local collection. */
-private[sql]
-case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[InternalRow])(sqlContext: SQLContext)
-   extends LogicalPlan with MultiInstanceRelation {
-
-  override def children: Seq[LogicalPlan] = Nil
-
-  override def newInstance(): this.type =
-    LogicalLocalTable(output.map(_.newInstance()), rows)(sqlContext).asInstanceOf[this.type]
-
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rows == rows
-    case _ => false
-  }
-
-  @transient override lazy val statistics: Statistics = Statistics(
-    // TODO: Improve the statistics estimation.
-    // This is made small enough so it can be broadcasted.
-    sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1
-  )
 }

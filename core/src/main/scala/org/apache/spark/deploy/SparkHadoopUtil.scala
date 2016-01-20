@@ -29,18 +29,15 @@ import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.JobContext
-import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
-import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /**
  * :: DeveloperApi ::
@@ -76,9 +73,6 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  @deprecated("use newConfiguration with SparkConf argument", "1.2.0")
-  def newConfiguration(): Configuration = newConfiguration(null)
-
   /**
    * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
    * subsystems.
@@ -92,10 +86,15 @@ class SparkHadoopUtil extends Logging {
       // Explicitly check for S3 environment variables
       if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
           System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
-        hadoopConf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
-        hadoopConf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
-        hadoopConf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
-        hadoopConf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+        val keyId = System.getenv("AWS_ACCESS_KEY_ID")
+        val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
+
+        hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
+        hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
+        hadoopConf.set("fs.s3a.access.key", keyId)
+        hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
+        hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
+        hadoopConf.set("fs.s3a.secret.key", accessKey)
       }
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
       conf.getAll.foreach { case (key, value) =>
@@ -186,29 +185,6 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Using reflection to get the Configuration from JobContext/TaskAttemptContext. If we directly
-   * call `JobContext/TaskAttemptContext.getConfiguration`, it will generate different byte codes
-   * for Hadoop 1.+ and Hadoop 2.+ because JobContext/TaskAttemptContext is class in Hadoop 1.+
-   * while it's interface in Hadoop 2.+.
-   */
-  def getConfigurationFromJobContext(context: JobContext): Configuration = {
-    val method = context.getClass.getMethod("getConfiguration")
-    method.invoke(context).asInstanceOf[Configuration]
-  }
-
-  /**
-   * Using reflection to call `getTaskAttemptID` from TaskAttemptContext. If we directly
-   * call `TaskAttemptContext.getTaskAttemptID`, it will generate different byte codes
-   * for Hadoop 1.+ and Hadoop 2.+ because TaskAttemptContext is class in Hadoop 1.+
-   * while it's interface in Hadoop 2.+.
-   */
-  def getTaskAttemptIDFromTaskAttemptContext(
-      context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
-    val method = context.getClass.getMethod("getTaskAttemptID")
-    method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
-  }
-
-  /**
    * Get [[FileStatus]] objects for all leaf children (files) under the given base path. If the
    * given path points to a file, return a single-element collection containing [[FileStatus]] of
    * that file.
@@ -224,11 +200,11 @@ class SparkHadoopUtil extends Logging {
    */
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
-      val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDir)
+      val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDirectory)
       leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
     }
 
-    if (baseStatus.isDir) recurse(baseStatus) else Seq(baseStatus)
+    if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
   }
 
   def listLeafDirStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
@@ -237,12 +213,12 @@ class SparkHadoopUtil extends Logging {
 
   def listLeafDirStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
-      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDir)
+      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
       val leaves = if (directories.isEmpty) Seq(status) else Seq.empty[FileStatus]
       leaves ++ directories.flatMap(dir => listLeafDirStatuses(fs, dir))
     }
 
-    assert(baseStatus.isDir)
+    assert(baseStatus.isDirectory)
     recurse(baseStatus)
   }
 
@@ -381,20 +357,13 @@ class SparkHadoopUtil extends Logging {
 
 object SparkHadoopUtil {
 
-  private val hadoop = {
-    val yarnMode = java.lang.Boolean.valueOf(
-        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if (yarnMode) {
-      try {
-        Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
-          .newInstance()
-          .asInstanceOf[SparkHadoopUtil]
-      } catch {
-       case e: Exception => throw new SparkException("Unable to load YARN support", e)
-      }
-    } else {
-      new SparkHadoopUtil
-    }
+  private lazy val hadoop = new SparkHadoopUtil
+  private lazy val yarn = try {
+    Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+      .newInstance()
+      .asInstanceOf[SparkHadoopUtil]
+  } catch {
+    case e: Exception => throw new SparkException("Unable to load YARN support", e)
   }
 
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
@@ -402,6 +371,13 @@ object SparkHadoopUtil {
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
   def get: SparkHadoopUtil = {
-    hadoop
+    // Check each time to support changing to/from YARN
+    val yarnMode = java.lang.Boolean.valueOf(
+        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if (yarnMode) {
+      yarn
+    } else {
+      hadoop
+    }
   }
 }

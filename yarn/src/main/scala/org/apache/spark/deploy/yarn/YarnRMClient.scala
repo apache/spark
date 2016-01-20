@@ -19,8 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
+import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -49,7 +49,6 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
    *
    * @param conf The Yarn configuration.
    * @param sparkConf The Spark configuration.
-   * @param preferredNodeLocations Map with hints about where to allocate containers.
    * @param uiAddress Address of the SparkUI.
    * @param uiHistoryAddress Address of the application on the History Server.
    */
@@ -58,7 +57,6 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       driverRef: RpcEndpointRef,
       conf: YarnConfiguration,
       sparkConf: SparkConf,
-      preferredNodeLocations: Map[String, Set[SplitInfo]],
       uiAddress: String,
       uiHistoryAddress: String,
       securityMgr: SecurityManager

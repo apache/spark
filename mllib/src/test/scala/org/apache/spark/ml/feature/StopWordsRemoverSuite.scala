@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -32,7 +33,9 @@ object StopWordsRemoverSuite extends SparkFunSuite {
   }
 }
 
-class StopWordsRemoverSuite extends SparkFunSuite with MLlibTestSparkContext {
+class StopWordsRemoverSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import StopWordsRemoverSuite._
 
   test("StopWordsRemover default") {
@@ -76,5 +79,14 @@ class StopWordsRemoverSuite extends SparkFunSuite with MLlibTestSparkContext {
     )).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
+  }
+
+  test("read/write") {
+    val t = new StopWordsRemover()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setStopWords(Array("the", "a"))
+      .setCaseSensitive(true)
+    testDefaultReadWrite(t)
   }
 }

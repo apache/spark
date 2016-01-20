@@ -18,7 +18,7 @@
 import numpy as np
 from numpy import array
 
-from pyspark import RDD
+from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import SparseVector, Vectors, _convert_to_vector
@@ -28,7 +28,8 @@ __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
            'RidgeRegressionModel', 'RidgeRegressionWithSGD',
            'LassoModel', 'LassoWithSGD', 'IsotonicRegressionModel',
-           'IsotonicRegression']
+           'IsotonicRegression', 'StreamingLinearAlgorithm',
+           'StreamingLinearRegressionWithSGD']
 
 
 class LabeledPoint(object):
@@ -42,6 +43,8 @@ class LabeledPoint(object):
             column matrix)
 
     Note: 'label' and 'features' are accessible as class attributes.
+
+    .. versionadded:: 1.0.0
     """
 
     def __init__(self, label, features):
@@ -65,6 +68,8 @@ class LinearModel(object):
 
     :param weights: Weights computed for every feature.
     :param intercept: Intercept computed for this model.
+
+    .. versionadded:: 0.9.0
     """
 
     def __init__(self, weights, intercept):
@@ -72,11 +77,15 @@ class LinearModel(object):
         self._intercept = float(intercept)
 
     @property
+    @since("1.0.0")
     def weights(self):
+        """Weights computed for every feature."""
         return self._coeff
 
     @property
+    @since("1.0.0")
     def intercept(self):
+        """Intercept computed for this model."""
         return self._intercept
 
     def __repr__(self):
@@ -93,8 +102,11 @@ class LinearRegressionModelBase(LinearModel):
     True
     >>> abs(lrmb.predict(SparseVector(2, {0: -1.03, 1: 7.777})) - 14.624) < 1e-6
     True
+
+    .. versionadded:: 0.9.0
     """
 
+    @since("0.9.0")
     def predict(self, x):
         """
         Predict the value of the dependent variable given a vector or
@@ -162,14 +174,20 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+
+    .. versionadded:: 0.9.0
     """
+    @since("1.4.0")
     def save(self, sc, path):
+        """Save a LinearRegressionModel."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel(
             _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since("1.4.0")
     def load(cls, sc, path):
+        """Load a LinearRegressionModel."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.LinearRegressionModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
@@ -198,11 +216,23 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
 
 
 class LinearRegressionWithSGD(object):
+    """
+    Train a linear regression model with no regularization using Stochastic Gradient Descent.
+    This solves the least squares regression formulation
+                 f(weights) = 1/n ||A weights-y||^2^
+    (which is the mean squared error).
+    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+    its corresponding right hand side label y.
+    See also the documentation for the precise formulation.
+
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
+    @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.0, regType=None, intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a linear regression model using Stochastic Gradient
         Descent (SGD).
@@ -244,11 +274,14 @@ class LinearRegressionWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam),
-                                 regType, bool(intercept), bool(validateData))
+                                 regType, bool(intercept), bool(validateData),
+                                 float(convergenceTol))
 
         return _regression_train_wrapper(train, LinearRegressionModel, data, initialWeights)
 
@@ -309,14 +342,20 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+
+    .. versionadded:: 0.9.0
     """
+    @since("1.4.0")
     def save(self, sc, path):
+        """Save a LassoModel."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel(
             _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since("1.4.0")
     def load(cls, sc, path):
+        """Load a LassoModel."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.LassoModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
@@ -326,11 +365,22 @@ class LassoModel(LinearRegressionModelBase):
 
 
 class LassoWithSGD(object):
+    """
+    Train a regression model with L1-regularization using Stochastic Gradient Descent.
+    This solves the l1-regularized least squares regression formulation
+             f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
+    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+    its corresponding right hand side label y.
+    See also the documentation for the precise formulation.
+
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
+    @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a regression model with L1-regularization using
         Stochastic Gradient Descent.
@@ -362,11 +412,13 @@ class LassoWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
-                                 bool(validateData))
+                                 bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
@@ -428,14 +480,20 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+
+    .. versionadded:: 0.9.0
     """
+    @since("1.4.0")
     def save(self, sc, path):
+        """Save a RidgeRegressionMode."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel(
             _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since("1.4.0")
     def load(cls, sc, path):
+        """Load a RidgeRegressionMode."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.RidgeRegressionModel.load(
             sc._jsc.sc(), path)
         weights = _java2py(sc, java_model.weights())
@@ -445,11 +503,22 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
 
 class RidgeRegressionWithSGD(object):
+    """
+    Train a regression model with L2-regularization using Stochastic Gradient Descent.
+    This solves the l2-regularized least squares regression formulation
+             f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
+    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+    its corresponding right hand side label y.
+    See also the documentation for the precise formulation.
+
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
+    @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a regression model with L2-regularization using
         Stochastic Gradient Descent.
@@ -481,11 +550,13 @@ class RidgeRegressionWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
-                                 bool(validateData))
+                                 bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, RidgeRegressionModel, data, initialWeights)
 
@@ -523,6 +594,8 @@ class IsotonicRegressionModel(Saveable, Loader):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
+
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self, boundaries, predictions, isotonic):
@@ -530,6 +603,7 @@ class IsotonicRegressionModel(Saveable, Loader):
         self.predictions = predictions
         self.isotonic = isotonic
 
+    @since("1.4.0")
     def predict(self, x):
         """
         Predict labels for provided features.
@@ -554,7 +628,9 @@ class IsotonicRegressionModel(Saveable, Loader):
             return x.map(lambda v: self.predict(v))
         return np.interp(x, self.boundaries, self.predictions)
 
+    @since("1.4.0")
     def save(self, sc, path):
+        """Save a IsotonicRegressionModel."""
         java_boundaries = _py2java(sc, self.boundaries.tolist())
         java_predictions = _py2java(sc, self.predictions.tolist())
         java_model = sc._jvm.org.apache.spark.mllib.regression.IsotonicRegressionModel(
@@ -562,7 +638,9 @@ class IsotonicRegressionModel(Saveable, Loader):
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since("1.4.0")
     def load(cls, sc, path):
+        """Load a IsotonicRegressionModel."""
         java_model = sc._jvm.org.apache.spark.mllib.regression.IsotonicRegressionModel.load(
             sc._jsc.sc(), path)
         py_boundaries = _java2py(sc, java_model.boundaryVector()).toArray()
@@ -571,8 +649,29 @@ class IsotonicRegressionModel(Saveable, Loader):
 
 
 class IsotonicRegression(object):
+    """
+    Isotonic regression.
+    Currently implemented using parallelized pool adjacent violators algorithm.
+    Only univariate (single feature) algorithm supported.
+
+    Sequential PAV implementation based on:
+    Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
+      "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
+      Available from [[http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf]]
+
+    Sequential PAV parallelization based on:
+    Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
+      "An approach to parallelizing isotonic regression."
+      Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
+      Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
+
+    @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
+
+    .. versionadded:: 1.4.0
+    """
 
     @classmethod
+    @since("1.4.0")
     def train(cls, data, isotonic=True):
         """
         Train a isotonic regression model on the given data.
@@ -590,10 +689,13 @@ class StreamingLinearAlgorithm(object):
     Base class that has to be inherited by any StreamingLinearAlgorithm.
 
     Prevents reimplementation of methods predictOn and predictOnValues.
+
+    .. versionadded:: 1.5.0
     """
     def __init__(self, model):
         self._model = model
 
+    @since("1.5.0")
     def latestModel(self):
         """
         Returns the latest model.
@@ -608,6 +710,7 @@ class StreamingLinearAlgorithm(object):
             raise ValueError(
                 "Model must be intialized using setInitialWeights")
 
+    @since("1.5.0")
     def predictOn(self, dstream):
         """
         Make predictions on a dstream.
@@ -617,6 +720,7 @@ class StreamingLinearAlgorithm(object):
         self._validate(dstream)
         return dstream.map(lambda x: self._model.predict(x))
 
+    @since("1.5.0")
     def predictOnValues(self, dstream):
         """
         Make predictions on a keyed dstream.
@@ -630,25 +734,40 @@ class StreamingLinearAlgorithm(object):
 @inherit_doc
 class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Run LinearRegression with SGD on a batch of data.
+    Train or predict a linear regression model on streaming data. Training uses
+    Stochastic Gradient Descent to update the model based on each new batch of
+    incoming data from a DStream (see `LinearRegressionWithSGD` for model equation).
 
-    The problem minimized is (1 / n_samples) * (y - weights'X)**2.
-    After training on a batch of data, the weights obtained at the end of
-    training are used as initial weights for the next batch.
+    Each batch of data is assumed to be an RDD of LabeledPoints.
+    The number of data points per batch can vary, but the number
+    of features must be constant. An initial weight
+    vector must be provided.
 
-    :param: stepSize Step size for each iteration of gradient descent.
-    :param: numIterations Total number of iterations run.
-    :param: miniBatchFraction Fraction of data on which SGD is run for each
-                              iteration.
+    :param stepSize:
+      Step size for each iteration of gradient descent.
+      (default: 0.1)
+    :param numIterations:
+      Number of iterations run for each batch of data.
+      (default: 50)
+    :param miniBatchFraction:
+      Fraction of each batch of data to use for updates.
+      (default: 1.0)
+    :param convergenceTol:
+      Value used to determine when to terminate iterations.
+      (default: 0.001)
+
+    .. versionadded:: 1.5.0
     """
-    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0):
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, convergenceTol=0.001):
         self.stepSize = stepSize
         self.numIterations = numIterations
         self.miniBatchFraction = miniBatchFraction
+        self.convergenceTol = convergenceTol
         self._model = None
         super(StreamingLinearRegressionWithSGD, self).__init__(
             model=self._model)
 
+    @since("1.5.0")
     def setInitialWeights(self, initialWeights):
         """
         Set the initial value of weights.
@@ -659,6 +778,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
         self._model = LinearRegressionModel(initialWeights, 0)
         return self
 
+    @since("1.5.0")
     def trainOn(self, dstream):
         """Train the model on the incoming dstream."""
         self._validate(dstream)
@@ -669,7 +789,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
                 self._model = LinearRegressionWithSGD.train(
                     rdd, self.numIterations, self.stepSize,
                     self.miniBatchFraction, self._model.weights,
-                    self._model.intercept)
+                    intercept=self._model.intercept, convergenceTol=self.convergenceTol)
 
         dstream.foreachRDD(update)
 

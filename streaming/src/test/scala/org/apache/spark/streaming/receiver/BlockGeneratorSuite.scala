@@ -18,16 +18,17 @@
 package org.apache.spark.streaming.receiver
 
 import scala.collection.mutable
+import scala.language.reflectiveCalls
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers._
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.ManualClock
-import org.apache.spark.{SparkException, SparkConf, SparkFunSuite}
 
 class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -184,9 +185,10 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
     // Verify that the final data is present in the final generated block and
     // pushed before complete stop
     assert(blockGenerator.isStopped() === false) // generator has not stopped yet
-    clock.advance(blockIntervalMs)   // force block generation
-    failAfter(1 second) {
-      thread.join()
+    eventually(timeout(10 seconds), interval(10 milliseconds)) {
+      // Keep calling `advance` to avoid blocking forever in `clock.waitTillTime`
+      clock.advance(blockIntervalMs)
+      assert(thread.isAlive === false)
     }
     assert(blockGenerator.isStopped() === true) // generator has finally been completely stopped
     assert(listener.pushedData === data, "All data not pushed by stop()")

@@ -21,10 +21,11 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedExtractValue, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
 /**
@@ -144,17 +145,18 @@ package object dsl {
       }
     }
 
-    def sum(e: Expression): Expression = Sum(e)
-    def sumDistinct(e: Expression): Expression = SumDistinct(e)
-    def count(e: Expression): Expression = Count(e)
-    def countDistinct(e: Expression*): Expression = CountDistinct(e)
+    def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
+    def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
+    def count(e: Expression): Expression = Count(e).toAggregateExpression()
+    def countDistinct(e: Expression*): Expression =
+      Count(e).toAggregateExpression(isDistinct = true)
     def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      ApproxCountDistinct(e, rsd)
-    def avg(e: Expression): Expression = Average(e)
-    def first(e: Expression): Expression = First(e)
-    def last(e: Expression): Expression = Last(e)
-    def min(e: Expression): Expression = Min(e)
-    def max(e: Expression): Expression = Max(e)
+      HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
+    def avg(e: Expression): Expression = Average(e).toAggregateExpression()
+    def first(e: Expression): Expression = new First(e).toAggregateExpression()
+    def last(e: Expression): Expression = new Last(e).toAggregateExpression()
+    def min(e: Expression): Expression = Min(e).toAggregateExpression()
+    def max(e: Expression): Expression = Max(e).toAggregateExpression()
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
@@ -225,9 +227,10 @@ package object dsl {
         AttributeReference(s, mapType, nullable = true)()
 
       /** Creates a new AttributeReference of type struct */
-      def struct(fields: StructField*): AttributeReference = struct(StructType(fields))
       def struct(structType: StructType): AttributeReference =
         AttributeReference(s, structType, nullable = true)()
+      def struct(attrs: AttributeReference*): AttributeReference =
+        struct(StructType.fromAttributes(attrs))
     }
 
     implicit class DslAttribute(a: AttributeReference) {
@@ -273,17 +276,19 @@ package object dsl {
 
       def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
-      // TODO specify the output column names
       def generate(
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
-        alias: Option[String] = None): LogicalPlan =
-        Generate(generator, join = join, outer = outer, alias, Nil, logicalPlan)
+        alias: Option[String] = None,
+        outputNames: Seq[String] = Nil): LogicalPlan =
+        Generate(generator, join = join, outer = outer, alias,
+          outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(
-          analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite, false)
+          analysis.UnresolvedRelation(TableIdentifier(tableName)),
+          Map.empty, logicalPlan, overwrite, false)
 
       def analyze: LogicalPlan = EliminateSubQueries(analysis.SimpleAnalyzer.execute(logicalPlan))
     }

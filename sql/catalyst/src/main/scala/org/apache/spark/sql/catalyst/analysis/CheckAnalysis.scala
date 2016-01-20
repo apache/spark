@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -49,11 +50,14 @@ trait CheckAnalysis {
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case u: UnresolvedRelation =>
+        u.failAnalysis(s"Table not found: ${u.tableIdentifier}")
+
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns: [$from]")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -66,15 +70,32 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
-          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
-            failAnalysis(
-              s"Could not resolve window function '$name'. " +
-              "Note that, using window functions currently requires a HiveContext")
+          case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
+            failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
-            // The window spec is not valid.
-            val reason = windowSpec.validate.get
-            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
+          case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
+               SpecifiedWindowFrame(frame,
+                 FrameBoundary(l),
+                 FrameBoundary(h))))
+             if order.isEmpty || frame != RowFrame || l != h =>
+            failAnalysis("An offset window function can only be evaluated in an ordered " +
+              s"row-based window frame with a single offset: $w")
+
+          case w @ WindowExpression(e, s) =>
+            // Only allow window functions with an aggregate expression or an offset window
+            // function.
+            e match {
+              case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+              case _ =>
+                failAnalysis(s"Expression '$e' not supported within a window function.")
+            }
+            // Make sure the window specification is valid.
+            s.validate match {
+              case Some(m) =>
+                failAnalysis(s"Window specification $s is not valid because $m")
+              case None => w
+            }
+
         }
 
         operator match {
@@ -105,25 +126,50 @@ trait CheckAnalysis {
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case _: AggregateExpression => // OK
+              case aggExpr: AggregateExpression =>
+                aggExpr.aggregateFunction.children.foreach { child =>
+                  child.foreach {
+                    case agg: AggregateExpression =>
+                      failAnalysis(
+                        s"It is not allowed to use an aggregate function in the argument of " +
+                          s"another aggregate function. Please use the inner aggregate function " +
+                          s"in a sub-query.")
+                    case other => // OK
+                  }
+
+                  if (!child.deterministic) {
+                    failAnalysis(
+                      s"nondeterministic expression ${expr.prettyString} should not " +
+                        s"appear in the arguments of an aggregate function.")
+                  }
+                }
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
-                    "Add to group by or wrap in first() if you don't care which value you get.")
+                    "Add to group by or wrap in first() (or first_value) if you don't care " +
+                    "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            def checkValidGroupingExprs(expr: Expression): Unit = expr.dataType match {
-              case BinaryType =>
-                failAnalysis(s"binary type expression ${expr.prettyString} cannot be used " +
-                  "in grouping expression")
-              case m: MapType =>
-                failAnalysis(s"map type expression ${expr.prettyString} cannot be used " +
-                  "in grouping expression")
-              case _ => // OK
+            def checkValidGroupingExprs(expr: Expression): Unit = {
+              // Check if the data type of expr is orderable.
+              if (!RowOrdering.isOrderable(expr.dataType)) {
+                failAnalysis(
+                  s"expression ${expr.prettyString} cannot be used as a grouping expression " +
+                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"data type.")
+              }
+
+              if (!expr.deterministic) {
+                // This is just a sanity check, our analysis rule PullOutNondeterministic should
+                // already pull out those nondeterministic expressions and evaluate them in
+                // a Project node.
+                failAnalysis(s"nondeterministic expression ${expr.prettyString} should not " +
+                  s"appear in grouping expression.")
+              }
             }
 
             aggregateExprs.foreach(checkValidAggregateExpression)
@@ -175,9 +221,12 @@ trait CheckAnalysis {
               s"unresolved operator ${operator.simpleString}")
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] =>
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+            // The rule above is used to check Aggregate operator.
             failAnalysis(
-              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+              s"""nondeterministic expressions are only allowed in
+                 |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.prettyString).mkString(",")}
                  |in operator ${operator.simpleString}
              """.stripMargin)

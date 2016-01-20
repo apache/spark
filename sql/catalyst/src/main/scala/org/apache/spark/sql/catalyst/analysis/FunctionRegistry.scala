@@ -24,6 +24,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -48,25 +49,39 @@ trait FunctionRegistry {
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private val functionBuilders =
+  private[sql] val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
-  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
-  : Unit = {
+  override def registerFunction(
+      name: String,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
     functionBuilders.put(name, (info, builder))
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).map(_._2).getOrElse {
-      throw new AnalysisException(s"undefined function $name")
+    val func = synchronized {
+      functionBuilders.get(name).map(_._2).getOrElse {
+        throw new AnalysisException(s"undefined function $name")
+      }
     }
     func(children)
   }
 
-  override def listFunction(): Seq[String] = functionBuilders.iterator.map(_._1).toList.sorted
+  override def listFunction(): Seq[String] = synchronized {
+    functionBuilders.iterator.map(_._1).toList.sorted
+  }
 
-  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+  override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
     functionBuilders.get(name).map(_._1)
+  }
+
+  def copy(): SimpleFunctionRegistry = synchronized {
+    val registry = new SimpleFunctionRegistry
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+      registry.registerFunction(name, info, builder)
+    }
+    registry
   }
 }
 
@@ -128,6 +143,7 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
     expression[Cos]("cos"),
+    expression[Cosh]("cosh"),
     expression[Conv]("conv"),
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
@@ -162,13 +178,28 @@ object FunctionRegistry {
     expression[ToRadians]("radians"),
 
     // aggregate functions
+    expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
+    expression[Corr]("corr"),
     expression[Count]("count"),
+    expression[CovPopulation]("covar_pop"),
+    expression[CovSample]("covar_samp"),
     expression[First]("first"),
+    expression[First]("first_value"),
     expression[Last]("last"),
+    expression[Last]("last_value"),
     expression[Max]("max"),
+    expression[Average]("mean"),
     expression[Min]("min"),
+    expression[StddevSamp]("stddev"),
+    expression[StddevPop]("stddev_pop"),
+    expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
+    expression[VarianceSamp]("variance"),
+    expression[VariancePop]("var_pop"),
+    expression[VarianceSamp]("var_samp"),
+    expression[Skewness]("skewness"),
+    expression[Kurtosis]("kurtosis"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -181,6 +212,7 @@ object FunctionRegistry {
     expression[FormatNumber]("format_number"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
+    expression[JsonTuple]("json_tuple"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[Length]("length"),
@@ -214,6 +246,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTimestamp]("now"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -232,6 +265,7 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ToDate]("to_date"),
+    expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
@@ -246,14 +280,30 @@ object FunctionRegistry {
     // misc functions
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
+    expression[Murmur3Hash]("hash"),
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
-    expression[InputFileName]("input_file_name")
+    expression[InputFileName]("input_file_name"),
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+
+    // grouping sets
+    expression[Cube]("cube"),
+    expression[Rollup]("rollup"),
+
+    // window functions
+    expression[Lead]("lead"),
+    expression[Lag]("lag"),
+    expression[RowNumber]("row_number"),
+    expression[CumeDist]("cume_dist"),
+    expression[NTile]("ntile"),
+    expression[Rank]("rank"),
+    expression[DenseRank]("dense_rank"),
+    expression[PercentRank]("percent_rank")
   )
 
-  val builtin: FunctionRegistry = {
+  val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
     expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
     fr

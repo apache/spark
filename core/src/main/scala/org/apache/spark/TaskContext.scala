@@ -21,8 +21,8 @@ import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.TaskCompletionListener
 
 
@@ -95,13 +95,11 @@ abstract class TaskContext extends Serializable {
    */
   def isInterrupted(): Boolean
 
-  @deprecated("use isRunningLocally", "1.2.0")
-  def runningLocally(): Boolean
-
   /**
    * Returns true if the task is running locally in the driver program.
-   * @return
+   * @return false
    */
+  @deprecated("Local execution was removed, so this always returns false", "2.0.0")
   def isRunningLocally(): Boolean
 
   /**
@@ -119,16 +117,6 @@ abstract class TaskContext extends Serializable {
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
 
   /**
-   * Adds a callback function to be executed on task completion. An example use
-   * is for HadoopRDD to register a callback to close the input stream.
-   * Will be called in any situation - success, failure, or cancellation.
-   *
-   * @param f Callback function.
-   */
-  @deprecated("use addTaskCompletionListener", "1.2.0")
-  def addOnCompleteCallback(f: () => Unit)
-
-  /**
    * The ID of the stage that this task belong to.
    */
   def stageId(): Int
@@ -143,9 +131,6 @@ abstract class TaskContext extends Serializable {
    * attemptNumber = 0, and subsequent attempts will have increasing attempt numbers.
    */
   def attemptNumber(): Int
-
-  @deprecated("use attemptNumber", "1.3.0")
-  def attemptId(): Long
 
   /**
    * An ID that is unique to this task attempt (within the same SparkContext, no two task attempts

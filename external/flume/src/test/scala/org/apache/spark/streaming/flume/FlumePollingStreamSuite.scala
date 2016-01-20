@@ -20,18 +20,18 @@ package org.apache.spark.streaming.flume
 import java.net.InetSocketAddress
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import com.google.common.base.Charsets.UTF_8
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext, TestOutputStream}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.{Seconds, TestOutputStream, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
 class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {
@@ -119,8 +119,8 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
         val headers = flattenOutputBuffer.map(_.event.getHeaders.asScala.map {
           case (key, value) => (key.toString, value.toString)
         }).map(_.asJava)
-        val bodies = flattenOutputBuffer.map(e => new String(e.event.getBody.array(), UTF_8))
-        utils.assertOutput(headers, bodies)
+        val bodies = flattenOutputBuffer.map(e => JavaUtils.bytesToString(e.event.getBody))
+        utils.assertOutput(headers.asJava, bodies.asJava)
       }
     } finally {
       ssc.stop()

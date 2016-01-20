@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 /**
  * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
@@ -42,7 +42,7 @@ case class DescribeCommand(
       new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("data_type", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = false,
+    AttributeReference("comment", StringType, nullable = true,
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 }
@@ -71,12 +71,12 @@ case class CreateTableUsing(
  * can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
-// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 case class CreateTableUsingAsSelect(
     tableIdent: TableIdentifier,
     provider: String,
     temporary: Boolean,
     partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     mode: SaveMode,
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
@@ -91,9 +91,9 @@ case class CreateTempTableUsing(
 
   def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(
-      sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
+      sqlContext, userSpecifiedSchema, Array.empty[String], bucketSpec = None, provider, options)
     sqlContext.catalog.registerTable(
-      tableIdent.toSeq,
+      tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
 
     Seq.empty[Row]
@@ -110,9 +110,16 @@ case class CreateTempTableUsingAsSelect(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
+    val resolved = ResolvedDataSource(
+      sqlContext,
+      provider,
+      partitionColumns,
+      bucketSpec = None,
+      mode,
+      options,
+      df)
     sqlContext.catalog.registerTable(
-      tableIdent.toSeq,
+      tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
 
     Seq.empty[Row]
@@ -128,7 +135,7 @@ case class RefreshTable(tableIdent: TableIdentifier)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent.toSeq)
+    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
     val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {

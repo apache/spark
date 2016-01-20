@@ -18,8 +18,10 @@
 import itertools
 import numpy as np
 
-from pyspark.ml.param import Params, Param
+from pyspark import since
 from pyspark.ml import Estimator, Model
+from pyspark.ml.param import Params, Param
+from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.util import keyword_only
 from pyspark.sql.functions import rand
 
@@ -47,11 +49,14 @@ class ParamGridBuilder(object):
     True
     >>> all([m in expected for m in output])
     True
+
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self):
         self._param_grid = {}
 
+    @since("1.4.0")
     def addGrid(self, param, values):
         """
         Sets the given parameters in this grid to fixed values.
@@ -60,6 +65,7 @@ class ParamGridBuilder(object):
 
         return self
 
+    @since("1.4.0")
     def baseOn(self, *args):
         """
         Sets the given parameters in this grid to fixed values.
@@ -73,6 +79,7 @@ class ParamGridBuilder(object):
 
         return self
 
+    @since("1.4.0")
     def build(self):
         """
         Builds and returns all combinations of parameters specified
@@ -83,7 +90,7 @@ class ParamGridBuilder(object):
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
-class CrossValidator(Estimator):
+class CrossValidator(Estimator, HasSeed):
     """
     K-fold cross validation.
 
@@ -104,6 +111,8 @@ class CrossValidator(Estimator):
     >>> cvModel = cv.fit(dataset)
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -121,9 +130,11 @@ class CrossValidator(Estimator):
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
 
     @keyword_only
-    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                 seed=None):
         """
-        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3)
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
+                 seed=None)
         """
         super(CrossValidator, self).__init__()
         #: param for estimator to be cross-validated
@@ -142,14 +153,18 @@ class CrossValidator(Estimator):
         self._set(**kwargs)
 
     @keyword_only
-    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+    @since("1.4.0")
+    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                  seed=None):
         """
-        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
+                  seed=None):
         Sets params for cross validator.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.4.0")
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
@@ -157,12 +172,14 @@ class CrossValidator(Estimator):
         self._paramMap[self.estimator] = value
         return self
 
+    @since("1.4.0")
     def getEstimator(self):
         """
         Gets the value of estimator or its default value.
         """
         return self.getOrDefault(self.estimator)
 
+    @since("1.4.0")
     def setEstimatorParamMaps(self, value):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
@@ -170,12 +187,14 @@ class CrossValidator(Estimator):
         self._paramMap[self.estimatorParamMaps] = value
         return self
 
+    @since("1.4.0")
     def getEstimatorParamMaps(self):
         """
         Gets the value of estimatorParamMaps or its default value.
         """
         return self.getOrDefault(self.estimatorParamMaps)
 
+    @since("1.4.0")
     def setEvaluator(self, value):
         """
         Sets the value of :py:attr:`evaluator`.
@@ -183,12 +202,14 @@ class CrossValidator(Estimator):
         self._paramMap[self.evaluator] = value
         return self
 
+    @since("1.4.0")
     def getEvaluator(self):
         """
         Gets the value of evaluator or its default value.
         """
         return self.getOrDefault(self.evaluator)
 
+    @since("1.4.0")
     def setNumFolds(self, value):
         """
         Sets the value of :py:attr:`numFolds`.
@@ -196,6 +217,7 @@ class CrossValidator(Estimator):
         self._paramMap[self.numFolds] = value
         return self
 
+    @since("1.4.0")
     def getNumFolds(self):
         """
         Gets the value of numFolds or its default value.
@@ -208,9 +230,10 @@ class CrossValidator(Estimator):
         numModels = len(epm)
         eva = self.getOrDefault(self.evaluator)
         nFolds = self.getOrDefault(self.numFolds)
+        seed = self.getOrDefault(self.seed)
         h = 1.0 / nFolds
         randCol = self.uid + "_rand"
-        df = dataset.select("*", rand(0).alias(randCol))
+        df = dataset.select("*", rand(seed).alias(randCol))
         metrics = np.zeros(numModels)
         for i in range(nFolds):
             validateLB = i * h
@@ -231,7 +254,16 @@ class CrossValidator(Estimator):
         bestModel = est.fit(dataset, epm[bestIndex])
         return CrossValidatorModel(bestModel)
 
+    @since("1.4.0")
     def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies creates a deep copy of
+        the embedded paramMap, and copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
         if extra is None:
             extra = dict()
         newCV = Params.copy(self, extra)
@@ -246,6 +278,8 @@ class CrossValidator(Estimator):
 class CrossValidatorModel(Model):
     """
     Model from k-fold cross validation.
+
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self, bestModel):
@@ -256,12 +290,14 @@ class CrossValidatorModel(Model):
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
+    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies the underlying bestModel,
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """

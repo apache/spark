@@ -20,6 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.*;
 
 import com.google.common.io.ByteStreams;
+import com.google.common.io.Closeables;
 
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
@@ -29,15 +30,15 @@ import org.apache.spark.unsafe.Platform;
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
  * of the file format).
  */
-final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
+public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
 
-  private final File file;
   private InputStream in;
   private DataInputStream din;
 
   // Variables that change with every record read:
   private int recordLength;
   private long keyPrefix;
+  private int numRecords;
   private int numRecordsRemaining;
 
   private byte[] arr = new byte[1024 * 1024];
@@ -49,11 +50,20 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
-    this.file = file;
     final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
-    this.in = blockManager.wrapForCompression(blockId, bs);
-    this.din = new DataInputStream(this.in);
-    numRecordsRemaining = din.readInt();
+    try {
+      this.in = blockManager.wrapForCompression(blockId, bs);
+      this.din = new DataInputStream(this.in);
+      numRecords = numRecordsRemaining = din.readInt();
+    } catch (IOException e) {
+      Closeables.close(bs, /* swallowIOException = */ true);
+      throw e;
+    }
+  }
+
+  @Override
+  public int getNumRecords() {
+    return numRecords;
   }
 
   @Override
@@ -72,10 +82,7 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
     ByteStreams.readFully(in, arr, 0, recordLength);
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
-      in.close();
-      file.delete();
-      in = null;
-      din = null;
+      close();
     }
   }
 
@@ -97,5 +104,17 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
   @Override
   public long getKeyPrefix() {
     return keyPrefix;
+  }
+
+  @Override
+  public void close() throws IOException {
+   if (in != null) {
+     try {
+       in.close();
+     } finally {
+       in = null;
+       din = null;
+     }
+   }
   }
 }

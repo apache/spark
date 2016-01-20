@@ -17,12 +17,16 @@
 
 package org.apache.spark
 
-import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
+
+// ==============================================================================================
+// NOTE: new task end reasons MUST be accompanied with serialization logic in util.JsonProtocol!
+// ==============================================================================================
 
 /**
  * :: DeveloperApi ::
@@ -49,7 +53,13 @@ sealed trait TaskFailedReason extends TaskEndReason {
   /** Error message displayed in the web UI. */
   def toErrorString: String
 
-  def shouldEventuallyFailJob: Boolean = true
+  /**
+   * Whether this task failure should be counted towards the maximum number of times the task is
+   * allowed to fail before the stage is aborted.  Set to false in cases where the task's failure
+   * was unrelated to the task; for example, if the task failed because the executor it was running
+   * on was killed.
+   */
+  def countTowardsTaskFailures: Boolean = true
 }
 
 /**
@@ -193,15 +203,18 @@ case object TaskKilled extends TaskFailedReason {
  * Task requested the driver to commit, but was denied.
  */
 @DeveloperApi
-case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extends TaskFailedReason {
+case class TaskCommitDenied(
+    jobID: Int,
+    partitionID: Int,
+    attemptNumber: Int) extends TaskFailedReason {
   override def toErrorString: String = s"TaskCommitDenied (Driver denied task commit)" +
-    s" for job: $jobID, partition: $partitionID, attempt: $attemptID"
+    s" for job: $jobID, partition: $partitionID, attemptNumber: $attemptNumber"
   /**
    * If a task failed because its attempt to commit was denied, do not count this failure
    * towards failing the stage. This is intended to prevent spurious stage failures in cases
    * where many speculative tasks are launched and denied to commit.
    */
-  override def shouldEventuallyFailJob: Boolean = false
+  override def countTowardsTaskFailures: Boolean = false
 }
 
 /**
@@ -210,14 +223,22 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String, isNormalExit: Boolean = false)
-  extends TaskFailedReason {
+case class ExecutorLostFailure(
+    execId: String,
+    exitCausedByApp: Boolean = true,
+    reason: Option[String]) extends TaskFailedReason {
   override def toErrorString: String = {
-    val exitBehavior = if (isNormalExit) "normally" else "abnormally"
-    s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})"
+    val exitBehavior = if (exitCausedByApp) {
+      "caused by one of the running tasks"
+    } else {
+      "unrelated to the running tasks"
+    }
+    s"ExecutorLostFailure (executor ${execId} exited due to an issue ${exitBehavior})"
+    s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
+      reason.map { r => s" Reason: $r" }.getOrElse("")
   }
 
-  override def shouldEventuallyFailJob: Boolean = !isNormalExit
+  override def countTowardsTaskFailures: Boolean = exitCausedByApp
 }
 
 /**

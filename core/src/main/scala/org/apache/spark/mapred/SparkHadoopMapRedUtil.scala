@@ -18,61 +18,12 @@
 package org.apache.spark.mapred
 
 import java.io.IOException
-import java.lang.reflect.Modifier
 
-import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
 
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.{Logging, SparkEnv, TaskContext}
-import org.apache.spark.util.{Utils => SparkUtils}
-
-private[spark]
-trait SparkHadoopMapRedUtil {
-  def newJobContext(conf: JobConf, jobId: JobID): JobContext = {
-    val klass = firstAvailableClass("org.apache.hadoop.mapred.JobContextImpl",
-      "org.apache.hadoop.mapred.JobContext")
-    val ctor = klass.getDeclaredConstructor(classOf[JobConf],
-      classOf[org.apache.hadoop.mapreduce.JobID])
-    // In Hadoop 1.0.x, JobContext is an interface, and JobContextImpl is package private.
-    // Make it accessible if it's not in order to access it.
-    if (!Modifier.isPublic(ctor.getModifiers)) {
-      ctor.setAccessible(true)
-    }
-    ctor.newInstance(conf, jobId).asInstanceOf[JobContext]
-  }
-
-  def newTaskAttemptContext(conf: JobConf, attemptId: TaskAttemptID): TaskAttemptContext = {
-    val klass = firstAvailableClass("org.apache.hadoop.mapred.TaskAttemptContextImpl",
-      "org.apache.hadoop.mapred.TaskAttemptContext")
-    val ctor = klass.getDeclaredConstructor(classOf[JobConf], classOf[TaskAttemptID])
-    // See above
-    if (!Modifier.isPublic(ctor.getModifiers)) {
-      ctor.setAccessible(true)
-    }
-    ctor.newInstance(conf, attemptId).asInstanceOf[TaskAttemptContext]
-  }
-
-  def newTaskAttemptID(
-      jtIdentifier: String,
-      jobId: Int,
-      isMap: Boolean,
-      taskId: Int,
-      attemptId: Int): TaskAttemptID = {
-    new TaskAttemptID(jtIdentifier, jobId, isMap, taskId, attemptId)
-  }
-
-  private def firstAvailableClass(first: String, second: String): Class[_] = {
-    try {
-      SparkUtils.classForName(first)
-    } catch {
-      case e: ClassNotFoundException =>
-        SparkUtils.classForName(second)
-    }
-  }
-}
+import org.apache.spark.executor.CommitDeniedException
 
 object SparkHadoopMapRedUtil extends Logging {
   /**
@@ -91,10 +42,9 @@ object SparkHadoopMapRedUtil extends Logging {
       committer: MapReduceOutputCommitter,
       mrTaskContext: MapReduceTaskAttemptContext,
       jobId: Int,
-      splitId: Int,
-      attemptId: Int): Unit = {
+      splitId: Int): Unit = {
 
-    val mrTaskAttemptID = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(mrTaskContext)
+    val mrTaskAttemptID = mrTaskContext.getTaskAttemptID
 
     // Called after we have decided to commit
     def performCommit(): Unit = {
@@ -122,7 +72,8 @@ object SparkHadoopMapRedUtil extends Logging {
 
       if (shouldCoordinateWithDriver) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
-        val canCommit = outputCommitCoordinator.canCommit(jobId, splitId, attemptId)
+        val taskAttemptNumber = TaskContext.get().attemptNumber()
+        val canCommit = outputCommitCoordinator.canCommit(jobId, splitId, taskAttemptNumber)
 
         if (canCommit) {
           performCommit()
@@ -132,7 +83,7 @@ object SparkHadoopMapRedUtil extends Logging {
           logInfo(message)
           // We need to abort the task so that the driver can reschedule new attempts, if necessary
           committer.abortTask(mrTaskContext)
-          throw new CommitDeniedException(message, jobId, splitId, attemptId)
+          throw new CommitDeniedException(message, jobId, splitId, taskAttemptNumber)
         }
       } else {
         // Speculation is disabled or a user has chosen to manually bypass the commit coordination
@@ -142,17 +93,5 @@ object SparkHadoopMapRedUtil extends Logging {
       // Some other attempt committed the output, so we do nothing and signal success
       logInfo(s"No need to commit output of task because needsTaskCommit=false: $mrTaskAttemptID")
     }
-  }
-
-  def commitTask(
-      committer: MapReduceOutputCommitter,
-      mrTaskContext: MapReduceTaskAttemptContext,
-      sparkTaskContext: TaskContext): Unit = {
-    commitTask(
-      committer,
-      mrTaskContext,
-      sparkTaskContext.stageId(),
-      sparkTaskContext.partitionId(),
-      sparkTaskContext.attemptNumber())
   }
 }

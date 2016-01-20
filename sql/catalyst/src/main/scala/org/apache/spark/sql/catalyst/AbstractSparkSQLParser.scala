@@ -26,9 +26,9 @@ import scala.util.parsing.input.CharArrayReader.EofCh
 import org.apache.spark.sql.catalyst.plans.logical._
 
 private[sql] abstract class AbstractSparkSQLParser
-  extends StandardTokenParsers with PackratParsers {
+  extends StandardTokenParsers with PackratParsers with ParserInterface {
 
-  def parse(input: String): LogicalPlan = {
+  def parsePlan(input: String): LogicalPlan = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(start)(new lexical.Scanner(input)) match {
@@ -78,7 +78,7 @@ private[sql] abstract class AbstractSparkSQLParser
 }
 
 class SqlLexical extends StdLexical {
-  case class FloatLit(chars: String) extends Token {
+  case class DecimalLit(chars: String) extends Token {
     override def toString: String = chars
   }
 
@@ -102,13 +102,16 @@ class SqlLexical extends StdLexical {
   }
 
   override lazy val token: Parser[Token] =
-    ( identChar ~ (identChar | digit).* ^^
-      { case first ~ rest => processIdent((first :: rest).mkString) }
+    ( rep1(digit) ~ scientificNotation ^^ { case i ~ s => DecimalLit(i.mkString + s) }
+    | '.' ~> (rep1(digit) ~ scientificNotation) ^^
+      { case i ~ s => DecimalLit("0." + i.mkString + s) }
+    | rep1(digit) ~ ('.' ~> digit.*) ~ scientificNotation ^^
+      { case i1 ~ i2 ~ s => DecimalLit(i1.mkString + "." + i2.mkString + s) }
     | digit.* ~ identChar ~ (identChar | digit).* ^^
       { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
         case i ~ None => NumericLit(i.mkString)
-        case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
+        case i ~ Some(d) => DecimalLit(i.mkString + "." + d.mkString)
       }
     | '\'' ~> chrExcept('\'', '\n', EofCh).* <~ '\'' ^^
       { case chars => StringLit(chars mkString "") }
@@ -124,6 +127,11 @@ class SqlLexical extends StdLexical {
     )
 
   override def identChar: Parser[Elem] = letter | elem('_')
+
+  private lazy val scientificNotation: Parser[String] =
+    (elem('e') | elem('E')) ~> (elem('+') | elem('-')).? ~ rep1(digit) ^^ {
+      case s ~ rest => "e" + s.mkString + rest.mkString
+    }
 
   override def whitespace: Parser[Any] =
     ( whitespaceChar

@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.parquet.filter2.predicate.Operators._
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.filter2.predicate.FilterApi._
+import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 
-import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -50,27 +52,33 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     val output = predicate.collect { case a: Attribute => a }.distinct
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      val query = df
-        .select(output.map(e => Column(e)): _*)
-        .where(Column(predicate))
+      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+        val query = df
+          .select(output.map(e => Column(e)): _*)
+          .where(Column(predicate))
 
-      val analyzedPredicate = query.queryExecution.optimizedPlan.collect {
-        case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation)) => filters
-      }.flatten
-      assert(analyzedPredicate.nonEmpty)
+        var maybeRelation: Option[ParquetRelation] = None
+        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+          case PhysicalOperation(_, filters, LogicalRelation(relation: ParquetRelation, _, _)) =>
+            maybeRelation = Some(relation)
+            filters
+        }.flatten.reduceLeftOption(_ && _)
+        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-      val selectedFilters = DataSourceStrategy.selectFilters(analyzedPredicate)
-      assert(selectedFilters.nonEmpty)
+        val (_, selectedFilters) =
+          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+        assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-      selectedFilters.foreach { pred =>
-        val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-        maybeFilter.foreach { f =>
-          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-          assert(f.getClass === filterClass)
+        selectedFilters.foreach { pred =>
+          val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
+          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+          maybeFilter.foreach { f =>
+            // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+            assert(f.getClass === filterClass)
+          }
         }
+        checker(stripSparkFilter(query), expected)
       }
-      checker(query, expected)
     }
   }
 
@@ -219,7 +227,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - string") {
+  // See https://issues.apache.org/jira/browse/SPARK-11153
+  ignore("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
@@ -247,7 +256,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - binary") {
+  // See https://issues.apache.org/jira/browse/SPARK-11153
+  ignore("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes("UTF-8")
     }
@@ -292,8 +302,191 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.read.parquet(path).filter("part = 1"),
+          sqlContext.read.parquet(dir.getCanonicalPath).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
+      }
+    }
+  }
+
+  test("SPARK-10829: Filter combine partition key and attribute doesn't work in DataSource scan") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+
+        // If the "part = 1" filter gets pushed down, this query will throw an exception since
+        // "part" is not a valid column in the actual Parquet file
+        checkAnswer(
+          sqlContext.read.parquet(dir.getCanonicalPath).filter("a > 0 and (part = 0 or a > 1)"),
+          (2 to 3).map(i => Row(i, i.toString, 1)))
+      }
+    }
+  }
+
+  test("SPARK-12231: test the filter and empty project in partitioned DataSource scan") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}"
+        (1 to 3).map(i => (i, i + 1, i + 2, i + 3)).toDF("a", "b", "c", "d").
+          write.partitionBy("a").parquet(path)
+
+        // The filter "a > 1 or b < 2" will not get pushed down, and the projection is empty,
+        // this query will throw an exception since the project from combinedFilter expect
+        // two projection while the
+        val df1 = sqlContext.read.parquet(dir.getCanonicalPath)
+
+        assert(df1.filter("a > 1 or b < 2").count() == 2)
+      }
+    }
+  }
+
+  test("SPARK-12231: test the new projection in partitioned DataSource scan") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}"
+        (1 to 3).map(i => (i, i + 1, i + 2, i + 3)).toDF("a", "b", "c", "d").
+          write.partitionBy("a").parquet(path)
+
+        // test the generate new projection case
+        // when projects != partitionAndNormalColumnProjs
+
+        val df1 = sqlContext.read.parquet(dir.getCanonicalPath)
+
+        checkAnswer(
+          df1.filter("a > 1 or b > 2").orderBy("a").selectExpr("a", "b", "c", "d"),
+          (2 to 3).map(i => Row(i, i + 1, i + 2, i + 3)))
+      }
+    }
+  }
+
+
+  test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val pathOne = s"${dir.getCanonicalPath}/table1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathOne)
+        val pathTwo = s"${dir.getCanonicalPath}/table2"
+        (1 to 3).map(i => (i, i.toString)).toDF("c", "b").write.parquet(pathTwo)
+
+        // If the "c = 1" filter gets pushed down, this query will throw an exception which
+        // Parquet emits. This is a Parquet issue (PARQUET-389).
+        checkAnswer(
+          sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a"),
+          (1 to 1).map(i => Row(i, i.toString, null)))
+      }
+    }
+  }
+
+  // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
+  test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/part=1"
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+          val df = sqlContext.read.parquet(path).filter("a = 2")
+
+          // The result should be single row.
+          // When a filter is pushed to Parquet, Parquet can apply it to every row.
+          // So, we can check the number of rows returned from the Parquet
+          // to make sure our filter pushdown work.
+          assert(stripSparkFilter(df).count == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-12218: 'Not' is included in Parquet filter pushdown") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.parquet(path)
+
+        checkAnswer(
+          sqlContext.read.parquet(path).where("not (a = 2) or not(b in ('1'))"),
+          (1 to 5).map(i => Row(i, (i % 2).toString)))
+
+        checkAnswer(
+          sqlContext.read.parquet(path).where("not (a = 2 and b in ('1'))"),
+          (1 to 5).map(i => Row(i, (i % 2).toString)))
+      }
+    }
+  }
+
+  test("SPARK-12218 Converting conjunctions into Parquet filter predicates") {
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = false),
+      StructField("b", StringType, nullable = true),
+      StructField("c", DoubleType, nullable = true)
+    ))
+
+    assertResult(Some(and(
+      lt(intColumn("a"), 10: Integer),
+      gt(doubleColumn("c"), 1.5: java.lang.Double)))
+    ) {
+      ParquetFilters.createFilter(
+        schema,
+        sources.And(
+          sources.LessThan("a", 10),
+          sources.GreaterThan("c", 1.5D)))
+    }
+
+    assertResult(None) {
+      ParquetFilters.createFilter(
+        schema,
+        sources.And(
+          sources.LessThan("a", 10),
+          sources.StringContains("b", "prefix")))
+    }
+
+    assertResult(None) {
+      ParquetFilters.createFilter(
+        schema,
+        sources.Not(
+          sources.And(
+            sources.GreaterThan("a", 1),
+            sources.StringContains("b", "prefix"))))
+    }
+  }
+
+  test("SPARK-11164: test the parquet filter in") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/table1"
+          (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
+
+          // When a filter is pushed to Parquet, Parquet can apply it to every row.
+          // So, we can check the number of rows returned from the Parquet
+          // to make sure our filter pushdown work.
+          val df = sqlContext.read.parquet(path).where("b in (0,2)")
+          assert(stripSparkFilter(df).count == 3)
+
+          val df1 = sqlContext.read.parquet(path).where("not (b in (1))")
+          assert(stripSparkFilter(df1).count == 3)
+
+          val df2 = sqlContext.read.parquet(path).where("not (b in (1,3) or a <= 2)")
+          assert(stripSparkFilter(df2).count == 2)
+
+          val df3 = sqlContext.read.parquet(path).where("not (b in (1,3) and a <= 2)")
+          assert(stripSparkFilter(df3).count == 4)
+
+          val df4 = sqlContext.read.parquet(path).where("not (a <= 2)")
+          assert(stripSparkFilter(df4).count == 3)
+        }
       }
     }
   }

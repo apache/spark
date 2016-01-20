@@ -22,8 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
@@ -52,15 +52,14 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(ns === 0)
     assert(fromJulianDay(d, ns) == 0L)
 
-    val t = Timestamp.valueOf("2015-06-11 10:10:10.100")
-    val (d1, ns1) = toJulianDay(fromJavaTimestamp(t))
-    val t1 = toJavaTimestamp(fromJulianDay(d1, ns1))
-    assert(t.equals(t1))
-
-    val t2 = Timestamp.valueOf("2015-06-11 20:10:10.100")
-    val (d2, ns2) = toJulianDay(fromJavaTimestamp(t2))
-    val t22 = toJavaTimestamp(fromJulianDay(d2, ns2))
-    assert(t2.equals(t22))
+    Seq(Timestamp.valueOf("2015-06-11 10:10:10.100"),
+      Timestamp.valueOf("2015-06-11 20:10:10.100"),
+      Timestamp.valueOf("1900-06-11 20:10:10.100")).foreach { t =>
+      val (d, ns) = toJulianDay(fromJavaTimestamp(t))
+      assert(ns > 0)
+      val t1 = toJavaTimestamp(fromJulianDay(d, ns))
+      assert(t.equals(t1))
+    }
   }
 
   test("SPARK-6785: java date conversion before and after epoch") {
@@ -111,6 +110,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.MILLISECOND, 0)
     assert(stringToDate(UTF8String.fromString("2015")).get ===
       millisToDays(c.getTimeInMillis))
+    c.set(1, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToDate(UTF8String.fromString("0001")).get ===
+      millisToDays(c.getTimeInMillis))
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
@@ -135,6 +138,42 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("2015.03.18")).isEmpty)
     assert(stringToDate(UTF8String.fromString("20150318")).isEmpty)
     assert(stringToDate(UTF8String.fromString("2015-031-8")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("02015-03-18")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("015-03-18")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("015")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
+  }
+
+  test("string to time") {
+    // Tests with UTC.
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-00:00") === c.getTime())
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30T10:00:00Z") === c.getTime())
+
+    // Tests with set time zone.
+    c.setTimeZone(TimeZone.getTimeZone("GMT-04:00"))
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00-04:00") === c.getTime())
+
+    c.set(1900, 0, 1, 0, 0, 0)
+    assert(stringToTime("1900-01-01T00:00:00GMT-04:00") === c.getTime())
+
+    // Tests with local time zone.
+    c.setTimeZone(TimeZone.getDefault())
+    c.set(Calendar.MILLISECOND, 0)
+
+    c.set(2000, 11, 30, 0, 0, 0)
+    assert(stringToTime("2000-12-30") === new Date(c.getTimeInMillis()))
+
+    c.set(2000, 11, 30, 10, 0, 0)
+    assert(stringToTime("2000-12-30 10:00:00") === new Timestamp(c.getTimeInMillis()))
   }
 
   test("string to timestamp") {
@@ -143,9 +182,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c.set(Calendar.MILLISECOND, 0)
     assert(stringToTimestamp(UTF8String.fromString("1969-12-31 16:00:00")).get ===
       c.getTimeInMillis * 1000)
-    c.set(2015, 0, 1, 0, 0, 0)
+    c.set(1, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(stringToTimestamp(UTF8String.fromString("2015")).get ===
+    assert(stringToTimestamp(UTF8String.fromString("0001")).get ===
       c.getTimeInMillis * 1000)
     c = Calendar.getInstance()
     c.set(2015, 2, 1, 0, 0, 0)
@@ -288,6 +327,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("2011-05-06 07:08:09.1000")).get === c.getTimeInMillis * 1000)
 
     assert(stringToTimestamp(UTF8String.fromString("238")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("00238")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18 123142")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18T123123")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-03-18X")).isEmpty)
@@ -295,12 +335,22 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToTimestamp(UTF8String.fromString("2015.03.18")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("20150318")).isEmpty)
     assert(stringToTimestamp(UTF8String.fromString("2015-031-8")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("02015-01-18")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("015-01-18")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-20:0")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-0:70")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-03-18T12:03.17-1:0:0")).isEmpty)
+
+    // Truncating the fractional seconds
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
+    c.set(2015, 2, 18, 12, 3, 17)
+    c.set(Calendar.MILLISECOND, 0)
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-03-18T12:03:17.123456789+0:00")).get ===
+        c.getTimeInMillis * 1000 + 123456)
   }
 
   test("hours") {
@@ -325,6 +375,16 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(getSeconds(c.getTimeInMillis * 1000) === 11)
     c.set(2015, 2, 8, 2, 7, 9)
     assert(getSeconds(c.getTimeInMillis * 1000) === 9)
+  }
+
+  test("hours / minutes / seconds") {
+    Seq(Timestamp.valueOf("2015-06-11 10:12:35.789"),
+      Timestamp.valueOf("2015-06-11 20:13:40.789"),
+      Timestamp.valueOf("1900-06-11 12:14:50.789"),
+      Timestamp.valueOf("1700-02-28 12:14:50.123456")).foreach { t =>
+      val us = fromJavaTimestamp(t)
+      assert(toJavaTimestamp(us) === t)
+    }
   }
 
   test("get day in year") {

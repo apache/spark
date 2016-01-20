@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.recommendation
 
-import java.io.File
 import java.util.Random
 
 import scala.collection.mutable
@@ -28,26 +27,23 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.ml.recommendation.ALS._
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.Utils
 
-class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
-
-  private var tempDir: File = _
+class ALSSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    tempDir = Utils.createTempDir()
     sc.setCheckpointDir(tempDir.getAbsolutePath)
   }
 
   override def afterAll(): Unit = {
-    Utils.deleteRecursively(tempDir)
     super.afterAll()
   }
 
@@ -186,7 +182,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     assert(compressed.dstPtrs.toSeq === Seq(0, 2, 3, 4, 5))
     var decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
     var i = 0
-    while (i < compressed.srcIds.size) {
+    while (i < compressed.srcIds.length) {
       var j = compressed.dstPtrs(i)
       while (j < compressed.dstPtrs(i + 1)) {
         val dstEncodedIndex = compressed.dstEncodedIndices(j)
@@ -483,4 +479,67 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2,
       implicitPrefs = true, seed = 0)
   }
+
+  test("read/write") {
+    import ALSSuite._
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    val als = new ALS()
+    allEstimatorParamSettings.foreach { case (p, v) =>
+      als.set(als.getParam(p), v)
+    }
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+    val model = als.fit(ratings.toDF())
+
+    // Test Estimator save/load
+    val als2 = testDefaultReadWrite(als)
+    allEstimatorParamSettings.foreach { case (p, v) =>
+      val param = als.getParam(p)
+      assert(als.get(param).get === als2.get(param).get)
+    }
+
+    // Test Model save/load
+    val model2 = testDefaultReadWrite(model)
+    allModelParamSettings.foreach { case (p, v) =>
+      val param = model.getParam(p)
+      assert(model.get(param).get === model2.get(param).get)
+    }
+    assert(model.rank === model2.rank)
+    def getFactors(df: DataFrame): Set[(Int, Array[Float])] = {
+      df.select("id", "features").collect().map { case r =>
+        (r.getInt(0), r.getAs[Array[Float]](1))
+      }.toSet
+    }
+    assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
+    assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+  }
+}
+
+object ALSSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allModelParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPredictionCol"
+  )
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allEstimatorParamSettings: Map[String, Any] = allModelParamSettings ++ Map(
+    "maxIter" -> 1,
+    "rank" -> 1,
+    "regParam" -> 0.01,
+    "numUserBlocks" -> 2,
+    "numItemBlocks" -> 2,
+    "implicitPrefs" -> true,
+    "alpha" -> 0.9,
+    "nonnegative" -> true,
+    "checkpointInterval" -> 20
+  )
 }

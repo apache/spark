@@ -21,9 +21,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.{MLTestingUtils, MetadataUtils}
-import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
+import org.apache.spark.ml.util.{MetadataUtils, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
+import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -43,16 +43,16 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val nPoints = 1000
 
-    // The following weights and xMean/xVariance are computed from iris dataset with lambda=0.2.
+    // The following coefficients and xMean/xVariance are computed from iris dataset with lambda=0.2
     // As a result, we are drawing samples from probability distribution of an actual model.
-    val weights = Array(
+    val coefficients = Array(
       -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,
       -0.16624, -0.84355, -0.048509, -0.301789, 4.170682)
 
     val xMean = Array(5.843, 3.057, 3.758, 1.199)
     val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
     rdd = sc.parallelize(generateMultinomialLogisticInput(
-      weights, xMean, xVariance, true, nPoints, 42), 2)
+      coefficients, xMean, xVariance, true, nPoints, 42), 2)
     dataset = sqlContext.createDataFrame(rdd)
   }
 

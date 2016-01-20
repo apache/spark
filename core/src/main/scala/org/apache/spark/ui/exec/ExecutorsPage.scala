@@ -52,17 +52,21 @@ private[ui] class ExecutorsPage(
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = listener.storageStatusList
-    val maxMem = storageStatusList.map(_.maxMem).sum
-    val memUsed = storageStatusList.map(_.memUsed).sum
-    val diskUsed = storageStatusList.map(_.diskUsed).sum
-    val execInfo = for (statusId <- 0 until storageStatusList.size) yield
-      ExecutorsPage.getExecInfo(listener, statusId)
+    val (storageStatusList, execInfo) = listener.synchronized {
+      // The follow codes should be protected by `listener` to make sure no executors will be
+      // removed before we query their status. See SPARK-12784.
+      val _storageStatusList = listener.storageStatusList
+      val _execInfo = {
+        for (statusId <- 0 until _storageStatusList.size)
+          yield ExecutorsPage.getExecInfo(listener, statusId)
+      }
+      (_storageStatusList, _execInfo)
+    }
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
     val execTable =
-      <table class={UIUtils.TABLE_CLASS_STRIPED}>
+      <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
         <thead>
           <th>Executor ID</th>
           <th>Address</th>
@@ -93,18 +97,15 @@ private[ui] class ExecutorsPage(
       </table>
 
     val content =
-      <div class="row-fluid">
+      <div class="row">
         <div class="span12">
-          <ul class="unstyled">
-            <li><strong>Memory:</strong>
-              {Utils.bytesToString(memUsed)} Used
-              ({Utils.bytesToString(maxMem)} Total) </li>
-            <li><strong>Disk:</strong> {Utils.bytesToString(diskUsed)} Used </li>
-          </ul>
+          <h4>Totals for {execInfo.size} Executors</h4>
+          {execSummary(execInfo)}
         </div>
       </div>
       <div class = "row">
         <div class="span12">
+          <h4>Active Executors</h4>
           {execTable}
         </div>
       </div>;
@@ -172,6 +173,66 @@ private[ui] class ExecutorsPage(
     </tr>
   }
 
+  private def execSummary(execInfo: Seq[ExecutorSummary]): Seq[Node] = {
+    val maximumMemory = execInfo.map(_.maxMemory).sum
+    val memoryUsed = execInfo.map(_.memoryUsed).sum
+    val diskUsed = execInfo.map(_.diskUsed).sum
+    val totalDuration = execInfo.map(_.totalDuration).sum
+    val totalInputBytes = execInfo.map(_.totalInputBytes).sum
+    val totalShuffleRead = execInfo.map(_.totalShuffleRead).sum
+    val totalShuffleWrite = execInfo.map(_.totalShuffleWrite).sum
+
+    val sumContent =
+      <tr>
+        <td>{execInfo.map(_.rddBlocks).sum}</td>
+        <td sorttable_customkey={memoryUsed.toString}>
+          {Utils.bytesToString(memoryUsed)} /
+          {Utils.bytesToString(maximumMemory)}
+        </td>
+        <td sorttable_customkey={diskUsed.toString}>
+          {Utils.bytesToString(diskUsed)}
+        </td>
+        <td>{execInfo.map(_.activeTasks).sum}</td>
+        <td>{execInfo.map(_.failedTasks).sum}</td>
+        <td>{execInfo.map(_.completedTasks).sum}</td>
+        <td>{execInfo.map(_.totalTasks).sum}</td>
+        <td sorttable_customkey={totalDuration.toString}>
+          {Utils.msDurationToString(totalDuration)}
+        </td>
+        <td sorttable_customkey={totalInputBytes.toString}>
+          {Utils.bytesToString(totalInputBytes)}
+        </td>
+        <td sorttable_customkey={totalShuffleRead.toString}>
+          {Utils.bytesToString(totalShuffleRead)}
+        </td>
+        <td sorttable_customkey={totalShuffleWrite.toString}>
+          {Utils.bytesToString(totalShuffleWrite)}
+        </td>
+      </tr>;
+
+    <table class={UIUtils.TABLE_CLASS_STRIPED}>
+      <thead>
+        <th>RDD Blocks</th>
+        <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
+        <th>Disk Used</th>
+        <th>Active Tasks</th>
+        <th>Failed Tasks</th>
+        <th>Complete Tasks</th>
+        <th>Total Tasks</th>
+        <th>Task Time</th>
+        <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+        <th>
+          <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+            Shuffle Write
+          </span>
+        </th>
+      </thead>
+      <tbody>
+        {sumContent}
+      </tbody>
+    </table>
+  }
 }
 
 private[spark] object ExecutorsPage {

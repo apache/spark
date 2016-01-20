@@ -24,8 +24,8 @@ import scopt.OptionParser
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.classification.{LogisticRegressionWithLBFGS, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.mllib.optimization.{L1Updater, SquaredL2Updater}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
 
 /**
  * An example app for binary classification. Run with

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import UTF8Deserializer
@@ -28,9 +28,10 @@ class MQTTUtils(object):
 
     @staticmethod
     def createStream(ssc, brokerUrl, topic,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
+                     storageLevel=StorageLevel.MEMORY_AND_DISK_2):
         """
         Create an input stream that pulls messages from a Mqtt Broker.
+
         :param ssc:  StreamingContext object
         :param brokerUrl:  Url of remote mqtt publisher
         :param topic:  topic name to subscribe to

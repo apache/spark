@@ -22,13 +22,12 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.sources.HadoopFsRelation
-
 
 /**
  * :: Experimental ::
@@ -119,13 +118,41 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme.
    *
-   * This is only applicable for Parquet at the moment.
+   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
    *
    * @since 1.4.0
    */
   @scala.annotation.varargs
   def partitionBy(colNames: String*): DataFrameWriter = {
     this.partitioningColumns = Option(colNames)
+    this
+  }
+
+  /**
+   * Buckets the output by the given columns. If specified, the output is laid out on the file
+   * system similar to Hive's bucketing scheme.
+   *
+   * This is applicable for Parquet, JSON and ORC.
+   *
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter = {
+    this.numBuckets = Option(numBuckets)
+    this.bucketColumnNames = Option(colName +: colNames)
+    this
+  }
+
+  /**
+   * Sorts the output in each bucket by the given columns.
+   *
+   * This is applicable for Parquet, JSON and ORC.
+   *
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def sortBy(colName: String, colNames: String*): DataFrameWriter = {
+    this.sortColumnNames = Option(colName +: colNames)
     this
   }
 
@@ -145,10 +172,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def save(): Unit = {
+    assertNotBucketed()
     ResolvedDataSource(
       df.sqlContext,
       source,
       partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+      getBucketSpec,
       mode,
       extraOptions.toMap,
       df)
@@ -163,19 +192,75 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(new SqlParser().parseTableIdentifier(tableName))
+    insertInto(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+    assertNotBucketed()
+    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
+
+    // A partitioned relation's schema can be different from the input logicalPlan, since
+    // partition columns are all moved after data columns. We Project to adjust the ordering.
+    // TODO: this belongs to the analyzer.
+    val input = normalizedParCols.map { parCols =>
+      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
+        parCols.contains(attr.name)
+      }
+      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
+    }.getOrElse(df.logicalPlan)
+
     df.sqlContext.executePlan(
       InsertIntoTable(
-        UnresolvedRelation(tableIdent.toSeq),
+        UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
-        df.logicalPlan,
+        input,
         overwrite,
         ifNotExists = false)).toRdd
+  }
+
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
+    cols.map(normalize(_, "Partition"))
+  }
+
+  private def normalizedBucketColNames: Option[Seq[String]] = bucketColumnNames.map { cols =>
+    cols.map(normalize(_, "Bucketing"))
+  }
+
+  private def normalizedSortColNames: Option[Seq[String]] = sortColumnNames.map { cols =>
+    cols.map(normalize(_, "Sorting"))
+  }
+
+  private def getBucketSpec: Option[BucketSpec] = {
+    if (sortColumnNames.isDefined) {
+      require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
+    }
+
+    for {
+      n <- numBuckets
+    } yield {
+      require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
+      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
+    }
+  }
+
+  /**
+   * The given column name may not be equal to any of the existing column names if we were in
+   * case-insensitive context.  Normalize the given column name to the real one so that we don't
+   * need to care about case sensitivity afterwards.
+   */
+  private def normalize(columnName: String, columnType: String): String = {
+    val validColumnNames = df.logicalPlan.output.map(_.name)
+    validColumnNames.find(df.sqlContext.analyzer.resolver(_, columnName))
+      .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
+        s"existing columns (${validColumnNames.mkString(", ")})"))
+  }
+
+  private def assertNotBucketed(): Unit = {
+    if (numBuckets.isDefined || sortColumnNames.isDefined) {
+      throw new IllegalArgumentException(
+        "Currently we don't support writing bucketed data to this data source.")
+    }
   }
 
   /**
@@ -197,11 +282,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(new SqlParser().parseTableIdentifier(tableName))
+    saveAsTable(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val tableExists = df.sqlContext.catalog.tableExists(tableIdent.toSeq)
+    val tableExists = df.sqlContext.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -224,6 +309,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             source,
             temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            getBucketSpec,
             mode,
             extraOptions.toMap,
             df.logicalPlan)
@@ -244,6 +330,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
+   *
+   * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     val props = new Properties()
@@ -252,10 +340,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     }
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnection(url, props)
+    val conn = JdbcUtils.createConnectionFactory(url, props)()
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, table)
+      var tableExists = JdbcUtils.tableExists(conn, url, table)
 
       if (mode == SaveMode.Ignore && tableExists) {
         return
@@ -274,7 +362,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
-        conn.prepareStatement(sql).executeUpdate()
+        val statement = conn.createStatement
+        try {
+          statement.executeUpdate(sql)
+        } finally {
+          statement.close()
+        }
       }
     } finally {
       conn.close()
@@ -317,6 +410,22 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def orc(path: String): Unit = format("orc").save(path)
 
+  /**
+   * Saves the content of the [[DataFrame]] in a text file at the specified path.
+   * The DataFrame must have only one column that is of string type.
+   * Each row becomes a new line in the output file. For example:
+   * {{{
+   *   // Scala:
+   *   df.write.text("/path/to/output")
+   *
+   *   // Java:
+   *   df.write().text("/path/to/output")
+   * }}}
+   *
+   * @since 1.6.0
+   */
+  def text(path: String): Unit = format("text").save(path)
+
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
@@ -329,4 +438,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var partitioningColumns: Option[Seq[String]] = None
 
+  private var bucketColumnNames: Option[Seq[String]] = None
+
+  private var numBuckets: Option[Int] = None
+
+  private var sortColumnNames: Option[Seq[String]] = None
 }

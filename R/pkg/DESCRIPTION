@@ -1,7 +1,7 @@
 Package: SparkR
 Type: Package
 Title: R frontend for Spark
-Version: 1.5.0
+Version: 2.0.0
 Date: 2013-09-09
 Author: The Apache Software Foundation
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
@@ -33,4 +33,6 @@ Collate:
     'mllib.R'
     'serialize.R'
     'sparkR.R'
+    'stats.R'
+    'types.R'
     'utils.R'

@@ -17,13 +17,16 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import java.util.Arrays
+
 import scala.util.Random
 
+import breeze.linalg.{norm => brzNorm, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics.abs
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, svd => brzSvd}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
+import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 
 class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -48,6 +51,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     (0.0, 1.0, 0.0),
     (math.sqrt(2.0) / 2.0, 0.0, math.sqrt(2.0) / 2.0),
     (math.sqrt(2.0) / 2.0, 0.0, - math.sqrt(2.0) / 2.0))
+  val explainedVariance = BDV(4.0 / 7.0, 3.0 / 7.0, 0.0)
 
   var denseMat: RowMatrix = _
   var sparseMat: RowMatrix = _
@@ -200,10 +204,15 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("pca") {
     for (mat <- Seq(denseMat, sparseMat); k <- 1 to n) {
-      val pc = denseMat.computePrincipalComponents(k)
+      val (pc, expVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
       assert(pc.numRows === n)
       assert(pc.numCols === k)
       assertColumnEqualUpToSign(pc.toBreeze.asInstanceOf[BDM[Double]], principalComponents, k)
+      assert(
+        closeToZero(BDV(expVariance.toArray) -
+        BDV(Arrays.copyOfRange(explainedVariance.data, 0, k))))
+      // Check that this method returns the same answer
+      assert(pc === mat.computePrincipalComponents(k))
     }
   }
 
@@ -253,6 +262,23 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       val rOnly = mat.tallSkinnyQR(computeQ = false)
       assert(rOnly.Q == null)
       assert(closeToZero(abs(expected.r) - abs(rOnly.R.toBreeze.asInstanceOf[BDM[Double]])))
+    }
+  }
+
+  test("compute covariance") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val result = mat.computeCovariance()
+      val expected = breeze.linalg.cov(mat.toBreeze())
+      assert(closeToZero(abs(expected) - abs(result.toBreeze.asInstanceOf[BDM[Double]])))
+    }
+  }
+
+  test("covariance matrix is symmetric (SPARK-10875)") {
+    val rdd = RandomRDDs.normalVectorRDD(sc, 100, 10, 0, 0)
+    val matrix = new RowMatrix(rdd)
+    val cov = matrix.computeCovariance()
+    for (i <- 0 until cov.numRows; j <- 0 until i) {
+      assert(cov(i, j) === cov(j, i))
     }
   }
 }

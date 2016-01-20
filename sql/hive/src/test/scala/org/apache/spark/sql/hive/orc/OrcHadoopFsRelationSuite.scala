@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.orc
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.{Row, SQLConf}
 import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
@@ -58,6 +59,25 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         hiveContext.read.options(Map(
           "path" -> file.getCanonicalPath,
           "dataSchema" -> dataSchemaWithPartition.json)).format(dataSourceName).load())
+    }
+  }
+
+  test("SPARK-12218: 'Not' is included in ORC filter pushdown") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.orc(path)
+
+        checkAnswer(
+          sqlContext.read.orc(path).where("not (a = 2) or not(b in ('1'))"),
+          (1 to 5).map(i => Row(i, (i % 2).toString)))
+
+        checkAnswer(
+          sqlContext.read.orc(path).where("not (a = 2 and b in ('1'))"),
+          (1 to 5).map(i => Row(i, (i % 2).toString)))
+      }
     }
   }
 }

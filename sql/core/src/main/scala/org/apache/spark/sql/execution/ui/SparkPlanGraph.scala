@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
+import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 private[ui] case class SparkPlanGraph(
     nodes: Seq[SparkPlanGraphNode], edges: Seq[SparkPlanGraphEdge]) {
 
-  def makeDotFile(metrics: Map[Long, Any]): String = {
+  def makeDotFile(metrics: Map[Long, String]): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
     nodes.foreach(node => dotFile.append(node.makeDotNode(metrics) + "\n"))
@@ -48,27 +48,29 @@ private[sql] object SparkPlanGraph {
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
    */
-  def apply(plan: SparkPlan): SparkPlanGraph = {
+  def apply(planInfo: SparkPlanInfo): SparkPlanGraph = {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    buildSparkPlanGraphNode(plan, nodeIdGenerator, nodes, edges)
+    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges)
     new SparkPlanGraph(nodes, edges)
   }
 
   private def buildSparkPlanGraphNode(
-      plan: SparkPlan,
+      planInfo: SparkPlanInfo,
       nodeIdGenerator: AtomicLong,
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
-    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      SQLPlanMetric(metric.name.getOrElse(key), metric.id,
-        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
+    val metrics = planInfo.metrics.map { metric =>
+      SQLPlanMetric(metric.name, metric.accumulatorId,
+        SQLMetrics.getMetricParam(metric.metricParam))
     }
     val node = SparkPlanGraphNode(
-      nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)
+      nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
+      planInfo.simpleString, planInfo.metadata, metrics)
+
     nodes += node
-    val childrenNodes = plan.children.map(
+    val childrenNodes = planInfo.children.map(
       child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))
     for (child <- childrenNodes) {
       edges += SparkPlanGraphEdge(child.id, node.id)
@@ -85,26 +87,33 @@ private[sql] object SparkPlanGraph {
  * @param metrics metrics that this SparkPlan node will track
  */
 private[ui] case class SparkPlanGraphNode(
-    id: Long, name: String, desc: String, metrics: Seq[SQLPlanMetric]) {
+    id: Long,
+    name: String,
+    desc: String,
+    metadata: Map[String, String],
+    metrics: Seq[SQLPlanMetric]) {
 
-  def makeDotNode(metricsValue: Map[Long, Any]): String = {
-    val values = {
-      for (metric <- metrics;
-           value <- metricsValue.get(metric.accumulatorId)) yield {
-        metric.name + ": " + value
-      }
+  def makeDotNode(metricsValue: Map[Long, String]): String = {
+    val builder = new mutable.StringBuilder(name)
+
+    val values = for {
+      metric <- metrics
+      value <- metricsValue.get(metric.accumulatorId)
+    } yield {
+      metric.name + ": " + value
     }
-    val label = if (values.isEmpty) {
-        name
-      } else {
-        // If there are metrics, display all metrics in a separate line. We should use an escaped
-        // "\n" here to follow the dot syntax.
-        //
-        // Note: whitespace between two "\n"s is to create an empty line between the name of
-        // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-        name + "\\n \\n" + values.mkString("\\n")
-      }
-    s"""  $id [label="$label"];"""
+
+    if (values.nonEmpty) {
+      // If there are metrics, display each entry in a separate line. We should use an escaped
+      // "\n" here to follow the dot syntax.
+      //
+      // Note: whitespace between two "\n"s is to create an empty line between the name of
+      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
+      builder ++= "\\n \\n"
+      builder ++= values.mkString("\\n")
+    }
+
+    s"""  $id [label="${builder.toString()}"];"""
   }
 }
 

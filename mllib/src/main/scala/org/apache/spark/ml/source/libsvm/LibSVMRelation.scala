@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrameReader, DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
@@ -82,7 +82,7 @@ private[libsvm] class LibSVMRelation(val path: String, val numFeatures: Int, val
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = sqlContext.read.format("libsvm")
+ *   DataFrame df = sqlContext.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}

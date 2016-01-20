@@ -18,14 +18,14 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
-import scala.math.max
+import scala.util.Try
 
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-
+import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParser}
 
 /**
  * :: DeveloperApi ::
@@ -278,6 +278,28 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     s"struct<${fieldTypes.mkString(",")}>"
   }
 
+  override def sql: String = {
+    val fieldTypes = fields.map(f => s"`${f.name}`: ${f.dataType.sql}")
+    s"STRUCT<${fieldTypes.mkString(", ")}>"
+  }
+
+  private[sql] override def simpleString(maxNumberFields: Int): String = {
+    val builder = new StringBuilder
+    val fieldTypes = fields.take(maxNumberFields).map {
+      case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
+    }
+    builder.append("struct<")
+    builder.append(fieldTypes.mkString(", "))
+    if (fields.length > 2) {
+      if (fields.length - fieldTypes.size == 1) {
+        builder.append(" ... 1 more field")
+      } else {
+        builder.append(" ... " + (fields.length - 2) + " more fields")
+      }
+    }
+    builder.append(">").toString()
+  }
+
   /**
    * Merges with another schema (`StructType`).  For a struct field A from `this` and a struct field
    * B from `that`,
@@ -305,7 +327,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
 
-  private[sql] val interpretedOrdering = InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+  @transient
+  private[sql] lazy val interpretedOrdering =
+    InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 }
 
 object StructType extends AbstractDataType {
@@ -318,15 +342,18 @@ object StructType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "struct"
 
-  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
-    case t: StructType => t
-    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+  private[sql] def fromString(raw: String): StructType = {
+    Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
+      case t: StructType => t
+      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+    }
   }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {
-    StructType(fields.toArray.asInstanceOf[Array[StructField]])
+    import scala.collection.JavaConverters._
+    StructType(fields.asScala)
   }
 
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
@@ -371,10 +398,19 @@ object StructType extends AbstractDataType {
         StructType(newFields)
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
-      DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(
-          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
-          max(leftScale, rightScale))
+        DecimalType.Fixed(rightPrecision, rightScale)) =>
+        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
+          DecimalType(leftPrecision, leftScale)
+        } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
+        } else if (leftPrecision != rightPrecision) {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"precision $leftPrecision and $rightPrecision")
+        } else {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"scala $leftScale and $rightScale")
+        }
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt

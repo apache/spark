@@ -23,39 +23,48 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
-private[sql] object InferSchema {
+
+private[json] object InferSchema {
+
   /**
    * Infer the type of a collection of json records in three stages:
    *   1. Infer the type of each record
    *   2. Merge types by choosing the lowest type necessary to cover equal keys
    *   3. Replace any remaining null fields with string, the top type
    */
-  def apply(
+  def infer(
       json: RDD[String],
-      samplingRatio: Double = 1.0,
-      columnNameOfCorruptRecords: String): StructType = {
-    require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
-    val schemaData = if (samplingRatio > 0.99) {
+      columnNameOfCorruptRecords: String,
+      configOptions: JSONOptions): StructType = {
+    require(configOptions.samplingRatio > 0,
+      s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
+    val schemaData = if (configOptions.samplingRatio > 0.99) {
       json
     } else {
-      json.sample(withReplacement = false, samplingRatio, 1)
+      json.sample(withReplacement = false, configOptions.samplingRatio, 1)
     }
 
     // perform schema inference on each row and merge afterwards
     val rootType = schemaData.mapPartitions { iter =>
       val factory = new JsonFactory()
+      configOptions.setJacksonOptions(factory)
       iter.map { row =>
         try {
-          val parser = factory.createParser(row)
-          parser.nextToken()
-          inferField(parser)
+          Utils.tryWithResource(factory.createParser(row)) { parser =>
+            parser.nextToken()
+            inferField(parser, configOptions)
+          }
         } catch {
           case _: JsonParseException =>
             StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
         }
       }
-    }.treeAggregate[DataType](StructType(Seq()))(compatibleRootType, compatibleRootType)
+    }.treeAggregate[DataType](
+      StructType(Seq()))(
+      compatibleRootType(columnNameOfCorruptRecords),
+      compatibleRootType(columnNameOfCorruptRecords))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -68,14 +77,14 @@ private[sql] object InferSchema {
   /**
    * Infer the type of a json document from the parser's token stream
    */
-  private def inferField(parser: JsonParser): DataType = {
+  private def inferField(parser: JsonParser, configOptions: JSONOptions): DataType = {
     import com.fasterxml.jackson.core.JsonToken._
     parser.getCurrentToken match {
       case null | VALUE_NULL => NullType
 
       case FIELD_NAME =>
         parser.nextToken()
-        inferField(parser)
+        inferField(parser, configOptions)
 
       case VALUE_STRING if parser.getTextLength < 1 =>
         // Zero length strings and nulls have special handling to deal
@@ -90,7 +99,10 @@ private[sql] object InferSchema {
       case START_OBJECT =>
         val builder = Seq.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
-          builder += StructField(parser.getCurrentName, inferField(parser), nullable = true)
+          builder += StructField(
+            parser.getCurrentName,
+            inferField(parser, configOptions),
+            nullable = true)
         }
 
         StructType(builder.result().sortBy(_.name))
@@ -101,10 +113,15 @@ private[sql] object InferSchema {
         // the type as we pass through all JSON objects.
         var elementType: DataType = NullType
         while (nextUntil(parser, END_ARRAY)) {
-          elementType = compatibleType(elementType, inferField(parser))
+          elementType = compatibleType(
+            elementType, inferField(parser, configOptions))
         }
 
         ArrayType(elementType)
+
+      case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) if configOptions.primitivesAsString => StringType
+
+      case (VALUE_TRUE | VALUE_FALSE) if configOptions.primitivesAsString => StringType
 
       case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
         import JsonParser.NumberType._
@@ -128,7 +145,7 @@ private[sql] object InferSchema {
   /**
    * Convert NullType to StringType and remove StructTypes with no fields
    */
-  private def canonicalizeType: DataType => Option[DataType] = {
+  private def canonicalizeType(tpe: DataType): Option[DataType] = tpe match {
     case at @ ArrayType(elementType, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)
@@ -137,15 +154,15 @@ private[sql] object InferSchema {
       }
 
     case StructType(fields) =>
-      val canonicalFields = for {
+      val canonicalFields: Array[StructField] = for {
         field <- fields
-        if field.name.nonEmpty
+        if field.name.length > 0
         canonicalType <- canonicalizeType(field.dataType)
       } yield {
         field.copy(dataType = canonicalType)
       }
 
-      if (canonicalFields.nonEmpty) {
+      if (canonicalFields.length > 0) {
         Some(StructType(canonicalFields))
       } else {
         // per SPARK-8093: empty structs should be deleted
@@ -156,28 +173,53 @@ private[sql] object InferSchema {
     case other => Some(other)
   }
 
+  private def withCorruptField(
+      struct: StructType,
+      columnNameOfCorruptRecords: String): StructType = {
+    if (!struct.fieldNames.contains(columnNameOfCorruptRecords)) {
+      // If this given struct does not have a column used for corrupt records,
+      // add this field.
+      struct.add(columnNameOfCorruptRecords, StringType, nullable = true)
+    } else {
+      // Otherwise, just return this struct.
+      struct
+    }
+  }
+
   /**
    * Remove top-level ArrayType wrappers and merge the remaining schemas
    */
-  private def compatibleRootType: (DataType, DataType) => DataType = {
-    case (ArrayType(ty1, _), ty2) => compatibleRootType(ty1, ty2)
-    case (ty1, ArrayType(ty2, _)) => compatibleRootType(ty1, ty2)
+  private def compatibleRootType(
+      columnNameOfCorruptRecords: String): (DataType, DataType) => DataType = {
+    // Since we support array of json objects at the top level,
+    // we need to check the element type and find the root level data type.
+    case (ArrayType(ty1, _), ty2) => compatibleRootType(columnNameOfCorruptRecords)(ty1, ty2)
+    case (ty1, ArrayType(ty2, _)) => compatibleRootType(columnNameOfCorruptRecords)(ty1, ty2)
+    // If we see any other data type at the root level, we get records that cannot be
+    // parsed. So, we use the struct as the data type and add the corrupt field to the schema.
+    case (struct: StructType, NullType) => struct
+    case (NullType, struct: StructType) => struct
+    case (struct: StructType, o) if !o.isInstanceOf[StructType] =>
+      withCorruptField(struct, columnNameOfCorruptRecords)
+    case (o, struct: StructType) if !o.isInstanceOf[StructType] =>
+      withCorruptField(struct, columnNameOfCorruptRecords)
+    // If we get anything else, we call compatibleType.
+    // Usually, when we reach here, ty1 and ty2 are two StructTypes.
     case (ty1, ty2) => compatibleType(ty1, ty2)
   }
 
   /**
    * Returns the most general data type for two given data types.
    */
-  private[json] def compatibleType(t1: DataType, t2: DataType): DataType = {
+  def compatibleType(t1: DataType, t2: DataType): DataType = {
     HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
         // in most case, also have better precision.
-        case (DoubleType, t: DecimalType) =>
+        case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
           DoubleType
-        case (t: DecimalType, DoubleType) =>
-          DoubleType
+
         case (t1: DecimalType, t2: DecimalType) =>
           val scale = math.max(t1.scale, t2.scale)
           val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)

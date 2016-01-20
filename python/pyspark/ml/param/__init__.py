@@ -18,6 +18,7 @@
 from abc import ABCMeta
 import copy
 
+from pyspark import since
 from pyspark.ml.util import Identifiable
 
 
@@ -27,14 +28,17 @@ __all__ = ['Param', 'Params']
 class Param(object):
     """
     A param with self-contained documentation.
+
+    .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc):
+    def __init__(self, parent, name, doc, expectedType=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
+        self.expectedType = expectedType
 
     def __str__(self):
         return str(self.parent) + "__" + self.name
@@ -56,6 +60,8 @@ class Params(Identifiable):
     """
     Components that take parameters. This also provides an internal
     param map to store parameter values attached to the instance.
+
+    .. versionadded:: 1.3.0
     """
 
     __metaclass__ = ABCMeta
@@ -72,6 +78,7 @@ class Params(Identifiable):
         self._params = None
 
     @property
+    @since("1.3.0")
     def params(self):
         """
         Returns all params ordered by name. The default implementation
@@ -83,6 +90,7 @@ class Params(Identifiable):
                                        [getattr(self, x) for x in dir(self) if x != "params"]))
         return self._params
 
+    @since("1.4.0")
     def explainParam(self, param):
         """
         Explains a single param and returns its name, doc, and optional
@@ -100,6 +108,7 @@ class Params(Identifiable):
         valueStr = "(" + ", ".join(values) + ")"
         return "%s: %s %s" % (param.name, param.doc, valueStr)
 
+    @since("1.4.0")
     def explainParams(self):
         """
         Returns the documentation of all params with their optionally
@@ -107,6 +116,7 @@ class Params(Identifiable):
         """
         return "\n".join([self.explainParam(param) for param in self.params])
 
+    @since("1.4.0")
     def getParam(self, paramName):
         """
         Gets a param by its name.
@@ -117,6 +127,7 @@ class Params(Identifiable):
         else:
             raise ValueError("Cannot find param with name %s." % paramName)
 
+    @since("1.4.0")
     def isSet(self, param):
         """
         Checks whether a param is explicitly set by user.
@@ -124,6 +135,7 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._paramMap
 
+    @since("1.4.0")
     def hasDefault(self, param):
         """
         Checks whether a param has a default value.
@@ -131,6 +143,7 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._defaultParamMap
 
+    @since("1.4.0")
     def isDefined(self, param):
         """
         Checks whether a param is explicitly set by user or has
@@ -138,6 +151,7 @@ class Params(Identifiable):
         """
         return self.isSet(param) or self.hasDefault(param)
 
+    @since("1.4.0")
     def hasParam(self, paramName):
         """
         Tests whether this instance contains a param with a given
@@ -146,6 +160,7 @@ class Params(Identifiable):
         param = self._resolveParam(paramName)
         return param in self.params
 
+    @since("1.4.0")
     def getOrDefault(self, param):
         """
         Gets the value of a param in the user-supplied param map or its
@@ -157,6 +172,7 @@ class Params(Identifiable):
         else:
             return self._defaultParamMap[param]
 
+    @since("1.4.0")
     def extractParamMap(self, extra=None):
         """
         Extracts the embedded default param values and user-supplied
@@ -164,6 +180,7 @@ class Params(Identifiable):
         a flat param map, where the latter value is used if there exist
         conflicts, i.e., with ordering: default param values <
         user-supplied values < extra.
+
         :param extra: extra param values
         :return: merged param map
         """
@@ -174,6 +191,7 @@ class Params(Identifiable):
         paramMap.update(extra)
         return paramMap
 
+    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with the same uid and some
@@ -182,6 +200,7 @@ class Params(Identifiable):
         embedded and extra parameters over and returns the copy.
         Subclasses should override this method if the default approach
         is not sufficient.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
@@ -201,6 +220,7 @@ class Params(Identifiable):
     def _resolveParam(self, param):
         """
         Resolves a param and validates the ownership.
+
         :param param: param name or the param instance, which must
                       belong to this Params instance
         :return: resolved param instance
@@ -228,7 +248,24 @@ class Params(Identifiable):
         Sets user-supplied params.
         """
         for param, value in kwargs.items():
-            self._paramMap[getattr(self, param)] = value
+            p = getattr(self, param)
+            if p.expectedType is None or type(value) == p.expectedType or value is None:
+                self._paramMap[getattr(self, param)] = value
+            else:
+                try:
+                    # Try and do "safe" conversions that don't lose information
+                    if p.expectedType == float:
+                        self._paramMap[getattr(self, param)] = float(value)
+                    # Python 3 unified long & int
+                    elif p.expectedType == int and type(value).__name__ == 'long':
+                        self._paramMap[getattr(self, param)] = value
+                    else:
+                        raise Exception(
+                            "Provided type {0} incompatible with type {1} for param {2}"
+                            .format(type(value), p.expectedType, p))
+                except ValueError:
+                    raise Exception(("Failed to convert {0} to type {1} for param {2}"
+                                     .format(type(value), p.expectedType, p)))
         return self
 
     def _setDefault(self, **kwargs):
@@ -243,6 +280,7 @@ class Params(Identifiable):
         """
         Copies param values from this instance to another instance for
         params shared by them.
+
         :param to: the target instance
         :param extra: extra params to be copied
         :return: the target instance with param values copied

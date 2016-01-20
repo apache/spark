@@ -18,11 +18,12 @@
 package org.apache.spark.ui.scope
 
 import scala.collection.mutable
-import scala.collection.mutable.{StringBuilder, ListBuffer}
+import scala.collection.mutable.{ListBuffer, StringBuilder}
 
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.CallSite
 
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
@@ -38,7 +39,7 @@ private[ui] case class RDDOperationGraph(
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean)
+private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -104,8 +105,8 @@ private[ui] object RDDOperationGraph extends Logging {
       edges ++= rdd.parentIds.map { parentId => RDDOperationEdge(parentId, rdd.id) }
 
       // TODO: differentiate between the intention to cache an RDD and whether it's actually cached
-      val node = nodes.getOrElseUpdate(
-        rdd.id, RDDOperationNode(rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE))
+      val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(
+        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.callSite))
 
       if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
@@ -177,7 +178,8 @@ private[ui] object RDDOperationGraph extends Logging {
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
-    s"""${node.id} [label="${node.name} [${node.id}]"]"""
+    val label = s"${node.name} [${node.id}]\n${node.callsite}"
+    s"""${node.id} [label="$label"]"""
   }
 
   /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */

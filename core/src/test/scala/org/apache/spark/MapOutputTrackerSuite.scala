@@ -19,10 +19,10 @@ package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Mockito._
 import org.mockito.Matchers.{any, isA}
+import org.mockito.Mockito._
 
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcCallContext, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
@@ -125,7 +125,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
     val slaveTracker = new MapOutputTrackerWorker(conf)
     slaveTracker.trackerEndpoint =
-      slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
     masterTracker.registerShuffle(10, 1)
     masterTracker.incrementEpoch()
@@ -168,10 +168,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.registerShuffle(10, 1)
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("88", "mph", 1000), Array.fill[Long](10)(0)))
-    val sender = mock(classOf[RpcEndpointRef])
-    when(sender.address).thenReturn(RpcAddress("localhost", 12345))
+    val senderAddress = RpcAddress("localhost", 12345)
     val rpcCallContext = mock(classOf[RpcCallContext])
-    when(rpcCallContext.sender).thenReturn(sender)
+    when(rpcCallContext.senderAddress).thenReturn(senderAddress)
     masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(10))
     verify(rpcCallContext).reply(any())
     verify(rpcCallContext, never()).sendFailure(any())
@@ -198,10 +197,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
         BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
     }
-    val sender = mock(classOf[RpcEndpointRef])
-    when(sender.address).thenReturn(RpcAddress("localhost", 12345))
+    val senderAddress = RpcAddress("localhost", 12345)
     val rpcCallContext = mock(classOf[RpcCallContext])
-    when(rpcCallContext.sender).thenReturn(sender)
+    when(rpcCallContext.senderAddress).thenReturn(senderAddress)
     masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(20))
     verify(rpcCallContext, never()).reply(any())
     verify(rpcCallContext).sendFailure(isA(classOf[SparkException]))

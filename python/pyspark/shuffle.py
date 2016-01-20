@@ -131,36 +131,6 @@ class Merger(object):
         raise NotImplementedError
 
 
-class InMemoryMerger(Merger):
-
-    """
-    In memory merger based on in-memory dict.
-    """
-
-    def __init__(self, aggregator):
-        Merger.__init__(self, aggregator)
-        self.data = {}
-
-    def mergeValues(self, iterator):
-        """ Combine the items by creator and combiner """
-        # speed up attributes lookup
-        d, creator = self.data, self.agg.createCombiner
-        comb = self.agg.mergeValue
-        for k, v in iterator:
-            d[k] = comb(d[k], v) if k in d else creator(v)
-
-    def mergeCombiners(self, iterator):
-        """ Merge the combined items by mergeCombiner """
-        # speed up attributes lookup
-        d, comb = self.data, self.agg.mergeCombiners
-        for k, v in iterator:
-            d[k] = comb(d[k], v) if k in d else v
-
-    def items(self):
-        """ Return the merged items ad iterator """
-        return iter(self.data.items())
-
-
 def _compressed_serializer(self, serializer=None):
     # always use PickleSerializer to simplify implementation
     ser = PickleSerializer()

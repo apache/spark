@@ -44,7 +44,7 @@ public class JavaSaveLoadSuite {
   File path;
   DataFrame df;
 
-  private void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(DataFrame actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -64,7 +64,7 @@ public class JavaSaveLoadSuite {
       path.delete();
     }
 
-    List<String> jsonObjects = new ArrayList<String>(10);
+    List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
@@ -82,7 +82,7 @@ public class JavaSaveLoadSuite {
 
   @Test
   public void saveAndLoad() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
     df.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
     DataFrame loadedDF = sqlContext.read().format("json").options(options).load();
@@ -91,11 +91,11 @@ public class JavaSaveLoadSuite {
 
   @Test
   public void saveAndLoadWithSchema() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
     df.write().format("json").mode(SaveMode.ErrorIfExists).options(options).save();
 
-    List<StructField> fields = new ArrayList<StructField>();
+    List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
     DataFrame loadedDF = sqlContext.read().format("json").schema(schema).options(options).load();

@@ -20,6 +20,10 @@ Unit tests for Spark ML Python APIs.
 """
 
 import sys
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -33,6 +37,7 @@ else:
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
+from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
@@ -86,6 +91,27 @@ class MockEstimator(Estimator, HasFake):
 
 class MockModel(MockTransformer, Model, HasFake):
     pass
+
+
+class ParamTypeConversionTests(PySparkTestCase):
+    """
+    Test that param type conversion happens.
+    """
+
+    def test_int_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.sc.parallelize([
+            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0))]).toDF()
+        lr = LogisticRegression(elasticNetParam=0)
+        lr.fit(df)
+        lr.setElasticNetParam(0)
+        lr.fit(df)
+
+    def test_invalid_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
+        lr = LogisticRegression(elasticNetParam=0)
+        self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
 
 
 class PipelineTests(PySparkTestCase):
@@ -163,7 +189,7 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
-        self.assertEqual(maxIter.doc, "max number of iterations (>= 0)")
+        self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
         self.assertTrue(maxIter.parent == testParams.uid)
 
     def test_params(self):
@@ -182,7 +208,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(testParams.getMaxIter(), 10)
         testParams.setMaxIter(100)
         self.assertTrue(testParams.isSet(maxIter))
-        self.assertEquals(testParams.getMaxIter(), 100)
+        self.assertEqual(testParams.getMaxIter(), 100)
 
         self.assertTrue(testParams.hasParam(inputCol))
         self.assertFalse(testParams.hasDefault(inputCol))
@@ -195,11 +221,11 @@ class ParamTests(PySparkTestCase):
         testParams._setDefault(seed=41)
         testParams.setSeed(43)
 
-        self.assertEquals(
+        self.assertEqual(
             testParams.explainParams(),
-            "\n".join(["inputCol: input column name (undefined)",
-                       "maxIter: max number of iterations (>= 0) (default: 10, current: 100)",
-                       "seed: random seed (default: 41, current: 43)"]))
+            "\n".join(["inputCol: input column name. (undefined)",
+                       "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
+                       "seed: random seed. (default: 41, current: 43)"]))
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
@@ -264,23 +290,23 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(ngram0.getInputCol(), "input")
         self.assertEqual(ngram0.getOutputCol(), "output")
         transformedDF = ngram0.transform(dataset)
-        self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
+        self.assertEqual(transformedDF.head().output, ["a b c d", "b c d e"])
 
     def test_stopwordsremover(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([Row(input=["a", "panda"])])
         stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
         # Default
-        self.assertEquals(stopWordRemover.getInputCol(), "input")
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
         transformedDF = stopWordRemover.transform(dataset)
-        self.assertEquals(transformedDF.head().output, ["panda"])
+        self.assertEqual(transformedDF.head().output, ["panda"])
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
-        self.assertEquals(stopWordRemover.getInputCol(), "input")
-        self.assertEquals(stopWordRemover.getStopWords(), stopwords)
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
-        self.assertEquals(transformedDF.head().output, ["a"])
+        self.assertEqual(transformedDF.head().output, ["a"])
 
 
 class HasInducedError(Params):
@@ -368,4 +394,7 @@ class CrossValidatorTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()

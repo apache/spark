@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Date, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.util.Properties
+
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -38,7 +40,6 @@ import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
   override def index: Int = idx
 }
-
 
 private[sql] object JDBCRDD extends Logging {
 
@@ -118,32 +119,37 @@ private[sql] object JDBCRDD extends Logging {
    */
   def resolveTable(url: String, table: String, properties: Properties): StructType = {
     val dialect = JdbcDialects.get(url)
-    val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
+    val conn: Connection = JdbcUtils.createConnectionFactory(url, properties)()
     try {
-      val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
+      val statement = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0")
       try {
-        val rsmd = rs.getMetaData
-        val ncols = rsmd.getColumnCount
-        val fields = new Array[StructField](ncols)
-        var i = 0
-        while (i < ncols) {
-          val columnName = rsmd.getColumnLabel(i + 1)
-          val dataType = rsmd.getColumnType(i + 1)
-          val typeName = rsmd.getColumnTypeName(i + 1)
-          val fieldSize = rsmd.getPrecision(i + 1)
-          val fieldScale = rsmd.getScale(i + 1)
-          val isSigned = rsmd.isSigned(i + 1)
-          val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-          val metadata = new MetadataBuilder().putString("name", columnName)
-          val columnType =
-            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-          fields(i) = StructField(columnName, columnType, nullable, metadata.build())
-          i = i + 1
+        val rs = statement.executeQuery()
+        try {
+          val rsmd = rs.getMetaData
+          val ncols = rsmd.getColumnCount
+          val fields = new Array[StructField](ncols)
+          var i = 0
+          while (i < ncols) {
+            val columnName = rsmd.getColumnLabel(i + 1)
+            val dataType = rsmd.getColumnType(i + 1)
+            val typeName = rsmd.getColumnTypeName(i + 1)
+            val fieldSize = rsmd.getPrecision(i + 1)
+            val fieldScale = rsmd.getScale(i + 1)
+            val isSigned = rsmd.isSigned(i + 1)
+            val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+            val metadata = new MetadataBuilder().putString("name", columnName)
+            val columnType =
+              dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+                getCatalystType(dataType, fieldSize, fieldScale, isSigned))
+            fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+            i = i + 1
+          }
+          return new StructType(fields)
+        } finally {
+          rs.close()
         }
-        return new StructType(fields)
       } finally {
-        rs.close()
+        statement.close()
       }
     } finally {
       conn.close()
@@ -161,40 +167,73 @@ private[sql] object JDBCRDD extends Logging {
    * @return A Catalyst schema corresponding to columns in the given order.
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields map { x => x.metadata.getString("name") -> x }: _*)
-    new StructType(columns map { name => fieldMap(name) })
+    val fieldMap = Map(schema.fields.map(x => x.metadata.getString("name") -> x): _*)
+    new StructType(columns.map(name => fieldMap(name)))
   }
 
   /**
-   * Given a driver string and an url, return a function that loads the
-   * specified driver string then returns a connection to the JDBC url.
-   * getConnector is run on the driver code, while the function it returns
-   * is run on the executor.
-   *
-   * @param driver - The class name of the JDBC driver for the given url, or null if the class name
-   *                 is not necessary.
-   * @param url - The JDBC url to connect to.
-   *
-   * @return A function that loads the driver and connects to the url.
+   * Converts value to SQL expression.
    */
-  def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
-    () => {
-      try {
-        if (driver != null) DriverRegistry.register(driver)
-      } catch {
-        case e: ClassNotFoundException =>
-          logWarning(s"Couldn't find class $driver", e)
-      }
-      DriverManager.getConnection(url, properties)
-    }
+  private def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case dateValue: Date => "'" + dateValue + "'"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
   }
+
+  private def escapeSql(value: String): String =
+    if (value == null) null else StringUtils.replace(value, "'", "''")
+
+  /**
+   * Turns a single Filter into a String representing a SQL expression.
+   * Returns None for an unhandled filter.
+   */
+  private def compileFilter(f: Filter): Option[String] = {
+    Option(f match {
+      case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+      case EqualNullSafe(attr, value) =>
+        s"(NOT ($attr != ${compileValue(value)} OR $attr IS NULL OR " +
+          s"${compileValue(value)} IS NULL) OR ($attr IS NULL AND ${compileValue(value)} IS NULL))"
+      case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
+      case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
+      case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
+      case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
+      case IsNull(attr) => s"$attr IS NULL"
+      case IsNotNull(attr) => s"$attr IS NOT NULL"
+      case StringStartsWith(attr, value) => s"${attr} LIKE '${value}%'"
+      case StringEndsWith(attr, value) => s"${attr} LIKE '%${value}'"
+      case StringContains(attr, value) => s"${attr} LIKE '%${value}%'"
+      case In(attr, value) => s"$attr IN (${compileValue(value)})"
+      case Not(f) => compileFilter(f).map(p => s"(NOT ($p))").getOrElse(null)
+      case Or(f1, f2) =>
+        // We can't compile Or filter unless both sub-filters are compiled successfully.
+        // It applies too for the following And filter.
+        // If we can make sure compileFilter supports all filters, we can remove this check.
+        val or = Seq(f1, f2).map(compileFilter(_)).flatten
+        if (or.size == 2) {
+          or.map(p => s"($p)").mkString(" OR ")
+        } else {
+          null
+        }
+      case And(f1, f2) =>
+        val and = Seq(f1, f2).map(compileFilter(_)).flatten
+        if (and.size == 2) {
+          and.map(p => s"($p)").mkString(" AND ")
+        } else {
+          null
+        }
+      case _ => null
+    })
+  }
+
+
 
   /**
    * Build and return JDBCRDD from the given information.
    *
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
-   * @param driver - The class name of the JDBC driver for the given url.
    * @param url - The JDBC url to connect to.
    * @param fqTable - The fully-qualified table name (or paren'd SQL query) to use.
    * @param requiredColumns - The names of the columns to SELECT.
@@ -207,7 +246,6 @@ private[sql] object JDBCRDD extends Logging {
   def scanTable(
       sc: SparkContext,
       schema: StructType,
-      driver: String,
       url: String,
       properties: Properties,
       fqTable: String,
@@ -218,12 +256,13 @@ private[sql] object JDBCRDD extends Logging {
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
-      getConnector(driver, url, properties),
+      JdbcUtils.createConnectionFactory(url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
       quotedColumns,
       filters,
       parts,
+      url,
       properties)
   }
 }
@@ -241,6 +280,7 @@ private[sql] class JDBCRDD(
     columns: Array[String],
     filters: Array[Filter],
     partitions: Array[Partition],
+    url: String,
     properties: Properties)
   extends RDD[InternalRow](sc, Nil) {
 
@@ -259,51 +299,23 @@ private[sql] class JDBCRDD(
   }
 
   /**
-   * Converts value to SQL expression.
-   */
-  private def compileValue(value: Any): Any = value match {
-    case stringValue: String => s"'${escapeSql(stringValue)}'"
-    case _ => value
-  }
-
-  private def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
-
-  /**
-   * Turns a single Filter into a String representing a SQL expression.
-   * Returns null for an unhandled filter.
-   */
-  private def compileFilter(f: Filter): String = f match {
-    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
-    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
-    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
-    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
-    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
-    case _ => null
-  }
-
-  /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
-  private val filterWhereClause: String = {
-    val filterStrings = filters map compileFilter filter (_ != null)
-    if (filterStrings.size > 0) {
-      val sb = new StringBuilder("WHERE ")
-      filterStrings.foreach(x => sb.append(x).append(" AND "))
-      sb.substring(0, sb.length - 5)
-    } else ""
-  }
+  private val filterWhereClause: String =
+    filters.map(JDBCRDD.compileFilter).flatten.mkString(" AND ")
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.
    */
   private def getWhereClause(part: JDBCPartition): String = {
     if (part.whereClause != null && filterWhereClause.length > 0) {
-      filterWhereClause + " AND " + part.whereClause
+      "WHERE " + filterWhereClause + " AND " + part.whereClause
     } else if (part.whereClause != null) {
       "WHERE " + part.whereClause
+    } else if (filterWhereClause.length > 0) {
+      "WHERE " + filterWhereClause
     } else {
-      filterWhereClause
+      ""
     }
   }
 
@@ -324,29 +336,32 @@ private[sql] class JDBCRDD(
   case object StringConversion extends JDBCConversion
   case object TimestampConversion extends JDBCConversion
   case object BinaryConversion extends JDBCConversion
+  case class ArrayConversion(elementConversion: JDBCConversion) extends JDBCConversion
 
   /**
    * Maps a StructType to a type tag list.
    */
-  def getConversions(schema: StructType): Array[JDBCConversion] = {
-    schema.fields.map(sf => sf.dataType match {
-      case BooleanType => BooleanConversion
-      case DateType => DateConversion
-      case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
-      case DoubleType => DoubleConversion
-      case FloatType => FloatConversion
-      case IntegerType => IntegerConversion
-      case LongType =>
-        if (sf.metadata.contains("binarylong")) BinaryLongConversion else LongConversion
-      case StringType => StringConversion
-      case TimestampType => TimestampConversion
-      case BinaryType => BinaryConversion
-      case _ => throw new IllegalArgumentException(s"Unsupported field $sf")
-    }).toArray
+  def getConversions(schema: StructType): Array[JDBCConversion] =
+    schema.fields.map(sf => getConversions(sf.dataType, sf.metadata))
+
+  private def getConversions(dt: DataType, metadata: Metadata): JDBCConversion = dt match {
+    case BooleanType => BooleanConversion
+    case DateType => DateConversion
+    case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
+    case DoubleType => DoubleConversion
+    case FloatType => FloatConversion
+    case IntegerType => IntegerConversion
+    case LongType => if (metadata.contains("binarylong")) BinaryLongConversion else LongConversion
+    case StringType => StringConversion
+    case TimestampType => TimestampConversion
+    case BinaryType => BinaryConversion
+    case ArrayType(et, _) => ArrayConversion(getConversions(et, metadata))
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
   }
 
   /**
    * Runs the SQL query against the JDBC driver.
+   *
    */
   override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] =
     new Iterator[InternalRow] {
@@ -358,6 +373,9 @@ private[sql] class JDBCRDD(
     context.addTaskCompletionListener{ context => close() }
     val part = thePart.asInstanceOf[JDBCPartition]
     val conn = getConnection()
+    val dialect = JdbcDialects.get(url)
+    import scala.collection.JavaConverters._
+    dialect.beforeFetch(conn, properties.asScala.toMap)
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
@@ -368,7 +386,7 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    val fetchSize = properties.getProperty("fetchSize", "0").toInt
+    val fetchSize = properties.getProperty("fetchsize", "0").toInt
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
@@ -419,16 +437,44 @@ private[sql] class JDBCRDD(
                 mutableRow.update(i, null)
               }
             case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
-            case BinaryLongConversion => {
+            case BinaryLongConversion =>
               val bytes = rs.getBytes(pos)
               var ans = 0L
               var j = 0
               while (j < bytes.size) {
                 ans = 256 * ans + (255 & bytes(j))
-                j = j + 1;
+                j = j + 1
               }
               mutableRow.setLong(i, ans)
-            }
+            case ArrayConversion(elementConversion) =>
+              val array = rs.getArray(pos).getArray
+              if (array != null) {
+                val data = elementConversion match {
+                  case TimestampConversion =>
+                    array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
+                      nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
+                    }
+                  case StringConversion =>
+                    array.asInstanceOf[Array[java.lang.String]]
+                      .map(UTF8String.fromString)
+                  case DateConversion =>
+                    array.asInstanceOf[Array[java.sql.Date]].map { date =>
+                      nullSafeConvert(date, DateTimeUtils.fromJavaDate)
+                    }
+                  case DecimalConversion(p, s) =>
+                    array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
+                      nullSafeConvert[java.math.BigDecimal](decimal, d => Decimal(d, p, s))
+                    }
+                  case BinaryLongConversion =>
+                    throw new IllegalArgumentException(s"Unsupported array element conversion $i")
+                  case _: ArrayConversion =>
+                    throw new IllegalArgumentException("Nested arrays unsupported")
+                  case _ => array.asInstanceOf[Array[Any]]
+                }
+                mutableRow.update(i, new GenericArrayData(data))
+              } else {
+                mutableRow.update(i, null)
+              }
           }
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1
@@ -458,12 +504,20 @@ private[sql] class JDBCRDD(
       }
       try {
         if (null != conn) {
+          if (!conn.isClosed && !conn.getAutoCommit) {
+            try {
+              conn.commit()
+            } catch {
+              case NonFatal(e) => logWarning("Exception committing transaction", e)
+            }
+          }
           conn.close()
         }
         logInfo("closed connection")
       } catch {
         case e: Exception => logWarning("Exception closing connection", e)
       }
+      closed = true
     }
 
     override def hasNext: Boolean = {
@@ -485,6 +539,14 @@ private[sql] class JDBCRDD(
       }
       gotNext = false
       nextValue
+    }
+  }
+
+  private def nullSafeConvert[T](input: T, f: T => Any): Any = {
+    if (input == null) {
+      null
+    } else {
+      f(input)
     }
   }
 }

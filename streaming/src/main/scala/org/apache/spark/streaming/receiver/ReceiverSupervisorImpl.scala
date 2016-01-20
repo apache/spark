@@ -26,13 +26,13 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.util.RpcUtils
-import org.apache.spark.{Logging, SparkEnv, SparkException}
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -47,7 +47,8 @@ private[streaming] class ReceiverSupervisorImpl(
     checkpointDirOption: Option[String]
   ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
 
-  private val hostPort = SparkEnv.get.blockManager.blockManagerId.hostPort
+  private val host = SparkEnv.get.blockManager.blockManagerId.host
+  private val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
 
   private val receivedBlockHandler: ReceivedBlockHandler = {
     if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {
@@ -179,7 +180,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   override protected def onReceiverStart(): Boolean = {
     val msg = RegisterReceiver(
-      streamId, receiver.getClass.getSimpleName, hostPort, endpoint)
+      streamId, receiver.getClass.getSimpleName, host, executorId, endpoint)
     trackerEndpoint.askWithRetry[Boolean](msg)
   }
 

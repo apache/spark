@@ -22,15 +22,19 @@ import java.util.Properties
 import scala.collection.Map
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, TaskEndReason}
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+
+import org.apache.spark.{Logging, SparkConf, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Distribution, Utils}
 
 @DeveloperApi
-sealed trait SparkListenerEvent
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
+trait SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
@@ -131,6 +135,17 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
+ * Interface for creating history listeners defined in other modules like SQL, which are used to
+ * rebuild the history UI.
+ */
+private[spark] trait SparkHistoryListenerFactory {
+  /**
+   * Create listeners used to rebuild the history UI.
+   */
+  def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener]
+}
+
+/**
  * :: DeveloperApi ::
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
  * interface which might change in different Spark releases. Java clients should extend
@@ -223,6 +238,11 @@ trait SparkListener {
    * Called when the driver receives a block update info.
    */
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated) { }
+
+  /**
+   * Called when other events like SQL-specific events are posted.
+   */
+  def onOtherEvent(event: SparkListenerEvent) { }
 }
 
 /**
@@ -251,7 +271,7 @@ class StatsReportListener extends SparkListener with Logging {
 
     // Shuffle write
     showBytesDistribution("shuffle bytes written:",
-      (_, metric) => metric.shuffleWriteMetrics.map(_.shuffleBytesWritten), taskInfoMetrics)
+      (_, metric) => metric.shuffleWriteMetrics.map(_.bytesWritten), taskInfoMetrics)
 
     // Fetch & I/O
     showMillisDistribution("fetch wait time:",

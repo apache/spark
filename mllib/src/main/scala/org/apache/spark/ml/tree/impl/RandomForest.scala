@@ -26,10 +26,10 @@ import org.apache.spark.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impl.{BaggedPoint, DTStatsAggregator, DecisionTreeMetadata,
+import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, DTStatsAggregator,
   TimeTracker}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
@@ -74,7 +74,7 @@ private[ml] object RandomForest extends Logging {
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
     timer.start("findSplitsBins")
-    val splits = findSplits(retaggedInput, metadata)
+    val splits = findSplits(retaggedInput, metadata, seed)
     timer.stop("findSplitsBins")
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
@@ -179,64 +179,29 @@ private[ml] object RandomForest extends Logging {
       }
     }
 
+    val numFeatures = metadata.numFeatures
+
     parentUID match {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(uid, rootNode.toNode, strategy.getNumClasses)
+            new DecisionTreeClassificationModel(uid, rootNode.toNode, numFeatures,
+              strategy.getNumClasses)
           }
         } else {
-          topNodes.map(rootNode => new DecisionTreeRegressionModel(uid, rootNode.toNode))
+          topNodes.map { rootNode =>
+            new DecisionTreeRegressionModel(uid, rootNode.toNode, numFeatures)
+          }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(rootNode.toNode, strategy.getNumClasses)
+            new DecisionTreeClassificationModel(rootNode.toNode, numFeatures,
+              strategy.getNumClasses)
           }
         } else {
-          topNodes.map(rootNode => new DecisionTreeRegressionModel(rootNode.toNode))
+          topNodes.map(rootNode => new DecisionTreeRegressionModel(rootNode.toNode, numFeatures))
         }
-    }
-  }
-
-  /**
-   * Get the node index corresponding to this data point.
-   * This function mimics prediction, passing an example from the root node down to a leaf
-   * or unsplit node; that node's index is returned.
-   *
-   * @param node  Node in tree from which to classify the given data point.
-   * @param binnedFeatures  Binned feature vector for data point.
-   * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
-   * @return  Leaf index if the data point reaches a leaf.
-   *          Otherwise, last node reachable in tree matching this example.
-   *          Note: This is the global node index, i.e., the index used in the tree.
-   *                This index is different from the index used during training a particular
-   *                group of nodes on one call to [[findBestSplits()]].
-   */
-  private def predictNodeIndex(
-      node: LearningNode,
-      binnedFeatures: Array[Int],
-      splits: Array[Array[Split]]): Int = {
-    if (node.isLeaf || node.split.isEmpty) {
-      node.id
-    } else {
-      val split = node.split.get
-      val featureIndex = split.featureIndex
-      val splitLeft = split.shouldGoLeft(binnedFeatures(featureIndex), splits(featureIndex))
-      if (node.leftChild.isEmpty) {
-        // Not yet split. Return index from next layer of nodes to train
-        if (splitLeft) {
-          LearningNode.leftChildIndex(node.id)
-        } else {
-          LearningNode.rightChildIndex(node.id)
-        }
-      } else {
-        if (splitLeft) {
-          predictNodeIndex(node.leftChild.get, binnedFeatures, splits)
-        } else {
-          predictNodeIndex(node.rightChild.get, binnedFeatures, splits)
-        }
-      }
     }
   }
 
@@ -447,8 +412,7 @@ private[ml] object RandomForest extends Logging {
         agg: Array[DTStatsAggregator],
         baggedPoint: BaggedPoint[TreePoint]): Array[DTStatsAggregator] = {
       treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
-        val nodeIndex =
-          predictNodeIndex(topNodes(treeIndex), baggedPoint.datum.binnedFeatures, splits)
+        val nodeIndex = topNodes(treeIndex).predictImpl(baggedPoint.datum.binnedFeatures, splits)
         nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null), agg, baggedPoint)
       }
       agg
@@ -510,7 +474,7 @@ private[ml] object RandomForest extends Logging {
     val nodeToFeatures = getNodeToFeatures(treeToNodeToIndexInfo)
     val nodeToFeaturesBc = input.sparkContext.broadcast(nodeToFeatures)
 
-    val partitionAggregates : RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
+    val partitionAggregates: RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
       input.zip(nodeIdCache.get.nodeIdsForInstances).mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
@@ -851,6 +815,7 @@ private[ml] object RandomForest extends Logging {
    *
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param metadata Learning and dataset metadata
+   * @param seed random seed
    * @return A tuple of (splits, bins).
    *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
    *          of size (numFeatures, numSplits).
@@ -859,7 +824,8 @@ private[ml] object RandomForest extends Logging {
    */
   protected[tree] def findSplits(
       input: RDD[LabeledPoint],
-      metadata: DecisionTreeMetadata): Array[Array[Split]] = {
+      metadata: DecisionTreeMetadata,
+      seed: Long): Array[Array[Split]] = {
 
     logDebug("isMulticlass = " + metadata.isMulticlass)
 
@@ -876,7 +842,7 @@ private[ml] object RandomForest extends Logging {
         1.0
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
-      input.sample(withReplacement = false, fraction, new XORShiftRandom(1).nextInt()).collect()
+      input.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
     } else {
       new Array[LabeledPoint](0)
     }

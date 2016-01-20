@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
@@ -43,7 +43,8 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       s"source vector size is ${sources.first().size} must be greater than k=$k")
 
     val mat = new RowMatrix(sources)
-    val pc = mat.computePrincipalComponents(k) match {
+    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
+    val densePC = pc match {
       case dm: DenseMatrix =>
         dm
       case sm: SparseMatrix =>
@@ -58,7 +59,13 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
           s"SparseMatrix or DenseMatrix. Instead got: ${m.getClass}")
 
     }
-    new PCAModel(k, pc)
+    val denseExplainedVariance = explainedVariance match {
+      case dv: DenseVector =>
+        dv
+      case sv: SparseVector =>
+        sv.toDense
+    }
+    new PCAModel(k, densePC, denseExplainedVariance)
   }
 
   /**
@@ -77,7 +84,8 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
 @Since("1.4.0")
 class PCAModel private[spark] (
     @Since("1.4.0") val k: Int,
-    @Since("1.4.0") val pc: DenseMatrix) extends VectorTransformer {
+    @Since("1.4.0") val pc: DenseMatrix,
+    @Since("1.6.0") val explainedVariance: DenseVector) extends VectorTransformer {
   /**
    * Transform a vector by computed Principal Components.
    *

@@ -20,9 +20,9 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.Date
 
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.{SecurityManager, SparkConf}
 
 private[deploy] object DeployTestUtils {
   def createAppDesc(): ApplicationDescription = {
@@ -31,8 +31,9 @@ private[deploy] object DeployTestUtils {
   }
 
   def createAppInfo() : ApplicationInfo = {
+    val appDesc = createAppDesc()
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", createAppDesc(), JsonConstants.submitDate, null, Int.MaxValue)
+      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }

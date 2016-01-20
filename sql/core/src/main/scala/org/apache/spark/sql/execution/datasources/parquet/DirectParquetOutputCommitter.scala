@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.Log
-import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetOutputCommitter, ParquetOutputFormat}
+import org.apache.parquet.hadoop.util.ContextUtil
 
 /**
  * An output committer for writing Parquet files.  In stead of writing to the `_temporary` folder
@@ -39,9 +39,10 @@ import org.apache.parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetO
  *
  *   NEVER use [[DirectParquetOutputCommitter]] when appending data, because currently there's
  *   no safe way undo a failed appending job (that's why both `abortTask()` and `abortJob()` are
- *   left * empty).
+ *   left empty).
  */
-private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+private[datasources] class DirectParquetOutputCommitter(
+    outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {
   val LOG = Log.getLog(classOf[ParquetOutputCommitter])
 

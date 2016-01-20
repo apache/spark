@@ -572,3 +572,81 @@ Copyright 2009-2013 The Apache Software Foundation
 
 Apache Avro IPC
 Copyright 2009-2013 The Apache Software Foundation
+
+
+Vis.js
+Copyright 2010-2015 Almende B.V.
+
+Vis.js is dual licensed under both
+
+  * The Apache 2.0 License
+    http://www.apache.org/licenses/LICENSE-2.0
+
+    and
+
+  * The MIT License
+    http://opensource.org/licenses/MIT
+
+Vis.js may be distributed under either license.
+
+
+Vis.js uses and redistributes the following third-party libraries:
+
+- component-emitter
+  https://github.com/component/emitter
+  The MIT License
+
+- hammer.js
+  http://hammerjs.github.io/
+  The MIT License
+
+- moment.js
+  http://momentjs.com/
+  The MIT License
+
+- keycharm
+  https://github.com/AlexDM0/keycharm
+  The MIT License
+
+===============================================================================
+
+The CSS style for the navigation sidebar of the documentation was originally
+submitted by Óscar Nájera for the scikit-learn project. The scikit-learn project
+is distributed under the 3-Clause BSD license.
+===============================================================================
+
+For CSV functionality:
+
+/*
+ * Copyright 2014 Databricks
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * Copyright 2015 Ayasdi Inc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
