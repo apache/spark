@@ -128,14 +128,14 @@ private[csv] object CSVCompressionCodecs {
    */
   def getCodecClassName(name: String): String = {
     val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
-    val codecClassName = try {
+    try {
       // Validate the codec name
       Utils.classForName(codecName)
-      Some(codecName)
+      codecName
     } catch {
-      case e: ClassNotFoundException => None
+      case e: ClassNotFoundException =>
+        throw new IllegalArgumentException(s"Codec [$codecName] " +
+          s"is not available. Known codecs are ${shortCompressionCodecNames.keys.mkString(", ")}.")
     }
-    codecClassName.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] " +
-      s"is not available. Available codecs are ${shortCompressionCodecNames.keys.mkString(", ")}."))
   }
 }
