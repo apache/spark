@@ -394,6 +394,7 @@ class CrossValidatorTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.ml.tests import *
     if xmlrunner:
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
     else:
