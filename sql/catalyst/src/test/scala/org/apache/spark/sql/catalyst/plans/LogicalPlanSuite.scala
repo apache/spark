@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -75,12 +76,14 @@ class LogicalPlanSuite extends SparkFunSuite {
 
   test("propagating constraint in filter") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    assert(tr.analyze.constraint.isEmpty)
-    assert(tr.select('a.attr).analyze.constraint.isEmpty)
-    assert(tr.where('a.attr > 10).analyze.constraint.get == ('a > 10))
-    assert(tr.where('a.attr > 10).select('c.attr).analyze.constraint.get == ('a > 10))
+    assert(tr.analyze.constraints.isEmpty)
+    assert(tr.select('a.attr).analyze.constraints.isEmpty)
+    val logicalPlan = tr.where('a.attr > 10).analyze
+    assert(logicalPlan.constraints ==
+      Seq(logicalPlan.resolve(Seq('a > 10), caseInsensitiveResolution))
+    assert(tr.where('a.attr > 10).select('c.attr).analyze.constraints.get == ('a > 10))
     assert(tr.where('a.attr > 10).select('c.attr, 'a.attr).where('c.attr < 100)
-      .analyze.constraint.get == And('a > 10, 'c < 100))
-    assert(tr.where('a.attr > 10).select('c.attr, 'b.attr).analyze.constraint.isEmpty)
+      .analyze.constraints.get == And('a > 10, 'c < 100))
+    assert(tr.where('a.attr > 10).select('c.attr, 'b.attr).analyze.constraints.isEmpty)
   }
 }

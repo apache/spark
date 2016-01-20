@@ -30,27 +30,16 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
   /**
    * Extracts the output property from a given child.
    */
-  def extractConstraintFromChild(child: QueryPlan[PlanType]): Seq[Expression] = {
-    child.constraint.flatMap { predicate =>
-      val conjunctivePredicates = splitConjunctivePredicates(predicate)
-      conjunctivePredicates.flatMap { p =>
-        if (p.references.subsetOf(outputSet)) {
-          // We only keep predicates that are composed by attributes in the outputSet.
-          Some(p)
-        } else {
-          None
-        }
-      }.reduceOption(And)
-    }
+  def extractConstraintsFromChild(child: QueryPlan[PlanType]): Seq[Expression] = {
+    child.constraints.filter(_.references.subsetOf(outputSet))
   }
 
   /**
    * An sequence of expressions that describes the data property of the output rows of this
-   * operator. For example, if the output of this operator is column `a`, an example `constraint`
+   * operator. For example, if the output of this operator is column `a`, an example `constraints`
    * can be `Seq(a > 10, a < 20)`.
    */
-  def constraint: Seq[Expression] = Nil
-
+  def constraints: Seq[Expression] = Nil
 
   /**
    * Returns the set of attributes that are output by this node.
