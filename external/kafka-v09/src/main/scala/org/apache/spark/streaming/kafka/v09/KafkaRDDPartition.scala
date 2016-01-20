@@ -23,6 +23,7 @@ import org.apache.spark.Partition
  *  @param partition kafka partition id
  *  @param fromOffset inclusive starting offset
  *  @param untilOffset exclusive ending offset
+ * @param host preferred kafka host, i.e. the leader at the time the rdd was created
  */
 private[kafka]
 class KafkaRDDPartition(

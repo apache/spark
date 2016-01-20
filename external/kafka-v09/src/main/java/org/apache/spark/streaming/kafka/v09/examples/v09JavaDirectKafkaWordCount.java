@@ -42,7 +42,7 @@ import java.util.regex.Pattern;
  * Usage: v09JavaDirectKafkaWordCount <brokers> <topics>
  *   <brokers> is a list of one or more Kafka brokers
  *   <topics> is a list of one or more kafka topics to consume from
- *   <poll time> time, in milliseconds, spent waiting in Kafka consumer poll if data is not available
+ *   <poll time> time, in milliseconds, spent waiting in Kafka consumer poll if data isn't available
  *
  * Example:
  *    $ bin/run-example streaming.v09JavaDirectKafkaWordCount broker1-host:port,broker2-host:port
@@ -57,7 +57,8 @@ public final class v09JavaDirectKafkaWordCount {
       System.err.println("Usage: v09JavaDirectKafkaWordCount <brokers> <topics>\n" +
           "  <brokers> is a list of one or more Kafka brokers\n" +
           "  <topics> is a list of one or more kafka topics to consume from\n" +
-          "  <poll time> time, in milliseconds, spent waiting in Kafka consumer poll if data is not available\n\n");
+          "  <poll time> time, in milliseconds, spent waiting in Kafka consumer poll if data is " +
+          "not available\n\n");
       System.exit(1);
     }
 
@@ -75,8 +76,10 @@ public final class v09JavaDirectKafkaWordCount {
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
     kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, "testGroup");
-    kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-    kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
+    kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+      "org.apache.kafka.common.serialization.StringDeserializer");
+    kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+      "org.apache.kafka.common.serialization.StringDeserializer");
     kafkaParams.put("spark.kafka.poll.time", pollTime);
 
     // Create direct kafka stream with brokers and topics
