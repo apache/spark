@@ -35,11 +35,16 @@ import org.apache.spark.sql.types._
   */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   def batches: Seq[Batch] = {
-    // SubQueries are only needed for analysis and can be removed before execution.
-    Batch("Remove SubQueries", FixedPoint(100),
-      EliminateSubQueries) ::
-    Batch("Compute Current Time", Once,
+    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
+    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
+    // However, because we also use the analyzer to canonicalized queries (for view definition),
+    // we do not eliminate subqueries or compute current time in the analyzer.
+    Batch("Finish Analysis", Once,
+      EliminateSubQueries,
       ComputeCurrentTime) ::
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // Optimizer rules start here
+    //////////////////////////////////////////////////////////////////////////////////////////
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
@@ -57,7 +62,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ProjectCollapsing,
       CombineFilters,
       CombineLimits,
-      // Constant folding
+      // Constant folding and strength reduction
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
@@ -635,6 +640,24 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
+
+      case e @ CaseWhen(branches, elseValue) if branches.exists(_._1 == FalseLiteral) =>
+        // If there are branches that are always false, remove them.
+        // If there are no more branches left, just use the else value.
+        // Note that these two are handled together here in a single case statement because
+        // otherwise we cannot determine the data type for the elseValue if it is None (i.e. null).
+        val newBranches = branches.filter(_._1 != FalseLiteral)
+        if (newBranches.isEmpty) {
+          elseValue.getOrElse(Literal.create(null, e.dataType))
+        } else {
+          e.copy(branches = newBranches)
+        }
+
+      case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
+        // If the first branch is a true literal, remove the entire CaseWhen and use the value
+        // from that. Note that CaseWhen.branches should never be empty, and as a result the
+        // headOption (rather than head) added above is just a extra (and unnecessary) safeguard.
+        branches.head._2
     }
   }
 }
