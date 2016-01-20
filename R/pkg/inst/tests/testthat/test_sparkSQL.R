@@ -335,7 +335,6 @@ writeLines(mockLinesMapType, mapTypeJsonPath)
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(sqlContext, complexTypeJsonPath)
-
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -490,19 +489,15 @@ test_that("insertInto() on a registered table", {
   unlink(parquetPath2)
 })
 
-test_that("table() returns a new DataFrame", {
+test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
-  tabledf <- table(sqlContext, "table1")
+  tabledf <- tableToDF(sqlContext, "table1")
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
+  tabledf2 <- tableToDF(sqlContext, "table1")
+  expect_equal(count(tabledf2), 3)
   dropTempTable(sqlContext, "table1")
-
-  # nolint start
-  # Test base::table is working
-  #a <- letters[1:3]
-  #expect_equal(class(table(a, sample(a))), "table")
-  # nolint end
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -734,7 +729,7 @@ test_that("head() and first() return the correct data", {
   expect_equal(ncol(testFirst), 2)
 })
 
-test_that("distinct() and unique on DataFrames", {
+test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
   lines <- c("{\"name\":\"Michael\"}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"Justin\", \"age\":19}",
@@ -750,6 +745,42 @@ test_that("distinct() and unique on DataFrames", {
   uniques2 <- unique(df)
   expect_is(uniques2, "DataFrame")
   expect_equal(count(uniques2), 3)
+
+  # Test dropDuplicates()
+  df <- createDataFrame(
+    sqlContext,
+    list(
+      list(2, 1, 2), list(1, 1, 1),
+      list(1, 2, 1), list(2, 1, 2),
+      list(2, 2, 2), list(2, 2, 1),
+      list(2, 1, 1), list(1, 1, 2),
+      list(1, 2, 2), list(1, 2, 1)),
+    schema = c("key", "value1", "value2"))
+  result <- collect(dropDuplicates(df))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 1, 2), c(1, 2, 1),
+    c(1, 2, 2), c(2, 1, 1), c(2, 1, 2),
+    c(2, 2, 1), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, c("key", "value1")))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, "key"))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(2, 1, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
 })
 
 test_that("sample on a DataFrame", {
