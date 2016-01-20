@@ -254,21 +254,19 @@ public class CountMinSketchImpl extends CountMinSketch {
       throw new CMSMergeException("Cannot merge estimators of different width");
     }
 
-    long[] hashA = Arrays.copyOf(that.hashA, that.hashA.length);
-    if (!Arrays.equals(this.hashA, hashA)) {
+    if (!Arrays.equals(this.hashA, that.hashA)) {
       throw new CMSMergeException("Cannot merge estimators of different seed");
     }
 
-    long[][] table = new long[this.depth][this.width];
-    for (int i = 0; i < table.length; ++i) {
-      for (int j = 0; j < table[i].length; ++j) {
-        table[i][j] = this.table[i][j] + that.table[i][j];
+    for (int i = 0; i < this.table.length; ++i) {
+      for (int j = 0; j < this.table[i].length; ++j) {
+        this.table[i][j] = this.table[i][j] + that.table[i][j];
       }
     }
 
-    long totalCount = this.totalCount + that.totalCount;
+    this.totalCount += that.totalCount;
 
-    return new CountMinSketchImpl(this.depth, this.width, totalCount, hashA, table);
+    return this;
   }
 
   @Override

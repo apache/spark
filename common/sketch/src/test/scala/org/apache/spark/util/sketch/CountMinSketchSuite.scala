@@ -64,7 +64,7 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  def testMerge[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
+  def testMergeInPlace[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
     test(s"mergeInPlace - $typeName") {
       val r = new Random()
       val numToMerge = 5
@@ -97,7 +97,7 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
   def testItemType[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
     testAccuracy[T](typeName)(itemGenerator)
-    testMerge[T](typeName)(itemGenerator)
+    testMergeInPlace[T](typeName)(itemGenerator)
   }
 
   testItemType[Byte]("Byte") { _.nextInt().toByte }
