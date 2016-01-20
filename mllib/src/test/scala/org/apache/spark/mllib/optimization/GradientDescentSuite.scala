@@ -184,7 +184,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
       val optimizerResult = gradientDescent.optimizeWithStats(dataRDD, initialWeightsWithIntercept)
 
     assert(loss.length < numIterations, "convergenceTolerance failed to stop optimization early")
-    assert(optimizerResult.history.length < numIterations, 
+    assert(optimizerResult.history.length < numIterations,
                                         "convergenceTolerance failed to stop optimization early")
   }
 }

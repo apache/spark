@@ -211,7 +211,8 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       .setRegParam(regParam)
 
     val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
-    val weightLBFGSWithStats = lbfgsOptimizer.optimizeWithStats(dataRDD, initialWeightsWithIntercept)
+    val weightLBFGSWithStats = lbfgsOptimizer.optimizeWithStats(dataRDD,
+                               initialWeightsWithIntercept)
 
     val numGDIterations = 50
     val stepSize = 1.0
@@ -231,8 +232,8 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       (weightLBFGS(0) ~= weightGD(0) relTol 0.02) && (weightLBFGS(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
     assert(
-      (weightLBFGSWithStats.weights(0) ~= weightGD(0) relTol 0.02) && 
-         (weightLBFGSWithStats.weights(1) ~= weightGD(1) relTol 0.02),
+      (weightLBFGSWithStats.weights(0) ~= weightGD(0) relTol 0.02) &&
+      (weightLBFGSWithStats.weights(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
   }
 }
