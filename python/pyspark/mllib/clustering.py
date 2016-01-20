@@ -202,15 +202,24 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
-    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2))
+    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2), 2)
     >>> model = GaussianMixture.train(clusterdata_1, 3, convergenceTol=0.0001,
     ...                                 maxIterations=50, seed=10)
     >>> labels = model.predict(clusterdata_1).collect()
     >>> labels[0]==labels[1]
     False
     >>> labels[1]==labels[2]
-    True
+    False
     >>> labels[4]==labels[5]
+    True
+    >>> model.predict([-0.1,-0.05])
+    0
+    >>> softPredicted = model.predictSoft([-0.1,-0.05])
+    >>> abs(softPredicted[0] - 1.0) < 0.001
+    True
+    >>> abs(softPredicted[1] - 0.0) < 0.001
+    True
+    >>> abs(softPredicted[2] - 0.0) < 0.001
     True
 
     >>> path = tempfile.mkdtemp()
@@ -277,26 +286,27 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     @since('1.3.0')
     def predict(self, x):
         """
-        Find the cluster to which the points in 'x' has maximum membership
-        in this model.
+        Find the cluster to which the point 'x' or each point in RDD 'x'
+        has maximum membership in this model.
 
-        :param x:    RDD of data points.
-        :return:     cluster_labels. RDD of cluster labels.
+        :param x:    vector or RDD of vector represents data points.
+        :return:     cluster label or RDD of cluster labels.
         """
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
             return cluster_labels
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            z = self.predictSoft(x)
+            return z.argmax()
 
     @since('1.3.0')
     def predictSoft(self, x):
         """
-        Find the membership of each point in 'x' to all mixture components.
+        Find the membership of point 'x' or each point in RDD 'x' to all mixture components.
 
-        :param x:    RDD of data points.
-        :return:     membership_matrix. RDD of array of double values.
+        :param x:    vector or RDD of vector represents data points.
+        :return:     the membership value to all mixture components for vector 'x'
+                     or each vector in RDD 'x'.
         """
         if isinstance(x, RDD):
             means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
@@ -304,8 +314,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
                                               _convert_to_vector(self.weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            return self.call("predictSoft", _convert_to_vector(x)).toArray()
 
     @classmethod
     @since('1.5.0')

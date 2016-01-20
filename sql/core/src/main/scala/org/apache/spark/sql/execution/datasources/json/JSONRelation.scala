@@ -57,7 +57,7 @@ class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegi
       maybeDataSchema = dataSchema,
       maybePartitionSpec = None,
       userDefinedPartitionColumns = partitionColumns,
-      bucketSpec = bucketSpec,
+      maybeBucketSpec = bucketSpec,
       paths = paths,
       parameters = parameters)(sqlContext)
   }
@@ -68,7 +68,7 @@ private[sql] class JSONRelation(
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    override val bucketSpec: Option[BucketSpec] = None,
+    override val maybeBucketSpec: Option[BucketSpec] = None,
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)

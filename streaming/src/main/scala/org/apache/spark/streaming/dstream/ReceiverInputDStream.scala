@@ -35,11 +35,11 @@ import org.apache.spark.streaming.util.WriteAheadLogUtils
  * define [[getReceiver]] function that gets the receiver object of type
  * [[org.apache.spark.streaming.receiver.Receiver]] that will be sent
  * to the workers to receive data.
- * @param ssc_ Streaming context that will execute this input stream
+ * @param _ssc Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
-  extends InputDStream[T](ssc_) {
+abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
+  extends InputDStream[T](_ssc) {
 
   /**
    * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.

@@ -1081,8 +1081,7 @@ class SQLTests(ReusedPySparkTestCase):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
-        # RuntimeException should not be captured
-        self.assertRaises(py4j.protocol.Py4JJavaError, lambda: self.sqlCtx.sql("abc"))
+        self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
         self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",

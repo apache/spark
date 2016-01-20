@@ -1173,7 +1173,7 @@ test_that("group by, agg functions", {
 
   expect_equal(3, count(mean(gd)))
   expect_equal(3, count(max(gd)))
-  expect_equal(30, collect(max(gd))[1, 2])
+  expect_equal(30, collect(max(gd))[2, 2])
   expect_equal(1, collect(count(gd))[1, 2])
 
   mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
@@ -1781,7 +1781,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(x), "map<string,string>")
 
   df <- selectExpr(read.json(sqlContext, jsonPath), "name", "(age * 1.21) as age")
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
 
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")
@@ -1797,6 +1797,37 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
                "Length of type vector should match the number of columns for DataFrame")
   expect_error(coltypes(df) <- c("environment", "list"),
                "Only atomic type is supported for column types")
+})
+
+test_that("Method str()", {
+  # Structure of Iris
+  iris2 <- iris
+  colnames(iris2) <- c("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width", "Species")
+  iris2$col <- TRUE
+  irisDF2 <- createDataFrame(sqlContext, iris2)
+
+  out <- capture.output(str(irisDF2))
+  expect_equal(length(out), 7)
+  expect_equal(out[1], "'DataFrame': 6 variables:")
+  expect_equal(out[2], " $ Sepal_Length: num 5.1 4.9 4.7 4.6 5 5.4")
+  expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9")
+  expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7")
+  expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4")
+  expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
+                              "setosa\" \"setosa\" \"setosa\" \"setosa\""))
+  expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
+
+  # A random dataset with many columns. This test is to check str limits
+  # the number of columns. Therefore, it will suffice to check for the
+  # number of returned rows
+  x <- runif(200, 1, 10)
+  df <- data.frame(t(as.matrix(data.frame(x,x,x,x,x,x,x,x,x))))
+  DF <- createDataFrame(sqlContext, df)
+  out <- capture.output(str(DF))
+  expect_equal(length(out), 103)
+
+  # Test utils:::str
+  expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
 })
 
 unlink(parquetPath)

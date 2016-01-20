@@ -304,6 +304,7 @@ def get_hadoop_profiles(hadoop_version):
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
         "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
         "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
+        "hadoop2.7": ["-Pyarn", "-Phadoop-2.7"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -529,11 +530,15 @@ def main():
     run_apache_rat_checks()
 
     # style checks
-    if not changed_files or any(f.endswith(".scala") for f in changed_files):
+    if not changed_files or any(f.endswith(".scala")
+                                or f.endswith("scalastyle-config.xml")
+                                for f in changed_files):
         run_scala_style_checks()
-    if not changed_files or any(f.endswith(".java") for f in changed_files):
-        # run_java_style_checks()
-        pass
+    if not changed_files or any(f.endswith(".java")
+                                or f.endswith("checkstyle.xml")
+                                or f.endswith("checkstyle-suppressions.xml")
+                                for f in changed_files):
+        run_java_style_checks()
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R") for f in changed_files):

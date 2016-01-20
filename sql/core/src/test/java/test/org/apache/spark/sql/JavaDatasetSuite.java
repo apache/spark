@@ -187,7 +187,7 @@ public class JavaDatasetSuite implements Serializable {
       }
     }, Encoders.STRING());
 
-    Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
+    Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
 
     Dataset<String> flatMapped = grouped.flatMapGroups(
       new FlatMapGroupsFunction<Integer, String, String>() {
@@ -202,7 +202,7 @@ public class JavaDatasetSuite implements Serializable {
       },
       Encoders.STRING());
 
-    Assert.assertEquals(Arrays.asList("1a", "3foobar"), flatMapped.collectAsList());
+    Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped.collectAsList()));
 
     Dataset<Tuple2<Integer, String>> reduced = grouped.reduce(new ReduceFunction<String>() {
       @Override
@@ -212,8 +212,8 @@ public class JavaDatasetSuite implements Serializable {
     });
 
     Assert.assertEquals(
-      Arrays.asList(tuple2(1, "a"), tuple2(3, "foobar")),
-      reduced.collectAsList());
+      asSet(tuple2(1, "a"), tuple2(3, "foobar")),
+      toSet(reduced.collectAsList()));
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
@@ -245,7 +245,7 @@ public class JavaDatasetSuite implements Serializable {
       },
       Encoders.STRING());
 
-    Assert.assertEquals(Arrays.asList("1a#2", "3foobar#6", "5#10"), cogrouped.collectAsList());
+    Assert.assertEquals(asSet("1a#2", "3foobar#6", "5#10"), toSet(cogrouped.collectAsList()));
   }
 
   @Test
@@ -268,7 +268,7 @@ public class JavaDatasetSuite implements Serializable {
       },
       Encoders.STRING());
 
-    Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
+    Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
   }
 
   @Test
@@ -290,9 +290,7 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("abc", "abc", "xyz");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
 
-    Assert.assertEquals(
-      Arrays.asList("abc", "xyz"),
-      sort(ds.distinct().collectAsList().toArray(new String[0])));
+    Assert.assertEquals(asSet("abc", "xyz"), toSet(ds.distinct().collectAsList()));
 
     List<String> data2 = Arrays.asList("xyz", "foo", "foo");
     Dataset<String> ds2 = context.createDataset(data2, Encoders.STRING());
@@ -302,16 +300,23 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<String> unioned = ds.union(ds2);
     Assert.assertEquals(
-      Arrays.asList("abc", "abc", "foo", "foo", "xyz", "xyz"),
-      sort(unioned.collectAsList().toArray(new String[0])));
+      Arrays.asList("abc", "abc", "xyz", "xyz", "foo", "foo"),
+      unioned.collectAsList());
 
     Dataset<String> subtracted = ds.subtract(ds2);
     Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
   }
 
-  private <T extends Comparable<T>> List<T> sort(T[] data) {
-    Arrays.sort(data);
-    return Arrays.asList(data);
+  private <T> Set<T> toSet(List<T> records) {
+    Set<T> set = new HashSet<T>();
+    for (T record : records) {
+      set.add(record);
+    }
+    return set;
+  }
+
+  private <T> Set<T> asSet(T... records) {
+    return toSet(Arrays.asList(records));
   }
 
   @Test

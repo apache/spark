@@ -76,4 +76,6 @@ if add_files is not None:
 # which allows us to execute the user's PYTHONSTARTUP file:
 _pythonstartup = os.environ.get('OLD_PYTHONSTARTUP')
 if _pythonstartup and os.path.isfile(_pythonstartup):
-    execfile(_pythonstartup)
+    with open(_pythonstartup) as f:
+        code = compile(f.read(), _pythonstartup, 'exec')
+        exec(code)
