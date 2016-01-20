@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.functions.{avg, col, max}
+import org.apache.spark.sql.test.SharedSQLContext
 
 class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
