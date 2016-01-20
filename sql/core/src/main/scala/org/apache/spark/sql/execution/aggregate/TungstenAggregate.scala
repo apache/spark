@@ -168,7 +168,7 @@ case class TungstenAggregate(
   override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    // the model could be only Partial or PartialMerge
+    // the mode could be only Partial or PartialMerge
     val updateExpr = if (modes.contains(Partial)) {
       functions.flatMap(_.updateExpressions)
     } else {
