@@ -245,8 +245,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
    *
-   * Note that this function does not recurse into the children of a node that is being replaced.
-   *
    * @param rule the function use to transform this nodes children
    */
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
@@ -256,8 +254,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
-   *
-   * Note that this function does not recurse into the children of a node that is being replaced.
    *
    * @param rule the function used to transform this nodes children
    */
@@ -278,9 +274,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.
-   *
-   * Unlike transform and transformDown, this function does transform all the matched nodes in one
-   * shot.
    *
    * @param rule the function use to transform this nodes children
    */
