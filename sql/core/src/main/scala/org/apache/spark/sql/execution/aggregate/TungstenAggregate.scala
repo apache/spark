@@ -95,7 +95,8 @@ case class TungstenAggregate(
             aggregateAttributes,
             initialInputBufferOffset,
             resultExpressions,
-            newMutableProjection,
+            (expressions, inputSchema) =>
+              newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
             child.output,
             iter,
             testFallbackStartsAt,

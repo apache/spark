@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.IntegerType
 
 
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
@@ -37,6 +38,10 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     comparePlans(actual, correctAnswer)
   }
 
+  private val trueBranch = (TrueLiteral, Literal(5))
+  private val normalBranch = (NonFoldableLiteral(true), Literal(10))
+  private val unreachableBranch = (FalseLiteral, Literal(20))
+
   test("simplify if") {
     assertEquivalent(
       If(TrueLiteral, Literal(10), Literal(20)),
@@ -47,4 +52,36 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       Literal(20))
   }
 
+  test("remove unreachable branches") {
+    // i.e. removing branches whose conditions are always false
+    assertEquivalent(
+      CaseWhen(unreachableBranch :: normalBranch :: unreachableBranch :: Nil, None),
+      CaseWhen(normalBranch :: Nil, None))
+  }
+
+  test("remove entire CaseWhen if only the else branch is reachable") {
+    assertEquivalent(
+      CaseWhen(unreachableBranch :: unreachableBranch :: Nil, Some(Literal(30))),
+      Literal(30))
+
+    assertEquivalent(
+      CaseWhen(unreachableBranch :: unreachableBranch :: Nil, None),
+      Literal.create(null, IntegerType))
+  }
+
+  test("remove entire CaseWhen if the first branch is always true") {
+    assertEquivalent(
+      CaseWhen(trueBranch :: normalBranch :: Nil, None),
+      Literal(5))
+
+    // Test branch elimination and simplification in combination
+    assertEquivalent(
+      CaseWhen(unreachableBranch :: unreachableBranch:: trueBranch :: normalBranch :: Nil, None),
+      Literal(5))
+
+    // Make sure this doesn't trigger if there is a non-foldable branch before the true branch
+    assertEquivalent(
+      CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None),
+      CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None))
+  }
 }
