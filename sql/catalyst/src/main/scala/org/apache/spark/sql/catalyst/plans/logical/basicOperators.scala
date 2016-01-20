@@ -191,7 +191,7 @@ case class Join(
         val commonPairs = commonOutputFromLeft.zip(commonOutputFromRight)
         val commonOutputExp = commonPairs.map {
           case (l: Attribute, r: Attribute) =>
-            Alias(CaseWhen(Seq((IsNull(l), r)), l), l.name)()
+            Alias(Coalesce(Seq(l, r)), l.name)()
         }
         commonOutputExp ++
           lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput.map(_.withNullability(true))
