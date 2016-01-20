@@ -18,11 +18,14 @@
 package org.apache.spark.ml.source.libsvm
 
 import java.io.IOException
+
 import com.google.common.base.Objects
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
