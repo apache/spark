@@ -280,7 +280,7 @@ export("as.DataFrame",
        "read.text",
        "sql",
        "str",
-       "table",
+       "tableToDF",
        "tableNames",
        "tables",
        "uncacheTable")
