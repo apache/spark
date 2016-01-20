@@ -21,7 +21,7 @@ import java.io.{CharArrayWriter, IOException}
 
 import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.{Path, FileStatus}
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
