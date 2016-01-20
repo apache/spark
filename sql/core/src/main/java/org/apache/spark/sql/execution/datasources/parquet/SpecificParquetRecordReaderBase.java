@@ -84,7 +84,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
     Configuration configuration =
-      SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext);
+      SparkHadoopUtil.get().getConfigurationFromJobContext(taskAttemptContext);
     ParquetInputSplit split = (ParquetInputSplit)inputSplit;
     this.file = split.getPath();
     long[] rowGroupOffsets = split.getRowGroupOffsets();
