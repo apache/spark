@@ -153,6 +153,10 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.Logging.org$apache$spark$streaming$flume$sink$Logging$$_log_="),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.TransactionProcessor.org$apache$spark$streaming$flume$sink$Logging$$log_"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.TransactionProcessor.org$apache$spark$streaming$flume$sink$Logging$$log__=")
+      ) ++ Seq(
+        // SPARK-12469 Add consistent accumulators to Spark
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$deserialized_="),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$value__=")
       )
     case v if v.startsWith("1.6") =>
       Seq(
