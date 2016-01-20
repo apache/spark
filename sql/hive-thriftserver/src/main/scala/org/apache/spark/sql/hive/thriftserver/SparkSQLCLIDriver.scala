@@ -369,7 +369,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (counter != 0) {
             responseMsg += s", Fetched $counter row(s)"
           }
-          console.printInfo(responseMsg , null)
+          console.printInfo(responseMsg, null)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {

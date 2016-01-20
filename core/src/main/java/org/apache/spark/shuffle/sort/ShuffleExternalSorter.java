@@ -233,8 +233,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       // Note that we intentionally ignore the value of `writeMetricsToUse.shuffleWriteTime()`.
       // Consistent with ExternalSorter, we do not count this IO towards shuffle write time.
       // This means that this IO time is not accounted for anywhere; SPARK-3577 will fix this.
-      writeMetrics.incShuffleRecordsWritten(writeMetricsToUse.shuffleRecordsWritten());
-      taskContext.taskMetrics().incDiskBytesSpilled(writeMetricsToUse.shuffleBytesWritten());
+      writeMetrics.incRecordsWritten(writeMetricsToUse.recordsWritten());
+      taskContext.taskMetrics().incDiskBytesSpilled(writeMetricsToUse.bytesWritten());
     }
   }
 

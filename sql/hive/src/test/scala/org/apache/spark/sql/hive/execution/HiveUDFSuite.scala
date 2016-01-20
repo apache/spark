@@ -22,7 +22,7 @@ import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF, GenericUDFOPAnd, GenericUDTFExplode}
+import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
@@ -348,6 +348,17 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
 
     sqlContext.dropTempTable("testUDF")
+  }
+
+  test("Hive UDF in group by") {
+    withTempTable("tab1") {
+      Seq(Tuple1(1451400761)).toDF("test_date").registerTempTable("tab1")
+      sql(s"CREATE TEMPORARY FUNCTION testUDFToDate AS '${classOf[GenericUDFToDate].getName}'")
+      val count = sql("select testUDFToDate(cast(test_date as timestamp))" +
+        " from tab1 group by testUDFToDate(cast(test_date as timestamp))").count()
+      sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToDate")
+      assert(count == 1)
+    }
   }
 
   test("SPARK-11522 select input_file_name from non-parquet table"){
