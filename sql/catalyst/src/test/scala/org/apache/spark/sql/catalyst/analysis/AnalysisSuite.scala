@@ -85,12 +85,10 @@ class AnalysisSuite extends AnalysisTest {
     val plan1 = testRelation2
       .where('a > "str").select('a, 'b)
       .where('b > "str").select('a)
-      .limit(4)
       .sortBy('b.asc, 'c.desc)
     val expected1 = testRelation2
       .where(a > "str").select(a, b, c)
       .where(b > "str").select(a, b, c)
-      .limit(4)
       .sortBy(b.asc, c.desc)
       .select(a, b).select(a)
     checkAnalysis(plan1, expected1)
@@ -112,80 +110,53 @@ class AnalysisSuite extends AnalysisTest {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
-
-    val f = testRelation3.output(1)
     val h = testRelation3.output(3)
 
-    // Case 1: join itself can resolve all the missing attributes
-    val plan1 = testRelation2.join(testRelation3)
+    // Case: join itself can resolve all the missing attributes
+    val plan = testRelation2.join(testRelation3)
       .where('a > "str").select('a, 'b)
       .sortBy('c.desc, 'h.asc)
-    val expected1 = testRelation2.join(testRelation3)
+    val expected = testRelation2.join(testRelation3)
       .where(a > "str").select(a, b, c, h)
       .sortBy(c.desc, h.asc)
       .select(a, b)
-    checkAnalysis(plan1, expected1)
-
-    // Case 2: join itself can resolve partial missing attributes
-    // and the remaining ones are resolvable in its left tree
-    val plan2 = testRelation2.select('a, 'b).join(testRelation3)
-      .where('a > "str").select('a, 'b)
-      .sortBy('c.desc, 'h.asc)
-    val expected2 = testRelation2.select(a, b, c).join(testRelation3)
-      .where(a > "str").select(a, b, h, c)
-      .sortBy(c.desc, h.asc)
-      .select(a, b, h).select(a, b)
-    checkAnalysis(plan2, expected2)
-
-    // Case 3: both trees are needed to resolve all the missing attribute
-    val plan3 = testRelation2.select('a, 'b).join(testRelation3.select('f))
-      .where('a > "str").select('a, 'b)
-      .sortBy('c.desc, 'h.asc)
-    val expected3 = testRelation2.select(a, b, c).join(testRelation3.select(f, h))
-      .where(a > "str").select(a, b, c, h)
-      .sortBy(c.desc, h.asc)
-      .select(a, b, c).select(a, b)
-    checkAnalysis(plan3, expected3)
-
-    // Case 4: right tree does not resolve any missing attribute
-    val plan4 = testRelation2.select('a, 'b).join(testRelation3.select('f))
-      .where('a > "str").select('a, 'b)
-      .sortBy('h.asc)
-    val expected4 = testRelation2.select(a, b).join(testRelation3.select(f, h))
-      .where(a > "str").select(a, b, h)
-      .sortBy(h.asc)
-      .select(a, b)
-    checkAnalysis(plan4, expected4)
-
-    // Case 5: left tree does not resolve any missing attribute
-    val plan5 = testRelation2.select('a, 'b).join(testRelation3.select('f))
-      .where('a > "str").select('a, 'b)
-      .sortBy('c.desc)
-    val expected5 = testRelation2.select(a, b, c).join(testRelation3.select(f))
-      .where(a > "str").select(a, b, c)
-      .sortBy(c.desc)
-      .select(a, b)
-    checkAnalysis(plan5, expected5)
+    checkAnalysis(plan, expected)
   }
 
   test("resolve sort references - aggregate") {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
-    val alias3 = count(a).as("a3")
+    val alias_a3 = count(a).as("a3")
+    val alias_b = b.as("aggOrder")
 
-    val plan = testRelation2
+    // Case 1: when the child of Sort is not Aggregate,
+    //   the sort reference is handled by the rule ResolveSortReferences
+    val plan1 = testRelation2
       .groupBy('a, 'c, 'b)('a, 'c, count('a).as("a3"))
       .select('a, 'c, 'a3)
       .orderBy('b.asc)
 
-    val expected = testRelation2
-      .groupBy(a, c, b)(a, c, alias3, b)
-      .select(a, c, alias3.toAttribute, b)
+    val expected1 = testRelation2
+      .groupBy(a, c, b)(a, c, alias_a3, b)
+      .select(a, c, alias_a3.toAttribute, b)
       .orderBy(b.asc)
-      .select(a, c, alias3.toAttribute)
+      .select(a, c, alias_a3.toAttribute)
 
-    checkAnalysis(plan, expected)
+    checkAnalysis(plan1, expected1)
+
+    // Case 2: when the child of Sort is Aggregate,
+    //   the sort reference is handled by the rule ResolveAggregateFunctions
+    val plan2 = testRelation2
+      .groupBy('a, 'c, 'b)('a, 'c, count('a).as("a3"))
+      .orderBy('b.asc)
+
+    val expected2 = testRelation2
+      .groupBy(a, c, b)(a, c, alias_a3, alias_b)
+      .orderBy(alias_b.toAttribute.asc)
+      .select(a, c, alias_a3.toAttribute)
+
+    checkAnalysis(plan2, expected2)
   }
 
   test("resolve relations") {
