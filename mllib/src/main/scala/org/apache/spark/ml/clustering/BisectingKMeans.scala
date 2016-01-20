@@ -18,16 +18,16 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.param.{IntParam, ParamMap, Params, Param}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.clustering.
   {BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
 
 
 /**
