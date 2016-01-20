@@ -300,9 +300,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val code =
       s"""
         $bufferHolder.reset();
-        $subexprReset
+        ${subexprReset.trim}
         ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
-
         $result.pointTo($bufferHolder.buffer, $bufferHolder.totalSize());
       """
     ExprCode(code, "false", result)

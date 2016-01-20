@@ -106,6 +106,8 @@ class GroupedData protected[sql](
           UnresolvedFunction("avg", inputExpr :: Nil, isDistinct = false)
         case "stddev" | "std" =>
           UnresolvedFunction("stddev", inputExpr :: Nil, isDistinct = false)
+        case "stddev1" | "std" =>
+          UnresolvedFunction("stddev1", inputExpr :: Nil, isDistinct = false)
         // Also special handle count because we need to take care count(*).
         case "count" | "size" =>
           // Turn count(*) into count(1)

@@ -21,9 +21,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
+import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 
@@ -35,7 +36,7 @@ case class TungstenAggregate(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryNode with CodegenSupport {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -110,6 +111,191 @@ case class TungstenAggregate(
         }
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    groupingExpressions.isEmpty &&
+      // final aggregation only have one row, do not need to codegen
+      !aggregateExpressions.exists(e => e.mode == Final || e.mode == Complete)
+  }
+
+  // For declarative functions
+  private val declFunctions = aggregateExpressions.map(_.aggregateFunction)
+    .filter(_.isInstanceOf[DeclarativeAggregate])
+    .map(_.asInstanceOf[DeclarativeAggregate])
+  private var declBufVars: Seq[ExprCode] = _
+
+  // For imperative functions
+  private val impFunctions = AggregationIterator.initializeAggregateFunctions(
+    aggregateExpressions.filter(_.aggregateFunction.isInstanceOf[ImperativeAggregate]),
+    child.output,
+    0
+  ).map(_.asInstanceOf[ImperativeAggregate])
+  private var impBuffTerm: String = _
+  private var impFunctionTerms: Array[String] = _
+
+  private val modes = aggregateExpressions.map(_.mode).distinct
+
+  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+    // generate buffer variables for declarative aggregation functions
+    val declInitExpr = declFunctions.flatMap(f => f.initialValues)
+    declBufVars = declInitExpr.map { e =>
+      val isNull = ctx.freshName("bufIsNull")
+      ctx.addMutableState("boolean", isNull, "")
+      val value = ctx.freshName("bufValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
+      // The initial expression should not access any column
+      val ev = e.gen(ctx)
+      val code = if (e.nullable) {
+        s"""
+           | $isNull = ${ev.isNull};
+           | if (!${ev.isNull}) {
+           |   $value = ${ev.value};
+           | }
+         """.stripMargin
+      } else {
+        s"$value = ${ev.value};"
+      }
+      ExprCode(ev.code + code, isNull, value)
+    }
+
+    // generate aggregation buffer for imperative functions
+    val impInitCode = if (impFunctions.nonEmpty) {
+
+      // create aggregation buffer
+      val aggBuffer = new SpecificMutableRow(
+        impFunctions.flatMap(_.aggBufferAttributes).map(_.dataType))
+      val buffIndex = ctx.references.length
+      ctx.references += aggBuffer
+      impBuffTerm = ctx.freshName("impBuff")
+      ctx.addMutableState("MutableRow", impBuffTerm,
+        s"this.$impBuffTerm = (MutableRow) references[$buffIndex];")
+
+      // create varialbles for imperative functions
+      val funcName = classOf[ImperativeAggregate].getName
+      impFunctionTerms = impFunctions.map { f =>
+        val idx = ctx.references.length
+        ctx.references += f
+        val funcTerm = ctx.freshName("aggFunc")
+        ctx.addMutableState(funcName, funcTerm, s"this.$funcTerm = ($funcName) references[$idx];")
+        funcTerm
+      }
+
+      // call initialize() of imperative functions
+      impFunctionTerms.map { f =>
+        s"$f.initialize($impBuffTerm);"
+      }.mkString("\n")
+    } else {
+      ""
+    }
+
+    // create variables for result (aggregation buffer)
+    val modes = aggregateExpressions.map(_.mode).distinct
+    // Final aggregation only output one row, do not need codegen
+    assert(!modes.contains(Final) && !modes.contains(Complete))
+    assert(modes.contains(Partial) || modes.contains(PartialMerge))
+
+    // create variables for imperative functions
+    // TODO: the next operator should be Exchange, we could output the aggregation buffer
+    // directly without creating any variables, if there is no declarative function.
+    ctx.INPUT_ROW = impBuffTerm
+    ctx.currentVars = null
+    val impAttrs = impFunctions.flatMap(_.aggBufferAttributes)
+    val impBufVars = impAttrs.zipWithIndex.map { case (e, i) =>
+      BoundReference(i, e.dataType, e.nullable).gen(ctx)
+    }
+
+    val (rdd, childSource) = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+    val initAgg = ctx.freshName("initAgg")
+    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+    val source =
+      s"""
+         | if (!$initAgg) {
+         |   $initAgg = true;
+         |
+         |   // initialize declarative aggregation buffer
+         |   ${declBufVars.map(_.code).mkString("\n")}
+         |
+         |   // initialize imperative aggregate buffer
+         |   $impInitCode
+         |
+         |   $childSource
+         |
+         |   // output the result
+         |   ${impBufVars.map(_.code).mkString("\n")}
+         |   ${consume(ctx, declBufVars ++ impBufVars)}
+         | }
+       """.stripMargin
+
+    (rdd, source)
+  }
+
+  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+    // update expressions for declarative functions
+    val updateExpr = if (modes.contains(Partial)) {
+      declFunctions.flatMap(_.updateExpressions)
+    } else {
+      declFunctions.flatMap(_.mergeExpressions)
+    }
+
+    // evaluate update expression to update buffer variables
+    val declInputAttr = declFunctions.flatMap(_.aggBufferAttributes) ++ child.output
+    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, declInputAttr))
+    ctx.currentVars = declBufVars ++ input
+    // TODO: eliminate common sub-expression
+    val declUpdateCode = boundExpr.zipWithIndex.map { case (e, i) =>
+      val ev = e.gen(ctx)
+      if (e.nullable) {
+        s"""
+           | ${ev.code}
+           | ${declBufVars(i).isNull} = ${ev.isNull};
+           | if (!${ev.isNull}) {
+           |   ${declBufVars(i).value} = ${ev.value};
+           | }
+       """.stripMargin
+      } else {
+        s"""
+           | ${ev.code}
+           | ${declBufVars(i).isNull} = false;
+           | ${declBufVars(i).value} = ${ev.value};
+         """.stripMargin
+      }
+    }
+
+    val impUpdateCode = if (impFunctions.nonEmpty) {
+      // create a UnsafeRow as input for imperative functions
+      // TODO: only create the columns that are needed
+      val columns = child.output.zipWithIndex.map {
+        case (a, i) => new BoundReference(i, a.dataType, a.nullable)
+      }
+      ctx.currentVars = input
+      val rowCode = GenerateUnsafeProjection.createCode(ctx, columns)
+
+      // call agg functions
+      // all aggregation expression should have the same mode
+      val updates = if (modes.contains(Partial)) {
+        impFunctionTerms.map { f => s"$f.update($impBuffTerm, ${rowCode.value});" }
+      } else {
+        impFunctionTerms.map { f => s"$f.merge($impBuffTerm, ${rowCode.value});" }
+      }
+      s"""
+         | // create an UnsafeRow for imperative functions
+         | ${rowCode.code}
+         | // call update()/merge() on imperative functions
+         | ${updates.mkString("\n")}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    s"""
+       | // declarative aggregation
+       | ${declUpdateCode.mkString("\n")}
+       |
+       | // imperative aggregation
+       | $impUpdateCode
+     """.stripMargin
   }
 
   override def simpleString: String = {

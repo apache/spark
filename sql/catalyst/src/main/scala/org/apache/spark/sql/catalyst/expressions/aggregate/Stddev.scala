@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types._
 
 case class StddevSamp(child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -78,4 +80,117 @@ case class StddevPop(
       math.sqrt(moments(2) / n)
     }
   }
+}
+
+// Compute standard deviation based on online algorithm specified here:
+// http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
+
+  def isSample: Boolean
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = resultType
+
+  // Expected input data type.
+  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression) to the
+  // new version at planning time (after analysis phase). For now, NullType is added at here
+  // to make it resolved when we have cases like `select stddev(null)`.
+  // We can use our analyzer to cast NullType to the default data type of the NumericType once
+  // we remove the old aggregate functions. Then, we will not need NullType at here.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, NullType))
+
+  private val resultType = DoubleType
+
+  private val count = AttributeReference("count", resultType, false)()
+  private val avg = AttributeReference("avg", resultType, false)()
+  private val mk = AttributeReference("mk", resultType, false)()
+
+  override val aggBufferAttributes = count :: avg :: mk :: Nil
+
+  override val initialValues: Seq[Expression] = Seq(
+    /* count = */ Literal(0.0),
+    /* avg = */ Literal(0.0),
+    /* mk = */ Literal(0.0)
+  )
+
+  override val updateExpressions: Seq[Expression] = {
+    val newCount = count + Literal(1.0)
+
+    // update average
+    // avg = avg + (value - avg)/count
+    val newAvg = avg + (child - avg) / newCount
+
+    // update sum ofference from mean
+    // Mk = Mk + (value - preAvg) * (value - updatedAvg)
+    val newMk = mk + (child - avg) * (child - newAvg)
+
+    if (child.nullable) {
+      Seq(
+        /* count = */ If(IsNull(child), count, newCount),
+        /* avg = */ If(IsNull(child), avg, newAvg),
+        /* mk = */ If(IsNull(child), mk, newMk)
+      )
+    } else {
+      Seq(
+        /* count = */ newCount,
+        /* avg = */ newAvg,
+        /* mk = */ newMk
+      )
+    }
+  }
+
+  override val mergeExpressions: Seq[Expression] = {
+
+    // count merge
+    val newCount = count.left + count.right
+
+    // average merge
+    val newAvg = ((avg.left * count.left) + (avg.right * count.right)) / newCount
+
+    // update sum of square differences
+    val newMk = {
+      val avgDelta = avg.right - avg.left
+      val mkDelta = (avgDelta * avgDelta) * (count.left * count.right) / newCount
+      mk.left + mk.right + mkDelta
+    }
+
+    Seq(
+      /* count = */ newCount,
+      /* avg = */ newAvg,
+      /* mk = */ newMk
+    )
+  }
+
+  override val evaluateExpression: Expression = {
+    // when count == 0, return null
+    // when count == 1, return 0
+    // when count >1
+    // stddev_samp = sqrt (mk/(count -1))
+    // stddev_pop = sqrt (mk/count)
+    val varCol =
+      if (isSample) {
+        mk / (count - Literal(1.0))
+      } else {
+        mk / count
+      }
+
+    If(EqualTo(count, Literal(0.0)), Literal.create(null, resultType),
+      If(EqualTo(count, Literal(1.0)), Literal(0.0),
+        Sqrt(varCol)))
+  }
+}
+
+// Compute the population standard deviation of a column
+case class StddevPop1(child: Expression) extends StddevAgg(child) {
+  override def isSample: Boolean = false
+  override def prettyName: String = "stddev_pop"
+}
+
+// Compute the sample standard deviation of a column
+case class StddevSamp1(child: Expression) extends StddevAgg(child) {
+  override def isSample: Boolean = true
+  override def prettyName: String = "stddev_samp"
 }

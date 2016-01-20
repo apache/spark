@@ -40,10 +40,14 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
-    val projectionCodes = expressions.zipWithIndex.map {
-      case (NoOp, _) => ""
-      case (e, i) =>
-        val evaluationCode = e.gen(ctx)
+    val (validExpr, index) = expressions.zipWithIndex.filter {
+      case (NoOp, _) => false
+      case _ => true
+    }.unzip
+    val exprVals = ctx.generateExpressions(validExpr, true)
+    val projectionCodes = exprVals.zip(index).map {
+      case (ev, i) =>
+        val e = expressions(i)
         if (e.nullable) {
           val isNull = s"isNull_$i"
           val value = s"value_$i"
@@ -51,22 +55,25 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           ctx.addMutableState(ctx.javaType(e.dataType), value,
             s"this.$value = ${ctx.defaultValue(e.dataType)};")
           s"""
-            ${evaluationCode.code}
-            this.$isNull = ${evaluationCode.isNull};
-            this.$value = ${evaluationCode.value};
+            ${ev.code}
+            this.$isNull = ${ev.isNull};
+            this.$value = ${ev.value};
            """
         } else {
           val value = s"value_$i"
           ctx.addMutableState(ctx.javaType(e.dataType), value,
             s"this.$value = ${ctx.defaultValue(e.dataType)};")
           s"""
-            ${evaluationCode.code}
-            this.$value = ${evaluationCode.value};
+            ${ev.code}
+            this.$value = ${ev.value};
            """
         }
     }
-    val updates = expressions.zipWithIndex.map {
-      case (NoOp, _) => ""
+
+    // Reset the subexpression values for each row.
+    val subexprReset = ctx.subExprResetVariables.mkString("\n")
+
+    val updates = validExpr.zip(index).map {
       case (e, i) =>
         if (e.nullable) {
           if (e.dataType.isInstanceOf[DecimalType]) {
@@ -128,6 +135,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+          $subexprReset
           $allProjections
           // copy all the results into MutableRow
           $allUpdates

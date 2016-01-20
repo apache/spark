@@ -27,12 +27,13 @@ import org.apache.spark.util.Benchmark
   *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
-  def testWholeStage(values: Int): Unit = {
-    val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
-    val sc = SparkContext.getOrCreate(conf)
-    val sqlContext = SQLContext.getOrCreate(sc)
+  lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
+  lazy val sc = SparkContext.getOrCreate(conf)
+  lazy val sqlContext = SQLContext.getOrCreate(sc)
 
-    val benchmark = new Benchmark("Single Int Column Scan", values)
+  def testRangeFilterAndAggregation(values: Int): Unit = {
+
+    val benchmark = new Benchmark("range/filter/aggregation", values)
 
     benchmark.addCase("Without whole stage codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
@@ -46,15 +47,64 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /*
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      Single Int Column Scan:      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-      -------------------------------------------------------------------------
-      Without whole stage codegen       6725.52            31.18         1.00 X
-      With whole stage codegen          2233.05            93.91         3.01 X
+      Single Int Column Scan:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      Without whole stage codegen             6585.36            31.85         1.00 X
+      With whole stage codegen                 343.80           609.99        19.15 X
     */
     benchmark.run()
   }
 
-  ignore("benchmark") {
-    testWholeStage(1024 * 1024 * 200)
+  def testImperitaveAggregation(values: Int): Unit = {
+
+    val benchmark = new Benchmark("aggregation", values)
+
+    benchmark.addCase("ImpAgg w/o whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("DeclAgg w/o whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev1").collect()
+    }
+
+    benchmark.addCase("ImpAgg w whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("DeclAgg w whole stage codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev1").collect()
+    }
+
+    /*
+      Before optimizing CentralMomentAgg and generated mutable projection:
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      aggregation:                       Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      ImpAgg w/o whole stage codegen          9047.35            11.59         1.00 X
+      DeclAgg w/o whole stage codegen         6507.27            16.11         1.39 X
+      ImpAgg w whole stage codegen            6947.30            15.09         1.30 X
+      DeclAgg w whole stage codegen           1376.74            76.16         6.57 X
+
+      After optimization:
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      aggregation:                       Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      ImpAgg w/o whole stage codegen          6159.03            17.03         1.00 X
+      DeclAgg w/o whole stage codegen         5248.69            19.98         1.17 X
+      ImpAgg w whole stage codegen            4202.30            24.95         1.47 X
+      DeclAgg w whole stage codegen           1367.34            76.69         4.50 X
+    */
+    benchmark.run()
+  }
+
+  test("benchmark") {
+    testRangeFilterAndAggregation(1024 * 1024 * 200)
+    testImperitaveAggregation(1024 * 1024 * 100)
   }
 }

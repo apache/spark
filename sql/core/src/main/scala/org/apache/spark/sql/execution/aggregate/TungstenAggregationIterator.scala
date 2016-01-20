@@ -250,7 +250,8 @@ class TungstenAggregationIterator(
         agg.copy(mode = Final)
       case other => other
     }
-    val newFunctions = initializeAggregateFunctions(newExpressions, 0)
+    val newFunctions = AggregationIterator.initializeAggregateFunctions(
+      newExpressions, originalInputAttributes, 0)
     val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
     sortBasedProcessRow = generateProcessRow(newExpressions, newFunctions, newInputAttributes)
 

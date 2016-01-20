@@ -23,6 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -190,7 +191,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
      """
     // try to compile, helpful for debug
     // println(s"${CodeFormatter.format(source)}")
-    CodeGenerator.compile(source)
+    // CodeGenerator.compile(source)
 
     rdd.mapPartitions { iter =>
       val clazz = CodeGenerator.compile(source)
@@ -264,12 +265,17 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
   */
 private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Rule[SparkPlan] {
 
+  private def supportCodegen(e: Expression): Boolean = e match {
+    case e: LeafExpression => true
+    case e: ImperativeAggregate => true
+    case e: CodegenFallback => false
+    case e => true
+  }
+
+
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
-      // Non-leaf with CodegenFallback does not work with whole stage codegen
-      val willFallback = plan.expressions.exists(
-        _.find(e => e.isInstanceOf[CodegenFallback] && !e.isInstanceOf[LeafExpression]).isDefined
-      )
+      val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
       val haveManyColumns = plan.output.length > 200
       !willFallback && !haveManyColumns
