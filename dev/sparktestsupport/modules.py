@@ -222,6 +222,18 @@ streaming_flume_sink = Module(
 )
 
 
+streaming_akka = Module(
+    name="streaming-akka",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/akka",
+    ],
+    sbt_test_goals=[
+        "streaming-akka/test",
+    ]
+)
+
+
 streaming_flume = Module(
     name="streaming-flume",
     dependencies=[streaming],

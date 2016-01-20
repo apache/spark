@@ -659,11 +659,11 @@ methods for creating DStreams from files and Akka actors as input sources.
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
 - **Streams based on Custom Actors:** DStreams can be created with data streams received through Akka
-  actors by using `streamingContext.actorStream(actorProps, actor-name)`. See the [Custom Receiver
+  actors by using `AkkaUtils.createStream(ssc, actorProps, actor-name)`. See the [Custom Receiver
   Guide](streaming-custom-receivers.html) for more details.
 
   <span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala
-  libraries, `actorStream` is not available in the Python API.
+  libraries, `AkkaUtils.createStream` is not available in the Python API.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
