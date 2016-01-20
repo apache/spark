@@ -29,8 +29,18 @@ import org.apache.spark.mllib.linalg.Vector
 @DeveloperApi
 trait Optimizer extends Serializable {
 
+  case class OptimizerResult(weights: Vector,
+                             history: Array[Double],
+                             iter: Int) {
+  }
+
   /**
    * Solve the provided convex optimization problem.
    */
-  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): (Vector, Double, Integer)
+  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector
+
+  /**
+   * Solves the provided convex optimization problem and returns the solution and some statistics.
+   */
+  def optimizeWithStats(data: RDD[(Double, Vector)], initialWeights: Vector): OptimizerResult
 }

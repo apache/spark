@@ -88,7 +88,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
     val dataRDD = sc.parallelize(data, 2).cache()
     val initialWeightsWithIntercept = Vectors.dense(initialWeights.toArray :+ 1.0)
 
-    val (_, loss, _) = GradientDescent.runMiniBatchSGD(
+    val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       updater,
@@ -121,11 +121,11 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
     val initialWeightsWithIntercept = Vectors.dense(1.0, 0.5)
 
     val regParam0 = 0
-    val (newWeights0, loss0, _) = GradientDescent.runMiniBatchSGD(
+    val (newWeights0, loss0) = GradientDescent.runMiniBatchSGD(
       dataRDD, gradient, updater, 1, 1, regParam0, 1.0, initialWeightsWithIntercept)
 
     val regParam1 = 1
-    val (newWeights1, loss1, _) = GradientDescent.runMiniBatchSGD(
+    val (newWeights1, loss1) = GradientDescent.runMiniBatchSGD(
       dataRDD, gradient, updater, 1, 1, regParam1, 1.0, initialWeightsWithIntercept)
 
     assert(
@@ -165,7 +165,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
     val dataRDD = sc.parallelize(data, 2).cache()
     val initialWeightsWithIntercept = Vectors.dense(initialWeights.toArray :+ 1.0)
 
-    val (_, loss, _) = GradientDescent.runMiniBatchSGD(
+    val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       updater,
@@ -176,7 +176,16 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
       initialWeightsWithIntercept,
       convergenceTolerance)
 
+    val gradientDescent = new GradientDescent(gradient, updater)
+      .setStepSize(stepSize)
+      .setConvergenceTol(convergenceTolerance)
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      val optimizerResult = gradientDescent.optimizeWithStats(dataRDD, initialWeightsWithIntercept)
+
     assert(loss.length < numIterations, "convergenceTolerance failed to stop optimization early")
+    assert(optimizerResult.history.length < numIterations, 
+                                        "convergenceTolerance failed to stop optimization early")
   }
 }
 
@@ -191,7 +200,7 @@ class GradientDescentClusterSuite extends SparkFunSuite with LocalClusterSparkCo
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val (weights, loss, _) = GradientDescent.runMiniBatchSGD(
+    val (weights, loss) = GradientDescent.runMiniBatchSGD(
       points,
       new LogisticGradient,
       new SquaredL2Updater,

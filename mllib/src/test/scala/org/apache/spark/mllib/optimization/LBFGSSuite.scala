@@ -76,7 +76,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val stepSize = 1.0
     // Well, GD converges slower, so it requires more iterations!
     val numGDIterations = 50
-    val (_, lossGD, _) = GradientDescent.runMiniBatchSGD(
+    val (_, lossGD) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       simpleUpdater,
@@ -114,7 +114,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
 
     val numGDIterations = 50
     val stepSize = 1.0
-    val (weightGD, lossGD, _) = GradientDescent.runMiniBatchSGD(
+    val (weightGD, lossGD) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -210,11 +210,12 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       .setNumIterations(numIterations)
       .setRegParam(regParam)
 
-    val (weightLBFGS, _, _) = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
+    val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
+    val weightLBFGSWithStats = lbfgsOptimizer.optimizeWithStats(dataRDD, initialWeightsWithIntercept)
 
     val numGDIterations = 50
     val stepSize = 1.0
-    val (weightGD, _, _) = GradientDescent.runMiniBatchSGD(
+    val (weightGD, _) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -228,6 +229,10 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     // for class LBFGS and the optimize method, we only look at the weights
     assert(
       (weightLBFGS(0) ~= weightGD(0) relTol 0.02) && (weightLBFGS(1) ~= weightGD(1) relTol 0.02),
+      "The weight differences between LBFGS and GD should be within 2%.")
+    assert(
+      (weightLBFGSWithStats.weights(0) ~= weightGD(0) relTol 0.02) && 
+         (weightLBFGSWithStats.weights(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
   }
 }
@@ -249,6 +254,6 @@ class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val random = new Random(0)
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val (weights, _, _) = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
+    val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
   }
 }

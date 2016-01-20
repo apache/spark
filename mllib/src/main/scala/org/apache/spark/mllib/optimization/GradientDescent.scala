@@ -122,8 +122,8 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    * @return solution vector
    */
   @DeveloperApi
-  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): (Vector, Double, Integer) = {
-    val (weights, lossHistory, iter) = GradientDescent.runMiniBatchSGD(
+  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
+    val (weights, lossHistory) = GradientDescent.runMiniBatchSGD(
       data,
       gradient,
       updater,
@@ -133,9 +133,30 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
       miniBatchFraction,
       initialWeights,
       convergenceTol)
-    (weights, lossHistory.last, iter)
+    weights
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Runs gradient descent on the given training data.
+   * @param data training data
+   * @param initialWeights initial weights
+   * @return solution vector
+   */
+  @DeveloperApi
+  def optimizeWithStats(data: RDD[(Double, Vector)], initialWeights: Vector): OptimizerResult = {
+    val (weights, lossHistory) = GradientDescent.runMiniBatchSGD(
+      data,
+      gradient,
+      updater,
+      stepSize,
+      numIterations,
+      regParam,
+      miniBatchFraction,
+      initialWeights,
+      convergenceTol)
+    OptimizerResult(weights, lossHistory, lossHistory.length)
+  }
 }
 
 /**
@@ -178,7 +199,7 @@ object GradientDescent extends Logging {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeights: Vector,
-      convergenceTol: Double): (Vector, Array[Double], Integer) = {
+      convergenceTol: Double): (Vector, Array[Double]) = {
 
     // convergenceTol should be set with non minibatch settings
     if (miniBatchFraction < 1.0 && convergenceTol > 0.0) {
@@ -197,7 +218,7 @@ object GradientDescent extends Logging {
     // if no data, return initial weights to avoid NaNs
     if (numExamples == 0) {
       logWarning("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
-      return (initialWeights, stochasticLossHistory.toArray, 0)
+      return (initialWeights, stochasticLossHistory.toArray)
     }
 
     if (numExamples * miniBatchFraction < 1) {
@@ -260,7 +281,7 @@ object GradientDescent extends Logging {
     logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
-    (weights, stochasticLossHistory.toArray, i)
+    (weights, stochasticLossHistory.toArray)
 
   }
 
@@ -275,7 +296,7 @@ object GradientDescent extends Logging {
       numIterations: Int,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): (Vector, Array[Double], Integer) =
+      initialWeights: Vector): (Vector, Array[Double]) =
     GradientDescent.runMiniBatchSGD(data, gradient, updater, stepSize, numIterations,
                                     regParam, miniBatchFraction, initialWeights, 0.001)
 
