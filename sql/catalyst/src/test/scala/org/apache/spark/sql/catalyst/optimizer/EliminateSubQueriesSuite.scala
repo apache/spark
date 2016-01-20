@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -33,34 +34,35 @@ class EliminateSubQueriesSuite extends PlanTest with PredicateHelper {
     val batches = Batch("EliminateSubQueries", Once, EliminateSubQueries) :: Nil
   }
 
-  protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
+  private def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation).analyze
     val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation).analyze)
     comparePlans(actual, correctAnswer)
   }
 
+  private def afterOptimization(plan: LogicalPlan): LogicalPlan = {
+    Optimize.execute(analysis.SimpleAnalyzer.execute(plan))
+  }
+
   test("eliminate top level subquery") {
     val input = LocalRelation('a.int, 'b.int)
     val query = Subquery("a", input)
-    val optimized = Optimize.execute(query.analyze)
-    comparePlans(optimized, input)
+    comparePlans(afterOptimization(query), input)
   }
 
   test("eliminate mid-tree subquery") {
     val input = LocalRelation('a.int, 'b.int)
     val query = Filter(TrueLiteral, Subquery("a", input))
-    val optimized = Optimize.execute(query.analyze)
     comparePlans(
-      optimized,
+      afterOptimization(query),
       Filter(TrueLiteral, LocalRelation('a.int, 'b.int)))
   }
 
   test("eliminate multiple subqueries") {
     val input = LocalRelation('a.int, 'b.int)
-    val query = Filter(TrueLiteral, Subquery("b", Subquery("a", input)))
-    val optimized = Optimize.execute(query.analyze)
+    val query = Filter(TrueLiteral, Subquery("c", Subquery("b", Subquery("a", input))))
     comparePlans(
-      optimized,
+      afterOptimization(query),
       Filter(TrueLiteral, LocalRelation('a.int, 'b.int)))
   }
 
