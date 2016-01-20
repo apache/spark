@@ -41,6 +41,10 @@ import org.apache.spark.util.Utils
  * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
  *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
  *                 thread safe so that they can be reported correctly.
+ * @param countFailedValues whether to accumulate values from failed tasks. This is set to true
+ *                          for system and time metrics like serialization time or bytes spilled,
+ *                          and false for things with absolute values like number of input rows.
+ *                          This should be used for internal metrics only.
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
@@ -48,7 +52,8 @@ class Accumulable[R, T] private[spark] (
     initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    internal: Boolean)
+    internal: Boolean,
+    val countFailedValues: Boolean = false)
   extends Serializable {
 
   private[spark] def this(

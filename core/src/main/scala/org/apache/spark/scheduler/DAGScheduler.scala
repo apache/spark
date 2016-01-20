@@ -1094,11 +1094,10 @@ class DAGScheduler(
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get
-            val value = s"${acc.value}"
-            stage.latestInfo.accumulables(id) =
-              new AccumulableInfo(id, name, None, value, acc.isInternal)
-            event.taskInfo.accumulables +=
-              new AccumulableInfo(id, name, Some(s"$partialValue"), value, acc.isInternal)
+            stage.latestInfo.accumulables(id) = new AccumulableInfo(
+              id, name, None, Some(acc.value), acc.isInternal, acc.countFailedValues)
+            event.taskInfo.accumulables += new AccumulableInfo(
+              id, name, Some(partialValue), Some(acc.value), acc.isInternal, acc.countFailedValues)
           }
         }
       } catch {

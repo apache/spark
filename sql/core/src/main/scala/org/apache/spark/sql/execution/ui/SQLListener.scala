@@ -329,7 +329,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.stageId,
       taskEnd.stageAttemptId,
       taskEnd.taskInfo.accumulables.map { acc =>
-        (acc.id, new LongSQLMetricValue(acc.update.getOrElse("0").toLong))
+        (acc.id, new LongSQLMetricValue(acc.update.map(_.toString.toLong).getOrElse(0L)))
       }.toMap,
       finishTask = true)
   }

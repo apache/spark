@@ -284,11 +284,44 @@ private[spark] object JsonProtocol {
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
+    val name = accumulableInfo.name
     ("ID" -> accumulableInfo.id) ~
-    ("Name" -> accumulableInfo.name) ~
-    ("Update" -> accumulableInfo.update.map(new JString(_)).getOrElse(JNothing)) ~
-    ("Value" -> accumulableInfo.value) ~
-    ("Internal" -> accumulableInfo.internal)
+    ("Name" -> name) ~
+    ("Update" -> accumulableInfo.update.map { v => accumValueToJson(name, v) }) ~
+    ("Value" -> accumulableInfo.value.map { v => accumValueToJson(name, v) }) ~
+    ("Internal" -> accumulableInfo.internal) ~
+    ("Count Failed Values" -> accumulableInfo.countFailedValues)
+  }
+
+  /**
+   * Serialize the value of an accumulator to JSON.
+   *
+   * For accmulators representing internal task metrics, this looks up the relevant
+   * [[AccumulatorParam]] to serialize the value accordingly. For all other accumulators,
+   * this will simply serialize the value as a string.
+   *
+   * The behavior here must match that of [[accumValueFromJson]]. TODO: add some tests.
+   */
+  private def accumValueToJson(name: String, value: Any): JValue = {
+    import AccumulatorParam._
+    if (name != null && name.startsWith(InternalAccumulator.METRICS_PREFIX)) {
+      (value, InternalAccumulator.getParam(name)) match {
+        case (v: Int, IntAccumulatorParam) => JInt(v)
+        case (v: Long, LongAccumulatorParam) => JInt(v)
+        case (v: String, StringAccumulatorParam) => JString(v)
+        case (v, UpdatedBlockStatusesAccumulatorParam) =>
+          JArray(v.asInstanceOf[Seq[(BlockId, BlockStatus)]].toList.map { case (id, status) =>
+            ("Block ID" -> id.toString) ~
+            ("Status" -> blockStatusToJson(status))
+          })
+        case (v, p) =>
+          throw new IllegalArgumentException(s"unexpected combination of accumulator value " +
+            s"type (${v.getClass.getName}) and param (${p.getClass.getName}) in '$name'")
+      }
+    } else {
+      // For all external accumulators, just use strings
+      JString(value.toString)
+    }
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -646,7 +679,7 @@ private[spark] object JsonProtocol {
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
     val accumulatedValues = (json \ "Accumulables").extractOpt[List[JValue]] match {
-      case Some(values) => values.map(accumulableInfoFromJson(_))
+      case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
     }
 
@@ -674,7 +707,7 @@ private[spark] object JsonProtocol {
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
     val accumulables = (json \ "Accumulables").extractOpt[Seq[JValue]] match {
-      case Some(values) => values.map(accumulableInfoFromJson(_))
+      case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
     }
 
@@ -690,10 +723,42 @@ private[spark] object JsonProtocol {
   def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
     val id = (json \ "ID").extract[Long]
     val name = (json \ "Name").extract[String]
-    val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
-    val value = (json \ "Value").extract[String]
+    val update = Utils.jsonOption(json \ "Update").map { v => accumValueFromJson(name, v) }
+    val value = Utils.jsonOption(json \ "Value").map { v => accumValueFromJson(name, v) }
     val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
-    AccumulableInfo(id, name, update, value, internal)
+    val countFailedValues = (json \ "Count Failed Values").extractOpt[Boolean].getOrElse(false)
+    new AccumulableInfo(id, name, update, value, internal, countFailedValues)
+  }
+
+  /**
+   * Deserialize the value of an accumulator from JSON.
+   *
+   * For accmulators representing internal task metrics, this looks up the relevant
+   * [[AccumulatorParam]] to deserialize the value accordingly. For all other
+   * accumulators, this will simply deserialize the value as a string.
+   *
+   * The behavior here must match that of [[accumValueToJson]].
+   */
+  private def accumValueFromJson(name: String, value: JValue): Any = {
+    import AccumulatorParam._
+    if (name != null && name.startsWith(InternalAccumulator.METRICS_PREFIX)) {
+      (value, InternalAccumulator.getParam(name)) match {
+        case (JInt(v), IntAccumulatorParam) => v.toInt
+        case (JInt(v), LongAccumulatorParam) => v.toLong
+        case (JString(v), StringAccumulatorParam) => v
+        case (JArray(v), UpdatedBlockStatusesAccumulatorParam) =>
+          v.map { blockJson =>
+            val id = BlockId((blockJson \ "Block ID").extract[String])
+            val status = blockStatusFromJson(blockJson \ "Status")
+            (id, status)
+          }
+        case (v, p) =>
+          throw new IllegalArgumentException(s"unexpected combination of accumulator " +
+            s"value in JSON ($v) and accumulator param (${p.getClass.getName}) in '$name'")
+       }
+     } else {
+       value.extract[String]
+     }
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {

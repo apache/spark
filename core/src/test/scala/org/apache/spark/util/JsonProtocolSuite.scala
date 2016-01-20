@@ -269,14 +269,13 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
-  test("ShuffleReadMetrics: Local bytes read and time taken backwards compatibility") {
-    // Metrics about local shuffle bytes read and local read time were added in 1.3.1.
+  test("ShuffleReadMetrics: Local bytes read backwards compatibility") {
+    // Metrics about local shuffle bytes read were added in 1.3.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     assert(metrics.shuffleReadMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Local Bytes Read" }
-      .removeField { case (field, _) => field == "Local Read Time" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
   }
@@ -367,27 +366,38 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("AccumulableInfo backward compatibility") {
-    // "Internal" property of AccumulableInfo were added after 1.5.1.
-    val accumulableInfo = makeAccumulableInfo(1)
+    // "Internal" property of AccumulableInfo was added in 1.5.1
+    val accumulableInfo = makeAccumulableInfo(1, internal = true, countFailedValues = true)
     val oldJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
       .removeField({ _._1 == "Internal" })
     val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
-    assert(false === oldInfo.internal)
+    assert(!oldInfo.internal)
+    // "Count Failed Values" property of AccumulableInfo was added in 2.0.0
+    val oldJson2 = JsonProtocol.accumulableInfoToJson(accumulableInfo)
+      .removeField({ _._1 == "Count Failed Values" })
+    val oldInfo2 = JsonProtocol.accumulableInfoFromJson(oldJson2)
+    assert(!oldInfo2.countFailedValues)
   }
 }
 
-
-// This extends SparkFunSuite only because we want its `assert` method.
+// These helper methods are moved into an object so other test suites can reuse them.
+// This extends SparkFunSuite only because we want to use scalatest asserts.
 private[spark] object JsonProtocolSuite extends SparkFunSuite {
-  private val jobSubmissionTime = 1421191042750L
-  private val jobCompletionTime = 1421191296660L
-  private val executorAddedTime = 1421458410000L
-  private val executorRemovedTime = 1421458922000L
 
-  private def testEvent(event: SparkListenerEvent, expectedJsonString: String) {
+  val jobSubmissionTime = 1421191042750L
+  val jobCompletionTime = 1421191296660L
+
+  val executorAddedTime = 1421458410000L
+  val executorRemovedTime = 1421458922000L
+
+  /** -------------------------- *
+   | Helper test running methods |
+    * --------------------------- */
+
+  private def testEvent(event: SparkListenerEvent, jsonString: String) {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
     val newEvent = JsonProtocol.sparkEventFromJson(parse(actualJsonString))
-    assertJsonStringEquals(expectedJsonString, actualJsonString, event.getClass.getSimpleName)
+    assertJsonStringEquals(jsonString, actualJsonString, event.getClass.getSimpleName)
     assertEquals(event, newEvent)
   }
 
@@ -443,7 +453,7 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
 
   /** -------------------------------- *
    | Util methods for comparing events |
-   * --------------------------------- */
+    * --------------------------------- */
 
   private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
     (event1, event2) match {
@@ -705,7 +715,7 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
 
   /** ----------------------------------- *
    | Util methods for constructing events |
-   * ------------------------------------ */
+    * ------------------------------------ */
 
   private val properties = {
     val p = new Properties
@@ -752,8 +762,12 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
     taskInfo
   }
 
-  private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
-    AccumulableInfo(id, "Accumulable" + id, Some("delta" + id), "val" + id, internal)
+  private def makeAccumulableInfo(
+      id: Int,
+      internal: Boolean = false,
+      countFailedValues: Boolean = false): AccumulableInfo =
+    new AccumulableInfo(id, s"Accumulable$id", Some(s"delta$id"), Some(s"val$id"),
+      internal, countFailedValues)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -831,14 +845,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -886,14 +902,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -924,21 +942,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -967,21 +988,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -1016,21 +1040,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -1048,7 +1075,7 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
       |      "Local Bytes Read": 1100,
-      |      "Total Records Read" : 10
+      |      "Total Records Read": 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
@@ -1102,21 +1129,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -1185,21 +1215,24 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -1278,14 +1311,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1336,14 +1371,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1410,14 +1447,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1500,14 +1539,16 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
       |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    }

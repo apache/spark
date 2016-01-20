@@ -338,9 +338,12 @@ class DAGSchedulerSuite
   }
 
   test("equals and hashCode AccumulableInfo") {
-    val accInfo1 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, true)
-    val accInfo2 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, false)
-    val accInfo3 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, false)
+    val accInfo1 = new AccumulableInfo(
+      1, "Accumulable1", Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
+    val accInfo2 = new AccumulableInfo(
+      1, "Accumulable1", Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
+    val accInfo3 = new AccumulableInfo(
+      1, "Accumulable1", Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     assert(accInfo1 !== accInfo2)
     assert(accInfo2 === accInfo3)
     assert(accInfo2.hashCode() === accInfo3.hashCode())

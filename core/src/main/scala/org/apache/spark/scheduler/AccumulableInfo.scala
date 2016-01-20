@@ -22,14 +22,22 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
+ *
+ * @param id accumulator ID
+ * @param name accumulator name
+ * @param update partial value from a task, may be None if used on driver to describe a stage
+ * @param value total accumulated value so far, maybe None if used on executors to describe a task
+ * @param internal whether this accumulator was internal
+ * @param countFailedValues whether to count this accumulator's partial value if the task failed
  */
 @DeveloperApi
 class AccumulableInfo private[spark] (
     val id: Long,
     val name: String,
-    val update: Option[String], // represents a partial update within a task
-    val value: String,
-    val internal: Boolean) {
+    val update: Option[Any], // represents a partial update within a task
+    val value: Option[Any],
+    val internal: Boolean,
+    val countFailedValues: Boolean) {
 
   override def equals(other: Any): Boolean = other match {
     case acc: AccumulableInfo =>
@@ -46,20 +54,24 @@ class AccumulableInfo private[spark] (
 }
 
 object AccumulableInfo {
+
+  @deprecated("do not instantiate AccumulableInfo", "2.0.0")
   def apply(
       id: Long,
       name: String,
       update: Option[String],
       value: String,
       internal: Boolean): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, internal)
+    new AccumulableInfo(id, name, update, Some(value), internal, countFailedValues = false)
   }
 
+  @deprecated("do not instantiate AccumulableInfo", "2.0.0")
   def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, internal = false)
+    new AccumulableInfo(id, name, update, Some(value), internal = false, countFailedValues = false)
   }
 
+  @deprecated("do not instantiate AccumulableInfo", "2.0.0")
   def apply(id: Long, name: String, value: String): AccumulableInfo = {
-    new AccumulableInfo(id, name, None, value, internal = false)
+    new AccumulableInfo(id, name, None, Some(value), internal = false, countFailedValues = false)
   }
 }
