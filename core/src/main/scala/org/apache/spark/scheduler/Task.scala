@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
@@ -54,23 +54,16 @@ private[spark] abstract class Task[T](
     val initialAccumulators: Seq[Accumulator[_]]) extends Serializable {
 
   /**
-   * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
-   * local value.
-   */
-  type AccumulatorUpdates = Map[Long, Any]
-
-  /**
-   * Called by [[Executor]] to run this task.
+   * Called by [[org.apache.spark.executor.Executor]] to run this task.
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task along with updates of Accumulators.
    */
   final def run(
-    taskAttemptId: Long,
-    attemptNumber: Int,
-    metricsSystem: MetricsSystem)
-  : (T, AccumulatorUpdates) = {
+      taskAttemptId: Long,
+      attemptNumber: Int,
+      metricsSystem: MetricsSystem): T = {
     context = new TaskContextImpl(
       stageId,
       partitionId,
@@ -85,7 +78,7 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
     try {
-      (runTask(context), context.taskMetrics.accumulatorUpdates())
+      runTask(context)
     } finally {
       context.markTaskCompleted()
       try {
@@ -141,6 +134,18 @@ private[spark] abstract class Task[T](
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
   def executorDeserializeTime: Long = _executorDeserializeTime
+
+  /**
+   * Collect the latest values of accumulators used in this task. If the task failed,
+   * filter out the accumulators whose values should not be included on failures.
+   */
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
+    if (context != null) {
+      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+    } else {
+      Seq.empty[AccumulableInfo]
+    }
+  }
 
   /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark

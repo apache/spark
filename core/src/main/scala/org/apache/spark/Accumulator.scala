@@ -17,7 +17,10 @@
 
 package org.apache.spark
 
-import scala.collection.{mutable, Map}
+import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
+
+import scala.collection.mutable
 import scala.ref.WeakReference
 
 import org.apache.spark.storage.{BlockId, BlockStatus}
@@ -51,14 +54,18 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `T`
+ * @param name human-readable name associated with this accumulator
+ * @param internal whether this accumulator is used internally within Spark only
+ * @param countFailedValues whether to accumulate values from failed tasks
  * @tparam T result type
  */
 class Accumulator[T] private[spark] (
     @transient private[spark] val initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String],
-    internal: Boolean)
-  extends Accumulable[T, T](initialValue, param, name, internal) {
+    internal: Boolean,
+    override val countFailedValues: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(initialValue, param, name, false)
@@ -77,39 +84,54 @@ private[spark] object Accumulators extends Logging {
    * This global map holds the original accumulator objects that are created on the driver.
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
+   * TODO: Don't use a global map; these should be tied to a SparkContext at the very least.
    */
+  @GuardedBy("Accumulators")
   val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
-  private var lastId: Long = 0
+  private val nextId = new AtomicLong(0L)
 
-  def newId(): Long = synchronized {
-    lastId += 1
-    lastId
-  }
+  /**
+   * Return a globally unique ID for a new [[Accumulable]].
+   * Note: Once you copy the [[Accumulable]] the ID is no longer unique.
+   */
+  def newId(): Long = nextId.getAndIncrement
 
+  /**
+   * Register an [[Accumulable]] created on the driver such that it can be used on the executors.
+   *
+   * All accumulators registered here can later be used as a container for accumulating partial
+   * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
+   * Note: if an accumulator is registered here, it should also be registered with the active
+   * context cleaner for cleanup so as to avoid memory leaks.
+   *
+   * If an [[Accumulable]] with the same ID was already registered, do nothing instead of
+   * overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
+   * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
+   */
   def register(a: Accumulable[_, _]): Unit = synchronized {
-    originals(a.id) = new WeakReference[Accumulable[_, _]](a)
-  }
-
-  def remove(accId: Long) {
-    synchronized {
-      originals.remove(accId)
+    if (!originals.contains(a.id)) {
+      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
     }
   }
 
-  // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        // Since we are now storing weak references, we must check whether the underlying data
-        // is valid.
-        originals(id).get match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
-          case None =>
-            throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
-        }
-      } else {
-        logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
+  /**
+   * Unregister the [[Accumulable]] with the given ID, if any.
+   */
+  def remove(accId: Long): Unit = synchronized {
+    originals.remove(accId)
+  }
+
+  /**
+   * Return the [[Accumulable]] registered with the given ID, if any.
+   */
+  def get(id: Long): Option[Accumulable[_, _]] = synchronized {
+    originals.get(id).map { weakRef =>
+      // Since we are storing weak references, we must check whether the underlying data is valid.
+      weakRef.get match {
+        case Some(accum) => accum
+        case None =>
+          throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
       }
     }
   }

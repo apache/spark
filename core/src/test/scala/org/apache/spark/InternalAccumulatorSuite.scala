@@ -97,6 +97,12 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     assert(shuffleWriteAccums.forall(_.isInternal))
     assert(inputAccums.forall(_.isInternal))
     assert(outputAccums.forall(_.isInternal))
+    // assert they all count on failures
+    assert(accums.forall(_.countFailedValues))
+    assert(shuffleReadAccums.forall(_.countFailedValues))
+    assert(shuffleWriteAccums.forall(_.countFailedValues))
+    assert(inputAccums.forall(_.countFailedValues))
+    assert(outputAccums.forall(_.countFailedValues))
     // assert they all have names
     assert(accums.forall(_.name.isDefined))
     assert(shuffleReadAccums.forall(_.name.isDefined))
@@ -138,13 +144,9 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val taskContext = TaskContext.empty()
     val accumUpdates = taskContext.taskMetrics.accumulatorUpdates()
     assert(accumUpdates.size > 0)
+    assert(accumUpdates.forall(_.internal))
     val testAccum = taskContext.taskMetrics.getAccum(TEST_ACCUM)
-    assert(accumUpdates.keys.exists(_ == testAccum.id))
-    assert(accumUpdates(testAccum.id) === 0L)
-    testAccum += 200L
-    val accumUpdates2 = taskContext.taskMetrics.accumulatorUpdates()
-    assert(accumUpdates2.keys.exists(_ == testAccum.id))
-    assert(accumUpdates2(testAccum.id) === 200L)
+    assert(accumUpdates.exists(_.id == testAccum.id))
   }
 
   test("internal accumulators in a stage") {
@@ -165,19 +167,18 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(taskInfos.size === numPartitions)
       // The accumulator values should be merged in the stage
       val stageAccum = findTestAccum(stageInfos.head.accumulables.values)
-      assert(stageAccum.value.toLong === numPartitions)
+      assert(stageAccum.value.get.toString.toLong === numPartitions)
       // The accumulator should be updated locally on each task
       val taskAccumValues = taskInfos.map { taskInfo =>
         val taskAccum = findTestAccum(taskInfo.accumulables)
         assert(taskAccum.update.isDefined)
-        assert(taskAccum.update.get.toLong === 1L)
-        taskAccum.value.toLong
+        assert(taskAccum.update.get.toString.toLong === 1L)
+        taskAccum.value.get.toString.toLong
       }
       // Each task should keep track of the partial value on the way, i.e. 1, 2, ... numPartitions
       assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
     }
     rdd.count()
-    listener.maybeThrowException()
   }
 
   test("internal accumulators in multiple stages") {
@@ -190,19 +191,19 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
-        iter
-      }
+      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
+      iter
+    }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
-        iter
-      }
+      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
+      iter
+    }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
-        iter
-      }
+      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
+      iter
+    }
     // Register asserts in job completion callback to avoid flakiness
     listener.registerJobCompletionCallback { _ =>
     // We ran 3 stages, and the accumulator values should be distinct
@@ -212,12 +213,11 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
         (findTestAccum(stageInfos(0).accumulables.values),
           findTestAccum(stageInfos(1).accumulables.values),
           findTestAccum(stageInfos(2).accumulables.values))
-      assert(firstStageAccum.value.toLong === numPartitions)
-      assert(secondStageAccum.value.toLong === numPartitions * 10)
-      assert(thirdStageAccum.value.toLong === numPartitions * 2 * 100)
+      assert(firstStageAccum.value.get.toString.toLong === numPartitions)
+      assert(secondStageAccum.value.get.toString.toLong === numPartitions * 10)
+      assert(thirdStageAccum.value.get.toString.toLong === numPartitions * 2 * 100)
     }
     rdd.count()
-    listener.maybeThrowException()
   }
 
   test("internal accumulators in fully resubmitted stages") {
@@ -268,7 +268,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     sc.addSparkListener(listener)
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitionsWithIndex { case (i, iter) =>
       val taskContext = TaskContext.get()
-      taskContext.taskMetrics.getAccum(TEST_ACCUM) += 1
+      taskContext.taskMetrics().getAccum(TEST_ACCUM) += 1
       // Fail the first attempts of a subset of the tasks
       if (failCondition(i) && taskContext.attemptNumber() == 0) {
         throw new Exception("Failing a task intentionally.")
@@ -282,15 +282,24 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(stageInfos.size === 1)
       assert(taskInfos.size === numPartitions + numFailedPartitions)
       val stageAccum = findTestAccum(stageInfos.head.accumulables.values)
-      // We should not double count values in the merged accumulator
-      assert(stageAccum.value.toLong === numPartitions)
+      // If all partitions failed, then we would resubmit the whole stage again and create a
+      // fresh set of internal accumulators. Otherwise, these internal accumulators do count
+      // failed values, so we must include the failed values.
+      val expectedAccumValue =
+        if (numPartitions == numFailedPartitions) {
+          numPartitions
+        } else {
+          numPartitions + numFailedPartitions
+        }
+      assert(stageAccum.value.get.toString.toLong === expectedAccumValue)
       val taskAccumValues = taskInfos.flatMap { taskInfo =>
         if (!taskInfo.failed) {
           // If a task succeeded, its update value should always be 1
           val taskAccum = findTestAccum(taskInfo.accumulables)
           assert(taskAccum.update.isDefined)
-          assert(taskAccum.update.get.toLong === 1L)
-          Some(taskAccum.value.toLong)
+          assert(taskAccum.update.get.toString.toLong === 1L)
+          assert(taskAccum.value.isDefined)
+          Some(taskAccum.value.get.toString.toLong)
         } else {
           // If a task failed, we should not get its accumulator values
           assert(taskInfo.accumulables.isEmpty)
