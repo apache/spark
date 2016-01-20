@@ -20,8 +20,11 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
+import org.apache.spark.sql.catalyst.plans.logical.DummyObjectOperator
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
 
@@ -32,14 +35,21 @@ case class StringIntClass(a: String, b: Int)
 case class ComplexClass(a: Long, b: StringLongClass)
 
 class EncoderResolutionSuite extends PlanTest {
+  private def resolveFromRowExpression(
+      encoder: ExpressionEncoder[_],
+      attributes: Seq[Attribute]): Expression = {
+    encoder.validate(attributes)
+    val fakePlan = DummyObjectOperator(encoder.fromRowExpression, attributes)
+    SimplifyCasts(SimpleAnalyzer.execute(fakePlan)).expressions.head
+  }
+
   test("real type doesn't match encoder schema but they are compatible: product") {
     val encoder = ExpressionEncoder[StringLongClass]
     val cls = classOf[StringLongClass]
 
-
     {
       val attrs = Seq('a.string, 'b.int)
-      val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
+      val fromRowExpr = resolveFromRowExpression(encoder, attrs)
       val expected: Expression = NewInstance(
         cls,
         Seq(
@@ -53,7 +63,7 @@ class EncoderResolutionSuite extends PlanTest {
 
     {
       val attrs = Seq('a.int, 'b.long)
-      val fromRowExpr = encoder.resolve(attrs, null).fromRowExpression
+      val fromRowExpr = resolveFromRowExpression(encoder, attrs)
       val expected = NewInstance(
         cls,
         Seq(
@@ -72,7 +82,7 @@ class EncoderResolutionSuite extends PlanTest {
     val cls = classOf[ComplexClass]
 
     val attrs = Seq('a.int, 'b.struct('a.int, 'b.long))
-    val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
+    val fromRowExpr = resolveFromRowExpression(encoder, attrs)
     val expected: Expression = NewInstance(
       cls,
       Seq(
@@ -103,7 +113,7 @@ class EncoderResolutionSuite extends PlanTest {
     val cls = classOf[StringLongClass]
 
     val attrs = Seq('a.struct('a.string, 'b.byte), 'b.int)
-    val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
+    val fromRowExpr = resolveFromRowExpression(encoder, attrs)
     val expected: Expression = NewInstance(
       classOf[Tuple2[_, _]],
       Seq(
@@ -127,7 +137,7 @@ class EncoderResolutionSuite extends PlanTest {
 
     {
       val attrs = Seq('a.string, 'b.long, 'c.int)
-      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+      assert(intercept[AnalysisException](resolveFromRowExpression(encoder, attrs)).message ==
         "Try to map struct<a:string,b:bigint,c:int> to Tuple2, " +
           "but failed as the number of fields does not line up.\n" +
           " - Input schema: struct<a:string,b:bigint,c:int>\n" +
@@ -136,7 +146,7 @@ class EncoderResolutionSuite extends PlanTest {
 
     {
       val attrs = Seq('a.string)
-      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+      assert(intercept[AnalysisException](resolveFromRowExpression(encoder, attrs)).message ==
         "Try to map struct<a:string> to Tuple2, " +
           "but failed as the number of fields does not line up.\n" +
           " - Input schema: struct<a:string>\n" +
@@ -149,7 +159,7 @@ class EncoderResolutionSuite extends PlanTest {
 
     {
       val attrs = Seq('a.string, 'b.struct('x.long, 'y.string, 'z.int))
-      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+      assert(intercept[AnalysisException](resolveFromRowExpression(encoder, attrs)).message ==
         "Try to map struct<x:bigint,y:string,z:int> to Tuple2, " +
           "but failed as the number of fields does not line up.\n" +
           " - Input schema: struct<a:string,b:struct<x:bigint,y:string,z:int>>\n" +
@@ -158,7 +168,7 @@ class EncoderResolutionSuite extends PlanTest {
 
     {
       val attrs = Seq('a.string, 'b.struct('x.long))
-      assert(intercept[AnalysisException](encoder.resolve(attrs, null)).message ==
+      assert(intercept[AnalysisException](resolveFromRowExpression(encoder, attrs)).message ==
         "Try to map struct<x:bigint> to Tuple2, " +
           "but failed as the number of fields does not line up.\n" +
           " - Input schema: struct<a:string,b:struct<x:bigint>>\n" +
@@ -172,7 +182,7 @@ class EncoderResolutionSuite extends PlanTest {
 
   test("throw exception if real type is not compatible with encoder schema") {
     val msg1 = intercept[AnalysisException] {
-      ExpressionEncoder[StringIntClass].resolve(Seq('a.string, 'b.long), null)
+      resolveFromRowExpression(ExpressionEncoder[StringIntClass], Seq('a.string, 'b.long))
     }.message
     assert(msg1 ==
       s"""
@@ -185,7 +195,7 @@ class EncoderResolutionSuite extends PlanTest {
 
     val msg2 = intercept[AnalysisException] {
       val structType = new StructType().add("a", StringType).add("b", DecimalType.SYSTEM_DEFAULT)
-      ExpressionEncoder[ComplexClass].resolve(Seq('a.long, 'b.struct(structType)), null)
+      resolveFromRowExpression(ExpressionEncoder[ComplexClass], Seq('a.long, 'b.struct(structType)))
     }.message
     assert(msg2 ==
       s"""
@@ -218,7 +228,7 @@ class EncoderResolutionSuite extends PlanTest {
     val to = ExpressionEncoder[U]
     val catalystType = from.schema.head.dataType.simpleString
     test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should success") {
-      to.resolve(from.schema.toAttributes, null)
+      resolveFromRowExpression(to, from.schema.toAttributes)
     }
   }
 
@@ -227,7 +237,7 @@ class EncoderResolutionSuite extends PlanTest {
     val to = ExpressionEncoder[U]
     val catalystType = from.schema.head.dataType.simpleString
     test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should fail") {
-      intercept[AnalysisException](to.resolve(from.schema.toAttributes, null))
+      intercept[AnalysisException](resolveFromRowExpression(to, from.schema.toAttributes))
     }
   }
 }

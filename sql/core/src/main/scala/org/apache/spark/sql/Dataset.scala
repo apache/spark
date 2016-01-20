@@ -23,9 +23,11 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
@@ -73,6 +75,7 @@ class Dataset[T] private[sql](
    * same object type (that will be possibly resolved to a different schema).
    */
   private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(tEncoder)
+  unresolvedTEncoder.validate(logicalPlan.output)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
@@ -84,10 +87,21 @@ class Dataset[T] private[sql](
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
-  private implicit def classTag = resolvedTEncoder.clsTag
+  private implicit def classTag = unresolvedTEncoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
+
+  private val boundDeserializer: Expression = {
+    val fakePlan = DummyObjectOperator(unresolvedTEncoder.fromRowExpression, logicalPlan.output)
+    val resolved = new QueryExecution(sqlContext, fakePlan).analyzed.expressions.head
+    BindReferences.bindReference(resolved, logicalPlan.output)
+  }
+
+  @transient lazy val fromRow: InternalRow => T = {
+    val objectProjection = GenerateSafeProjection.generate(boundDeserializer :: Nil)
+    row => objectProjection(row).get(0, boundDeserializer.dataType).asInstanceOf[T]
+  }
 
   /**
    * Returns the schema of the encoded form of the objects in this [[Dataset]].
@@ -164,9 +178,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def rdd: RDD[T] = {
-    queryExecution.toRdd.mapPartitions { iter =>
-      iter.map(boundTEncoder.fromRow)
-    }
+    queryExecution.toRdd.mapPartitions(_.map(fromRow))
   }
 
   /**
@@ -696,7 +708,7 @@ class Dataset[T] private[sql](
   def collect(): Array[T] = {
     // This is different from Dataset.rdd in that it collects Rows, and then runs the encoders
     // to convert the rows into objects of type T.
-    queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
+    queryExecution.toRdd.map(_.copy()).collect().map(fromRow)
   }
 
   /**

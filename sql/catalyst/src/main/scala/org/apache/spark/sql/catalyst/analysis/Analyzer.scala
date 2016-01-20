@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -442,23 +443,30 @@ class Analyzer(
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on grandchild
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
-        val newOrdering = resolveSortOrders(ordering, child, throws = false)
+        val newOrdering = ordering.map(order =>
+          resolveExpression(order, child, throws = false).asInstanceOf[SortOrder])
         Sort(newOrdering, global, child)
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
       case g @ Generate(generator, join, outer, qualifier, output, child)
         if child.resolved && !generator.resolved =>
-        val newG = generator transformUp {
-          case u @ UnresolvedAttribute(nameParts) =>
-            withPosition(u) { child.resolve(nameParts, resolver).getOrElse(u) }
-          case UnresolvedExtractValue(child, fieldExpr) =>
-            ExtractValue(child, fieldExpr, resolver)
-        }
+        val newG = resolveExpression(generator, child)
         if (newG.fastEquals(generator)) {
           g
         } else {
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
+        }
+
+      case o: ObjectOperator if containsUnresolvedDeserializer(o.deserializers.map(_._1)) =>
+        val deserializerToAttributes = o.deserializers.map {
+          case (deserializer, attributes) => new TreeNodeRef(deserializer) -> attributes
+        }.toMap
+
+        o.transformExpressions {
+          case expr => deserializerToAttributes.get(new TreeNodeRef(expr)).map { attributes =>
+            resolveDeserializer(expr, attributes)
+          }.getOrElse(expr)
         }
 
       case q: LogicalPlan =>
@@ -473,6 +481,32 @@ class Analyzer(
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
         }
+    }
+
+    private def containsUnresolvedDeserializer(exprs: Seq[Expression]): Boolean = {
+      exprs.exists { expr =>
+        !expr.resolved || expr.find(_.isInstanceOf[BoundReference]).isDefined
+      }
+    }
+
+    private def resolveDeserializer(
+        deserializer: Expression,
+        attributes: Seq[Attribute]): Expression = {
+      val unbound = deserializer transform {
+        case b: BoundReference => attributes(b.ordinal)
+      }
+
+      resolveExpression(unbound, LocalRelation(attributes)) transform {
+        case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
+          val outer = OuterScopes.outerScopes.get(n.cls.getDeclaringClass.getName)
+          if (outer == null) {
+            throw new AnalysisException(
+              s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
+                "access to the scope that this class was defined in.\n" +
+                "Try moving this class out of its parent class.")
+          }
+          n.copy(outerPointer = Some(Literal.fromObject(outer)))
+      }
     }
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
@@ -493,23 +527,20 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
-  private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
-    ordering.map { order =>
-      // Resolve SortOrder in one round.
-      // If throws == false or the desired attribute doesn't exist
-      // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
-      // Else, throw exception.
-      try {
-        val newOrder = order transformUp {
-          case u @ UnresolvedAttribute(nameParts) =>
-            plan.resolve(nameParts, resolver).getOrElse(u)
-          case UnresolvedExtractValue(child, fieldName) if child.resolved =>
-            ExtractValue(child, fieldName, resolver)
-        }
-        newOrder.asInstanceOf[SortOrder]
-      } catch {
-        case a: AnalysisException if !throws => order
+  private def resolveExpression(expr: Expression, plan: LogicalPlan, throws: Boolean = true) = {
+    // Resolve expression in one round.
+    // If throws == false or the desired attribute doesn't exist
+    // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
+    // Else, throw exception.
+    try {
+      expr transformUp {
+        case u @ UnresolvedAttribute(nameParts) =>
+          withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
+        case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+          ExtractValue(child, fieldName, resolver)
       }
+    } catch {
+      case a: AnalysisException if !throws => expr
     }
   }
 
@@ -546,7 +577,8 @@ class Analyzer(
         ordering: Seq[SortOrder],
         child: LogicalPlan,
         grandchild: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      val newOrdering = resolveSortOrders(ordering, grandchild, throws = true)
+      val newOrdering =
+        ordering.map(order => resolveExpression(order, grandchild).asInstanceOf[SortOrder])
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
       val requiredAttributes = AttributeSet(newOrdering).filter(_.resolved)

@@ -19,17 +19,16 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
-import java.util.concurrent.ConcurrentMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import com.google.common.collect.MapMaker
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences}
+import org.apache.spark.sql.catalyst.plans.logical.DummyObjectOperator
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
@@ -78,7 +77,7 @@ class JavaSerializable(val value: Int) extends Serializable {
 }
 
 class ExpressionEncoderSuite extends SparkFunSuite {
-  OuterScopes.outerScopes.put(getClass.getName, this)
+  OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
@@ -293,7 +292,12 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.defaultBinding
+
+      val fakePlan = DummyObjectOperator(encoder.fromRowExpression, schema)
+      val resolved = SimpleAnalyzer.execute(fakePlan).expressions.head
+      val bound = BindReferences.bindReference(resolved, schema)
+      val boundEncoder = encoder.copy(fromRowExpression = bound)
+
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
