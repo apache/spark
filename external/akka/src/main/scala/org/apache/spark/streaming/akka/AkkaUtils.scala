@@ -52,7 +52,7 @@ object AkkaUtils {
       actorName: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       actorSystemCreator: () => ActorSystem = ActorReceiver.defaultActorSystemCreator,
-      supervisorStrategy: SupervisorStrategy = ActorReceiver.defaultStrategy
+      supervisorStrategy: SupervisorStrategy = ActorReceiver.defaultSupervisorStrategy
     ): ReceiverInputDStream[T] = ssc.withNamedScope("actor stream") {
     val cleanF = ssc.sc.clean(actorSystemCreator)
     ssc.receiverStream(new ActorReceiverSupervisor[T](

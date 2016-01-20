@@ -40,13 +40,23 @@ import org.apache.spark.streaming.receiver.Receiver
 @DeveloperApi
 object ActorReceiver {
 
-  val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
+  /**
+   * A OneForOneStrategy supervisor strategy with `maxNrOfRetries = 10` and
+   * `withinTimeRange = 15 millis`. For RuntimeException, it will restart the ActorReceiver; for
+   * others, it just escalates the failure to the supervisor of the supervisor.
+   */
+  val defaultSupervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
     15 millis) {
     case _: RuntimeException => Restart
     case _: Exception => Escalate
   }
 
-  def defaultActorSystemCreator(): ActorSystem = {
+  /**
+   * A default ActorSystem creator. It will use a unique system name
+   * (streaming-actor-system-<spark-task-attempt-id>) to start an ActorSystem that supports remote
+   * communication.
+   */
+  val defaultActorSystemCreator: () => ActorSystem = () => {
     val uniqueSystemName = s"streaming-actor-system-${TaskContext.get().taskAttemptId()}"
     val akkaConf = ConfigFactory.parseString(
       s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
