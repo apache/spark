@@ -279,7 +279,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.
    *
-   * Unlike transfor and transformDown, this function does transform all the matched nodes in one
+   * Unlike transform and transformDown, this function does transform all the matched nodes in one
    * shot.
    *
    * @param rule the function use to transform this nodes children
