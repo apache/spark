@@ -2437,4 +2437,3 @@ setMethod("drop",
           function(x) {
             base::drop(x)
           })
-
