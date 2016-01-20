@@ -89,9 +89,9 @@ case class Generate(
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def constraints: Seq[Expression] = {
+  override def constraints: Set[Expression] = {
     val newConstraint = splitConjunctivePredicates(condition).filter(
-      _.references.subsetOf(outputSet))
+      _.references.subsetOf(outputSet)).toSet
     newConstraint.union(extractConstraintsFromChild(child))
   }
 }
@@ -103,9 +103,9 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
       leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
     }
 
-  protected def leftConstraints: Seq[Expression] = extractConstraintsFromChild(left)
+  protected def leftConstraints: Set[Expression] = extractConstraintsFromChild(left)
 
-  protected def rightConstraints: Seq[Expression] = {
+  protected def rightConstraints: Set[Expression] = {
     require(left.output.size == right.output.size)
     val attributeRewrites = AttributeMap(left.output.zip(right.output))
     extractConstraintsFromChild(right).map(_ transform {
@@ -135,7 +135,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
     Statistics(sizeInBytes = sizeInBytes)
   }
 
-  override def constraints: Seq[Expression] = {
+  override def constraints: Set[Expression] = {
     leftConstraints.intersect(rightConstraints)
   }
 }
@@ -147,7 +147,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override def constraints: Seq[Expression] = {
+  override def constraints: Set[Expression] = {
     leftConstraints.union(rightConstraints)
   }
 }
@@ -156,7 +156,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
-  override def constraints: Seq[Expression] = leftConstraints
+  override def constraints: Set[Expression] = leftConstraints
 }
 
 case class Join(
@@ -180,7 +180,7 @@ case class Join(
     }
   }
 
-  override def constraints: Seq[Expression] = {
+  override def constraints: Set[Expression] = {
     joinType match {
       case LeftSemi =>
         extractConstraintsFromChild(left)

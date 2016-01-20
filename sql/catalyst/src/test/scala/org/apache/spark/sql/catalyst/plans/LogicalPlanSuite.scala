@@ -19,11 +19,10 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
  * This suite is used to test [[LogicalPlan]]'s `resolveOperators` and make sure it can correctly
@@ -75,27 +74,14 @@ class LogicalPlanSuite extends SparkFunSuite {
   }
 
   test("propagating constraint in filter") {
-
-    def resolve(plan: LogicalPlan, constraints: Seq[String]): Seq[Expression] = {
-      Seq(plan.resolve(constraints.map(_.toString), caseInsensitiveResolution).get)
-    }
-
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
+    def resolveColumn(columnName: String): Expression =
+      tr.analyze.resolveQuoted(columnName, caseInsensitiveResolution).get
     assert(tr.analyze.constraints.isEmpty)
     assert(tr.select('a.attr).analyze.constraints.isEmpty)
-    assert(tr.where('a.attr > 10).analyze.constraints.zip(Seq('a.attr > 10))
-      .forall(e => e._1.semanticEquals(e._2)))
-    /*
-        assert(tr.where('a.attr > 10).analyze.constraints == resolve(tr.where('a.attr > 10).analyze,
-          Seq("a > 10")))
-    */
-/*
-    assert(logicalPlan.constraints ==
-      Seq(logicalPlan.resolve(Seq('a > 10), caseInsensitiveResolution))
-    assert(tr.where('a.attr > 10).select('c.attr).analyze.constraints.get == ('a > 10))
-    assert(tr.where('a.attr > 10).select('c.attr, 'a.attr).where('c.attr < 100)
-      .analyze.constraints.get == And('a > 10, 'c < 100))
+    assert(tr.where('a.attr > 10).analyze.constraints == Set(resolveColumn("a") > 10))
     assert(tr.where('a.attr > 10).select('c.attr, 'b.attr).analyze.constraints.isEmpty)
-*/
+    assert(tr.where('a.attr > 10).select('c.attr, 'a.attr).where('c.attr < 100)
+      .analyze.constraints == Set(resolveColumn("a") > 10, resolveColumn("c") < 100))
   }
 }

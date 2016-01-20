@@ -30,16 +30,16 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
   /**
    * Extracts the output property from a given child.
    */
-  def extractConstraintsFromChild(child: QueryPlan[PlanType]): Seq[Expression] = {
+  def extractConstraintsFromChild(child: QueryPlan[PlanType]): Set[Expression] = {
     child.constraints.filter(_.references.subsetOf(outputSet))
   }
 
   /**
    * An sequence of expressions that describes the data property of the output rows of this
    * operator. For example, if the output of this operator is column `a`, an example `constraints`
-   * can be `Seq(a > 10, a < 20)`.
+   * can be `Set(a > 10, a < 20)`.
    */
-  def constraints: Seq[Expression] = Nil
+  def constraints: Set[Expression] = Set.empty
 
   /**
    * Returns the set of attributes that are output by this node.
