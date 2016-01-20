@@ -277,16 +277,14 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
     if (tempShuffleReadMetrics.nonEmpty) {
-      val merged = new ShuffleReadMetrics(initialAccumsMap)
-      for (depMetrics <- tempShuffleReadMetrics) {
-        merged.incFetchWaitTime(depMetrics.fetchWaitTime)
-        merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
-        merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
-        merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
-        merged.incLocalBytesRead(depMetrics.localBytesRead)
-        merged.incRecordsRead(depMetrics.recordsRead)
-      }
-      _shuffleReadMetrics = Some(merged)
+      val metrics = new ShuffleReadMetrics(initialAccumsMap)
+      metrics.setRemoteBlocksFetched(tempShuffleReadMetrics.map(_.remoteBlocksFetched).sum)
+      metrics.setLocalBlocksFetched(tempShuffleReadMetrics.map(_.localBlocksFetched).sum)
+      metrics.setFetchWaitTime(tempShuffleReadMetrics.map(_.fetchWaitTime).sum)
+      metrics.setRemoteBytesRead(tempShuffleReadMetrics.map(_.remoteBytesRead).sum)
+      metrics.setLocalBytesRead(tempShuffleReadMetrics.map(_.localBytesRead).sum)
+      metrics.setRecordsRead(tempShuffleReadMetrics.map(_.recordsRead).sum)
+      _shuffleReadMetrics = Some(metrics)
     }
   }
 
