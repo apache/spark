@@ -1,4 +1,5 @@
 @echo off
+pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -24,4 +25,5 @@ rem disable randomized hash for string in Python 3.3+
 set PYTHONHASHSEED=0
 
 set CLASS=org.apache.spark.deploy.SparkSubmit
-%~dp0spark-class2.cmd %CLASS% %*
+spark-class2.cmd %CLASS% %*
+popd

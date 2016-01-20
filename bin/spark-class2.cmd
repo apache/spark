@@ -1,4 +1,5 @@
 @echo off
+pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -18,9 +19,9 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=%~dp0..
+set SPARK_HOME=..\
 
-call %SPARK_HOME%\bin\load-spark-env.cmd
+call %SPARK_HOME%bin\load-spark-env.cmd
 
 rem Test that an argument was given
 if "x%1"=="x" (
@@ -34,7 +35,7 @@ set SPARK_ASSEMBLY_JAR=0
 if exist "%SPARK_HOME%\RELEASE" (
   set ASSEMBLY_DIR=%SPARK_HOME%\lib
 ) else (
-  set ASSEMBLY_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%
+  set ASSEMBLY_DIR=%SPARK_HOME\%assembly\target\scala-%SPARK_SCALA_VERSION%
 )
 
 for %%d in (%ASSEMBLY_DIR%\spark-assembly*hadoop*.jar) do (
@@ -68,3 +69,4 @@ for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
 )
 del %LAUNCHER_OUTPUT%
 %SPARK_CMD%
+popd

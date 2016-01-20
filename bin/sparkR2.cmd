@@ -1,4 +1,5 @@
 @echo off
+pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -18,9 +19,10 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=%~dp0..
+set SPARK_HOME=..\
 
 call %SPARK_HOME%\bin\load-spark-env.cmd
 
 
 call %SPARK_HOME%\bin\spark-submit2.cmd sparkr-shell-main %*
+popd

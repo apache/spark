@@ -1,4 +1,5 @@
 @echo off
+pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -18,7 +19,7 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=%~dp0..
+set SPARK_HOME=..\
 
 call %SPARK_HOME%\bin\load-spark-env.cmd
 set _SPARK_CMD_USAGE=Usage: bin\pyspark.cmd [options]
@@ -36,3 +37,4 @@ set OLD_PYTHONSTARTUP=%PYTHONSTARTUP%
 set PYTHONSTARTUP=%SPARK_HOME%\python\pyspark\shell.py
 
 call %SPARK_HOME%\bin\spark-submit2.cmd pyspark-shell-main --name "PySparkShell" %*
+popd

@@ -1,4 +1,5 @@
 @echo off
+pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -27,7 +28,7 @@ if [%SPARK_ENV_LOADED%] == [] (
   if not [%SPARK_CONF_DIR%] == [] (
     set user_conf_dir=%SPARK_CONF_DIR%
   ) else (
-    set user_conf_dir=%~dp0..\conf
+    set user_conf_dir=\conf
   )
 
   call :LoadSparkEnv
@@ -57,3 +58,4 @@ exit /b 0
 if exist "%user_conf_dir%\spark-env.cmd" (
   call "%user_conf_dir%\spark-env.cmd"
 )
+popd

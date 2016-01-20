@@ -1,4 +1,5 @@
 @echo off
+pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -20,4 +21,5 @@ rem
 rem This is the entry point for running a Spark class. To avoid polluting
 rem the environment, it just launches a new cmd to do the real work.
 
-cmd /V /E /C "%~dp0spark-class2.cmd" %*
+cmd /V /E /C spark-class2.cmd %*
+popd
