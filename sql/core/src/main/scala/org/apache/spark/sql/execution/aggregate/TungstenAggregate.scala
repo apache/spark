@@ -134,22 +134,14 @@ case class TungstenAggregate(
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     bufVars = initExpr.map { e =>
-      var isNull = ctx.freshName("bufIsNull")
+      val isNull = ctx.freshName("bufIsNull")
       val value = ctx.freshName("bufValue")
       // The initial expression should not access any column
       val ev = e.gen(ctx)
-      val initVars = if (e.nullable) {
-        s"""
-           | boolean $isNull = ${ev.isNull};
-           | ${ctx.javaType(e.dataType)} $value = ${ctx.defaultValue(e.dataType)};
-           | if (!${ev.isNull}) {
-           |   $value = ${ev.value};
-           | }
-         """.stripMargin
-      } else {
-        isNull = "false"
-        s"${ctx.javaType(e.dataType)} $value = ${ev.value};"
-      }
+      val initVars = s"""
+         | boolean $isNull = ${ev.isNull};
+         | ${ctx.javaType(e.dataType)} $value = ${ev.value};
+       """.stripMargin
       ExprCode(ev.code + initVars, isNull, value)
     }
 
@@ -188,20 +180,11 @@ case class TungstenAggregate(
     // TODO: support subexpression elimination
     val codes = boundExpr.zipWithIndex.map { case (e, i) =>
       val ev = e.gen(ctx)
-      if (e.nullable) {
-        s"""
-           | ${ev.code}
-           | ${bufVars(i).isNull} = ${ev.isNull};
-           | if (!${ev.isNull}) {
-           |   ${bufVars(i).value} = ${ev.value};
-           | }
+      s"""
+         | ${ev.code}
+         | ${bufVars(i).isNull} = ${ev.isNull};
+         | ${bufVars(i).value} = ${ev.value};
        """.stripMargin
-      } else {
-        s"""
-           | ${ev.code}
-           | ${bufVars(i).value} = ${ev.value};
-         """.stripMargin
-      }
     }
 
     s"""
