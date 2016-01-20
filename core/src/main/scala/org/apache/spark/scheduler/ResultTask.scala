@@ -49,7 +49,7 @@ private[spark] class ResultTask[T, U](
     partition: Partition,
     locs: Seq[TaskLocation],
     val outputId: Int,
-    _initialAccums: Seq[Accumulator[_]])
+    _initialAccums: Seq[Accumulator[_]] = InternalAccumulator.create())
   extends Task[U](stageId, stageAttemptId, partition.index, _initialAccums)
   with Serializable {
 
