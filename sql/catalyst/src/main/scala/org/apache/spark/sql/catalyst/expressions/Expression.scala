@@ -100,8 +100,8 @@ abstract class Expression extends TreeNode[Expression] {
       ExprCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
-      val primitive = ctx.freshName("primitive")
-      val ve = ExprCode("", isNull, primitive)
+      val value = ctx.freshName("value")
+      val ve = ExprCode("", isNull, value)
       ve.code = genCode(ctx, ve)
       // Add `this` in the comment.
       ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)

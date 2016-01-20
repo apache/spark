@@ -154,4 +154,17 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExpr(sum)
     assert(equivalence.getAllEquivalentExprs.isEmpty)
   }
+
+  test("Children of CodegenFallback") {
+    val one = Literal(1)
+    val two = Add(one, one)
+    val explode = Explode(two)
+    val add = Add(two, explode)
+
+    var equivalence = new EquivalentExpressions
+    equivalence.addExprTree(add, true)
+    // the `two` inside `explode` should not be added
+    assert(equivalence.getAllEquivalentExprs.filter(_.size > 1).size == 0)
+    assert(equivalence.getAllEquivalentExprs.filter(_.size == 1).size == 3)  // add, two, explode
+  }
 }

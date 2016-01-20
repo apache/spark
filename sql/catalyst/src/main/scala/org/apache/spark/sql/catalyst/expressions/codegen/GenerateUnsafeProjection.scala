@@ -294,13 +294,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
 
-    // Reset the subexpression values for each row.
-    val subexprReset = ctx.subExprResetVariables.mkString("\n")
+    // Evaluate all the subexpression.
+    val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val code =
       s"""
         $bufferHolder.reset();
-        $subexprReset
+        $evalSubexpr
         ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
 
         $result.pointTo($bufferHolder.buffer, $bufferHolder.totalSize());

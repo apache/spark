@@ -125,7 +125,7 @@ class CodegenContext {
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-exression result resetting methods that need to be called on each row.
-  val subExprResetVariables = mutable.ArrayBuffer.empty[String]
+  val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {
     addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
@@ -424,9 +424,9 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach(e => {
       val expr = e.head
-      val isNull = freshName("isNull")
-      val value = freshName("value")
       val fnName = freshName("evalExpr")
+      val isNull = s"${fnName}IsNull"
+      val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
       val code = expr.gen(this)
@@ -461,7 +461,7 @@ class CodegenContext {
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
-      subExprResetVariables += s"$fnName($INPUT_ROW);"
+      subexprFunctions += s"$fnName($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
     })
