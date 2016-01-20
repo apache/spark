@@ -42,7 +42,7 @@ abstract public class CountMinSketch {
   public abstract void writeTo(OutputStream out);
 
   public static CountMinSketch readFrom(InputStream in) {
-    return null;
+    throw new UnsupportedOperationException("Not implemented yet");
   }
 
   public static CountMinSketch create(int depth, int width, int seed) {

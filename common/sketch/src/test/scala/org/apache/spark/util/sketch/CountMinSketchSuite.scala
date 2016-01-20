@@ -29,7 +29,7 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
   private val seed = 42
 
-  def testAccuracy[T: ClassTag](typeName: String)(itemGenerator: Random => T) {
+  def testAccuracy[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
     test(s"accuracy - $typeName") {
       val r = new Random()
 
@@ -64,13 +64,49 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  testAccuracy[Byte]("Byte") { _.nextInt.toByte }
+  def testMerge[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
+    test(s"mergeInPlace - $typeName") {
+      val r = new Random()
+      val numToMerge = 5
+      val numItemsPerSketch = 100000
+      val perSketchItems = Array.fill(numToMerge, numItemsPerSketch) {
+        itemGenerator(r)
+      }
 
-  testAccuracy[Short]("Short") { _.nextInt.toShort }
+      val sketches = perSketchItems.map { items =>
+        val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
+        items.foreach(sketch.add)
+        sketch
+      }
 
-  testAccuracy[Int]("Int") { _.nextInt }
+      val mergedSketch = sketches.reduce(_ mergeInPlace _)
 
-  testAccuracy[Long]("Long") { _.nextLong() }
+      val expectedSketch = {
+        val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
+        perSketchItems.foreach(_.foreach(sketch.add))
+        sketch
+      }
 
-  testAccuracy[String]("String") { r => r.nextString(r.nextInt(20)) }
+      perSketchItems.foreach {
+        _.foreach { item =>
+          assert(mergedSketch.estimateCount(item) === expectedSketch.estimateCount(item))
+        }
+      }
+    }
+  }
+
+  def testItemType[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
+    testAccuracy[T](typeName)(itemGenerator)
+    testMerge[T](typeName)(itemGenerator)
+  }
+
+  testItemType[Byte]("Byte") { _.nextInt.toByte }
+
+  testItemType[Short]("Short") { _.nextInt.toShort }
+
+  testItemType[Int]("Int") { _.nextInt }
+
+  testItemType[Long]("Long") { _.nextLong() }
+
+  testItemType[String]("String") { r => r.nextString(r.nextInt(20)) }
 }
