@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.util.Utils
 
 /**
  * The Hive table scan operator.  Column and partition pruning are both handled.
@@ -133,11 +134,17 @@ case class HiveTableScan(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    // Using dummyCallSite, as getCallSite can turn out to be expensive with
+    // with multiple partitions.
     val rdd = if (!relation.hiveQlTable.isPartitioned) {
-      hadoopReader.makeRDDForTable(relation.hiveQlTable)
+      Utils.withDummyCallSite(sqlContext.sparkContext) {
+        hadoopReader.makeRDDForTable(relation.hiveQlTable)
+      }
     } else {
-      hadoopReader.makeRDDForPartitionedTable(
-        prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+      Utils.withDummyCallSite(sqlContext.sparkContext) {
+        hadoopReader.makeRDDForPartitionedTable(
+          prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+      }
     }
     rdd.mapPartitionsInternal { iter =>
       val proj = UnsafeProjection.create(schema)
