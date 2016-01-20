@@ -160,8 +160,7 @@ private[hive] class SparkHiveWriterContainer(
     serializer
   }
 
-  // this function is executed on executor side
-  def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
+  protected def executorSidePrepare() = {
     val serializer = newSerializer(fileSinkConf.getTableInfo)
     val standardOI = ObjectInspectorUtils
       .getStandardObjectInspector(
@@ -173,6 +172,12 @@ private[hive] class SparkHiveWriterContainer(
     val dataTypes = inputSchema.map(_.dataType)
     val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt) }
     val outputData = new Array[Any](fieldOIs.length)
+    (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData)
+  }
+
+  // this function is executed on executor side
+  def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
+    val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = executorSidePrepare()
     executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
     iterator.foreach { row =>
@@ -243,17 +248,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
   // this function is executed on executor side
   override def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
-    val serializer = newSerializer(fileSinkConf.getTableInfo)
-    val standardOI = ObjectInspectorUtils
-      .getStandardObjectInspector(
-        fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
-        ObjectInspectorCopyOption.JAVA)
-      .asInstanceOf[StructObjectInspector]
-
-    val fieldOIs = standardOI.getAllStructFieldRefs.asScala.map(_.getFieldObjectInspector).toArray
-    val dataTypes = inputSchema.map(_.dataType)
-    val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt) }
-    val outputData = new Array[Any](fieldOIs.length)
+    val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = executorSidePrepare()
     executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
     val partitionOutput = inputSchema.takeRight(dynamicPartColNames.length)
