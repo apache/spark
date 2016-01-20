@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.Utils
 
@@ -318,11 +319,14 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
     accums += a
   }
+
   /**
    * Return the latest updates of accumulators in this task.
    */
-  private[spark] def accumulatorUpdates(): Map[Long, Any] =
-    accums.map { a => (a.id, a.localValue) }.toMap[Long, Any]
+  def accumulatorUpdates(): Seq[AccumulableInfo] = accums.map { a =>
+    new AccumulableInfo(
+      a.id, a.name.orNull, Some(a.localValue), None, a.isInternal, a.countFailedValues)
+  }
 
 }
 

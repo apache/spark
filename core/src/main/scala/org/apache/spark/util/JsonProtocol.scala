@@ -265,7 +265,7 @@ private[spark] object JsonProtocol {
     ("Completion Time" -> completionTime) ~
     ("Failure Reason" -> failureReason) ~
     ("Accumulables" -> JArray(
-        stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
+      stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
@@ -384,12 +384,12 @@ private[spark] object JsonProtocol {
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
-        val metrics = exceptionFailure.metrics.map(taskMetricsToJson).getOrElse(JNothing)
+        val accumUpdates = JArray(exceptionFailure.accumUpdates.map(accumulableInfoToJson).toList)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
-        ("Metrics" -> metrics)
+        ("Accumulator Updates" -> accumUpdates)
       case taskCommitDenied: TaskCommitDenied =>
         ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
@@ -850,10 +850,13 @@ private[spark] object JsonProtocol {
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]
         val stackTrace = stackTraceFromJson(json \ "Stack Trace")
-        val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
-          map(_.extract[String]).orNull
-        val metrics = Utils.jsonOption(json \ "Metrics").map(taskMetricsFromJson)
-        ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics, None)
+        val fullStackTrace = (json \ "Full Stack Trace").extractOpt[String].orNull
+        // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
+        // TODO: add a test
+        val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
+          .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
+          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulatorUpdates())
+        ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
       case `taskCommitDenied` =>

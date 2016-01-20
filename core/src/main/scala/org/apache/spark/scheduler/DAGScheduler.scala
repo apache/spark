@@ -208,11 +208,10 @@ class DAGScheduler(
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any],
-      taskInfo: TaskInfo,
-      taskMetrics: TaskMetrics): Unit = {
+      accumUpdates: Seq[AccumulableInfo],
+      taskInfo: TaskInfo): Unit = {
     eventProcessLoop.post(
-      CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
+      CompletionEvent(task, reason, result, accumUpdates, taskInfo))
   }
 
   /**
@@ -1074,38 +1073,43 @@ class DAGScheduler(
     }
   }
 
-  /** Merge updates from a task to our local accumulator values */
+  /**
+   * Merge local values from a task into the corresponding accumulators previously registered
+   * here on the driver.
+   *
+   * Although accumulators themselves are not thread-safe, this method is called only from one
+   * thread, the one that runs the scheduling loop. This means we only handle one task
+   * completion event at a time so we don't need to worry about locking the accumulators.
+   * This still doesn't stop the caller from updating the accumulator outside the scheduler,
+   * but that's not our problem since there's nothing we can do about that.
+   */
   private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
     val stage = stageIdToStage(task.stageId)
-    if (event.accumUpdates != null) {
-      try {
-        Accumulators.add(event.accumUpdates)
-
-        event.accumUpdates.foreach { case (id, partialValue) =>
-          // In this instance, although the reference in Accumulators.originals is a WeakRef,
-          // it's guaranteed to exist since the event.accumUpdates Map exists
-
-          val acc = Accumulators.originals(id).get match {
-            case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
-            case None => throw new NullPointerException("Non-existent reference to Accumulator")
-          }
-
-          // To avoid UI cruft, ignore cases where value wasn't updated
-          if (acc.name.isDefined && partialValue != acc.zero) {
-            val name = acc.name.get
-            stage.latestInfo.accumulables(id) = new AccumulableInfo(
-              id, name, None, Some(acc.value), acc.isInternal, acc.countFailedValues)
-            event.taskInfo.accumulables += new AccumulableInfo(
-              id, name, Some(partialValue), Some(acc.value), acc.isInternal, acc.countFailedValues)
-          }
+    try {
+      event.accumUpdates.foreach { ainfo =>
+        assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
+        val id = ainfo.id
+        val partialValue = ainfo.update.get
+        // Find the corresponding accumulator on the driver and update it
+        val acc: Accumulable[Any, Any] = Accumulators.get(id) match {
+          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
+          case None =>
+            throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
-      } catch {
-        // If we see an exception during accumulator update, just log the
-        // error and move on.
-        case e: Exception =>
-          logError(s"Failed to update accumulators for $task", e)
+        acc ++= partialValue
+        // To avoid UI cruft, ignore cases where value wasn't updated
+        if (acc.name.isDefined && partialValue != acc.zero) {
+          val name = acc.name.get
+          stage.latestInfo.accumulables(id) = new AccumulableInfo(
+            id, name, None, Some(acc.value), acc.isInternal, acc.countFailedValues)
+          event.taskInfo.accumulables += new AccumulableInfo(
+            id, name, Some(partialValue), Some(acc.value), acc.isInternal, acc.countFailedValues)
+        }
       }
+    } catch {
+      case NonFatal(e) =>
+        logError(s"Failed to update accumulators for task ${task.partitionId}", e)
     }
   }
 
@@ -1118,6 +1122,9 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
+    // TODO: reconstruct me
+    val taskMetrics: TaskMetrics = null
+
     outputCommitCoordinator.taskCompleted(
       stageId,
       task.partitionId,
@@ -1128,8 +1135,8 @@ class DAGScheduler(
     // updates before posting.
     if (event.reason != Success) {
       val attemptId = task.stageAttemptId
-      listenerBus.post(SparkListenerTaskEnd(stageId, attemptId, taskType, event.reason,
-        event.taskInfo, event.taskMetrics))
+      listenerBus.post(SparkListenerTaskEnd(
+        stageId, attemptId, taskType, event.reason, event.taskInfo, taskMetrics))
     }
 
     if (!stageIdToStage.contains(task.stageId)) {
@@ -1140,8 +1147,8 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
-        listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
-          event.reason, event.taskInfo, event.taskMetrics))
+        listenerBus.post(SparkListenerTaskEnd(
+          stageId, stage.latestInfo.attemptId, taskType, event.reason, event.taskInfo, taskMetrics))
         stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>
@@ -1636,7 +1643,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case GettingResultEvent(taskInfo) =>
       dagScheduler.handleGetTaskResult(taskInfo)
 
-    case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
+    case completion: CompletionEvent =>
       dagScheduler.handleTaskCompletion(completion)
 
     case TaskSetFailed(taskSet, reason, exception) =>
