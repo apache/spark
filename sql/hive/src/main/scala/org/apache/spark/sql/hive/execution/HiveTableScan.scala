@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.util.Utils
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -34,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.util.Utils
 
 /**
  * The Hive table scan operator.  Column and partition pruning are both handled.
