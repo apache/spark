@@ -203,7 +203,7 @@ private[spark] object InternalAccumulator {
       initialValue: T,
       name: String,
       param: AccumulatorParam[T]): Accumulator[T] = {
-    new Accumulator[T](initialValue, param, Some(name), internal = true)
+    new Accumulator[T](initialValue, param, Some(name), internal = true, countFailedValues = true)
   }
 
 }

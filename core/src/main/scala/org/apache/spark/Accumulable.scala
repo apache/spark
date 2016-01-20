@@ -48,26 +48,36 @@ import org.apache.spark.util.Utils
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
-class Accumulable[R, T] private[spark] (
-    initialValue: R,
+class Accumulable[R, T] private (
+    val id: Long,
+    @transient initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean,
-    val countFailedValues: Boolean = false)
+    val countFailedValues: Boolean)
   extends Serializable {
 
   private[spark] def this(
-      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
-    this(initialValue, param, None, internal)
+      initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean,
+      countFailedValues: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues)
   }
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
-    this(initialValue, param, name, false)
+  private[spark] def this(
+      initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean) = {
+    this(initialValue, param, name, internal, false /* countFailedValues */)
+  }
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None)
+  def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
+    this(initialValue, param, name, false /* internal */)
 
-  val id: Long = Accumulators.newId()
+  def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
   // TODO: after SPARK-12896, we should mark this transient again
   @volatile private var value_ : R = initialValue

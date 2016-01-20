@@ -19,7 +19,7 @@ package org.apache.spark
 
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.{mutable, Map}
+import scala.collection.mutable
 import scala.ref.WeakReference
 
 import org.apache.spark.storage.{BlockId, BlockStatus}
@@ -53,14 +53,18 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `T`
+ * @param name human-readable name associated with this accumulator
+ * @param internal whether this accumulator is used internally within Spark only
+ * @param countFailedValues whether to accumulate values from failed tasks
  * @tparam T result type
  */
 class Accumulator[T] private[spark] (
     @transient private[spark] val initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String],
-    internal: Boolean)
-  extends Accumulable[T, T](initialValue, param, name, internal) {
+    internal: Boolean,
+    override val countFailedValues: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(initialValue, param, name, false)

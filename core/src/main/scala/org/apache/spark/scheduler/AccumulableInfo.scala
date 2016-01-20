@@ -36,8 +36,13 @@ class AccumulableInfo private[spark] (
     val name: String,
     val update: Option[Any], // represents a partial update within a task
     val value: Option[Any],
-    val internal: Boolean,
-    val countFailedValues: Boolean) {
+    private[spark] val internal: Boolean,
+    private[spark] val countFailedValues: Boolean)
+  extends Serializable {
+
+  def this(id: Long, name: String, update: Option[Any], value: Option[Any]) {
+    this(id, name, update, value, false /* internal */, false /* countFailedValues */)
+  }
 
   override def equals(other: Any): Boolean = other match {
     case acc: AccumulableInfo =>

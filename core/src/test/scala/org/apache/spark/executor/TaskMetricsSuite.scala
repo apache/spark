@@ -18,6 +18,7 @@
 package org.apache.spark.executor
 
 import org.apache.spark._
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel, TestBlockId}
 
 
@@ -309,25 +310,117 @@ class TaskMetricsSuite extends SparkFunSuite {
     val acc1 = new Accumulator(0, IntAccumulatorParam, Some("a"))
     val acc2 = new Accumulator(0, IntAccumulatorParam, Some("b"))
     val acc3 = new Accumulator(0, IntAccumulatorParam, Some("c"))
-    val acc4 = new Accumulator(0, IntAccumulatorParam, Some("d"), internal = true)
+    val acc4 = new Accumulator(0, IntAccumulatorParam, Some("d"),
+      internal = true, countFailedValues = true)
     tm.registerAccumulator(acc1)
     tm.registerAccumulator(acc2)
     tm.registerAccumulator(acc3)
     tm.registerAccumulator(acc4)
     acc1 += 1
     acc2 += 2
-    val newUpdates = tm.accumulatorUpdates()
+    val newUpdates = tm.accumulatorUpdates().map { a => (a.id, a) }.toMap
     assert(newUpdates.contains(acc1.id))
     assert(newUpdates.contains(acc2.id))
     assert(newUpdates.contains(acc3.id))
     assert(newUpdates.contains(acc4.id))
-    assert(newUpdates(acc1.id) === 1)
-    assert(newUpdates(acc2.id) === 2)
-    assert(newUpdates(acc3.id) === 0)
-    assert(newUpdates(acc4.id) === 0)
+    assert(newUpdates(acc1.id).name === "a")
+    assert(newUpdates(acc2.id).name === "b")
+    assert(newUpdates(acc3.id).name === "c")
+    assert(newUpdates(acc4.id).name === "d")
+    assert(newUpdates(acc1.id).update === Some(1))
+    assert(newUpdates(acc2.id).update === Some(2))
+    assert(newUpdates(acc3.id).update === Some(0))
+    assert(newUpdates(acc4.id).update === Some(0))
+    assert(!newUpdates(acc3.id).internal)
+    assert(!newUpdates(acc3.id).countFailedValues)
+    assert(newUpdates(acc4.id).internal)
+    assert(newUpdates(acc4.id).countFailedValues)
+    assert(newUpdates.values.map(_.update).forall(_.isDefined))
+    assert(newUpdates.values.map(_.value).forall(_.isEmpty))
     assert(newUpdates.size === internalAccums.size + 4)
   }
 
+//  test("existing values in accums") {
+//    // set shuffle read accum before passing it into TaskMetrics
+//    val accums1 = InternalAccumulator.create()
+//    val srAccum = accums1.find(_.name === Some(shuffleRead.FETCH_WAIT_TIME))
+//    assert(srAccum.isDefined)
+//    srAccum.get.asInstanceOf[Accumulator[Long]] += 10L
+//    val tm1 = new TaskMetrics(accums1)
+//    assert(tm1.shuffleReadMetrics.isDefined)
+//    assert(tm1.shuffleWriteMetrics.isEmpty)
+//    assert(tm1.inputMetrics.isEmpty)
+//    assert(tm1.outputMetrics.isEmpty)
+//    // set shuffle write accum before passing it into TaskMetrics
+//    val accums2 = InternalAccumulator.create()
+//    val swAccum = accums2.find(_.name === Some(shuffleWrite.RECORDS_WRITTEN))
+//    assert(swAccum.isDefined)
+//    swAccum.get.asInstanceOf[Accumulator[Long]] += 10L
+//    val tm2 = new TaskMetrics(accums2)
+//    assert(tm2.shuffleReadMetrics.isEmpty)
+//    assert(tm2.shuffleWriteMetrics.isDefined)
+//    assert(tm2.inputMetrics.isEmpty)
+//    assert(tm2.outputMetrics.isEmpty)
+//    // set input accum before passing it into TaskMetrics
+//    val accums3 = InternalAccumulator.create()
+//    val inAccum = accums3.find(_.name === Some(input.RECORDS_READ))
+//    assert(inAccum.isDefined)
+//    inAccum.get.asInstanceOf[Accumulator[Long]] += 10L
+//    val tm3 = new TaskMetrics(accums3)
+//    assert(tm3.shuffleReadMetrics.isEmpty)
+//    assert(tm3.shuffleWriteMetrics.isEmpty)
+//    assert(tm3.inputMetrics.isDefined)
+//    assert(tm3.outputMetrics.isEmpty)
+//    // set output accum before passing it into TaskMetrics
+//    val accums4 = InternalAccumulator.create()
+//    val outAccum = accums4.find(_.name === Some(output.RECORDS_WRITTEN))
+//    assert(outAccum.isDefined)
+//    outAccum.get.asInstanceOf[Accumulator[Long]] += 10L
+//    val tm4 = new TaskMetrics(accums4)
+//    assert(tm4.shuffleReadMetrics.isEmpty)
+//    assert(tm4.shuffleWriteMetrics.isEmpty)
+//    assert(tm4.inputMetrics.isEmpty)
+//    assert(tm4.outputMetrics.isDefined)
+//    // do not modify any accums before creating TaskMetrics; nothing should be set
+//    val tm5 = new TaskMetrics
+//    assert(tm5.shuffleReadMetrics.isEmpty)
+//    assert(tm5.shuffleWriteMetrics.isEmpty)
+//    assert(tm5.inputMetrics.isEmpty)
+//    assert(tm5.outputMetrics.isEmpty)
+//  }
+//
+//  test("from accumulator updates") {
+//    val accumUpdates1 = InternalAccumulator.create().map { a =>
+//      AccumulableInfo(a.id, a.name.orNull, Some(3L), None, a.isInternal, a.countFailedValues)
+//    }
+//    val metrics1 = TaskMetrics.fromAccumulatorUpdates(0L, accumUpdates1)
+//    assertUpdatesEquals(metrics1.accumulatorUpdates(), accumUpdates1)
+//    // Test this with additional accumulators. Only the ones registered with `Accumulators`
+//    // will show up in the reconstructed TaskMetrics. In practice, all accumulators created
+//    // on the driver, internal or not, should be registered with `Accumulators` at some point.
+//    // Here we show that reconstruction will succeed even if there are unregistered accumulators.
+//    val param = IntAccumulatorParam
+//    val registeredAccums = Seq(
+//      new Accumulator(0, param, Some("a"), internal = true, countFailedValues = true),
+//      new Accumulator(0, param, Some("b"), internal = true, countFailedValues = false),
+//      new Accumulator(0, param, Some("c"), internal = false, countFailedValues = true),
+//      new Accumulator(0, param, Some("d"), internal = false, countFailedValues = false))
+//    val unregisteredAccums = Seq(
+//      new Accumulator(0, param, Some("e"), internal = true, countFailedValues = true),
+//      new Accumulator(0, param, Some("f"), internal = true, countFailedValues = false))
+//    registeredAccums.foreach(Accumulators.register)
+//    registeredAccums.foreach { a => assert(Accumulators.originals.contains(a.id)) }
+//    unregisteredAccums.foreach { a => assert(!Accumulators.originals.contains(a.id)) }
+//    // set some values in these accums
+//    registeredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
+//    unregisteredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
+//    val registeredAccumInfos = registeredAccums.map(makeInfo)
+//    val unregisteredAccumInfos = unregisteredAccums.map(makeInfo)
+//    val accumUpdates2 = accumUpdates1 ++ registeredAccumInfos ++ unregisteredAccumInfos
+//    val metrics2 = TaskMetrics.fromAccumulatorUpdates(0L, accumUpdates2)
+//    // accumulators that were not registered with `Accumulators` will not show up
+//    assertUpdatesEquals(metrics2.accumulatorUpdates(), accumUpdates1 ++ registeredAccumInfos)
+//  }
 }
 
 
@@ -351,11 +444,37 @@ private[spark] object TaskMetricsSuite extends SparkFunSuite {
     val accum = accums.find(_.name == Some(metricName))
     assert(accum.isDefined)
     assertEquals(accum.get.value, value)
-    val accumUpdate = tm.accumulatorUpdates()
-      .find { case (k, _) => k == accum.get.id }
-      .map { case (_, v) => v }
+    val accumUpdate = tm.accumulatorUpdates().find(_.name == metricName)
     assert(accumUpdate.isDefined)
-    assertEquals(accumUpdate.get, value)
+    assert(accumUpdate.get.value === None)
+    assertEquals(accumUpdate.get.update, Some(value))
+  }
+
+  /**
+   * Assert that two lists of accumulator updates are equal.
+   * Note: this does NOT check accumulator ID equality.
+   */
+  def assertUpdatesEquals(
+      updates1: Seq[AccumulableInfo],
+      updates2: Seq[AccumulableInfo]): Unit = {
+    assert(updates1.size === updates2.size)
+    updates1.zip(updates2).foreach { case (info1, info2) =>
+      // do not assert ID equals here
+      assert(info1.name === info2.name)
+      assert(info1.update === info2.update)
+      assert(info1.value === info2.value)
+      assert(info1.internal === info2.internal)
+      assert(info1.countFailedValues === info2.countFailedValues)
+    }
+  }
+
+  /**
+   * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
+   * info as an accumulator update.
+   */
+  def makeInfo(a: Accumulable[_, _]): AccumulableInfo = {
+    new AccumulableInfo(
+      a.id, a.name.orNull, Some(a.value), None, a.isInternal, a.countFailedValues)
   }
 
 }
