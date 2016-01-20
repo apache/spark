@@ -122,7 +122,7 @@ constant
     | BigintLiteral
     | SmallintLiteral
     | TinyintLiteral
-    | DecimalLiteral
+    | DoubleLiteral
     | booleanValue
     ;
 

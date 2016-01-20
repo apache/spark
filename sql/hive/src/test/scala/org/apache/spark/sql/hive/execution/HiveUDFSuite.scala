@@ -143,10 +143,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("Generic UDAF aggregates") {
-    checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999)) FROM src LIMIT 1"),
+    checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999D)) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
 
-    checkAnswer(sql("SELECT percentile_approx(100.0, array(0.9, 0.9)) FROM src LIMIT 1"),
+    checkAnswer(sql("SELECT percentile_approx(100.0D, array(0.9D, 0.9D)) FROM src LIMIT 1"),
       sql("SELECT array(100, 100) FROM src LIMIT 1").collect().toSeq)
    }
 
