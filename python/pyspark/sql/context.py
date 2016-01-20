@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
 import sys
 import warnings
 import json
@@ -686,10 +687,10 @@ class HiveContext(SQLContext):
                 self._scala_HiveContext = self._get_hive_ctx()
             return self._scala_HiveContext
         except Py4JError as e:
-            warnings.warn("You must build Spark with Hive. "
+            print("You must build Spark with Hive. "
                           "Export 'SPARK_HIVE=true' and run "
-                          "build/sbt assembly")
-            raise e
+                          "build/sbt assembly", file=sys.stderr)
+            raise
 
     def _get_hive_ctx(self):
         return self._jvm.HiveContext(self._jsc.sc())
