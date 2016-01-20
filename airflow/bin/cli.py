@@ -383,13 +383,13 @@ def worker(args):
 
 
 def initdb(args):
-    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + repr(settings.engine.url))
     utils.initdb()
     print("Done.")
 
 
 def resetdb(args):
-    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + repr(settings.engine.url))
     if args.yes or input(
             "This will drop existing tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
@@ -401,7 +401,7 @@ def resetdb(args):
 
 
 def upgradedb(args):
-    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + repr(settings.engine.url))
     utils.upgradedb()
 
 
