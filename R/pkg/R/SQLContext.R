@@ -352,8 +352,8 @@ sql <- function(sqlContext, sqlQuery) {
 #' @param sqlContext SQLContext to use
 #' @param tableName The SparkSQL Table to convert to a DataFrame.
 #' @return DataFrame
-#' @rdname sqlTableToDF
-#' @name sqlTableToDF
+#' @rdname tableToDF
+#' @name tableToDF
 #' @export
 #' @examples
 #'\dontrun{
@@ -362,23 +362,13 @@ sql <- function(sqlContext, sqlQuery) {
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
-#' new_df <- sqlTableToDF(sqlContext, "table")
-#' new_df2 <- table(sqlContext, "table")
+#' new_df <- tableToDF(sqlContext, "table")
 #' }
 
-sqlTableToDF <- function(sqlContext, tableName) {
+tableToDF <- function(sqlContext, tableName) {
   sdf <- callJMethod(sqlContext, "table", tableName)
   dataFrame(sdf)
 }
-
-#' @rdname sqlTableToDF
-#' @name table
-#' @export
-table <- function(sqlContext, tableName) {
-  .Deprecated("sqlTableToDF")
-  sqlTableToDF(sqlContext, tableName)
-}
-
 
 #' Tables
 #'

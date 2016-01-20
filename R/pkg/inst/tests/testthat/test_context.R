@@ -28,7 +28,7 @@ test_that("Check masked functions", {
   expect_equal(sort(maskedBySparkR), sort(c("describe", "cov", "filter", "lag", "na.omit",
                                             "predict", "sd", "var", "colnames", "colnames<-",
                                             "intersect", "rank", "rbind", "sample", "subset",
-                                            "summary", "table", "transform")))
+                                            "summary", "transform")))
   # above are those reported as masked when `library(SparkR)`
   # note that many of these methods are still callable without base:: or stats:: prefix
   # there should be a test for each of these, except followings, which are currently "broken"
@@ -37,7 +37,7 @@ test_that("Check masked functions", {
                                       }))
   maskedCompletely <- masked[!funcHasAny]
   expect_equal(length(maskedCompletely), 4)
-  expect_equal(sort(maskedCompletely), sort(c("cov", "filter", "sample", "table")))
+  expect_equal(sort(maskedCompletely), sort(c("cov", "filter", "sample")))
 })
 
 test_that("repeatedly starting and stopping SparkR", {
