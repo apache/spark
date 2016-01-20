@@ -49,6 +49,7 @@ object HiveTypeCoercion {
       InConversion ::
       WidenSetOperationTypes ::
       PromoteStrings ::
+      SimplifyIntegerDecimalComparing ::
       DecimalPrecision ::
       BooleanEquality ::
       StringToIntegralCasts ::
@@ -692,6 +693,43 @@ object HiveTypeCoercion {
         Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
+    }
+  }
+
+  /**
+   * Strength reduction for comparisons between an integral column and a decimal literal:
+   *
+   * 1. int_col > decimal_literal => int_col > floor(decimal_literal)
+   * 2. int_col >= decimal_literal => int_col >= ceil(decimal_literal)
+   * 3. int_col < decimal_literal => int_col < ceil(decimal_literal)
+   * 4. int_col <= decimal_literal => int_col <= floor(decimal_literal)
+   * 5. decimal_literal > int_col => ceil(decimal_literal) > int_col
+   * 6. decimal_literal >= int_col => floor(decimal_literal) >= int_col
+   * 7. decimal_literal < int_col => floor(decimal_literal) < int_col
+   * 8. decimal_literal <= int_col => ceil(decimal_literal) <= int_col
+   *
+   */
+  object SimplifyIntegerDecimalComparing extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case GreaterThan(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
+        GreaterThan(i, Literal.create(value.floor.toInt, IntegerType))
+      case GreaterThanOrEqual(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
+        GreaterThanOrEqual(i, Literal.create(value.ceil.toInt, IntegerType))
+      case LessThan(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
+        LessThan(i, Literal.create(value.ceil.toInt, IntegerType))
+      case LessThanOrEqual(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
+        LessThanOrEqual(i, Literal.create(value.floor.toInt, IntegerType))
+      case GreaterThan(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
+        GreaterThan(Literal.create(value.ceil.toInt, IntegerType), i)
+      case GreaterThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
+        GreaterThanOrEqual(Literal.create(value.floor.toInt, IntegerType), i)
+      case LessThan(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
+        LessThan(Literal.create(value.floor.toInt, IntegerType), i)
+      case LessThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
+        LessThanOrEqual(Literal.create(value.ceil.toInt, IntegerType), i)
     }
   }
 
