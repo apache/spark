@@ -200,7 +200,9 @@ private[spark] class EventLoggingListener(
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
-    logEvent(event, flushLogger = true)
+    if (event.logEvent) {
+      logEvent(event, flushLogger = true)
+    }
   }
 
   /**

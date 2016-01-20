@@ -1644,9 +1644,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // Shut down the SparkContext.
   def stop() {
-    if (AsynchronousListenerBus.withinListenerThread.value) {
-      throw new SparkException("Cannot stop SparkContext within listener thread of" +
-        " AsynchronousListenerBus")
+    if (LiveListenerBus.withinListenerThread.value) {
+      throw new SparkException(
+        s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.

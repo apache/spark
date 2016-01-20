@@ -77,7 +77,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
 
         // Ensure progress listener has been notified of all events
-        ssc.scheduler.listenerBus.waitUntilEmpty(500)
+        ssc.sparkContext.listenerBus.waitUntilEmpty(500)
 
         // Verify all "InputInfo"s have been reported
         assert(ssc.progressListener.numTotalReceivedRecords === input.size)

@@ -49,7 +49,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
   private val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
-  val listenerBus = new StreamingListenerBus()
+  val listenerBus = new StreamingListenerBus(ssc.sparkContext.listenerBus)
 
   // These two are created only when scheduler starts.
   // eventLoop not being null means the scheduler has been started and not stopped
@@ -76,7 +76,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       rateController <- inputDStream.rateController
     } ssc.addStreamingListener(rateController)
 
-    listenerBus.start(ssc.sparkContext)
+    listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
     receiverTracker.start()
