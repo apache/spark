@@ -115,7 +115,7 @@ class Accumulable[R, T] private[spark] (
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
-   * Access the accumulator's current value; only allowed on master.
+   * Access the accumulator's current value; only allowed on driver.
    */
   def value: R = {
     if (!deserialized) {
@@ -137,7 +137,7 @@ class Accumulable[R, T] private[spark] (
   def localValue: R = value_
 
   /**
-   * Set the accumulator's value; only allowed on master.
+   * Set the accumulator's value; only allowed on driver.
    */
   def value_= (newValue: R) {
     if (!deserialized) {
