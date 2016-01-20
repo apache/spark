@@ -335,7 +335,6 @@ writeLines(mockLinesMapType, mapTypeJsonPath)
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(sqlContext, complexTypeJsonPath)
-
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -490,19 +489,15 @@ test_that("insertInto() on a registered table", {
   unlink(parquetPath2)
 })
 
-test_that("table() returns a new DataFrame", {
+test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
-  tabledf <- table(sqlContext, "table1")
+  tabledf <- tableToDF(sqlContext, "table1")
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
+  tabledf2 <- tableToDF(sqlContext, "table1")
+  expect_equal(count(tabledf2), 3)
   dropTempTable(sqlContext, "table1")
-
-  # nolint start
-  # Test base::table is working
-  #a <- letters[1:3]
-  #expect_equal(class(table(a, sample(a))), "table")
-  # nolint end
 })
 
 test_that("toRDD() returns an RRDD", {
