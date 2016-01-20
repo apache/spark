@@ -46,7 +46,8 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
   }
 
   protected override def doPostEvent(
-      listener: StreamingListener, event: StreamingListenerEvent): Unit = {
+      listener: StreamingListener,
+      event: StreamingListenerEvent): Unit = {
     event match {
       case receiverStarted: StreamingListenerReceiverStarted =>
         listener.onReceiverStarted(receiverStarted)
@@ -88,8 +89,8 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    * Wrapper for StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark
    * listener bus.
    */
-  case class WrappedStreamingListenerEvent(
-    streamingListenerEvent: StreamingListenerEvent) extends SparkListenerEvent {
+  private case class WrappedStreamingListenerEvent(streamingListenerEvent: StreamingListenerEvent)
+    extends SparkListenerEvent {
 
     // Do not log streaming events in event log as history server does not support streaming
     // events (SPARK-12140). TODO Once SPARK-12140 is resolved we should set it to true.
