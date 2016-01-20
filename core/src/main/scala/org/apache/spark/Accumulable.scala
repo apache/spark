@@ -187,7 +187,8 @@ class Accumulable[R, T] private[spark] (
     param: AccumulableParam[R, T],
     name: Option[String],
     internal: Boolean)
-    extends GenericAccumulable[R, R, T](initialValue, param, name, internal, identity, false) with Serializable {
+    extends GenericAccumulable[R, R, T](initialValue, param, name, internal, identity, false)
+    with Serializable {
 
   private[spark] def this(
       @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
