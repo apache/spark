@@ -370,7 +370,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param complement boolean specifying whether to return subsample or its complement
    * @return A random, stratified sub-sample of the RDD without replacement.
    */
-  // TODO: look at withscope
   private[spark] def randomSampleByKeyWithRange(lb: Map[K, Double],
       ub: Map[K, Double],
       seed: Long,
