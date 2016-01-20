@@ -1975,7 +1975,13 @@ setMethod("write.df",
           signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "error", ...){
             if (is.null(source)) {
-              sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              } else if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRHivesc", envir = .sparkREnv)
+              } else {
+                stop("sparkRHive or sparkRSQL context has to be specified")
+              }
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
