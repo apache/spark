@@ -87,3 +87,21 @@ class InputMetrics private (
     _readMethod.setValue(v.toString)
 
 }
+
+/**
+ * Deprecated methods to preserve case class matching behavior before Spark 2.0.
+ */
+object InputMetrics {
+
+  @deprecated("matching on InputMetrics will not be supported in the future", "2.0.0")
+  def apply(readMethod: DataReadMethod.Value): InputMetrics = {
+    val im = new InputMetrics
+    im.setReadMethod(readMethod)
+    im
+  }
+
+  @deprecated("matching on InputMetrics will not be supported in the future", "2.0.0")
+  def unapply(input: InputMetrics): Option[DataReadMethod.Value] = {
+    Some(input.readMethod)
+  }
+}
