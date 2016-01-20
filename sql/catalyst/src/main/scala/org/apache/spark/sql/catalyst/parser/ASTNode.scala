@@ -30,7 +30,7 @@ case class ASTNode(
   val numChildren = children.size
 
   /** tuple used in pattern matching. */
-  val pattern = Some((token.getText, children))
+  val pattern = Some((token.getText.toUpperCase, children))
 
   /** Line in which the ASTNode starts. */
   lazy val line: Int = {

@@ -34,6 +34,8 @@ import org.apache.spark.util.random.RandomSampler
  * This class translates SQL to Catalyst [[LogicalPlan]]s or [[Expression]]s.
  */
 private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends ParserInterface {
+  import CatalystQl._
+
   object Token {
     def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
       CurrentOrigin.setPosition(node.line, node.positionInLine)
@@ -421,8 +423,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       noParseRule("Plan", node)
   }
 
-  val allJoinTokens = "(TOK_.*JOIN)".r
-  val laterViewToken = "TOK_LATERAL_VIEW(.*)".r
   protected def nodeToRelation(node: ASTNode): LogicalPlan = {
     node match {
       case Token("TOK_SUBQUERY", query :: Token(alias, Nil) :: Nil) =>
@@ -444,9 +444,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             (clauses.dropRight(1), Some(clauses.last))
           }
 
-        val (Some(tableNameParts) ::
-          splitSampleClause ::
-          bucketSampleClause :: Nil) = {
+        val (Some(tableNameParts) :: splitSampleClause :: bucketSampleClause :: Nil) = {
           getClauses(Seq("TOK_TABNAME", "TOK_TABLESPLITSAMPLE", "TOK_TABLEBUCKETSAMPLE"),
             nonAliasClauses)
         }
@@ -458,10 +456,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         // Apply sampling if requested.
         (bucketSampleClause orElse splitSampleClause).map {
           case Token("TOK_TABLESPLITSAMPLE",
-          Token("TOK_ROWCOUNT", Nil) :: Token(count, Nil) :: Nil) =>
+              Token("TOK_ROWCOUNT", Nil) :: Token(count, Nil) :: Nil) =>
             Limit(Literal(count.toInt), relation)
           case Token("TOK_TABLESPLITSAMPLE",
-          Token("TOK_PERCENT", Nil) :: Token(fraction, Nil) :: Nil) =>
+              Token("TOK_PERCENT", Nil) :: Token(fraction, Nil) :: Nil) =>
             // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
             // function takes X PERCENT as the input and the range of X is [0, 100], we need to
             // adjust the fraction.
@@ -473,8 +471,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               (math.random * 1000).toInt,
               relation)
           case Token("TOK_TABLEBUCKETSAMPLE",
-          Token(numerator, Nil) ::
-            Token(denominator, Nil) :: Nil) =>
+              Token(numerator, Nil) :: Token(denominator, Nil) :: Nil) =>
             val fraction = numerator.toDouble / denominator.toDouble
             Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)
           case a =>
@@ -515,7 +512,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       noParseRule("SortOrder", node)
   }
 
-  val destinationToken = "TOK_DESTINATION|TOK_INSERT_INTO".r
   protected def nodeToDest(
       node: ASTNode,
       query: LogicalPlan,
@@ -525,9 +521,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
       query
 
-    case Token(destinationToken(),
-    Token("TOK_TAB",
-    tableArgs) :: Nil) =>
+    case Token(destinationToken(), Token("TOK_TAB", tableArgs) :: Nil) =>
       val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
 
@@ -545,10 +539,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         UnresolvedRelation(tableIdent, None), partitionKeys, query, overwrite, ifNotExists = false)
 
     case Token(destinationToken(),
-    Token("TOK_TAB",
-    tableArgs) ::
-      Token("TOK_IFNOTEXISTS",
-      ifNotExists) :: Nil) =>
+        Token("TOK_TAB", tableArgs) :: Token("TOK_IFNOTEXISTS", ifNotExists) :: Nil) =>
       val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
 
@@ -589,10 +580,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       noParseRule("Select", node)
   }
 
-  protected val escapedIdentifier = "`([^`]+)`".r
-  protected val doubleQuotedString = "\"([^\"]+)\"".r
-  protected val singleQuotedString = "'([^']+)'".r
-
   protected def unquoteString(str: String) = str match {
     case singleQuotedString(s) => s
     case doubleQuotedString(s) => s
@@ -605,24 +592,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case plainIdent => plainIdent
   }
 
-  /* Case insensitive matches */
-  val COUNT = "(?i)COUNT".r
-  val SUM = "(?i)SUM".r
-  val AND = "(?i)AND".r
-  val OR = "(?i)OR".r
-  val NOT = "(?i)NOT".r
-  val TRUE = "(?i)TRUE".r
-  val FALSE = "(?i)FALSE".r
-  val LIKE = "(?i)LIKE".r
-  val RLIKE = "(?i)RLIKE".r
-  val REGEXP = "(?i)REGEXP".r
-  val IN = "(?i)IN".r
-  val DIV = "(?i)DIV".r
-  val BETWEEN = "(?i)BETWEEN".r
-  val WHEN = "(?i)WHEN".r
-  val CASE = "(?i)CASE".r
-
-  val INTEGRAL = "[+-]?\\d+".r
 
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
@@ -642,10 +611,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", target) :: Nil) if target.nonEmpty =>
       UnresolvedStar(Some(target.map(_.text)))
 
-    /* Aggregate Functions */
-    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
+    // Aggregate functions: special case handle for count(*), i.e. turn it into count(1).
+    case Token("TOK_FUNCTIONDI", Token("COUNT", Nil) :: args) =>
       Count(args.map(nodeToExpr)).toAggregateExpression(isDistinct = true)
-    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) =>
+    case Token("TOK_FUNCTIONSTAR", Token("COUNT", Nil) :: Nil) =>
       Count(Literal(1)).toAggregateExpression()
 
     /* Casts */
@@ -690,7 +659,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
-    case Token(DIV(), left :: right:: Nil) =>
+    case Token("DIV", left :: right:: Nil) =>
       Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
     case Token("&", left :: right:: Nil) => BitwiseAnd(nodeToExpr(left), nodeToExpr(right))
@@ -707,42 +676,36 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
-    case Token(LIKE(), left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
-    case Token(RLIKE(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
-    case Token(REGEXP(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token("LIKE", left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
+    case Token("RLIKE", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token("REGEXP", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) =>
       IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
       IsNull(nodeToExpr(child))
-    case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
+    case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
-    case Token("TOK_FUNCTION",
-    Token(BETWEEN(), Nil) ::
-      kw ::
-      target ::
-      minValue ::
-      maxValue :: Nil) =>
-
+    case Token("TOK_FUNCTION", Token("BETWEEN", Nil) :: kw :: target :: min :: max :: Nil) =>
       val targetExpression = nodeToExpr(target)
       val betweenExpr =
         And(
-          GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
-          LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
+          GreaterThanOrEqual(targetExpression, nodeToExpr(min)),
+          LessThanOrEqual(targetExpression, nodeToExpr(max)))
       kw match {
         case Token("KW_FALSE", Nil) => betweenExpr
         case Token("KW_TRUE", Nil) => Not(betweenExpr)
       }
 
     /* Boolean Logic */
-    case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
-    case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
-    case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
+    case Token("AND", left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
+    case Token("OR", left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
+    case Token("NOT", child :: Nil) => Not(nodeToExpr(child))
     case Token("!", child :: Nil) => Not(nodeToExpr(child))
 
     /* Case statements */
-    case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
+    case Token("TOK_FUNCTION", Token("WHEN", Nil) :: branches) =>
       CaseWhen.createFromParser(branches.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
+    case Token("TOK_FUNCTION", Token("CASE", Nil) :: branches) =>
       val keyExpr = nodeToExpr(branches.head)
       CaseKeyWhen(keyExpr, branches.drop(1).map(nodeToExpr))
 
@@ -771,8 +734,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal.create(null, NullType)
-    case Token(TRUE(), Nil) => Literal.create(true, BooleanType)
-    case Token(FALSE(), Nil) => Literal.create(false, BooleanType)
+    case Token("TRUE", Nil) => Literal.create(true, BooleanType)
+    case Token("FALSE", Nil) => Literal.create(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => ParseUtils.unescapeSQLString(s.text)).mkString)
 
@@ -847,9 +810,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   /* Case insensitive matches for Window Specification */
-  val PRECEDING = "(?i)preceding".r
-  val FOLLOWING = "(?i)following".r
-  val CURRENT = "(?i)current".r
   protected def nodesToWindowSpecification(nodes: Seq[ASTNode]): WindowSpec = nodes match {
     case Token(windowName, Nil) :: Nil =>
       // Refer to a window spec defined in the window clause.
@@ -901,19 +861,19 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         } else {
           val frameType = rowFrame.map(_ => RowFrame).getOrElse(RangeFrame)
           def nodeToBoundary(node: ASTNode): FrameBoundary = node match {
-            case Token(PRECEDING(), Token(count, Nil) :: Nil) =>
+            case Token("PRECEDING", Token(count, Nil) :: Nil) =>
               if (count.toLowerCase() == "unbounded") {
                 UnboundedPreceding
               } else {
                 ValuePreceding(count.toInt)
               }
-            case Token(FOLLOWING(), Token(count, Nil) :: Nil) =>
+            case Token("FOLLOWING", Token(count, Nil) :: Nil) =>
               if (count.toLowerCase() == "unbounded") {
                 UnboundedFollowing
               } else {
                 ValueFollowing(count.toInt)
               }
-            case Token(CURRENT(), Nil) => CurrentRow
+            case Token("CURRENT", Nil) => CurrentRow
             case _ =>
               noParseRule("Window Frame Boundary", node)
           }
@@ -940,17 +900,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       node: ASTNode,
       child: LogicalPlan): Option[ScriptTransformation] = None
 
-  val explode = "(?i)explode".r
-  val jsonTuple = "(?i)json_tuple".r
   protected def nodeToGenerate(node: ASTNode, outer: Boolean, child: LogicalPlan): Generate = {
     val Token("TOK_SELECT", Token("TOK_SELEXPR", clauses) :: Nil) = node
 
     val alias = getClause("TOK_TABALIAS", clauses).children.head.text
 
     val generator = clauses.head match {
-      case Token("TOK_FUNCTION", Token(explode(), Nil) :: childNode :: Nil) =>
+      case Token("TOK_FUNCTION", Token("EXPLODE", Nil) :: childNode :: Nil) =>
         Explode(nodeToExpr(childNode))
-      case Token("TOK_FUNCTION", Token(jsonTuple(), Nil) :: children) =>
+      case Token("TOK_FUNCTION", Token("JSON_TUPLE", Nil) :: children) =>
         JsonTuple(children.map(nodeToExpr))
       case other =>
         nodeToGenerator(other)
@@ -967,4 +925,23 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
   protected def noParseRule(msg: String, node: ASTNode): Nothing = throw new NotImplementedError(
     s"[$msg]: No parse rules for ASTNode type: ${node.tokenType}, tree:\n${node.treeString}")
+}
+
+
+private object CatalystQl {
+
+  private val allJoinTokens = "(TOK_.*JOIN)".r
+
+  private val laterViewToken = "TOK_LATERAL_VIEW(.*)".r
+
+  private val destinationToken = "TOK_DESTINATION|TOK_INSERT_INTO".r
+
+  private val INTEGRAL = "[+-]?\\d+".r
+
+  private val escapedIdentifier = "`([^`]+)`".r
+
+  private val doubleQuotedString = "\"([^\"]+)\"".r
+
+  private val singleQuotedString = "'([^']+)'".r
+
 }
