@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -91,6 +92,16 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
     }
     assert(e.getMessage === s"${SQLConf.CASE_SENSITIVE.key} should be boolean, but was 10")
+  }
+
+  test("passing Spark config other than Spark SQL ones") {
+    sqlContext.conf.clear()
+    val key = "spark.some.config"
+    val value = "foo"
+    val e = intercept[SparkException] {
+      sql(s"set $key=$value")
+    }
+    assert(e.getMessage === s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
   }
 
   test("Test SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE's method") {

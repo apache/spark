@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import org.apache.spark.SparkException
+
 import scala.collection.immutable
 import scala.collection.JavaConverters._
 
@@ -618,7 +620,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
       // Only verify configs in the SQLConf object
       entry.valueConverter(value)
     }
-    settings.put(key, value)
+    setConfWithCheck(key, value)
   }
 
   /** Set the given Spark SQL configuration property. */
@@ -626,7 +628,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     require(entry != null, "entry cannot be null")
     require(value != null, s"value cannot be null for key: ${entry.key}")
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    settings.put(entry.key, entry.stringConverter(value))
+    setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
@@ -687,6 +689,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       (entry.key, entry.defaultValueString, entry.doc)
     }.toSeq
+  }
+
+  private def setConfWithCheck(key: String, value: String): Unit = {
+    if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
+      throw new SparkException(
+        s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
+    }
+    settings.put(key, value)
   }
 
   private[spark] def unsetConf(key: String): Unit = {
