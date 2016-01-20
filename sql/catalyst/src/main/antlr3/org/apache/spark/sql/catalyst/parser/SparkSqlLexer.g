@@ -332,6 +332,7 @@ KW_LAZY: 'LAZY';
 KW_CACHE: 'CACHE';
 KW_UNCACHE: 'UNCACHE';
 KW_DFS: 'DFS';
+KW_CONFIG: 'CONFIG';
 
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.

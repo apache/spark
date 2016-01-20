@@ -374,8 +374,6 @@ TOK_SET_AUTOCOMMIT;
 TOK_CACHETABLE;
 TOK_UNCACHETABLE;
 TOK_CLEARCACHE;
-TOK_DFS;
-TOK_ADDRESOURCE;
 }
 
 
@@ -697,8 +695,11 @@ catch (RecognitionException e) {
 
 // starting rule
 statement
-	: explainStatement EOF
-	| execStatement EOF
+	: KW_SET KW_CONFIG -> ^(KW_SET)
+	| KW_DFS^
+    | KW_ADD^
+    | explainStatement EOF
+    | execStatement EOF
 	;
 
 explainStatement
@@ -728,8 +729,6 @@ execStatement
     | updateStatement
     | sqlTransactionStatement
     | cacheStatement
-    | dfs
-    | addResource
     ;
 
 loadStatement
@@ -2530,19 +2529,3 @@ clearCacheStatement
   KW_CLEAR KW_CACHE -> ^(TOK_CLEARCACHE)
   ;
 
-/*
- * Add resource (file or jar) to the context.
- */
-addResource
-@init { pushMsg("add resource statement", state); }
-@after { popMsg(state); }
-  :
-  KW_ADD resource -> ^(TOK_ADDRESOURCE resource)
-  ;
-
-dfs
-@init { pushMsg("dfs statement", state); }
-@after { popMsg(state); }
-  :
-  KW_DFS command=StringLiteral -> ^(TOK_DFS $command)
-  ;
