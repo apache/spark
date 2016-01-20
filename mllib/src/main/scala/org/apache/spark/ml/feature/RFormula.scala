@@ -49,8 +49,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
  * The basic operators are:
  *
  * `~` separate target and terms
- * `+` concat terms, “+ 0” means removing intercept
- * `-` remove a term, “- 1” means removing intercept
+ * `+` concat terms, "+ 0" means removing intercept
+ * `-` remove a term, "- 1" means removing intercept
  * `:` interaction (multiplication for numeric values, or binarized categorical values)
  * `.` all columns except target
  *
