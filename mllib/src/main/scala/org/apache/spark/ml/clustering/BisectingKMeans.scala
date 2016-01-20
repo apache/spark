@@ -40,15 +40,15 @@ private[clustering] trait BisectingKMeansParams extends Params
    * Set the number of clusters to create (k). Must be > 1. Default: 2.
    * @group param
    */
-  @Since("1.6.0")
+  @Since("2.0.0")
   final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
 
   /** @group getParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def getK: Int = $(k)
 
   /** @group expertParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   final val minDivisibleClusterSize = new Param[Double](
     this,
     "minDivisibleClusterSize",
@@ -56,7 +56,7 @@ private[clustering] trait BisectingKMeansParams extends Params
     (value: Double) => value > 0)
 
   /** @group expertGetParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def getMinDivisibleClusterSize: Double = $(minDivisibleClusterSize)
 
   /**
@@ -76,40 +76,40 @@ private[clustering] trait BisectingKMeansParams extends Params
  *
  * @param parentModel a model trained by spark.mllib.clustering.BisectingKMeans.
  */
-@Since("1.6.0")
+@Since("2.0.0")
 @Experimental
 class BisectingKMeansModel private[ml] (
-    @Since("1.6.0") override val uid: String,
+    @Since("2.0.0") override val uid: String,
     private val parentModel: MLlibBisectingKMeansModel
   ) extends Model[BisectingKMeansModel] with BisectingKMeansParams {
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
     val copied = new BisectingKMeansModel(uid, parentModel)
     copyValues(copied, extra)
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def transform(dataset: DataFrame): DataFrame = {
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters
 
   /**
    * Computes the sum of squared distances between the input points and their corresponding cluster
    * centers.
    */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def computeCost(dataset: DataFrame): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
@@ -133,10 +133,10 @@ class BisectingKMeansModel private[ml] (
  *     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
  *     KDD Workshop on Text Mining, 2000.]]
  */
-@Since("1.6.0")
+@Since("2.0.0")
 @Experimental
-class BisectingKMeans @Since("1.6.0") (
-    @Since("1.6.0") override val uid: String)
+class BisectingKMeans @Since("2.0.0") (
+    @Since("2.0.0") override val uid: String)
   extends Estimator[BisectingKMeansModel] with BisectingKMeansParams {
 
   setDefault(
@@ -144,37 +144,37 @@ class BisectingKMeans @Since("1.6.0") (
     maxIter -> 20,
     minDivisibleClusterSize -> 1.0)
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeans = defaultCopy(extra)
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   def this() = this(Identifiable.randomUID("bisecting k-means"))
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def setK(value: Int): this.type = set(k, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group expertSetParam */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def setMinDivisibleClusterSize(value: Double): this.type = set(minDivisibleClusterSize, value)
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def fit(dataset: DataFrame): BisectingKMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
 
@@ -188,7 +188,7 @@ class BisectingKMeans @Since("1.6.0") (
     copyValues(model)
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
