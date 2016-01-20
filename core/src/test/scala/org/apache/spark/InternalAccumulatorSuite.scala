@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
@@ -227,6 +229,25 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     testInternalAccumulatorsWithFailedTasks((i: Int) => i % 2 == 0) // fail a subset
   }
 
+  test("internal accumulators are registered for cleanups") {
+    sc = new SparkContext("local", "test") {
+      private val myCleaner = new SaveAccumContextCleaner(this)
+      override def cleaner: Option[ContextCleaner] = Some(myCleaner)
+    }
+    assert(Accumulators.originals.isEmpty)
+    sc.parallelize(1 to 100).map { i => (i, i) }.reduceByKey { _ + _ }.count()
+    val internalAccums = InternalAccumulator.create()
+    // We ran 2 stages, so we should have 2 sets of internal accumulators, 1 for each stage
+    assert(Accumulators.originals.size === internalAccums.size * 2)
+    val accumsRegistered = sc.cleaner match {
+      case Some(cleaner: SaveAccumContextCleaner) => cleaner.accumsRegisteredForCleanup
+      case _ => Seq.empty[Long]
+    }
+    // Make sure the same set of accumulators is registered for cleanup
+    assert(accumsRegistered.size === internalAccums.size * 2)
+    assert(accumsRegistered.toSet === Accumulators.originals.keys.toSet)
+  }
+
   /**
    * Return the accumulable info that matches the specified name.
    */
@@ -281,6 +302,20 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     }
     rdd.count()
     listener.maybeThrowException()
+  }
+
+  /**
+   * A special [[ContextCleaner]] that saves the IDs of the accumulators registered for cleanup.
+   */
+  private class SaveAccumContextCleaner(sc: SparkContext) extends ContextCleaner(sc) {
+    private val accumsRegistered = new ArrayBuffer[Long]
+
+    override def registerAccumulatorForCleanup(a: Accumulable[_, _]): Unit = {
+      accumsRegistered += a.id
+      super.registerAccumulatorForCleanup(a)
+    }
+
+    def accumsRegisteredForCleanup: Seq[Long] = accumsRegistered.toArray
   }
 
 }
