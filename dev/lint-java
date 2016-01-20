@@ -17,6 +17,10 @@
 # limitations under the License.
 #
 
+# Disable Java style checker because it depends on "mvn install"
+echo -e "Skip Java style checker"
+exit 0
+
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 
