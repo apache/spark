@@ -688,8 +688,8 @@ class HiveContext(SQLContext):
             return self._scala_HiveContext
         except Py4JError as e:
             print("You must build Spark with Hive. "
-                          "Export 'SPARK_HIVE=true' and run "
-                          "build/sbt assembly", file=sys.stderr)
+                  "Export 'SPARK_HIVE=true' and run "
+                  "build/sbt assembly", file=sys.stderr)
             raise
 
     def _get_hive_ctx(self):
