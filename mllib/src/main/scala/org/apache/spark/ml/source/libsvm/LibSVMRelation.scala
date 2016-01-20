@@ -174,11 +174,12 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
     }
   }
 
-  override def createRelation(sqlContext: SQLContext,
-                              paths: Array[String],
-                              dataSchema: Option[StructType],
-                              partitionColumns: Option[StructType],
-                              parameters: Map[String, String]): HadoopFsRelation = {
+  override def createRelation(
+      sqlContext: SQLContext,
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      parameters: Map[String, String]): HadoopFsRelation = {
     val path = if (paths.length == 1) paths(0)
       else if (paths.isEmpty) throw new IOException("No input path specified for libsvm data")
       else throw new IOException("Multiple input paths are not supported for libsvm data")

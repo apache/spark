@@ -25,6 +25,7 @@ import com.google.common.io.Files
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.util.Utils
 
 class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -85,11 +86,12 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data and read it again") {
     val df = sqlContext.read.format("libsvm").load(path)
-    val writepath = path + "_2"
-    df.write.save(writepath)
+    val tempDir2 = Utils.createTempDir()
+    val writepath = tempDir2.toURI.toString
+    df.write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)
 
     val df2 = sqlContext.read.format("libsvm").load(writepath)
-    val row1 = df.first()
+    val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
   }
