@@ -38,13 +38,26 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
+  def generate(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      useSubexprElimination: Boolean): (() => MutableProjection) = {
+    create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
+  }
+
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
+    create(expressions, false)
+  }
+
+  private def create(
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
     val (validExpr, index) = expressions.zipWithIndex.filter {
       case (NoOp, _) => false
       case _ => true
     }.unzip
-    val exprVals = ctx.generateExpressions(validExpr, true)
+    val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
     val projectionCodes = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)
