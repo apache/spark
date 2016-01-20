@@ -100,11 +100,11 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
     testMerge[T](typeName)(itemGenerator)
   }
 
-  testItemType[Byte]("Byte") { _.nextInt.toByte }
+  testItemType[Byte]("Byte") { _.nextInt().toByte }
 
-  testItemType[Short]("Short") { _.nextInt.toShort }
+  testItemType[Short]("Short") { _.nextInt().toShort }
 
-  testItemType[Int]("Int") { _.nextInt }
+  testItemType[Int]("Int") { _.nextInt() }
 
   testItemType[Long]("Long") { _.nextLong() }
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe;
+package org.apache.spark.util.sketch.unsafe;
 
 import java.lang.reflect.Field;
 

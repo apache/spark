@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.hash;
+package org.apache.spark.util.sketch.unsafe.hash;
 
-import org.apache.spark.unsafe.Platform;
+import org.apache.spark.util.sketch.unsafe.Platform;
 
 /**
  * 32-bit Murmur3 hasher.  This is based on Guava's Murmur3_32HashFunction.

@@ -22,9 +22,10 @@ import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
-import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.util.sketch.unsafe.Platform;
+import org.apache.spark.util.sketch.unsafe.hash.Murmur3_x86_32;
 
+// This class is largely based on the `CountMinSketch` class from stream-lib.
 public class CountMinSketchImpl extends CountMinSketch {
   public static final long PRIME_MODULUS = (1L << 31) - 1;
 
