@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -77,33 +78,22 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object EquiJoinSelection extends Strategy with PredicateHelper {
 
-    private[this] def makeBroadcastHashJoin(
-        leftKeys: Seq[Expression],
-        rightKeys: Seq[Expression],
-        left: LogicalPlan,
-        right: LogicalPlan,
-        condition: Option[Expression],
-        side: joins.BuildSide): Seq[SparkPlan] = {
-      val broadcastHashJoin = execution.joins.BroadcastHashJoin(
-        leftKeys, rightKeys, side, planLater(left), planLater(right))
-      condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
-    }
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // --- Inner joins --------------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
-        makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildRight)
+        joins.BroadcastHashJoin(
+          leftKeys, rightKeys, BuildRight, condition, planLater(left), planLater(right)) :: Nil
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
-        makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
+        joins.BroadcastHashJoin(
+          leftKeys, rightKeys, BuildLeft, condition, planLater(left), planLater(right)) :: Nil
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
-        val mergeJoin =
-          joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
-        condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
+        joins.SortMergeJoin(
+          leftKeys, rightKeys, condition, planLater(left), planLater(right)) :: Nil
 
       // --- Outer joins --------------------------------------------------------------------------
 

@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.RecordWriter
@@ -58,9 +59,10 @@ private[csv] class CSVRelation(
     if (Charset.forName(params.charset) == Charset.forName("UTF-8")) {
       sqlContext.sparkContext.textFile(location)
     } else {
+      val charset = params.charset
       sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions { _.map { pair =>
-            new String(pair._2.getBytes, 0, pair._2.getLength, params.charset)
+            new String(pair._2.getBytes, 0, pair._2.getLength, charset)
           }
         }
     }
@@ -98,6 +100,15 @@ private[csv] class CSVRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+    val conf = job.getConfiguration
+    params.compressionCodec.foreach { codec =>
+      conf.set("mapreduce.output.fileoutputformat.compress", "true")
+      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+      conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
+      conf.set("mapreduce.map.output.compress", "true")
+      conf.set("mapreduce.map.output.compress.codec", codec)
+    }
+
     new CSVOutputWriterFactory(params)
   }
 

@@ -23,17 +23,15 @@ import java.sql.Timestamp
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.CatalystQl
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.sql.execution.{aggregate, SparkQl}
 import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
-/** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect(conf: ParserConf) extends CatalystQl(conf)
 
 class SQLQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -146,23 +144,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .toDF("id", "saying")
       .groupBy(expr("length(saying)"))
       .count(), Row(24, 1) :: Row(14, 1) :: Nil)
-  }
-
-  test("SQL Dialect Switching to a new SQL parser") {
-    val newContext = new SQLContext(sparkContext)
-    newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
-    assert(newContext.getSQLDialect().getClass === classOf[MyDialect])
-    assert(newContext.sql("SELECT 1").collect() === Array(Row(1)))
-  }
-
-  test("SQL Dialect Switch to an invalid parser with alias") {
-    val newContext = new SQLContext(sparkContext)
-    newContext.sql("SET spark.sql.dialect=MyTestClass")
-    intercept[DialectException] {
-      newContext.sql("SELECT 1")
-    }
-    // test if the dialect set back to DefaultSQLDialect
-    assert(newContext.getSQLDialect().getClass === classOf[SparkQl])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -1987,6 +1968,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     verifyCallCount(
       df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
+
+    val testUdf = functions.udf((x: Int) => {
+      countAcc.++=(1)
+      x
+    })
+    verifyCallCount(
+      df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
 
     // Would be nice if semantic equals for `+` understood commutative
     verifyCallCount(

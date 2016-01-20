@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.sql.catalyst.{ParserDialect, TableIdentifier}
+import org.apache.spark.sql.catalyst.{ParserInterface, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  *                 parameter because this allows us to return a different dialect if we
  *                 have to.
  */
-class SparkSQLParser(fallback: => ParserDialect) extends ParserDialect {
+class SparkSQLParser(fallback: => ParserInterface) extends ParserInterface {
 
   override def parseExpression(sql: String): Expression = fallback.parseExpression(sql)
 
