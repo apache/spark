@@ -17,41 +17,60 @@
 
 package org.apache.spark.util.sketch
 
-import java.util.Random
+import scala.reflect.ClassTag
+import scala.util.Random
 
 import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
-  test("accuracy - long") {
-    val epsOfTotalCount = 0.0001
-    val confidence = 0.99
-    val seed = 42
+  private val epsOfTotalCount = 0.0001
 
-    val numItems = 1000000
-    val maxScale = 20
-    val items = {
-      val r = new Random(seed)
-      Array.fill(numItems) { r.nextInt(1 << r.nextInt(maxScale)) }
+  private val confidence = 0.99
+
+  private val seed = 42
+
+  def testAccuracy[T: ClassTag](typeName: String)(itemGenerator: Random => T) {
+    test(s"accuracy - $typeName") {
+      val r = new Random()
+
+      val numAllItems = 1000000
+      val allItems = Array.fill(numAllItems)(itemGenerator(r))
+
+      val numSamples = numAllItems / 10
+      val sampledItemIndices = Array.fill(numSamples)(r.nextInt(numAllItems))
+
+      val exactFreq = {
+        val sampledItems = sampledItemIndices.map(allItems)
+        sampledItems.groupBy(identity).mapValues(_.length.toLong)
+      }
+
+      val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
+      sampledItemIndices.foreach(i => sketch.add(allItems(i)))
+
+      val probCorrect = {
+        val numErrors = allItems.map { item =>
+          val count = exactFreq.getOrElse(item, 0L)
+          val ratio = (sketch.estimateCount(item) - count).toDouble / numAllItems
+          if (ratio > epsOfTotalCount) 1 else 0
+        }.sum
+
+        1D - numErrors.toDouble / numAllItems
+      }
+
+      assert(
+        probCorrect > confidence,
+        s"Confidence not reached: required $confidence, reached $probCorrect"
+      )
     }
-
-    val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
-    items.foreach(sketch.add)
-
-    val exactFreq = Array.fill(1 << maxScale)(0)
-    items.foreach(exactFreq(_) += 1)
-
-    val pCorrect = {
-      val numErrors = exactFreq.zipWithIndex.map { case (f, i) =>
-        val ratio = (sketch.estimateCount(i) - f).toDouble / numItems
-        if (ratio > epsOfTotalCount) 1 else 0
-      }.sum
-
-      1.0 - numErrors.toDouble / exactFreq.length
-    }
-
-    assert(
-      pCorrect > confidence,
-      s"Confidence not reached: required $confidence, reached $pCorrect"
-    )
   }
+
+  testAccuracy[Byte]("Byte") { _.nextInt.toByte }
+
+  testAccuracy[Short]("Short") { _.nextInt.toShort }
+
+  testAccuracy[Int]("Int") { _.nextInt }
+
+  testAccuracy[Long]("Long") { _.nextLong() }
+
+  testAccuracy[String]("String") { r => r.nextString(r.nextInt(20)) }
 }
