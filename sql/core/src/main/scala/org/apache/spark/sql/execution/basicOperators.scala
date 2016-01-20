@@ -281,13 +281,10 @@ case class Range(
  * Union two plans, without a distinct. This is UNION ALL in SQL.
  */
 case class Union(children: Seq[SparkPlan]) extends SparkPlan {
-  override def output: Seq[Attribute] = {
-    children.tail.foldLeft(children.head.output) { case (currentOutput, child) =>
-      currentOutput.zip(child.output).map { case (a1, a2) =>
-        a1.withNullability(a1.nullable || a2.nullable)
-      }
-    }
-  }
+  override def output: Seq[Attribute] =
+    children.map(_.output).transpose.map(attrs =>
+      attrs.head.withNullability(attrs.exists(_.nullable)))
+
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
 }
