@@ -41,7 +41,6 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("explain create table command") {
-    sql("show tables").show()
     checkExistence(sql("explain create table temp__b as select * from src limit 2"), true,
                    "== Physical Plan ==",
                    "InsertIntoHiveTable",

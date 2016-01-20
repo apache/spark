@@ -83,19 +83,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       numBuckets: Int,
       bucketCols: Seq[String],
       sortCols: Seq[String] = Nil): Unit = {
-    val files = dataDir.listFiles()
-    if (files == null) {
-      dataDir.isDirectory
-      throw new NullPointerException(s"""
-           |dataDir.listFiles() is NULL
-           |== Directory(isDirectory=${dataDir.isDirectory} exists=${dataDir.exists}) ==
-           |$dataDir
-           |== Hive Warehouse(isDirectory=${hiveContext.warehousePath.isDirectory}) ==
-           |${hiveContext.warehousePath}
-           |== bucketed_table TableIdentifier ==
-           |${sqlContext.sqlParser.parseTableIdentifier("bucketed_table")}""".stripMargin)
-    }
-    val allBucketFiles = files.filterNot(f =>
+    val allBucketFiles = dataDir.listFiles().filterNot(f =>
       f.getName.startsWith(".") || f.getName.startsWith("_")
     )
 

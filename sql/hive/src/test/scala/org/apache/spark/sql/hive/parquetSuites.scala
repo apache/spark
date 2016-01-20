@@ -452,7 +452,6 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """.stripMargin)
 
     var tableIdentifier = catalog.QualifiedTableName("default", "test_insert_parquet")
-    assert(catalog.client.currentDatabase === "default", "Current database should be 'default'.")
 
     // First, make sure the converted test_parquet is not cached.
     assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
