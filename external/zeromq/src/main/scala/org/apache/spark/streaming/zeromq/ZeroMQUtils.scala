@@ -55,7 +55,7 @@ object ZeroMQUtils {
       bytesToObjects: Seq[ByteString] => Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       actorSystemCreator: () => ActorSystem = ActorReceiver.defaultActorSystemCreator,
-      supervisorStrategy: SupervisorStrategy = ActorReceiver.defaultStrategy
+      supervisorStrategy: SupervisorStrategy = ActorReceiver.defaultSupervisorStrategy
     ): ReceiverInputDStream[T] = {
     AkkaUtils.createStream(
       ssc,
