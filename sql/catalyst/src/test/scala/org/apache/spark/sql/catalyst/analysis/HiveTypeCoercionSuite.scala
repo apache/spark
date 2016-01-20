@@ -308,15 +308,14 @@ class HiveTypeCoercionSuite extends PlanTest {
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq(Literal(true), Literal(1.2), Literal.create(1, DecimalType(7, 2)))),
-      CaseWhen(Seq(
-        Literal(true), Literal(1.2), Cast(Literal.create(1, DecimalType(7, 2)), DoubleType)))
+      CaseWhen(Seq((Literal(true), Literal(1.2))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(1.2))),
+        Cast(Literal.create(1, DecimalType(7, 2)), DoubleType))
     )
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq(Literal(true), Literal(100L), Literal.create(1, DecimalType(7, 2)))),
-      CaseWhen(Seq(
-        Literal(true), Cast(Literal(100L), DecimalType(22, 2)),
-        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2))))
+      CaseWhen(Seq((Literal(true), Literal(100L))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
+        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
     )
   }
 
@@ -388,7 +387,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("WidenSetOperationTypes for union except and intersect") {
+  test("WidenSetOperationTypes for union, except, and intersect") {
     def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
       logical.output.zip(expectTypes).foreach { case (attr, dt) =>
         assert(attr.dataType === dt)
@@ -452,7 +451,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     val expectedTypes = Seq(DecimalType(10, 5), DecimalType(10, 5), DecimalType(15, 5),
       DecimalType(25, 5), DoubleType, DoubleType)
 
-    rightTypes.zip(expectedTypes).map { case (rType, expectedType) =>
+    rightTypes.zip(expectedTypes).foreach { case (rType, expectedType) =>
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 
@@ -499,7 +498,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
     ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
   }
-
 
   /**
    * There are rules that need to not fire before child expressions get resolved.

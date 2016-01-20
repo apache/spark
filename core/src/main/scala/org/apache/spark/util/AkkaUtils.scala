@@ -86,7 +86,7 @@ private[spark] object AkkaUtils extends Logging {
     val secureCookie = if (isAuthOn) secretKey else ""
     logDebug(s"In createActorSystem, requireCookie is: $requireCookie")
 
-    val akkaSslConfig = securityManager.akkaSSLOptions.createAkkaConfig
+    val akkaSslConfig = securityManager.getSSLOptions("akka").createAkkaConfig
         .getOrElse(ConfigFactory.empty())
 
     val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap.asJava)

@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{CatalystQl, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -1042,7 +1042,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def when(condition: Column, value: Any): Column = withExpr {
-    CaseWhen(Seq(condition.expr, lit(value).expr))
+    CaseWhen(Seq((condition.expr, lit(value).expr)))
   }
 
   /**
@@ -1063,7 +1063,10 @@ object functions extends LegacyFunctions {
    *
    * @group normal_funcs
    */
-  def expr(expr: String): Column = Column(SqlParser.parseExpression(expr))
+  def expr(expr: String): Column = {
+    val parser = SQLContext.getActive().map(_.sqlParser).getOrElse(new CatalystQl())
+    Column(parser.parseExpression(expr))
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
