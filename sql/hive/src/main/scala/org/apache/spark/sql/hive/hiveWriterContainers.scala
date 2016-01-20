@@ -20,29 +20,29 @@ package org.apache.spark.sql.hive
 import java.text.NumberFormat
 import java.util.Date
 
-import org.apache.hadoop.hive.serde2.Serializer
-import org.apache.hadoop.hive.serde2.objectinspector.{StructObjectInspector, ObjectInspectorUtils}
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.serde2.Serializer
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorUtils, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
 import org.apache.spark._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableJobConf
-
-import scala.collection.JavaConverters._
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -160,7 +160,7 @@ private[hive] class SparkHiveWriterContainer(
     serializer
   }
 
-  protected def executorSidePrepare() = {
+  protected def prepareForWrite() = {
     val serializer = newSerializer(fileSinkConf.getTableInfo)
     val standardOI = ObjectInspectorUtils
       .getStandardObjectInspector(
@@ -177,7 +177,7 @@ private[hive] class SparkHiveWriterContainer(
 
   // this function is executed on executor side
   def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
-    val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = executorSidePrepare()
+    val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = prepareForWrite()
     executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
     iterator.foreach { row =>
@@ -248,7 +248,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
   // this function is executed on executor side
   override def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
-    val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = executorSidePrepare()
+    val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = prepareForWrite()
     executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
     val partitionOutput = inputSchema.takeRight(dynamicPartColNames.length)
