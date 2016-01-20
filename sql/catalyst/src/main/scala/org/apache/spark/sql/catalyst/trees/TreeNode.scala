@@ -244,6 +244,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * When `rule` does not apply to a given node it is left unchanged.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
+   *
    * @param rule the function use to transform this nodes children
    */
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
@@ -253,6 +254,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
+   *
    * @param rule the function used to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
@@ -265,6 +267,26 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       transformChildren(rule, (t, r) => t.transformDown(r))
     } else {
       afterRule.transformChildren(rule, (t, r) => t.transformDown(r))
+    }
+  }
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.
+   *
+   * @param rule the function use to transform this nodes children
+   */
+  def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    val afterRuleOnChildren = transformChildren(rule, (t, r) => t.transformUp(r))
+    if (this fastEquals afterRuleOnChildren) {
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(this, identity[BaseType])
+      }
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      }
     }
   }
 
@@ -330,25 +352,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case null => null
     }.toArray
     if (changed) makeCopy(newArgs) else this
-  }
-
-  /**
-   * Returns a copy of this node where `rule` has been recursively applied first to all of its
-   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
-   * unchanged.
-   * @param rule the function use to transform this nodes children
-   */
-  def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = transformChildren(rule, (t, r) => t.transformUp(r))
-    if (this fastEquals afterRuleOnChildren) {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(this, identity[BaseType])
-      }
-    } else {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
-      }
-    }
   }
 
   /**
