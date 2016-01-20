@@ -650,7 +650,7 @@ private[ml] object RandomForest extends Logging {
    * @param binAggregates Bin statistics.
    * @return tuple for best split: (Split, information gain, prediction at node)
    */
-  private def binsToBestSplit(
+  private[tree] def binsToBestSplit(
       binAggregates: DTStatsAggregator,
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
@@ -740,7 +740,7 @@ private[ml] object RandomForest extends Logging {
               val categoryStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
               val centroid = if (categoryStats.count != 0) {
-                categoryStats.calculate()
+                categoryStats.prob(categoryStats.predict)
               } else {
                 Double.MaxValue
               }
