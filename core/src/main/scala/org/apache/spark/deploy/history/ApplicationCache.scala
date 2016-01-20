@@ -189,7 +189,7 @@ private[history] class ApplicationCache(
         log.debug(s"Probing at time $now for updated application $cacheKey -> $entry")
         metrics.updateProbeCount.inc()
         updated = time(metrics.updateProbeTimer) {
-          entry.updateProbe.isUpdated()
+          entry.updateProbe()
         }
         if (updated) {
           logDebug(s"refreshing $cacheKey")
@@ -357,24 +357,26 @@ private[history] class ApplicationCache(
  * An entry in the cache.
  *
  * @param ui Spark UI
- * @param completed: flag to indicated that the application has completed (and so
- *                 does not need refreshing)
- * @param probeTime timestamp in milliseconds. This may be updated during probes
+ * @param completed Flag to indicated that the application has completed (and so
+ *                 does not need refreshing).
+ * @param updateProbe function to call to see if the application has been updated and
+ *                    therefore that the cached value needs to be refreshed.
+ * @param probeTime Times in milliseconds when the probe was last executed.
  */
 private[history] final class CacheEntry(
     val ui: SparkUI,
     val completed: Boolean,
-    val updateProbe: HistoryUpdateProbe,
+    val updateProbe: () => Boolean,
     var probeTime: Long) {
 
   /** string value is for test assertions */
   override def toString: String = {
-    s"UI $ui, updateProbe=$updateProbe, completed=$completed, probeTime=$probeTime"
+    s"UI $ui, completed=$completed, probeTime=$probeTime"
   }
 }
 
 /**
- * Cache key: compares on App Id and then, if non-empty, attemptId.
+ * Cache key: compares on `appId` and then, if non-empty, `attemptId`.
  * The [[hashCode()]] function uses the same fields.
  * @param appId application ID
  * @param attemptId attempt ID
@@ -386,6 +388,10 @@ private[history] final case class CacheKey(appId: String, attemptId: Option[Stri
   }
 }
 
+/**
+ * Metrics of the cache
+ * @param prefix prefix to register all entries under
+ */
 private[history] class CacheMetrics(prefix: String) extends Source {
 
   /* metrics: counters and timers */
@@ -444,7 +450,7 @@ private[history] class CacheMetrics(prefix: String) extends Source {
 private[history] trait ApplicationCacheOperations {
 
   /**
-   * Get the application UI and the probe neededed to see if it has updated later.
+   * Get the application UI and the probe neededed to see if it has been updated.
    * @param appId application ID
    * @param attemptId attempt ID
    * @return If found, the Spark UI and any history information to be used in the cache
@@ -626,7 +632,7 @@ private[history] object ApplicationCacheCheckFilterRelay extends Logging {
         } catch {
           case ex: Exception =>
             // something went wrong. Keep going with the existing UI
-            logWarning(s"When checking for  $appId/$attemptId from $requestURI", ex)
+            logWarning(s"When checking for $appId/$attemptId from $requestURI", ex)
             false
         }
 

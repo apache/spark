@@ -72,17 +72,11 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     var detachCount = 0L
     var updateProbeCount = 0L
 
-    /**
-     * Get the application UI
-     * @param appId application ID
-     * @param attemptId attempt ID
-     * @return If found, the Spark UI and any history information to be used in the cache
-     */
     override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
       instances.get(CacheKey(appId, attemptId)).map( e =>
-        LoadedAppUI(e.ui, new StubHistoryUpdateProbe(appId, attemptId, e.probeTime)))
+        LoadedAppUI(e.ui, updateProbe(appId, attemptId, e.probeTime)))
     }
 
     override def attachSparkUI(
@@ -126,8 +120,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
         completed: Boolean,
         timestamp: Long): Unit = {
       instances += (CacheKey(appId, attemptId) ->
-          new CacheEntry(ui, completed,
-            new StubHistoryUpdateProbe(appId, attemptId, timestamp), timestamp))
+          new CacheEntry(ui, completed, updateProbe(appId, attemptId, timestamp), timestamp))
     }
 
     /**
@@ -157,23 +150,17 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
      * @param attemptId attempt to probe
      * @param updateTime timestamp of this UI load
      */
-    private[history] class StubHistoryUpdateProbe(
+    private[history] def updateProbe(
         appId: String,
         attemptId: Option[String],
-        updateTime: Long)
-        extends HistoryUpdateProbe {
-
-      override def isUpdated(): Boolean = {
-        updateProbeCount += 1
-        logDebug(s"isUpdated($appId, $attemptId, ${updateTime})")
-        val entry = instances.get(CacheKey(appId, attemptId)).get
-        val updated = entry.probeTime > updateTime
-        logDebug(s"entry = $entry; updated = $updated")
-        updated
-      }
+        updateTime: Long)(): Boolean = {
+      updateProbeCount += 1
+      logDebug(s"isUpdated($appId, $attemptId, ${updateTime})")
+      val entry = instances.get(CacheKey(appId, attemptId)).get
+      val updated = entry.probeTime > updateTime
+      logDebug(s"entry = $entry; updated = $updated")
+      updated
     }
-
-
   }
 
   /**

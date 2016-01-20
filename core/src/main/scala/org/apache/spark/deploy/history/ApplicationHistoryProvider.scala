@@ -68,7 +68,7 @@ private[history] abstract class HistoryUpdateProbe {
  */
 private[history] case class LoadedAppUI(
     ui: SparkUI,
-    updateProbe: HistoryUpdateProbe)
+    updateProbe: () => Boolean)
 
 private[history] abstract class ApplicationHistoryProvider {
 

@@ -55,7 +55,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * is created copying over all the original data, the current size, and an incremented version
  * counter. Accordingly, the fact the attempt is updated is detected, but there is no replay
  * cost.
- * - When [[UpdateProbe.isUpdated()]] is invoked to check if a loaded [[SparkUI]]
+ * - When [[updateProbe()]] is invoked to check if a loaded [[SparkUI]]
  * instance is out of date, the version counter of the application attempt loaded is
  * compared with that attempt's current value; the loaded UI is considered out of date
  * if its version is less than that of the current listing.
@@ -254,7 +254,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
               appListener.viewAcls.getOrElse(""))
-            LoadedAppUI(ui, new UpdateProbe(appId, attemptId, attempt.fileSize))
+            LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize))
           }
         }
       }
@@ -724,23 +724,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * @param attemptId attempt to probe
    * @param fileSize the file size of the last attempt's logs
    */
-  private class UpdateProbe(
-      appId: String,
-      attemptId: Option[String],
-      fileSize: Long) extends HistoryUpdateProbe {
-
-    override def toString: String = {
-      s"UpdateProbe($appId/$attemptId @$fileSize)"
-    }
-
-    override def isUpdated(): Boolean = {
-      lookup(appId, attemptId) match {
-        case None =>
-          logDebug(s"Application Attempt $appId/$attemptId not found")
-          false
-        case Some(latest) =>
-          fileSize < latest.fileSize
-      }
+  private def updateProbe(
+    appId: String,
+    attemptId: Option[String],
+    fileSize: Long)(): Boolean = {
+    lookup(appId, attemptId) match {
+      case None =>
+        logDebug(s"Application Attempt $appId/$attemptId not found")
+        false
+      case Some(latest) =>
+        fileSize < latest.fileSize
     }
   }
 }
