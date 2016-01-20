@@ -349,4 +349,30 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
+
+  test("save csv with compression codec option") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(testFile(carsFile))
+
+      cars.coalesce(1).write
+        .format("csv")
+        .option("header", "true")
+        .option("compression", "gZiP")
+        .save(csvDir)
+
+      val compressedFiles = new File(csvDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+
+      val carsCopy = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(csvDir)
+
+      verifyCars(carsCopy, withHeader = true)
+    }
+  }
 }
