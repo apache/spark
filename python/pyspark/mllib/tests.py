@@ -77,24 +77,21 @@ except:
     pass
 
 ser = PickleSerializer()
+sc = SparkContext('local[4]', "MLlib tests")
 
 
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = SparkContext('local[4]', "MLlib tests")
-
-    def tearDown(self):
-        self.sc.stop()
+        self.sc = sc
 
 
 class MLLibStreamingTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = SparkContext('local[4]', "MLlib tests")
+        self.sc = sc
         self.ssc = StreamingContext(self.sc, 1.0)
 
     def tearDown(self):
         self.ssc.stop(False)
-        self.sc.stop()
 
     @staticmethod
     def _eventually(condition, timeout=30.0, catch_assertions=False):
@@ -1169,7 +1166,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             clusterWeights=[1.0, 1.0, 1.0, 1.0])
 
         predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
-        predict_data = [self.sc.parallelize(batch, 1) for batch in predict_data]
+        predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
         predict_stream = self.ssc.queueStream(predict_data)
         predict_val = stkm.predictOn(predict_stream)
 
@@ -1200,7 +1197,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         # classification based in the initial model would have been 0
         # proving that the model is updated.
         batches = [[[-0.5], [0.6], [0.8]], [[0.2], [-0.1], [0.3]]]
-        batches = [self.sc.parallelize(batch) for batch in batches]
+        batches = [sc.parallelize(batch) for batch in batches]
         input_stream = self.ssc.queueStream(batches)
         predict_results = []
 
@@ -1233,7 +1230,7 @@ class LinearDataGeneratorTests(MLlibTestCase):
             self.assertEqual(len(point.features), 3)
 
         linear_data = LinearDataGenerator.generateLinearRDD(
-            sc=self.sc, nexamples=6, nfeatures=2, eps=0.1,
+            sc=sc, nexamples=6, nfeatures=2, eps=0.1,
             nParts=2, intercept=0.0).collect()
         self.assertEqual(len(linear_data), 6)
         for point in linear_data:
@@ -1409,7 +1406,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0, 10.0], xMean, xVariance, 100, 42 + i, 0.1)
-            batches.append(self.sc.parallelize(batch))
+            batches.append(sc.parallelize(batch))
 
         input_stream = self.ssc.queueStream(batches)
         slr.trainOn(input_stream)
@@ -1433,7 +1430,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
-            batches.append(self.sc.parallelize(batch))
+            batches.append(sc.parallelize(batch))
 
         model_weights = []
         input_stream = self.ssc.queueStream(batches)
@@ -1466,7 +1463,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
                 0.0, [10.0, 10.0], [0.0, 0.0], [1.0 / 3.0, 1.0 / 3.0],
                 100, 42 + i, 0.1)
             batches.append(
-                self.sc.parallelize(batch).map(lambda lp: (lp.label, lp.features)))
+                sc.parallelize(batch).map(lambda lp: (lp.label, lp.features)))
 
         input_stream = self.ssc.queueStream(batches)
         output_stream = slr.predictOnValues(input_stream)
@@ -1497,7 +1494,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
-            batches.append(self.sc.parallelize(batch))
+            batches.append(sc.parallelize(batch))
 
         predict_batches = [
             b.map(lambda lp: (lp.label, lp.features)) for b in batches]
@@ -1583,7 +1580,6 @@ class ALSTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if xmlrunner:
