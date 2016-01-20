@@ -264,12 +264,16 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
   */
 private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Rule[SparkPlan] {
 
+  private def supportCodegen(e: Expression): Boolean = e match {
+    case e: LeafExpression => true
+    // CodegenFallback requires the input to be an InternalRow
+    case e: CodegenFallback => false
+    case _ => true
+  }
+
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
-      // Non-leaf with CodegenFallback does not work with whole stage codegen
-      val willFallback = plan.expressions.exists(
-        _.find(e => e.isInstanceOf[CodegenFallback] && !e.isInstanceOf[LeafExpression]).isDefined
-      )
+      val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
       val haveManyColumns = plan.output.length > 200
       !willFallback && !haveManyColumns

@@ -71,7 +71,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
     val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
-    df.collect()
+    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+      df.collect()
+    }
     sparkContext.listenerBus.waitUntilEmpty(10000)
     val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
     assert(executionIds.size === 1)

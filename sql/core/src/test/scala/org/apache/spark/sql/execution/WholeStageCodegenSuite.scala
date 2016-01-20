@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.functions.{avg, col, max}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
@@ -34,5 +37,14 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       (p: SparkPlan) => Filter('a == 1, p),
       sortAnswers = false
     )
+  }
+
+  test("Aggregate should be included in WholeStageCodegen") {
+    val df = sqlContext.range(10).groupBy().agg(max(col("id")), avg(col("id")))
+    val plan = df.queryExecution.executedPlan
+    assert(plan.find(p =>
+      p.isInstanceOf[WholeStageCodegen] &&
+        p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[TungstenAggregate]).isDefined)
+    assert(df.collect() === Array(Row(9, 4.5)))
   }
 }
