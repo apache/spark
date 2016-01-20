@@ -19,21 +19,13 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.rdd.{BlockRDD, RDD}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.types.StructType
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.api.java.StorageLevels
-
-import org.apache.spark.sql.{Dataset, DataFrame, SQLContext, Encoder, Row}
-import org.apache.spark.sql.catalyst.encoders.{RowEncoder, encoderFor}
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Union, LeafNode}
-import org.apache.spark.storage.{StreamBlockId, BlockId}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
+import org.apache.spark.sql.types.StructType
 
 object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)

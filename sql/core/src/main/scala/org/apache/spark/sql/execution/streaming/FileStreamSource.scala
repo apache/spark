@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{OutputStreamWriter, BufferedWriter}
+import java.io.{BufferedWriter, OutputStreamWriter}
 
-import org.apache.hadoop.fs.{FileStatus, Path, FileSystem}
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashSet
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * A very simple source that reads text files from the given directory as they appear.

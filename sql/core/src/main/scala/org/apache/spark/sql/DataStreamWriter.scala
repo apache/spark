@@ -17,20 +17,11 @@
 
 package org.apache.spark.sql
 
-import java.util.Properties
-
-import org.apache.spark.sql.execution.streaming.{Offset, Sink, Batch, StreamExecution}
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{Project, InsertIntoTable}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
-import org.apache.spark.sql.sources.HadoopFsRelation
-
+import org.apache.spark.sql.execution.datasources.ResolvedDataSource
+import org.apache.spark.sql.execution.streaming.StreamExecution
 
 /**
  * :: Experimental ::

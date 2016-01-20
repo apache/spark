@@ -22,10 +22,6 @@ import java.util.{Locale, TimeZone}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.plans._
@@ -196,10 +192,10 @@ abstract class QueryTest extends PlanTest {
     val logicalPlan = df.queryExecution.analyzed
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
-      case _: MapPartitions[_, _] => return
-      case _: MapGroups[_, _, _] => return
-      case _: AppendColumns[_, _] => return
-      case _: CoGroup[_, _, _, _] => return
+      case _: MapPartitions => return
+      case _: MapGroups => return
+      case _: AppendColumns => return
+      case _: CoGroup => return
       case _: LogicalRelation => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return

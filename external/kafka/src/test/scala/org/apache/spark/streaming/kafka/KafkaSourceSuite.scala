@@ -26,7 +26,6 @@ import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.test.SharedSQLContext
 
-
 class KafkaSourceSuite extends StreamTest with SharedSQLContext {
 
   import testImplicits._
@@ -72,7 +71,7 @@ class KafkaSourceSuite extends StreamTest with SharedSQLContext {
       testStream(mapped)(
         AddKafkaData(kafkaSource, Set(topic), 1, 2, 3),
         CheckAnswer(2, 3, 4),
-        StopStream ,
+        StopStream,
         DropBatches(1),         // Lose last batch in the sink
         StartStream,
         CheckAnswer(2, 3, 4),   // Should get the data back on recovery

@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.kafka
 
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
@@ -27,10 +27,10 @@ import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
+import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.NextIterator
-import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
 
 /**
  * A batch-oriented interface for consuming from Kafka.
@@ -156,7 +156,7 @@ class KafkaRDD[
     var requestOffset = part.fromOffset
     var iter: Iterator[MessageAndOffset] = null
 
-    // The idea is to use the provided preferred host, except on task retry atttempts,
+    // The idea is to use the provided preferred host, except on task retry attempts,
     // to minimize number of kafka metadata requests
     private def connectLeader: SimpleConsumer = {
       if (context.attemptNumber > 0) {

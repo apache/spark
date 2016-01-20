@@ -36,6 +36,7 @@ HADOOP_PROFILES=(
     hadoop-2.3
     hadoop-2.4
     hadoop-2.6
+    hadoop-2.7
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
@@ -70,19 +71,10 @@ $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /de
 # Generate manifests for each Hadoop profile:
 for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   echo "Performing Maven install for $HADOOP_PROFILE"
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar install:install -q \
-    -pl '!assembly' \
-    -pl '!examples' \
-    -pl '!external/flume-assembly' \
-    -pl '!external/kafka-assembly' \
-    -pl '!external/twitter' \
-    -pl '!external/flume' \
-    -pl '!external/mqtt' \
-    -pl '!external/mqtt-assembly' \
-    -pl '!external/zeromq' \
-    -pl '!external/kafka' \
-    -pl '!tags' \
-    -DskipTests
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install clean -q
+
+  echo "Performing Maven validate for $HADOOP_PROFILE"
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE validate -q
 
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps

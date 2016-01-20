@@ -21,10 +21,10 @@ import kafka.common.TopicAndPartition
 import kafka.serializer._
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{Batch, Offset, Source, StreamingRelation}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 
 
 /** An [[Offset]] for the [[KafkaSource]]. */

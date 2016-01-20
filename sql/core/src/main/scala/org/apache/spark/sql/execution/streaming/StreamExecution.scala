@@ -19,15 +19,14 @@ package org.apache.spark.sql.execution.streaming
 
 import java.lang.Thread.UncaughtExceptionHandler
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.{StandingQuery, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
-
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.Logging
+import org.apache.spark.sql.{DataFrame, SQLContext, StandingQuery}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.QueryExecution
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occuring in a separate thread.

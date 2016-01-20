@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.{DataFrame, SQLContext}
-
 /**
  * An interface for systems that can collect the results of a streaming query.
  *

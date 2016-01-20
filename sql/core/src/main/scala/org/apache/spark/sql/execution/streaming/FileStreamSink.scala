@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.nio.ByteBuffer
 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.Logging
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SQLContext
