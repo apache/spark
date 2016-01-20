@@ -17,27 +17,19 @@
 
 package org.apache.spark.ml.source.libsvm
 
-import java.io.{CharArrayWriter, IOException}
-
-import com.fasterxml.jackson.core.JsonFactory
+import java.io.IOException
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
-
-import org.apache.spark.Logging
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
 
 /**
  * LibSVMRelation provides the DataFrame constructed from LibSVM format data.
