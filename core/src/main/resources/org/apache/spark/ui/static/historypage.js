@@ -109,7 +109,6 @@ $(document).ready(function() {
                         {name: 'seventh'},
                         {name: 'eighth'},
                     ],
-                    "displayLength": 25,
         };
 
         var rowGroupConf = {
@@ -127,7 +126,7 @@ $(document).ready(function() {
           }
         }
 
-        if ($(selector.concat(" tr")).length <= 25) {
+        if ($(selector.concat(" tr")).length <= 20) {
           $.extend(conf, {paging: false});
         }
 

@@ -65,25 +65,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allAppsSize}
                 {if (requestedIncomplete) "(Incomplete applications)"}
-                <span style="float: right">
-                  {
-                  if (actualPage > 1) {
-                    <a href={makePageLink(actualPage - 1, requestedIncomplete)}>&lt; </a>
-                      <a href={makePageLink(1, requestedIncomplete)}>1</a>
-                  }
-                  }
-                  {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
-                  {leftSideIndices}
-                  {actualPage}
-                  {rightSideIndices}
-                  {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
-                  {
-                  if (actualPage < pageCount) {
-                    <a href={makePageLink(pageCount, requestedIncomplete)}>{pageCount}</a>
-                      <a href={makePageLink(actualPage + 1, requestedIncomplete)}> &gt;</a>
-                  }
-                  }
-                </span>
               </h4> ++
               <div id="history-summary"></div>
             } else if (requestedIncomplete) {
