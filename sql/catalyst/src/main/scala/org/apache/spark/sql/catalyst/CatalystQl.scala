@@ -643,7 +643,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", target) :: Nil) if target.nonEmpty =>
-      UnresolvedStar(Some(target.map(_.text)))
+      UnresolvedStar(Some(target.map(x => cleanIdentifier(x.text))))
 
     /* Aggregate Functions */
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
