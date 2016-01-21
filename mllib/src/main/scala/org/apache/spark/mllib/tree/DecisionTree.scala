@@ -885,7 +885,11 @@ object DecisionTree extends Serializable with Logging {
               val categoryStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
               val centroid = if (categoryStats.count != 0) {
-                categoryStats.prob(categoryStats.predict)
+                if (categoryStats.count == 2) {
+                  categoryStats.stats(1)
+                } else {
+                  categoryStats.predict
+                }
               } else {
                 Double.MaxValue
               }

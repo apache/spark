@@ -491,7 +491,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
     val split = rootNode.split.get
-    assert(split.categories === List(0.0))
+    assert(split.categories === List(1.0))
     assert(split.featureType === Categorical)
     assert(split.threshold === Double.MinValue)
 
@@ -520,7 +520,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val split = rootNode.split.get
     assert(split.categories.length === 1)
-    assert(split.categories.contains(0.0))
+    assert(split.categories.contains(1.0))
     assert(split.featureType === Categorical)
     assert(split.threshold === Double.MinValue)
 
