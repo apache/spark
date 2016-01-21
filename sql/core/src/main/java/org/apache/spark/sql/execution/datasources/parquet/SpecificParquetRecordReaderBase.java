@@ -57,6 +57,8 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 
+import org.apache.spark.deploy.SparkHadoopUtil;
+
 /**
  * Base class for custom RecordReaaders for Parquet that directly materialize to `T`.
  * This class handles computing row groups, filtering on them, setting up the column readers,
@@ -81,7 +83,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
-    Configuration configuration = taskAttemptContext.getConfiguration();
+    Configuration configuration =
+      SparkHadoopUtil.get().getConfigurationFromJobContext(taskAttemptContext);
     ParquetInputSplit split = (ParquetInputSplit)inputSplit;
     this.file = split.getPath();
     long[] rowGroupOffsets = split.getRowGroupOffsets();
