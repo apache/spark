@@ -182,8 +182,7 @@ object IterativelyReweightedLeastSquaresSuite {
       val eta = family.predict((instance.label + yMean) / 2.0)
       Instance(eta, instance.weight, instance.features)
     }
-    val model = wls.fit(newInstances)
-    model
+    wls.fit(newInstances)
   }
 
   def BinomialReweightFunc(
@@ -214,7 +213,7 @@ object IterativelyReweightedLeastSquaresSuite {
     val eta = dot(instance.features, model.coefficients) + model.intercept
     val e = math.max(math.abs(eta - instance.label), 1e-7)
     val w = 1 / e
-    val z = instance.label
-    (z, w)
+    val y = instance.label
+    (y, w)
   }
 }
