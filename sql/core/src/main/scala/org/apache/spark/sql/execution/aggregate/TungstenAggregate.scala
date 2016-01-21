@@ -121,9 +121,7 @@ case class TungstenAggregate(
 
   override def supportCodegen: Boolean = {
     // ImperativeAggregate is not supported right now
-    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) &&
-      // final aggregation without grouping keys only have one row, do not need to codegen
-      (!(modes.contains(Final) || modes.contains(Complete)))
+    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
   }
 
   override def upstream(): RDD[InternalRow] = {
@@ -168,6 +166,17 @@ case class TungstenAggregate(
       ExprCode(ev.code + initVars, isNull, value)
     }
 
+    // generate variables for output
+    val resultVars = if (modes.contains(Final)) {
+      ctx.currentVars = bufVars
+      val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
+      resultExpressions.map { e =>
+        BindReferences.bindReference(e, bufferAttrs).gen(ctx)
+      }
+    } else {
+      bufVars.map(ev => ExprCode("", ev.isNull, ev.value))
+    }
+
     val childSource = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     s"""
        | if (!$initAgg) {
@@ -179,7 +188,8 @@ case class TungstenAggregate(
        |   $childSource
        |
        |   // output the result
-       |   ${consume(ctx, this, bufVars)}
+       |   ${resultVars.map(_.code).mkString("\n")}
+       |   ${consume(ctx, this, resultVars)}
        | }
      """.stripMargin
   }
@@ -257,10 +267,50 @@ case class TungstenAggregate(
     val iterTerm = ctx.freshName("mapIter")
     ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
 
-    val unsafeRowJoiner = GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
-    val joinerTerm = addOjb(ctx, "unsafeRowJoiner", unsafeRowJoiner,
-      classOf[UnsafeRowJoiner].getName)
-    val resultRow = ctx.freshName("resultRow")
+    // generate code for output
+    val keyTerm = ctx.freshName("aggKey")
+    val bufferTerm = ctx.freshName("aggBuffer")
+    val outputCode = if (modes.contains(Final)) {
+      // generate output using resultExpressions
+      ctx.currentVars = null
+      ctx.INPUT_ROW = keyTerm
+      val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
+          BoundReference(i, e.dataType, e.nullable).gen(ctx)
+      }
+      ctx.INPUT_ROW = bufferTerm
+      val bufferVars = bufferAttributes.zipWithIndex.map { case (e, i) =>
+        BoundReference(i, e.dataType, e.nullable).gen(ctx)
+
+      }
+      ctx.currentVars = keyVars ++ bufferVars
+      val inputAttrs = groupingAttributes ++ bufferAttributes
+      val resultVars = resultExpressions.map { e =>
+        BindReferences.bindReference(e, inputAttrs).gen(ctx)
+      }
+      s"""
+         | ${keyVars.map(_.code).mkString("\n")}
+         | ${bufferVars.map(_.code).mkString("\n")}
+         | ${resultVars.map(_.code).mkString("\n")}
+         | ${consume(ctx, this, resultVars)}
+       """.stripMargin
+
+    } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
+      // This should be the last operator in a stage, we should output UnsafeRow directly
+      val unsafeRowJoiner = GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
+      val joinerTerm = addOjb(ctx, "unsafeRowJoiner", unsafeRowJoiner,
+        classOf[UnsafeRowJoiner].getName)
+      val resultRow = ctx.freshName("resultRow")
+      s"""
+         | UnsafeRow $resultRow = $joinerTerm.join($keyTerm, $bufferTerm);
+         | ${consume(ctx, this, null, resultRow)}
+       """.stripMargin
+
+    } else {
+      // only grouping key
+      s"""
+         | ${consume(ctx, this, null, keyTerm)}
+       """.stripMargin
+    }
 
     val childSource = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     s"""
@@ -274,9 +324,9 @@ case class TungstenAggregate(
        |
        | // output the result
        | while ($iterTerm.next()) {
-       |   UnsafeRow $resultRow =
-       |     $joinerTerm.join((UnsafeRow) $iterTerm.getKey(), (UnsafeRow) $iterTerm.getValue());
-       |   ${consume(ctx, this, null, resultRow)}
+       |   UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
+       |   UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getKey();
+       |   $outputCode
        | }
        | $hashMapTerm.free();
      """.stripMargin
