@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.sketch.unsafe;
+package org.apache.spark.util.sketch;
 
 import java.lang.reflect.Field;
 
 import sun.misc.Unsafe;
 
-public final class Platform {
+final class Platform {
 
   private static final Unsafe _UNSAFE;
 

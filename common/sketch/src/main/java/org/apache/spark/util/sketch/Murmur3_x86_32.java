@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.sketch.unsafe.hash;
-
-import org.apache.spark.util.sketch.unsafe.Platform;
+package org.apache.spark.util.sketch;
 
 /**
  * 32-bit Murmur3 hasher.  This is based on Guava's Murmur3_32HashFunction.
  */
-public final class Murmur3_x86_32 {
+final class Murmur3_x86_32 {
   private static final int C1 = 0xcc9e2d51;
   private static final int C2 = 0x1b873593;
 
