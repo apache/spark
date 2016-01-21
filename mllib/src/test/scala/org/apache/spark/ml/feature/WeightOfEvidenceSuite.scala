@@ -22,11 +22,11 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class WeightOfEvidenceSuite
+class WoETransformerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
-    ParamsSuite.checkParams(new WeightOfEvidence())
+    ParamsSuite.checkParams(new WoETransformer())
   }
 
   test("Weight of Evidence with String feature and Boolean label") {
@@ -38,11 +38,12 @@ class WeightOfEvidenceSuite
       (true, "cd", -0.4055)
     )).toDF("label", "feature", "expected")
 
-    val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    assert (woe.transform(df).collect().forall(r =>
+    val woe = new WoETransformer().setInputCol("feature").setOutputCol("woe")
+    val model = woe.fit(df)
+    assert (model.transform(df).collect().forall(r =>
       r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
     ))
-    assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
+    assert(WoETransformer.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
   }
 
   test("Weight of Evidence with Int feature and Int label") {
@@ -54,11 +55,12 @@ class WeightOfEvidenceSuite
       (1, 200, -0.4055)
     )).toDF("label", "feature", "expected")
 
-    val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    assert (woe.transform(df).collect().forall(r =>
+    val woe = new WoETransformer().setInputCol("feature").setOutputCol("woe")
+    val model = woe.fit(df)
+    assert (model.transform(df).collect().forall(r =>
       r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
     ))
-    assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
+    assert(WoETransformer.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
   }
 
   test("Weight of Evidence with Double feature and Double label") {
@@ -70,11 +72,12 @@ class WeightOfEvidenceSuite
       (1.0, 200.0, -0.4055)
     )).toDF("label", "feature", "expected")
 
-    val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    assert (woe.transform(df).collect().forall(r =>
+    val woe = new WoETransformer().setInputCol("feature").setOutputCol("woe")
+    val model = woe.fit(df)
+    assert (model.transform(df).collect().forall(r =>
       r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
     ))
-    assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
+    assert(WoETransformer.getInformationValue(df, "feature", "label") ~== 0.1147 absTol 1E-3)
   }
 
   test("Weight of Evidence with 0 postive or 0 negative") {
@@ -88,10 +91,11 @@ class WeightOfEvidenceSuite
       (false, "ef", -5.5910)
     )).toDF("label", "feature", "expected")
 
-    val woe = new WeightOfEvidence().setInputCol("feature").setOutputCol("woe")
-    assert (woe.transform(df).collect().forall(r =>
+    val woe = new WoETransformer().setInputCol("feature").setOutputCol("woe")
+    val model = woe.fit(df)
+    assert (model.transform(df).collect().forall(r =>
       r.getAs[Double]("woe") ~== r.getAs[Double]("expected") absTol 1E-3
     ))
-    assert(WeightOfEvidence.getInformationValue(df, "feature", "label") ~== 6.3018 absTol 1E-3)
+    assert(WoETransformer.getInformationValue(df, "feature", "label") ~== 6.3018 absTol 1E-3)
   }
 }
