@@ -65,7 +65,7 @@ private[spark] class ResultTask[T, U](
     metrics = Some(context.taskMetrics)
     val itr = rdd.iterator(partition, context)
     val result = func(context, itr)
-    val computedFullPartition = itr.isEmpty || rdd.getStorageLevel != StorageLevel.NONE
+    val computedFullPartition = itr.isEmpty || rdd.storageLevel != StorageLevel.NONE
     (result, computedFullPartition)
   }
 
