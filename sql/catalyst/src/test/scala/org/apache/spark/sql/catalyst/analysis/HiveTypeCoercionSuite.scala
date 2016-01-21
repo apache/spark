@@ -522,7 +522,7 @@ class HiveTypeCoercionSuite extends PlanTest {
   }
 
   test("strength reduction for integer/decimal comparisons") {
-    val rule = HiveTypeCoercion.SimplifyIntegerDecimalComparing
+    val rule = HiveTypeCoercion.DecimalPrecision
 
     // If a is an int.
     // a > 4.7 => a > 4
