@@ -109,8 +109,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def schedulingMode: SchedulingMode = SchedulingMode.NONE
     override def start() = {}
     override def stop() = {}
-    override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
-      blockManagerId: BlockManagerId): Boolean = true
+    override def executorHeartbeatReceived(
+        execId: String,
+        accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+        blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -475,7 +477,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       override def defaultParallelism(): Int = 2
       override def executorHeartbeatReceived(
           execId: String,
-          taskMetrics: Array[(Long, TaskMetrics)],
+          accumUpdates: Array[(Long, Seq[AccumulableInfo])],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def applicationAttemptId(): Option[String] = None

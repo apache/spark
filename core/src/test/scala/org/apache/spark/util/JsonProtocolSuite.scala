@@ -80,7 +80,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", Seq(
       (1L, 2, 3, makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800,
-        hasHadoopInput = true, hasOutput = true))))
+        hasHadoopInput = true, hasOutput = true).accumulatorUpdates())))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -488,14 +488,17 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
         assert(e1.executorId === e1.executorId)
       case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
         assert(e1.execId === e2.execId)
-        assertSeqEquals[(Long, Int, Int, TaskMetrics)](e1.taskMetrics, e2.taskMetrics, (a, b) => {
-          val (taskId1, stageId1, stageAttemptId1, metrics1) = a
-          val (taskId2, stageId2, stageAttemptId2, metrics2) = b
-          assert(taskId1 === taskId2)
-          assert(stageId1 === stageId2)
-          assert(stageAttemptId1 === stageAttemptId2)
-          assertEquals(metrics1, metrics2)
-        })
+        assertSeqEquals[(Long, Int, Int, Seq[AccumulableInfo])](
+          e1.accumUpdates,
+          e2.accumUpdates,
+          (a, b) => {
+            val (taskId1, stageId1, stageAttemptId1, updates1) = a
+            val (taskId2, stageId2, stageAttemptId2, updates2) = b
+            assert(taskId1 === taskId2)
+            assert(stageId1 === stageId2)
+            assert(stageAttemptId1 === stageAttemptId2)
+            assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
+          })
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
