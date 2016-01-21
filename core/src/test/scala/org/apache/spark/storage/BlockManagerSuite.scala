@@ -855,7 +855,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       } finally {
         TaskContext.unset()
       }
-      context.taskMetrics.updatedBlocks.getOrElse(Seq.empty)
+      context.taskMetrics.updatedBlockStatuses
     }
 
     // 1 updated block (i.e. list1)

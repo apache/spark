@@ -25,7 +25,7 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
@@ -96,6 +96,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test("union all") {
+    val unionDF = testData.unionAll(testData).unionAll(testData)
+      .unionAll(testData).unionAll(testData)
+
+    // Before optimizer, Union should be combined.
+    assert(unionDF.queryExecution.analyzed.collect {
+      case j: Union if j.children.size == 5 => j }.size === 1)
+
+    checkAnswer(
+      unionDF.agg(avg('key), max('key), min('key), sum('key)),
+      Row(50.5, 100, 1, 25250) :: Nil
+    )
   }
 
   test("empty data frame") {
@@ -335,6 +349,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+  }
+
+  test("intersect - nullability") {
+    val nonNullableInts = Seq(Tuple1(1), Tuple1(3)).toDF()
+    assert(nonNullableInts.schema.forall(_.nullable == false))
+
+    val df1 = nonNullableInts.intersect(nullInts)
+    checkAnswer(df1, Row(1) :: Row(3) :: Nil)
+    assert(df1.schema.forall(_.nullable == false))
+
+    val df2 = nullInts.intersect(nonNullableInts)
+    checkAnswer(df2, Row(1) :: Row(3) :: Nil)
+    assert(df2.schema.forall(_.nullable == false))
+
+    val df3 = nullInts.intersect(nullInts)
+    checkAnswer(df3, Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
+    assert(df3.schema.forall(_.nullable == true))
+
+    val df4 = nonNullableInts.intersect(nonNullableInts)
+    checkAnswer(df4, Row(1) :: Row(3) :: Nil)
+    assert(df4.schema.forall(_.nullable == false))
   }
 
   test("udf") {

@@ -19,7 +19,10 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.Charset
 
+import org.apache.hadoop.io.compress._
+
 import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 private[sql] case class CSVParameters(@transient parameters: Map[String, String]) extends Logging {
 
@@ -35,7 +38,7 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
     val param = parameters.getOrElse(paramName, default.toString)
-    if (param.toLowerCase() == "true") {
+    if (param.toLowerCase == "true") {
       true
     } else if (param.toLowerCase == "false") {
       false
@@ -73,6 +76,11 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
+  val compressionCodec: Option[String] = {
+    val name = parameters.get("compression").orElse(parameters.get("codec"))
+    name.map(CSVCompressionCodecs.getCodecClassName)
+  }
+
   val maxColumns = 20480
 
   val maxCharsPerColumn = 100000
@@ -85,7 +93,6 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 }
 
 private[csv] object ParseModes {
-
   val PERMISSIVE_MODE = "PERMISSIVE"
   val DROP_MALFORMED_MODE = "DROPMALFORMED"
   val FAIL_FAST_MODE = "FAILFAST"
@@ -105,5 +112,30 @@ private[csv] object ParseModes {
     mode.toUpperCase == PERMISSIVE_MODE
   } else {
     true // We default to permissive is the mode string is not valid
+  }
+}
+
+private[csv] object CSVCompressionCodecs {
+  private val shortCompressionCodecNames = Map(
+    "bzip2" -> classOf[BZip2Codec].getName,
+    "gzip" -> classOf[GzipCodec].getName,
+    "lz4" -> classOf[Lz4Codec].getName,
+    "snappy" -> classOf[SnappyCodec].getName)
+
+  /**
+   * Return the full version of the given codec class.
+   * If it is already a class name, just return it.
+   */
+  def getCodecClassName(name: String): String = {
+    val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
+    try {
+      // Validate the codec name
+      Utils.classForName(codecName)
+      codecName
+    } catch {
+      case e: ClassNotFoundException =>
+        throw new IllegalArgumentException(s"Codec [$codecName] " +
+          s"is not available. Known codecs are ${shortCompressionCodecNames.keys.mkString(", ")}.")
+    }
   }
 }
