@@ -219,12 +219,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val yMean = ySummarizer.mean(0)
-    var yStd = math.sqrt(ySummarizer.variance(0))
-
-    // If the yStd is zero, then the intercept is yMean with zero coefficient;
-    // as a result, training is not needed.
-    if (yStd == 0.0) {
+    val rawYStd = math.sqrt(ySummarizer.variance(0))
+    if (rawYStd == 0.0) {
       if ($(fitIntercept)) {
+        // If the rawYStd is zero and fitIntercept=true, then the intercept is yMean with
+        // zero coefficient; as a result, training is not needed.
         logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
           s"zeros and the intercept will be the mean of the label; as a result, " +
           s"training is not needed.")
@@ -246,14 +245,17 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           Array(0D))
         return copyValues(model.setSummary(trainingSummary))
       } else {
+        require(!($(regParam) > 0.0 && $(standardization)),
+          "The standard deviation of the label is zero. " +
+            "Model cannot be regularized with standardization=true")
         logWarning(s"The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
-        // In this case, the target variable cannot be standardized.
-        // So setting yStd=1 means that the target variable will not be scaled anymore and
-        // the training will continue.
-        yStd = 1.0
       }
     }
+
+    // if y is constant (rawYStd is zero), then y cannot be scaled. In this case
+    // setting yStd=1.0 ensures that y is not scaled anymore in l-bfgs algorithm.
+    val yStd = if (rawYStd > 0) rawYStd else 1.0
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
 

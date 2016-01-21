@@ -98,9 +98,9 @@ class LinearRegressionSuite
        R code:
 
        A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
-       b <- c(17, 17, 17, 17)
+       b.const <- c(17, 17, 17, 17)
        w <- c(1, 2, 3, 4)
-       df.const.label <- as.data.frame(cbind(A, b))
+       df.const.label <- as.data.frame(cbind(A, b.const))
      */
     datasetWithWeightConstantLabel = sqlContext.createDataFrame(
       sc.parallelize(Seq(
@@ -578,7 +578,7 @@ class LinearRegressionSuite
   test("linear regression model with constant label") {
     /*
        R code:
-       for (formula in c(b ~ . -1, b ~ .)) {
+       for (formula in c(b.const ~ . -1, b.const ~ .)) {
          model <- lm(formula, data=df.const.label, weights=w)
          print(as.vector(coef(model)))
        }
@@ -589,16 +589,30 @@ class LinearRegressionSuite
       Vectors.dense(0.0, -9.221298, 3.394343),
       Vectors.dense(17.0, 0.0, 0.0))
 
-    var idx = 0
-    for (fitIntercept <- Seq(false, true)) {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      var idx = 0
+      for (fitIntercept <- Seq(false, true)) {
+        val model = new LinearRegression()
+          .setFitIntercept(fitIntercept)
+          .setWeightCol("weight")
+          .setSolver(solver)
+          .fit(datasetWithWeightConstantLabel)
+        val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+        assert(actual ~== expected(idx) absTol 1e-4)
+        idx += 1
+      }
+    }
+  }
+
+  test("regularized linear regression through origin with constant label") {
+    // The problem is ill-defined if fitIntercept=false, regParam is non-zero and \
+    // standardization=true. An exception is thrown in this case.
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val model = new LinearRegression()
-        .setFitIntercept(fitIntercept)
-        .setWeightCol("weight")
-        .setSolver("l-bfgs")
-        .fit(datasetWithWeightConstantLabel)
-      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-      assert(actual ~== expected(idx) absTol 1e-4)
-      idx += 1
+        .setFitIntercept(false).setRegParam(0.1).setStandardization(true).setSolver(solver)
+      intercept[IllegalArgumentException] {
+        model.fit(datasetWithWeightConstantLabel)
+      }
     }
   }
 
