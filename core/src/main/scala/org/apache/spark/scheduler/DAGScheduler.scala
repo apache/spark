@@ -1006,7 +1006,7 @@ class DAGScheduler(
         case stage: ResultStage =>
           JavaUtils.bufferToArray(closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
       }
-
+      logDebug(s"Size of broadcasted task binary: ${taskBinaryBytes.length}")
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.
