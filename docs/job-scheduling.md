@@ -39,7 +39,10 @@ Resource allocation can be configured as follows, based on the cluster type:
   and optionally set `spark.cores.max` to limit each application's resource share as in the standalone mode.
   You should also set `spark.executor.memory` to control the executor memory.
 * **YARN:** The `--num-executors` option to the Spark YARN client controls how many executors it will allocate
-  on the cluster, while `--executor-memory` and `--executor-cores` control the resources per executor.
+  on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
+  (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
+  property) control the resources per executor. For more information, see the
+  [YARN Spark Properties](running-on-yarn.html).
 
 A second option available on Mesos is _dynamic sharing_ of CPU cores. In this mode, each Spark application
 still has a fixed and independent memory allocation (set by `spark.executor.memory`), but when the
