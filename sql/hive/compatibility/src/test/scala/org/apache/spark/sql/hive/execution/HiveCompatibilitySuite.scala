@@ -41,9 +41,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
 
-  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+  def testCases: Seq[(String, File)] = {
+    hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+  }
 
   override def beforeAll() {
+    super.beforeAll()
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -68,10 +71,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // For debugging dump some statistics about how much time was spent in various optimizer rules.
     logWarning(RuleExecutor.dumpTimeSpent())
+    super.afterAll()
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
-  override def blackList = Seq(
+  override def blackList: Seq[String] = Seq(
     // These tests use hooks that are not on the classpath and thus break all subsequent execution.
     "hook_order",
     "hook_context_cs",
@@ -106,7 +110,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge",
     "alter_concatenate_indexed_table",
     "protectmode2",
-    //"describe_table",
+    // "describe_table",
     "describe_comment_nonascii",
 
     "create_merge_compressed",
@@ -292,6 +296,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Odd changes to output
     "merge4",
 
+    // Unsupported underscore syntax.
+    "inputddl5",
+
     // Thift is broken...
     "inputddl8",
 
@@ -316,14 +323,21 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Feature removed in HIVE-11145
     "alter_partition_protect_mode",
     "drop_partitions_ignore_protection",
-    "protectmode"
+    "protectmode",
+
+    // Spark parser treats numerical literals differently: it creates decimals instead of doubles.
+    "udf_abs",
+    "udf_format_number",
+    "udf_round",
+    "udf_round_3",
+    "view_cast"
   )
 
   /**
    * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
    * blacklist are implicitly marked as ignored.
    */
-  override def whiteList = Seq(
+  override def whiteList: Seq[String] = Seq(
     "add_part_exist",
     "add_part_multiple",
     "add_partition_no_whitelist",
@@ -599,7 +613,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl2",
     "inputddl3",
     "inputddl4",
-    "inputddl5",
     "inputddl6",
     "inputddl7",
     "inputddl8",
@@ -878,7 +891,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_10_trims",
     "udf_E",
     "udf_PI",
-    "udf_abs",
     "udf_acos",
     "udf_add",
     "udf_array",
@@ -922,7 +934,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_find_in_set",
     "udf_float",
     "udf_floor",
-    "udf_format_number",
     "udf_from_unixtime",
     "udf_greaterthan",
     "udf_greaterthanorequal",
@@ -970,8 +981,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_regexp_replace",
     "udf_repeat",
     "udf_rlike",
-    "udf_round",
-    "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
     "udf_sign",

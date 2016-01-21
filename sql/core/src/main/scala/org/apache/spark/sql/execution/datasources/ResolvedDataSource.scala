@@ -97,6 +97,7 @@ object ResolvedDataSource extends Logging {
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
@@ -142,6 +143,7 @@ object ResolvedDataSource extends Logging {
             paths,
             Some(dataSchema),
             maybePartitionsSchema,
+            bucketSpec,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
@@ -173,7 +175,7 @@ object ResolvedDataSource extends Logging {
                 SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
               }
           }
-          dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
+          dataSource.createRelation(sqlContext, paths, None, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
           throw new AnalysisException(
             s"A schema needs to be specified when using $className.")
@@ -210,6 +212,7 @@ object ResolvedDataSource extends Logging {
       sqlContext: SQLContext,
       provider: String,
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
@@ -244,6 +247,7 @@ object ResolvedDataSource extends Logging {
           Array(outputPath.toString),
           Some(dataSchema.asNullable),
           Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+          bucketSpec,
           caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column
