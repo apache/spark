@@ -49,7 +49,6 @@ case class JSONOptions(
   }
 }
 
-
 object JSONOptions {
   def createFromConfigMap(parameters: Map[String, String]): JSONOptions = JSONOptions(
     samplingRatio =

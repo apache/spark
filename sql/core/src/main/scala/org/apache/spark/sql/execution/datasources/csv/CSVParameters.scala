@@ -115,5 +115,3 @@ private[csv] object ParseModes {
     true // We default to permissive is the mode string is not valid
   }
 }
-
-
