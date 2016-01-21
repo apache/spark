@@ -49,7 +49,7 @@ import org.apache.spark.util.SerializableJobConf
  * It is based on [[SparkHadoopWriter]].
  */
 private[hive] class SparkHiveWriterContainer(
-    @transient jobConf: JobConf,
+    @transient private val jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
     inputSchema: Seq[Attribute],
     table: MetastoreRelation)
