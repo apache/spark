@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
-import org.apache.spark.SparkException
+import org.apache.spark.Logging
 
 import scala.collection.immutable
 import scala.collection.JavaConverters._
@@ -513,7 +513,7 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf {
+private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -693,8 +693,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   private def setConfWithCheck(key: String, value: String): Unit = {
     if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
-      throw new SparkException(
-        s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
+      logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
     }
     settings.put(key, value)
   }
