@@ -635,7 +635,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(nameParts) =>
           UnresolvedAttribute(nameParts :+ cleanIdentifier(attr))
-        case other => UnresolvedExtractValue(other, Literal(attr))
+        case other => UnresolvedExtractValue(other, Literal(cleanIdentifier(attr)))
       }
 
     /* Stars (*) */
