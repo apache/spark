@@ -1,6 +1,16 @@
 # R on Spark
 
 SparkR is an R package that provides a light-weight frontend to use Spark from R.
+### Installing sparkR
+
+Libraries of sparkR need to be created in `$SPARK_HOME/R/lib`. This can be done by running the script `$SPARK_HOME/R/install-dev.sh`.
+By default the above script uses the system wide installation of R. However, this can be changed to any user installed location of R by setting the environment variable `R_HOME` the full path of the base directory where R is installed, before running install-dev.sh script.
+Example: 
+```
+# where /home/username/R is where R is installed and /home/username/R/bin contains the files R and RScript
+export R_HOME=/home/username/R
+./install-dev.sh
+```
 
 ### SparkR development
 
