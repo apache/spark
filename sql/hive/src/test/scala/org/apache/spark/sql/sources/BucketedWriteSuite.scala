@@ -19,13 +19,15 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, SQLConf}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+
+import org.scalatest.exceptions.TestFailedException
 
 class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
@@ -82,8 +84,9 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     )
 
     for (bucketFile <- allBucketFiles) {
-      val bucketId = BucketingUtils.getBucketId(bucketFile.getName).get
-      assert(bucketId >= 0 && bucketId < numBuckets)
+      val bucketId = BucketingUtils.getBucketId(bucketFile.getName).getOrElse {
+        fail(s"Unable to find the related bucket files.")
+      }
 
       // We may loss the type information after write(e.g. json format doesn't keep schema
       // information), here we get the types from the original dataframe.
@@ -178,6 +181,27 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
         testBucketing(tableDir, source, 8, Seq("i", "j"), Seq("k"))
+      }
+    }
+  }
+
+  test("write bucketed data with bucketing disabled") {
+    withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+      for (source <- Seq("parquet", "json", "orc")) {
+        withTable("bucketed_table") {
+          df.write
+            .format(source)
+            .partitionBy("i")
+            .bucketBy(8, "j", "k")
+            .saveAsTable("bucketed_table")
+
+          val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
+          for (i <- 0 until 5) {
+            val e = intercept[TestFailedException](
+              testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j", "k")))
+            assert(e.getMessage().contains("Unable to find the related bucket files"))
+          }
+        }
       }
     }
   }
