@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DecimalType, StructType}
+import org.apache.spark.unsafe.KVIterator
 
 case class TungstenAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
@@ -80,6 +82,7 @@ case class TungstenAggregate(
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
 
+    assert(modes.contains(Final) || !sqlContext.conf.wholeStageEnabled)
     child.execute().mapPartitions { iter =>
 
       val hasInput = iter.hasNext
@@ -114,20 +117,39 @@ case class TungstenAggregate(
     }
   }
 
+  private val modes = aggregateExpressions.map(_.mode).distinct
+
   override def supportCodegen: Boolean = {
-    groupingExpressions.isEmpty &&
-      // ImperativeAggregate is not supported right now
-      !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) &&
-      // final aggregation only have one row, do not need to codegen
-      !aggregateExpressions.exists(e => e.mode == Final || e.mode == Complete)
+    // ImperativeAggregate is not supported right now
+    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) &&
+      // final aggregation without grouping keys only have one row, do not need to codegen
+      (!(modes.contains(Final) || modes.contains(Complete)))
+  }
+
+  override def upstream(): RDD[InternalRow] = {
+    child.asInstanceOf[CodegenSupport].upstream()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    if (groupingExpressions.isEmpty) {
+      doProduceWithoutKeys(ctx)
+    } else {
+      doProduceWithKeys(ctx)
+    }
+  }
+
+  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+    if (groupingExpressions.isEmpty) {
+      doConsumeWithoutKeys(ctx, child, input)
+    } else {
+      doConsumeWithKeys(ctx, child, input)
+    }
   }
 
   // The variables used as aggregation buffer
   private var bufVars: Seq[ExprCode] = _
 
-  private val modes = aggregateExpressions.map(_.mode).distinct
-
-  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+  private def doProduceWithoutKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
@@ -146,26 +168,26 @@ case class TungstenAggregate(
       ExprCode(ev.code + initVars, isNull, value)
     }
 
-    val (rdd, childSource) = child.asInstanceOf[CodegenSupport].produce(ctx, this)
-    val source =
-      s"""
-         | if (!$initAgg) {
-         |   $initAgg = true;
-         |
-         |   // initialize aggregation buffer
-         |   ${bufVars.map(_.code).mkString("\n")}
-         |
-         |   $childSource
-         |
-         |   // output the result
-         |   ${consume(ctx, bufVars)}
-         | }
-       """.stripMargin
-
-    (rdd, source)
+    val childSource = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    s"""
+       | if (!$initAgg) {
+       |   $initAgg = true;
+       |
+       |   // initialize aggregation buffer
+       |   ${bufVars.map(_.code).mkString("\n")}
+       |
+       |   $childSource
+       |
+       |   // output the result
+       |   ${consume(ctx, this, bufVars)}
+       | }
+     """.stripMargin
   }
 
-  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+  private def doConsumeWithoutKeys(
+      ctx: CodegenContext,
+      child: SparkPlan,
+      input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     // the mode could be only Partial or PartialMerge
@@ -191,6 +213,145 @@ case class TungstenAggregate(
     s"""
        | // do aggregate and update aggregation buffer
        | ${codes.mkString("")}
+     """.stripMargin
+  }
+
+
+  def addOjb(ctx: CodegenContext, name: String, obj: Any, className: String = null): String = {
+    val term = ctx.freshName(name)
+    val idx = ctx.references.length
+    ctx.references += obj
+    val clsName = if (className == null) obj.getClass.getName else className
+    ctx.addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
+    term
+  }
+
+  // The name for HashMap
+  var hashMapTerm: String = _
+
+  private def doProduceWithKeys(ctx: CodegenContext): String = {
+    val initAgg = ctx.freshName("initAgg")
+    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+
+    // create initialized aggregate buffer
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val initExpr = functions.flatMap(f => f.initialValues)
+    val initialBuffer = UnsafeProjection.create(initExpr)(EmptyRow)
+
+    // create hashMap
+    val groupingAttributes = groupingExpressions.map(_.toAttribute)
+    val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
+    val bufferAttributes = functions.flatMap(_.aggBufferAttributes)
+    val bufferSchema = StructType.fromAttributes(bufferAttributes)
+    val hashMap = new UnsafeFixedWidthAggregationMap(
+      initialBuffer,
+      bufferSchema,
+      groupingKeySchema,
+      TaskContext.get().taskMemoryManager(),
+      1024 * 16, // initial capacity
+      TaskContext.get().taskMemoryManager().pageSizeBytes,
+      false // disable tracking of performance metrics
+    )
+    hashMapTerm = addOjb(ctx, "hashMap", hashMap)
+
+    val iterTerm = ctx.freshName("mapIter")
+    ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
+
+    val unsafeRowJoiner = GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
+    val joinerTerm = addOjb(ctx, "unsafeRowJoiner", unsafeRowJoiner,
+      classOf[UnsafeRowJoiner].getName)
+    val resultRow = ctx.freshName("resultRow")
+
+    val childSource = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    s"""
+       | if (!$initAgg) {
+       |   $initAgg = true;
+       |
+       |   $childSource
+       |
+       |   $iterTerm = $hashMapTerm.iterator();
+       | }
+       |
+       | // output the result
+       | while ($iterTerm.next()) {
+       |   UnsafeRow $resultRow =
+       |     $joinerTerm.join((UnsafeRow) $iterTerm.getKey(), (UnsafeRow) $iterTerm.getValue());
+       |   ${consume(ctx, this, null, resultRow)}
+       | }
+       | $hashMapTerm.free();
+     """.stripMargin
+  }
+
+  private def doConsumeWithKeys(
+      ctx: CodegenContext,
+      child: SparkPlan,
+      input: Seq[ExprCode]): String = {
+
+    // create grouping key
+    ctx.currentVars = input
+    val keyCode = GenerateUnsafeProjection.createCode(
+      ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+    val key = keyCode.value
+    val buffer = ctx.freshName("aggBuffer")
+
+    // only have DeclarativeAggregate
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    // the model could be only Partial or PartialMerge
+    val updateExpr = if (modes.contains(Partial)) {
+      functions.flatMap(_.updateExpressions)
+    } else {
+      functions.flatMap(_.mergeExpressions)
+    }
+
+    val inputAttr = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
+    ctx.currentVars = new Array[ExprCode](groupingExpressions.length) ++ input
+    ctx.INPUT_ROW = buffer
+    // TODO: support subexpression elimination
+    val evals = boundExpr.map(_.gen(ctx))
+    val updates = evals.zipWithIndex.map { case (ev, i) =>
+      val dt = updateExpr(i).dataType
+      if (updateExpr(i).nullable) {
+        if (dt.isInstanceOf[DecimalType]) {
+          s"""
+             | if (!${ev.isNull}) {
+             |   ${ctx.setColumn(buffer, dt, i, ev.value)};
+             | } else {
+             |   ${ctx.setColumn(buffer, dt, i, "null")};
+             | }
+         """.stripMargin
+        } else {
+          s"""
+           | if (!${ev.isNull}) {
+           |   ${ctx.setColumn(buffer, dt, i, ev.value)};
+           | } else {
+           |   $buffer.setNullAt($i);
+           | }
+         """.stripMargin
+        }
+      } else {
+        s"""
+           | ${ctx.setColumn(buffer, dt, i, ev.value)};
+         """.stripMargin
+      }
+    }
+
+    s"""
+       | // Aggregate
+       |
+       | // generate grouping key
+       | ${keyCode.code}
+       | UnsafeRow $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
+       | if ($buffer == null) {
+       |   // failed to allocate the first page
+       |   throw new OutOfMemoryError("No enough memory for aggregation");
+       | }
+       |
+       | // evaluate aggregate function
+       | ${evals.map(_.code).mkString("\n")}
+       |
+       | // update aggregate buffer
+       | ${updates.mkString("\n")}
      """.stripMargin
   }
 

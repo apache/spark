@@ -37,7 +37,11 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+  override def upstream(): RDD[InternalRow] = {
+    child.asInstanceOf[CodegenSupport].upstream()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
@@ -49,7 +53,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     s"""
        | ${output.map(_.code).mkString("\n")}
        |
-       | ${consume(ctx, output)}
+       | ${consume(ctx, this, output)}
      """.stripMargin
   }
 
@@ -76,7 +80,11 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+  override def upstream(): RDD[InternalRow] = {
+    child.asInstanceOf[CodegenSupport].upstream()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
@@ -88,7 +96,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
     s"""
        | ${eval.code}
        | if (!${eval.isNull} && ${eval.value}) {
-       |   ${consume(ctx, ctx.currentVars)}
+       |   ${consume(ctx, this, ctx.currentVars)}
        | }
      """.stripMargin
   }
@@ -153,7 +161,12 @@ case class Range(
     output: Seq[Attribute])
   extends LeafNode with CodegenSupport {
 
-  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+  override def upstream(): RDD[InternalRow] = {
+    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
+      .map(i => InternalRow(i))
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
     val initTerm = ctx.freshName("range_initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
     val partitionEnd = ctx.freshName("range_partitionEnd")
@@ -172,10 +185,7 @@ case class Range(
       s"$number > $partitionEnd"
     }
 
-    val rdd = sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
-      .map(i => InternalRow(i))
-
-    val code = s"""
+    s"""
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
@@ -215,15 +225,9 @@ case class Range(
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
-      |  ${consume(ctx, Seq(ev))}
+      |  ${consume(ctx, this, Seq(ev))}
       | }
      """.stripMargin
-
-    (rdd, code)
-  }
-
-  def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
-    throw new UnsupportedOperationException
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
