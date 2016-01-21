@@ -36,11 +36,13 @@ object BuildCommons {
 
   val allProjects@Seq(catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
     sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
-    Seq("catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
+    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags, sketch) =
+    Seq(
+      "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
       "streaming-flume", "streaming-akka", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+      "streaming-zeromq", "launcher", "unsafe", "test-tags", "sketch"
+    ).map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
