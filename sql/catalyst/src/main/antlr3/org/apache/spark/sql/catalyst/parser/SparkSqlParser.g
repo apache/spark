@@ -653,6 +653,12 @@ import java.util.HashMap;
   }
   private char [] excludedCharForColumnName = {'.', ':'};
   private boolean containExcludedCharForCreateTableColumnName(String input) {
+    if (input.length() > 0) {
+      if (input.charAt(0) == '`' && input.charAt(input.length() - 1) == '`') {
+        // When column name is backquoted, we don't care about excluded chars.
+        return false;
+      }
+    }
     for(char c : excludedCharForColumnName) {
       if(input.indexOf(c)>-1) {
         return true;
@@ -1809,8 +1815,8 @@ optionKeyValue
 @init { pushMsg("table's option specification", state); }
 @after { popMsg(state); }
     :
-       looseIdentifier StringLiteral
-    -> ^(TOK_TABLEOPTION looseIdentifier StringLiteral)
+       (looseIdentifier (DOT looseIdentifier)*) StringLiteral
+    -> ^(TOK_TABLEOPTION looseIdentifier+ StringLiteral)
     ;
 
 tableOpts
@@ -2179,7 +2185,7 @@ structType
 mapType
 @init { pushMsg("map type", state); }
 @after { popMsg(state); }
-    : KW_MAP LESSTHAN left=primitiveType COMMA right=type GREATERTHAN
+    : KW_MAP LESSTHAN left=type COMMA right=type GREATERTHAN
     -> ^(TOK_MAP $left $right)
     ;
 

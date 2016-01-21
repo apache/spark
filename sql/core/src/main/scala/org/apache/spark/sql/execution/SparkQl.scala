@@ -84,7 +84,11 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           opts match {
             case Token("TOK_TABLEOPTIONS", options) =>
               options.map {
-                case Token("TOK_TABLEOPTION", Token(key, _) :: Token(value, _) :: Nil) =>
+                case Token("TOK_TABLEOPTION", keysAndValue) =>
+                  val key = keysAndValue.init.map {
+                    case Token(k, _) => k
+                  }.mkString(".")
+                  val value = unquoteString(keysAndValue.last.text)
                   (key, unquoteString(value))
               }.asInstanceOf[Seq[(String, String)]].toMap
           }

@@ -467,7 +467,7 @@ Identifier
 fragment    
 QuotedIdentifier 
     :
-    '`'  ( '``' | ~('`') )* '`' { setText(getText().substring(1, getText().length() -1 ).replaceAll("``", "`")); }
+    '`'  ( '``' | ~('`') )* '`' { setText(getText().replaceAll("``", "`")); }
     ;
 
 WS  :  (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;}

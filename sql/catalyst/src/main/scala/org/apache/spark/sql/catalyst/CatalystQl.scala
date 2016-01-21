@@ -140,6 +140,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
     case Token("TOK_BOOLEAN", Nil) => BooleanType
     case Token("TOK_STRING", Nil) => StringType
     case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
+    case Token("TOK_CHAR", Token(_, Nil) :: Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
     case Token("TOK_DOUBLE", Nil) => DoubleType
     case Token("TOK_DATE", Nil) => DateType
@@ -156,9 +157,10 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
 
   protected def nodeToStructField(node: ASTNode): StructField = node match {
     case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
-    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: _ /* comment */:: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
+      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true)
+    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: comment :: Nil) =>
+      val meta = new MetadataBuilder().putString("comment", unquoteString(comment.text)).build()
+      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true, meta)
     case _ =>
       noParseRule("StructField", node)
   }
