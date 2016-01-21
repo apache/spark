@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.source.libsvm
 
-import java.io.{IOException, File}
+import java.io.{File, IOException}
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
