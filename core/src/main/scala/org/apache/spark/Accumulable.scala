@@ -42,6 +42,7 @@ import org.apache.spark.util.Utils
  *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
  *                 thread safe so that they can be reported correctly.
  * @param process function on the accumulated data to the result (defaults to identity).
+ * @param consistent if the current accumulator has [[ConsistentAccumulator]] behaviour.
  * @tparam R the full accumulated data
  * @tparam RR result type
  * @tparam T partial data that can be added in
