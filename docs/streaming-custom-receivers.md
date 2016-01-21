@@ -257,12 +257,22 @@ The following table summarizes the characteristics of both types of receivers
 
 ## Implementing and Using a Custom Actor-based Receiver
 
+Custom [Akka Actors](http://doc.akka.io/docs/akka/2.3.11/scala/actors.html) can also be used to
+receive data. Here are the instructions.
+
+1. **Linking:** You need to add the following dependency to your SBT or Maven project (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
+
+		groupId = org.apache.spark
+		artifactId = spark-streaming-akka_{{site.SCALA_BINARY_VERSION}}
+		version = {{site.SPARK_VERSION_SHORT}}
+
+2. **Programming:**
+
 <div class="codetabs">
 <div data-lang="scala"  markdown="1" >
 
-Custom [Akka Actors](http://doc.akka.io/docs/akka/2.3.11/scala/actors.html) can also be used to
-receive data. Extending [`ActorReceiver`](api/scala/index.html#org.apache.spark.streaming.akka.ActorReceiver)
-allows received data to be stored in Spark using `store(...)` methods. The supervisor strategy of
+You need to extend [`ActorReceiver`](api/scala/index.html#org.apache.spark.streaming.akka.ActorReceiver)
+so as to store received data into Spark using `store(...)` methods. The supervisor strategy of
 this actor can be configured to handle failures, etc.
 
 {% highlight scala %}
@@ -283,9 +293,8 @@ See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/
 </div>
 <div data-lang="java" markdown="1">
 
-Custom [Akka UntypedActors](http://doc.akka.io/docs/akka/2.3.11/java/untyped-actors.html) can also be used to
-receive data. Extending [`JavaActorReceiver`](api/scala/index.html#org.apache.spark.streaming.akka.JavaActorReceiver)
-allows received data to be stored in Spark using `store(...)` methods. The supervisor strategy of
+You need to extend [`JavaActorReceiver`](api/scala/index.html#org.apache.spark.streaming.akka.JavaActorReceiver)
+so as to store received data into Spark using `store(...)` methods. The supervisor strategy of
 this actor can be configured to handle failures, etc.
 
 {% highlight java %}
