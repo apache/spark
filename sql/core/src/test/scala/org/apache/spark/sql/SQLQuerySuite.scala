@@ -469,10 +469,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
 
     checkAnswer(
-      sql("SELECT a, SUM(b) FROM testData2 GROUP BY 1"),
-      Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
-
-    checkAnswer(
       sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
       Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
 
