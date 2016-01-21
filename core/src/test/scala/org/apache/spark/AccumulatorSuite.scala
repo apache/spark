@@ -61,8 +61,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     longAcc.value should be (210L + maxInt * 20)
   }
 
-  // TODO: re-enable this for SPARK-12896
-  ignore("value not assignable from tasks") {
+  test("value not assignable from tasks") {
     sc = new SparkContext("local", "test")
     val acc : Accumulator[Int] = sc.accumulator(0)
 
@@ -87,8 +86,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  // TODO: re-enable this for SPARK-12896
-  ignore("value not readable in tasks") {
+  test("value not readable in tasks") {
     val maxI = 1000
     for (nThreads <- List(1, 10)) { // test single & multi-threaded
       sc = new SparkContext("local[" + nThreads + "]", "test")
@@ -194,10 +192,6 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val (_, _, taskBytes) = Task.deserializeWithDependencies(taskSer)
     val taskDeser = serInstance.deserialize[DummyTask](
       taskBytes, Thread.currentThread.getContextClassLoader)
-    // TODO: no need to explicitly register the accums here once SPARK-12896 is resolved
-    val taskContext = new TaskContextImpl(
-      taskDeser.stageId, taskDeser.partitionId, 0, 0, null, null, taskDeser.internalAccums)
-    taskDeser.externalAccums.foreach(taskContext.registerAccumulator)
     // Assert that executors see only zeros
     taskDeser.externalAccums.foreach { a => assert(a.localValue == a.zero) }
     taskDeser.internalAccums.foreach { a => assert(a.localValue == a.zero) }

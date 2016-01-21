@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import javax.annotation.concurrent.GuardedBy
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.ref.WeakReference
@@ -88,12 +89,13 @@ private[spark] object Accumulators extends Logging {
   @GuardedBy("Accumulators")
   val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
-  private var lastId: Long = 0
+  private val nextId = new AtomicLong(0L)
 
-  def newId(): Long = synchronized {
-    lastId += 1
-    lastId
-  }
+  /**
+   * Return a globally unique ID for a new [[Accumulable]].
+   * Note: Once you copy the [[Accumulable]] the ID is no longer unique.
+   */
+  def newId(): Long = nextId.getAndIncrement
 
   /**
    * Register an [[Accumulable]] created on the driver such that it can be used on the executors.

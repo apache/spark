@@ -34,7 +34,14 @@ import org.apache.spark.util.Utils
  * such as a counter, these might be the same operation. In that case, you can use the simpler
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
+ * 
+ * All accumulators created on the driver to be used on the executors must be registered with
+ * [[Accumulators]]. This is already done automatically for accumulators created by the user.
+ * Internal accumulators must be explicitly registered by the caller.
  *
+ * Operations are not thread-safe.
+ *
+ * @param id ID of this accumulator; for internal use only.
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
@@ -79,12 +86,8 @@ class Accumulable[R, T] private (
 
   def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
-  // TODO: after SPARK-12896, we should mark this transient again
-  @volatile private var value_ : R = initialValue
-  val zero = param.zero(initialValue)
-
-  // TODO: currently, this is not set. After SPARK-12896, this will be set in `readObject`.
-  // For more detail, read the comment there.
+  @volatile @transient private var value_ : R = initialValue // Current value on driver
+  val zero = param.zero(initialValue) // Zero value to be passed to executors
   private var deserialized = false
 
   // In many places we create internal accumulators without access to the active context cleaner,
@@ -186,12 +189,8 @@ class Accumulable[R, T] private (
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    // TODO: As of SPARK-12895 we send accumulators both ways between executors and the driver.
-    // If we set the value to zero here we would zero out all accumulator updates on the driver,
-    // which is not what we want. Let's comment this out for now until SPARK-12896, which allows
-    // us to avoid sending accumulators from the executors to the driver.
-    // value_ = zero
-    // deserialized = true
+    value_ = zero
+    deserialized = true
 
     // Automatically register the accumulator when it is deserialized with the task closure.
     // This is for external accumulators and internal ones that do not represent task level
