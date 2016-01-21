@@ -554,10 +554,6 @@ class Analyzer(
           ordering.map(order => resolveExpression(order, child).asInstanceOf[SortOrder])
         Sort(newOrdering, global, child)
 
-      case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
-        val newOrdering = resolveSortOrders(ordering, child, throws = false)
-        Sort(newOrdering, global, child)
-
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
       case g @ Generate(generator, join, outer, qualifier, output, child)
