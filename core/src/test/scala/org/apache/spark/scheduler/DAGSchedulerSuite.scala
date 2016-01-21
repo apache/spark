@@ -1575,7 +1575,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("accumulators are updated on exception failures") {
-    val acc1 = sc.accumulator(0L, "ingénieur")
+    val acc1 = sc.accumulator(0L, "ingenieur")
     val acc2 = sc.accumulator(0L, "boulanger")
     val acc3 = sc.accumulator(0L, "agriculteur")
     assert(Accumulators.get(acc1.id).isDefined)

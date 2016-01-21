@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import javax.annotation.concurrent.GuardedBy
 import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.ref.WeakReference

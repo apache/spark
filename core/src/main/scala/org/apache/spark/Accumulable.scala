@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * such as a counter, these might be the same operation. In that case, you can use the simpler
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
- * 
+ *
  * All accumulators created on the driver to be used on the executors must be registered with
  * [[Accumulators]]. This is already done automatically for accumulators created by the user.
  * Internal accumulators must be explicitly registered by the caller.
