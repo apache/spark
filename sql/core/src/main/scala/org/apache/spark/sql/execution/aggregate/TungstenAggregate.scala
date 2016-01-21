@@ -82,7 +82,6 @@ case class TungstenAggregate(
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
 
-    assert(modes.contains(Final) || !sqlContext.conf.wholeStageEnabled)
     child.execute().mapPartitions { iter =>
 
       val hasInput = iter.hasNext
@@ -167,14 +166,23 @@ case class TungstenAggregate(
     }
 
     // generate variables for output
-    val resultVars = if (modes.contains(Final)) {
+    val (resultVars, genResult) = if (modes.contains(Final)) {
       ctx.currentVars = bufVars
       val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
-      resultExpressions.map { e =>
+      val aggResults = functions.map(_.evaluateExpression).map { e =>
         BindReferences.bindReference(e, bufferAttrs).gen(ctx)
       }
+      ctx.currentVars = aggResults
+      val resultVars = resultExpressions.map { e =>
+        BindReferences.bindReference(e, aggregateAttributes).gen(ctx)
+      }
+      (resultVars, s"""
+         | ${aggResults.map(_.code).mkString("\n")}
+         | ${resultVars.map(_.code).mkString("\n")}
+       """.stripMargin)
     } else {
-      bufVars.map(ev => ExprCode("", ev.isNull, ev.value))
+      // output the aggregate buffer directly
+      (bufVars, "")
     }
 
     val childSource = child.asInstanceOf[CodegenSupport].produce(ctx, this)
@@ -188,7 +196,8 @@ case class TungstenAggregate(
        |   $childSource
        |
        |   // output the result
-       |   ${resultVars.map(_.code).mkString("\n")}
+       |   $genResult
+       |
        |   ${consume(ctx, this, resultVars)}
        | }
      """.stripMargin
@@ -200,19 +209,20 @@ case class TungstenAggregate(
       input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    // the mode could be only Partial or PartialMerge
-    val updateExpr = if (modes.contains(Partial)) {
-      functions.flatMap(_.updateExpressions)
-    } else {
-      functions.flatMap(_.mergeExpressions)
+    val updateExpr = aggregateExpressions.flatMap { e =>
+      e.mode match {
+        case Partial | Complete =>
+          e.aggregateFunction.asInstanceOf[DeclarativeAggregate].updateExpressions
+        case PartialMerge | Final =>
+          e.aggregateFunction.asInstanceOf[DeclarativeAggregate].mergeExpressions
+      }
     }
 
     val inputAttr = functions.flatMap(_.aggBufferAttributes) ++ child.output
-    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
     ctx.currentVars = bufVars ++ input
     // TODO: support subexpression elimination
-    val codes = boundExpr.zipWithIndex.map { case (e, i) =>
-      val ev = e.gen(ctx)
+    val codes = updateExpr.zipWithIndex.map { case (e, i) =>
+      val ev = BindReferences.bindReference[Expression](e, inputAttr).gen(ctx)
       s"""
          | ${ev.code}
          | ${bufVars(i).isNull} = ${ev.isNull};
@@ -280,17 +290,24 @@ case class TungstenAggregate(
       ctx.INPUT_ROW = bufferTerm
       val bufferVars = bufferAttributes.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).gen(ctx)
-
       }
-      ctx.currentVars = keyVars ++ bufferVars
-      val inputAttrs = groupingAttributes ++ bufferAttributes
+      // evaluate the aggregation result
+      ctx.currentVars = bufferVars
+      val aggResults = functions.map(_.evaluateExpression).map { e =>
+        BindReferences.bindReference(e, bufferAttributes).gen(ctx)
+      }
+      // generate the final result
+      ctx.currentVars = keyVars ++ aggResults
+      val inputAttrs = groupingAttributes ++ aggregateAttributes
       val resultVars = resultExpressions.map { e =>
         BindReferences.bindReference(e, inputAttrs).gen(ctx)
       }
       s"""
          | ${keyVars.map(_.code).mkString("\n")}
          | ${bufferVars.map(_.code).mkString("\n")}
+         | ${aggResults.map(_.code).mkString("\n")}
          | ${resultVars.map(_.code).mkString("\n")}
+         |
          | ${consume(ctx, this, resultVars)}
        """.stripMargin
 
@@ -307,8 +324,14 @@ case class TungstenAggregate(
 
     } else {
       // only grouping key
+      ctx.INPUT_ROW = keyTerm
+      ctx.currentVars = null
+      val eval = resultExpressions.map{ e =>
+        BindReferences.bindReference(e, groupingAttributes).gen(ctx)
+      }
       s"""
-         | ${consume(ctx, this, null, keyTerm)}
+         | ${eval.map(_.code).mkString("\n")}
+         | ${consume(ctx, this, eval)}
        """.stripMargin
     }
 
@@ -325,7 +348,7 @@ case class TungstenAggregate(
        | // output the result
        | while ($iterTerm.next()) {
        |   UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
-       |   UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getKey();
+       |   UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
        |   $outputCode
        | }
        | $hashMapTerm.free();
@@ -346,16 +369,19 @@ case class TungstenAggregate(
 
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    // the model could be only Partial or PartialMerge
-    val updateExpr = if (modes.contains(Partial)) {
-      functions.flatMap(_.updateExpressions)
-    } else {
-      functions.flatMap(_.mergeExpressions)
+    val updateExpr = aggregateExpressions.flatMap { e =>
+      e.mode match {
+        case Partial | Complete =>
+          e.aggregateFunction.asInstanceOf[DeclarativeAggregate].updateExpressions
+        case PartialMerge | Final =>
+          e.aggregateFunction.asInstanceOf[DeclarativeAggregate].mergeExpressions
+      }
     }
 
-    val inputAttr = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
+    val inputAttr = bufferAttrs ++ child.output
     val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
-    ctx.currentVars = new Array[ExprCode](groupingExpressions.length) ++ input
+    ctx.currentVars = new Array[ExprCode](bufferAttrs.length) ++ input
     ctx.INPUT_ROW = buffer
     // TODO: support subexpression elimination
     val evals = boundExpr.map(_.gen(ctx))

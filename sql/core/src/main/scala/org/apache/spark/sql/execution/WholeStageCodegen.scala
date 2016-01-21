@@ -74,34 +74,41 @@ trait CodegenSupport extends SparkPlan {
   protected def doProduce(ctx: CodegenContext): String
 
   /**
-    * Consume the columns generated from current SparkPlan, call it's parent or create an iterator.
+    * Consume the columns generated from current SparkPlan, call it's parent.
     */
   def consume(
       ctx: CodegenContext,
       child: SparkPlan,
       input: Seq[ExprCode],
       row: String = null): String = {
-    if (child eq this) {
-      // This is called by itself, pass to it's parent
-      if (input != null) {
-        assert(input.length == output.length)
+    // This is called by itself, pass to it's parent
+    if (input != null) {
+      assert(input.length == output.length)
+    }
+    parent.consumeChild(ctx, this, input, row)
+  }
+
+  /**
+    * Consume the columns generated from it's child, call doConsume() or emit the rows.
+    */
+  def consumeChild(
+      ctx: CodegenContext,
+      child: SparkPlan,
+      input: Seq[ExprCode],
+      row: String = null): String = {
+    // This is called by child
+    if (row != null) {
+      ctx.currentVars = null
+      ctx.INPUT_ROW = row
+      val evals = child.output.zipWithIndex.map { case (attr, i) =>
+        BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
       }
-      parent.consume(ctx, this, input, row)
+      s"""
+         | ${evals.map(_.code).mkString("\n")}
+         | ${doConsume(ctx, child, evals)}
+       """.stripMargin
     } else {
-      // This is called by child
-      if (row != null) {
-        ctx.currentVars = null
-        ctx.INPUT_ROW = row
-        val evals = child.output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
-        }
-        s"""
-           | ${evals.map(_.code).mkString("\n")}
-           | ${doConsume(ctx, child, evals)}
-         """.stripMargin
-      } else {
-        doConsume(ctx, child, input)
-      }
+      doConsume(ctx, child, input)
     }
   }
 
@@ -179,9 +186,11 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
   *                                                doProduce() ---> execute()
   *                                                   |
   *                                                consume()
-  *                          doConsume()  ------------|
+  *                        consumeChild() <-----------|
   *                             |
-  *  doConsume()  <-----    consume()
+  *                          doConsume()
+  *                             |
+  *  consumeChild()  <-----  consume()
   *
   * SparkPlan A should override doProduce() and doConsume().
   *
@@ -240,7 +249,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     throw new UnsupportedOperationException
   }
 
-  override def consume(
+  override def consumeChild(
       ctx: CodegenContext,
       child: SparkPlan,
       input: Seq[ExprCode],
