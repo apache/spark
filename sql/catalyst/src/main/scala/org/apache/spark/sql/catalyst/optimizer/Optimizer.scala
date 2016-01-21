@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueri
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -35,11 +35,23 @@ import org.apache.spark.sql.types._
   */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   def batches: Seq[Batch] = {
-    // SubQueries are only needed for analysis and can be removed before execution.
-    Batch("Remove SubQueries", FixedPoint(100),
-      EliminateSubQueries) ::
-    Batch("Compute Current Time", Once,
+    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
+    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
+    // However, because we also use the analyzer to canonicalized queries (for view definition),
+    // we do not eliminate subqueries or compute current time in the analyzer.
+    Batch("Finish Analysis", Once,
+      EliminateSubQueries,
       ComputeCurrentTime) ::
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // Optimizer rules start here
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // - Do the first call of CombineUnions before starting the major Optimizer rules,
+    //   since it can reduce the number of iteration and the other rules could add/move
+    //   extra operators between two adjacent Union operators.
+    // - Call CombineUnions again in Batch("Operator Optimizations"),
+    //   since the other rules might make two separate Unions operators adjacent.
+    Batch("Union", Once,
+      CombineUnions) ::
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
@@ -57,7 +69,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ProjectCollapsing,
       CombineFilters,
       CombineLimits,
-      // Constant folding
+      CombineUnions,
+      // Constant folding and strength reduction
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
@@ -133,11 +146,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
-  private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
-    assert(bn.isInstanceOf[Union] || bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
-    assert(bn.left.output.size == bn.right.output.size)
-
-    AttributeMap(bn.left.output.zip(bn.right.output))
+  private def buildRewrites(left: LogicalPlan, right: LogicalPlan): AttributeMap[Attribute] = {
+    assert(left.output.size == right.output.size)
+    AttributeMap(left.output.zip(right.output))
   }
 
   /**
@@ -171,32 +182,38 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down filter into union
-    case Filter(condition, u @ Union(left, right)) =>
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(u)
-      Filter(nondeterministic,
-        Union(
-          Filter(deterministic, left),
-          Filter(pushToRight(deterministic, rewrites), right)
-        )
-      )
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, u @ Union(left, right)) =>
+    case p @ Project(projectList, Union(children)) =>
+      assert(children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
-        val rewrites = buildRewrites(u)
-        Union(
-          Project(projectList, left),
-          Project(projectList.map(pushToRight(_, rewrites)), right))
+        val newFirstChild = Project(projectList, children.head)
+        val newOtherChildren = children.tail.map ( child => {
+          val rewrites = buildRewrites(children.head, child)
+          Project(projectList.map(pushToRight(_, rewrites)), child)
+        } )
+        Union(newFirstChild +: newOtherChildren)
       } else {
         p
       }
 
-    // Push down filter through INTERSECT
-    case Filter(condition, i @ Intersect(left, right)) =>
+    // Push down filter into union
+    case Filter(condition, Union(children)) =>
+      assert(children.nonEmpty)
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(i)
+      val newFirstChild = Filter(deterministic, children.head)
+      val newOtherChildren = children.tail.map {
+        child => {
+          val rewrites = buildRewrites(children.head, child)
+          Filter(pushToRight(deterministic, rewrites), child)
+        }
+      }
+      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
+
+    // Push down filter through INTERSECT
+    case Filter(condition, Intersect(left, right)) =>
+      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Intersect(
           Filter(deterministic, left),
@@ -205,9 +222,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       )
 
     // Push down filter through EXCEPT
-    case Filter(condition, e @ Except(left, right)) =>
+    case Filter(condition, Except(left, right)) =>
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(e)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Except(
           Filter(deterministic, left),
@@ -635,7 +652,34 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
+
+      case e @ CaseWhen(branches, elseValue) if branches.exists(_._1 == FalseLiteral) =>
+        // If there are branches that are always false, remove them.
+        // If there are no more branches left, just use the else value.
+        // Note that these two are handled together here in a single case statement because
+        // otherwise we cannot determine the data type for the elseValue if it is None (i.e. null).
+        val newBranches = branches.filter(_._1 != FalseLiteral)
+        if (newBranches.isEmpty) {
+          elseValue.getOrElse(Literal.create(null, e.dataType))
+        } else {
+          e.copy(branches = newBranches)
+        }
+
+      case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
+        // If the first branch is a true literal, remove the entire CaseWhen and use the value
+        // from that. Note that CaseWhen.branches should never be empty, and as a result the
+        // headOption (rather than head) added above is just a extra (and unnecessary) safeguard.
+        branches.head._2
     }
+  }
+}
+
+/**
+ * Combines all adjacent [[Union]] operators into a single [[Union]].
+ */
+object CombineUnions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Unions(children) => Union(children)
   }
 }
 

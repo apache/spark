@@ -21,9 +21,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
+import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 
@@ -35,7 +36,7 @@ case class TungstenAggregate(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryNode with CodegenSupport {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -94,7 +95,8 @@ case class TungstenAggregate(
             aggregateAttributes,
             initialInputBufferOffset,
             resultExpressions,
-            newMutableProjection,
+            (expressions, inputSchema) =>
+              newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
             child.output,
             iter,
             testFallbackStartsAt,
@@ -110,6 +112,86 @@ case class TungstenAggregate(
         }
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    groupingExpressions.isEmpty &&
+      // ImperativeAggregate is not supported right now
+      !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) &&
+      // final aggregation only have one row, do not need to codegen
+      !aggregateExpressions.exists(e => e.mode == Final || e.mode == Complete)
+  }
+
+  // The variables used as aggregation buffer
+  private var bufVars: Seq[ExprCode] = _
+
+  private val modes = aggregateExpressions.map(_.mode).distinct
+
+  protected override def doProduce(ctx: CodegenContext): (RDD[InternalRow], String) = {
+    val initAgg = ctx.freshName("initAgg")
+    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+
+    // generate variables for aggregation buffer
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val initExpr = functions.flatMap(f => f.initialValues)
+    bufVars = initExpr.map { e =>
+      val isNull = ctx.freshName("bufIsNull")
+      val value = ctx.freshName("bufValue")
+      // The initial expression should not access any column
+      val ev = e.gen(ctx)
+      val initVars = s"""
+         | boolean $isNull = ${ev.isNull};
+         | ${ctx.javaType(e.dataType)} $value = ${ev.value};
+       """.stripMargin
+      ExprCode(ev.code + initVars, isNull, value)
+    }
+
+    val (rdd, childSource) = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    val source =
+      s"""
+         | if (!$initAgg) {
+         |   $initAgg = true;
+         |
+         |   // initialize aggregation buffer
+         |   ${bufVars.map(_.code).mkString("\n")}
+         |
+         |   $childSource
+         |
+         |   // output the result
+         |   ${consume(ctx, bufVars)}
+         | }
+       """.stripMargin
+
+    (rdd, source)
+  }
+
+  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+    // only have DeclarativeAggregate
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    // the mode could be only Partial or PartialMerge
+    val updateExpr = if (modes.contains(Partial)) {
+      functions.flatMap(_.updateExpressions)
+    } else {
+      functions.flatMap(_.mergeExpressions)
+    }
+
+    val inputAttr = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
+    ctx.currentVars = bufVars ++ input
+    // TODO: support subexpression elimination
+    val codes = boundExpr.zipWithIndex.map { case (e, i) =>
+      val ev = e.gen(ctx)
+      s"""
+         | ${ev.code}
+         | ${bufVars(i).isNull} = ${ev.isNull};
+         | ${bufVars(i).value} = ${ev.value};
+       """.stripMargin
+    }
+
+    s"""
+       | // do aggregate and update aggregation buffer
+       | ${codes.mkString("")}
+     """.stripMargin
   }
 
   override def simpleString: String = {

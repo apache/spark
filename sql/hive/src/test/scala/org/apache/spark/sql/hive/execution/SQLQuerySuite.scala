@@ -1012,9 +1012,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |       java_method("java.lang.String", "isEmpty"),
         |       java_method("java.lang.Math", "max", 2, 3),
         |       java_method("java.lang.Math", "min", 2, 3),
-        |       java_method("java.lang.Math", "round", 2.5),
-        |       java_method("java.lang.Math", "exp", 1.0),
-        |       java_method("java.lang.Math", "floor", 1.9)
+        |       java_method("java.lang.Math", "round", 2.5D),
+        |       java_method("java.lang.Math", "exp", 1.0D),
+        |       java_method("java.lang.Math", "floor", 1.9D)
         |FROM src tablesample (1 rows)
       """.stripMargin),
       Row(
@@ -1461,6 +1461,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       """
         |SELECT json_tuple(json, 'f1', 'f2'), 3.14, str
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
-      """.stripMargin), Row("value1", "12", 3.14, "hello"))
+      """.stripMargin), Row("value1", "12", BigDecimal("3.14"), "hello"))
   }
 }
