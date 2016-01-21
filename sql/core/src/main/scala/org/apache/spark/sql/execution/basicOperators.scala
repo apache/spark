@@ -53,7 +53,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     s"""
        | ${output.map(_.code).mkString("\n")}
        |
-       | ${consume(ctx, this, output)}
+       | ${consume(ctx, output)}
      """.stripMargin
   }
 
@@ -96,7 +96,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
     s"""
        | ${eval.code}
        | if (!${eval.isNull} && ${eval.value}) {
-       |   ${consume(ctx, this, ctx.currentVars)}
+       |   ${consume(ctx, ctx.currentVars)}
        | }
      """.stripMargin
   }
@@ -225,7 +225,7 @@ case class Range(
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
-      |  ${consume(ctx, this, Seq(ev))}
+      |  ${consume(ctx, Seq(ev))}
       | }
      """.stripMargin
   }

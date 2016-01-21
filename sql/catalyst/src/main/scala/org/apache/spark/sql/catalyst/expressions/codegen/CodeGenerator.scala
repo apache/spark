@@ -56,6 +56,20 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
+    * Add an object to `references`, create a class member to access it.
+    *
+    * Returns the name of class member.
+    */
+  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
+    val term = freshName(name)
+    val idx = references.length
+    references += obj
+    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
+    term
+  }
+
+  /**
     * Holding a list of generated columns as input of current operator, will be used by
     * BoundReference to generate code.
     */

@@ -50,7 +50,6 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
     val df = sqlContext.range(3).groupBy("id").count().orderBy("id")
-    df.explain()
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegen] &&

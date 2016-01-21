@@ -76,12 +76,7 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Consume the columns generated from current SparkPlan, call it's parent.
     */
-  def consume(
-      ctx: CodegenContext,
-      child: SparkPlan,
-      input: Seq[ExprCode],
-      row: String = null): String = {
-    // This is called by itself, pass to it's parent
+  def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
     if (input != null) {
       assert(input.length == output.length)
     }
@@ -96,7 +91,6 @@ trait CodegenSupport extends SparkPlan {
       child: SparkPlan,
       input: Seq[ExprCode],
       row: String = null): String = {
-    // This is called by child
     if (row != null) {
       ctx.currentVars = null
       ctx.INPUT_ROW = row
@@ -156,7 +150,7 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
        |  while (input.hasNext()) {
        |   InternalRow $row = (InternalRow) input.next();
        |   ${columns.map(_.code).mkString("\n")}
-       |   ${consume(ctx, this, columns)}
+       |   ${consume(ctx, columns)}
        | }
      """.stripMargin
   }

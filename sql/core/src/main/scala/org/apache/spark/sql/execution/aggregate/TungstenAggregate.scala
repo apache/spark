@@ -116,6 +116,7 @@ case class TungstenAggregate(
     }
   }
 
+  // all the mode of aggregate expressions
   private val modes = aggregateExpressions.map(_.mode).distinct
 
   override def supportCodegen: Boolean = {
@@ -166,12 +167,14 @@ case class TungstenAggregate(
     }
 
     // generate variables for output
-    val (resultVars, genResult) = if (modes.contains(Final)) {
+    val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
+      // evaluate aggregate results
       ctx.currentVars = bufVars
       val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
       val aggResults = functions.map(_.evaluateExpression).map { e =>
         BindReferences.bindReference(e, bufferAttrs).gen(ctx)
       }
+      // evaluate result expressions
       ctx.currentVars = aggResults
       val resultVars = resultExpressions.map { e =>
         BindReferences.bindReference(e, aggregateAttributes).gen(ctx)
@@ -185,7 +188,6 @@ case class TungstenAggregate(
       (bufVars, "")
     }
 
-    val childSource = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     s"""
        | if (!$initAgg) {
        |   $initAgg = true;
@@ -193,12 +195,12 @@ case class TungstenAggregate(
        |   // initialize aggregation buffer
        |   ${bufVars.map(_.code).mkString("\n")}
        |
-       |   $childSource
+       |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
        |
        |   // output the result
        |   $genResult
        |
-       |   ${consume(ctx, this, resultVars)}
+       |   ${consume(ctx, resultVars)}
        | }
      """.stripMargin
   }
@@ -209,6 +211,7 @@ case class TungstenAggregate(
       input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
     val updateExpr = aggregateExpressions.flatMap { e =>
       e.mode match {
         case Partial | Complete =>
@@ -217,12 +220,10 @@ case class TungstenAggregate(
           e.aggregateFunction.asInstanceOf[DeclarativeAggregate].mergeExpressions
       }
     }
-
-    val inputAttr = functions.flatMap(_.aggBufferAttributes) ++ child.output
     ctx.currentVars = bufVars ++ input
     // TODO: support subexpression elimination
-    val codes = updateExpr.zipWithIndex.map { case (e, i) =>
-      val ev = BindReferences.bindReference[Expression](e, inputAttr).gen(ctx)
+    val updates = updateExpr.zipWithIndex.map { case (e, i) =>
+      val ev = BindReferences.bindReference[Expression](e, inputAttrs).gen(ctx)
       s"""
          | ${ev.code}
          | ${bufVars(i).isNull} = ${ev.isNull};
@@ -232,18 +233,8 @@ case class TungstenAggregate(
 
     s"""
        | // do aggregate and update aggregation buffer
-       | ${codes.mkString("")}
+       | ${updates.mkString("")}
      """.stripMargin
-  }
-
-
-  def addOjb(ctx: CodegenContext, name: String, obj: Any, className: String = null): String = {
-    val term = ctx.freshName(name)
-    val idx = ctx.references.length
-    ctx.references += obj
-    val clsName = if (className == null) obj.getClass.getName else className
-    ctx.addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
-    term
   }
 
   // The name for HashMap
@@ -272,15 +263,16 @@ case class TungstenAggregate(
       TaskContext.get().taskMemoryManager().pageSizeBytes,
       false // disable tracking of performance metrics
     )
-    hashMapTerm = addOjb(ctx, "hashMap", hashMap)
+    hashMapTerm = ctx.addReferenceObj("hashMap", hashMap)
 
+    // Create a name for iterator from HashMap
     val iterTerm = ctx.freshName("mapIter")
     ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
 
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-    val outputCode = if (modes.contains(Final)) {
+    val outputCode = if (modes.contains(Final) || modes.contains(Complete)) {
       // generate output using resultExpressions
       ctx.currentVars = null
       ctx.INPUT_ROW = keyTerm
@@ -308,18 +300,18 @@ case class TungstenAggregate(
          | ${aggResults.map(_.code).mkString("\n")}
          | ${resultVars.map(_.code).mkString("\n")}
          |
-         | ${consume(ctx, this, resultVars)}
+         | ${consume(ctx, resultVars)}
        """.stripMargin
 
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       // This should be the last operator in a stage, we should output UnsafeRow directly
       val unsafeRowJoiner = GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
-      val joinerTerm = addOjb(ctx, "unsafeRowJoiner", unsafeRowJoiner,
+      val joinerTerm = ctx.addReferenceObj("unsafeRowJoiner", unsafeRowJoiner,
         classOf[UnsafeRowJoiner].getName)
       val resultRow = ctx.freshName("resultRow")
       s"""
          | UnsafeRow $resultRow = $joinerTerm.join($keyTerm, $bufferTerm);
-         | ${consume(ctx, this, null, resultRow)}
+         | ${consume(ctx, null, resultRow)}
        """.stripMargin
 
     } else {
@@ -331,16 +323,15 @@ case class TungstenAggregate(
       }
       s"""
          | ${eval.map(_.code).mkString("\n")}
-         | ${consume(ctx, this, eval)}
+         | ${consume(ctx, eval)}
        """.stripMargin
     }
 
-    val childSource = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     s"""
        | if (!$initAgg) {
        |   $initAgg = true;
        |
-       |   $childSource
+       |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
        |
        |   $iterTerm = $hashMapTerm.iterator();
        | }
@@ -351,6 +342,7 @@ case class TungstenAggregate(
        |   UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
        |   $outputCode
        | }
+       |
        | $hashMapTerm.free();
      """.stripMargin
   }
@@ -413,8 +405,6 @@ case class TungstenAggregate(
     }
 
     s"""
-       | // Aggregate
-       |
        | // generate grouping key
        | ${keyCode.code}
        | UnsafeRow $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);

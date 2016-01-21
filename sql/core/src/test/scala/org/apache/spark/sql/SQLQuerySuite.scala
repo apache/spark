@@ -1973,7 +1973,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       countAcc.++=(1)
       x
     })
-    //TODO: support subexpression elimination in whole stage codegen
+    // TODO: support subexpression elimination in whole stage codegen
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
       verifyCallCount(
         df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
