@@ -104,6 +104,7 @@
     <module>external/flume</module>
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
+    <module>external/akka</module>
     <module>external/mqtt</module>
     <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
@@ -2415,6 +2416,16 @@
       <id>hadoop-2.6</id>
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
+        <jets3t.version>0.9.3</jets3t.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+        <curator.version>2.6.0</curator.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.7</id>
+      <properties>
+        <hadoop.version>2.7.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>

@@ -278,11 +278,6 @@ private[spark] object SQLConf {
     doc = "When true, common subexpressions will be eliminated.",
     isPublic = false)
 
-  val DIALECT = stringConf(
-    "spark.sql.dialect",
-    defaultValue = Some("sql"),
-    doc = "The default SQL dialect to use.")
-
   val CASE_SENSITIVE = booleanConf("spark.sql.caseSensitive",
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
@@ -422,6 +417,10 @@ private[spark] object SQLConf {
       doc = "The maximum number of concurrent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
 
+  val BUCKETING_ENABLED = booleanConf("spark.sql.sources.bucketing.enabled",
+    defaultValue = Some(true),
+    doc = "When false, we will treat bucketed table as normal table")
+
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   //
@@ -485,6 +484,13 @@ private[spark] object SQLConf {
     isPublic = false,
     doc = "This flag should be set to true to enable support for SQL2011 reserved keywords.")
 
+  val WHOLESTAGE_CODEGEN_ENABLED = booleanConf("spark.sql.codegen.wholeStage",
+    defaultValue = Some(true),
+    doc = "When true, the whole stage (of multiple operators) will be compiled into single java" +
+      " method",
+    isPublic = false)
+
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -513,21 +519,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
-  // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
-
-  /**
-   * The SQL dialect that is used when parsing queries.  This defaults to 'sql' which uses
-   * a simple SQL parser provided by Spark SQL.  This is currently the only option for users of
-   * SQLContext.
-   *
-   * When using a HiveContext, this value defaults to 'hiveql', which uses the Hive 0.12.0 HiveQL
-   * parser.  Users can change this to 'sql' if they want to run queries that aren't supported by
-   * HiveQL (e.g., SELECT 1).
-   *
-   * Note that the choice of dialect does not affect things like what tables are available or
-   * how query execution is performed.
-   */
-  private[spark] def dialect: String = getConf(DIALECT)
 
   private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
@@ -556,6 +547,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
+
+  private[spark] def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
@@ -589,6 +582,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   private[spark] def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
+
+  private[spark] def bucketingEnabled(): Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

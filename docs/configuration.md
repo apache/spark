@@ -173,7 +173,7 @@ of the most common options to set are:
     stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
 
-    NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    NOTE: In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
@@ -687,10 +687,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for 
-    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java 
-    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python). 
-    Can save substantial space at the cost of some extra CPU time. 
+    Whether to compress serialized RDD partitions (e.g. for
+    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
+    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python).
+    Can save substantial space at the cost of some extra CPU time.
   </td>
 </tr>
 <tr>
@@ -1430,6 +1430,7 @@ Apart from these, the following properties are also available, and may be useful
             The reference list of protocols one can find on
             <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
+            Note: If not set, it will use the default cipher suites of JVM.
         </td>
     </tr>
     <tr>
@@ -1455,12 +1456,26 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.keyStoreType</code></td>
+        <td>JKS</td>
+        <td>
+            The type of the key-store.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.protocol</code></td>
         <td>None</td>
         <td>
             A protocol name. The protocol must be supported by JVM. The reference list of protocols
             one can find on <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.needClientAuth</code></td>
+        <td>false</td>
+        <td>
+            Set true if SSL needs client authentication.
         </td>
     </tr>
     <tr>
@@ -1476,6 +1491,13 @@ Apart from these, the following properties are also available, and may be useful
         <td>None</td>
         <td>
             A password to the trust-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.trustStoreType</code></td>
+        <td>JKS</td>
+        <td>
+            The type of the trust-store.
         </td>
     </tr>
 </table>
