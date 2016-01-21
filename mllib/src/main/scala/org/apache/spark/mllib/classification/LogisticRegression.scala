@@ -437,20 +437,10 @@ class LogisticRegressionWithLBFGS
         val df = input.toDF()
         // Determine if we should cache the DF
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
-        if (handlePersistence) {
-          df.persist(StorageLevel.MEMORY_AND_DISK)
-        }
         // Train our model
-        val mlLogisticRegresionModel = lr.train(df)
-        // unpersist if we persisted
-        if (handlePersistence) {
-          df.unpersist()
-        }
+        val mlLogisticRegresionModel = lr.train(df, handlePersistence)
         // convert the model
-        val weights = mlLogisticRegresionModel.weights match {
-          case x: DenseVector => x
-          case y: Vector => Vectors.dense(y.toArray)
-        }
+        val weights = Vectors.dense(mlLogisticRegresionModel.coefficients.toArray)
         createModel(weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {
