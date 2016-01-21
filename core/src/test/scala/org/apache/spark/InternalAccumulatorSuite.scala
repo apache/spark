@@ -269,7 +269,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     sc.addSparkListener(listener)
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitionsWithIndex { case (i, iter) =>
       val taskContext = TaskContext.get()
-      taskContext.taskMetrics.getAccum(TEST_ACCUM) += 1
+      taskContext.taskMetrics().getAccum(TEST_ACCUM) += 1
       // Fail the first attempts of a subset of the tasks
       if (failCondition(i) && taskContext.attemptNumber() == 0) {
         throw new Exception("Failing a task intentionally.")
@@ -283,8 +283,16 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(stageInfos.size === 1)
       assert(taskInfos.size === numPartitions + numFailedPartitions)
       val stageAccum = findTestAccum(stageInfos.head.accumulables.values)
-      // We should not double count values in the merged accumulator
-      assert(stageAccum.value.get.toString.toLong === numPartitions)
+      // If all partitions failed, then we would resubmit the whole stage again and create a
+      // fresh set of internal accumulators. Otherwise, these internal accumulators do count
+      // failed values, so we must include the failed values.
+      val expectedAccumValue =
+        if (numPartitions == numFailedPartitions) {
+          numPartitions
+        } else {
+          numPartitions + numFailedPartitions
+        }
+      assert(stageAccum.value.get.toString.toLong === expectedAccumValue)
       val taskAccumValues = taskInfos.flatMap { taskInfo =>
         if (!taskInfo.failed) {
           // If a task succeeded, its update value should always be 1
