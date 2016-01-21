@@ -341,6 +341,8 @@ case class TungstenAggregate(
        |   UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
        |   UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
        |   $outputCode
+       |
+       |   if (!currentRows.isEmpty()) return;
        | }
        |
        | $hashMapTerm.free();

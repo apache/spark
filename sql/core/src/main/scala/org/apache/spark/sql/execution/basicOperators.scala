@@ -226,6 +226,8 @@ case class Range(
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
+      |
+      |  if (!currentRows.isEmpty()) return;
       | }
      """.stripMargin
   }

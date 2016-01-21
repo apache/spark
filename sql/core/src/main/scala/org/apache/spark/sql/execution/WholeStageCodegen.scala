@@ -151,12 +151,15 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
        |   InternalRow $row = (InternalRow) input.next();
        |   ${columns.map(_.code).mkString("\n")}
        |   ${consume(ctx, columns)}
+       |   if (!currentRows.isEmpty()) {
+       |     return;
+       |   }
        | }
      """.stripMargin
   }
 
   override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException
+    child.execute()
   }
 
   override def simpleString: String = "INPUT"
@@ -252,8 +255,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         | currentRow = $row;
-         | return;
+         | currentRows.add($row.copy());
        """.stripMargin
     } else {
       assert(input != null)
@@ -266,14 +268,12 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
            | ${code.code.trim}
-           | currentRow = ${code.value};
-           | return;
+           | currentRows.add(${code.value}.copy());
      """.stripMargin
       } else {
         // There is no columns
         s"""
-           | currentRow = unsafeRow;
-           | return;
+           | currentRows.add(unsafeRow);
        """.stripMargin
       }
     }

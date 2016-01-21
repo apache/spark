@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
+import java.util.LinkedList;
 
 import scala.collection.Iterator;
 
@@ -31,22 +32,20 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
  * TODO: replaced it by batched columnar format.
  */
 public class BufferedRowIterator {
-  protected InternalRow currentRow;
+  protected LinkedList<InternalRow> currentRows = new LinkedList<>();
   protected Iterator<InternalRow> input;
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
   public boolean hasNext() throws IOException {
-    if (currentRow == null) {
+    if (currentRows.isEmpty()) {
       processNext();
     }
-    return currentRow != null;
+    return !currentRows.isEmpty();
   }
 
   public InternalRow next() {
-    InternalRow r = currentRow;
-    currentRow = null;
-    return r;
+    return currentRows.remove();
   }
 
   public void setInput(Iterator<InternalRow> iter) {
@@ -60,7 +59,7 @@ public class BufferedRowIterator {
    */
   protected void processNext() throws IOException {
     if (input.hasNext()) {
-      currentRow = input.next();
+      currentRows.add(input.next());
     }
   }
 }
