@@ -161,13 +161,105 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(!Accumulators.originals.get(accId).isDefined)
   }
 
+  test("get accum") {
+    sc = new SparkContext("local", "test")
+    // Don't register with SparkContext for cleanup
+    var acc = new Accumulable[Int, Int](0, IntAccumulatorParam, None, true, true)
+    val accId = acc.id
+    val ref = WeakReference(acc)
+    assert(ref.get.isDefined)
+    Accumulators.register(ref.get.get)
+
+    // Remove the explicit reference to it and allow weak reference to get garbage collected
+    acc = null
+    System.gc()
+    assert(ref.get.isEmpty)
+
+    // Getting a garbage collected accum should throw error
+    intercept[IllegalAccessError] {
+      Accumulators.get(accId)
+    }
+
+    // Getting a normal accumulator. Note: this has to be separate because referencing an
+    // accumulator above in an `assert` would keep it from being garbage collected.
+    val acc2 = new Accumulable[Long, Long](0L, LongAccumulatorParam, None, true, true)
+    Accumulators.register(acc2)
+    assert(Accumulators.get(acc2.id) === Some(acc2))
+
+    // Getting an accumulator that does not exist should return None
+    assert(Accumulators.get(100000).isEmpty)
+  }
+
   test("only external accums are automatically registered") {
     val accEx = new Accumulator(0, IntAccumulatorParam, Some("external"), internal = false)
     val accIn = new Accumulator(0, IntAccumulatorParam, Some("internal"), internal = true)
     assert(!accEx.isInternal)
     assert(accIn.isInternal)
-    assert(Accumulators.originals.contains(accEx.id))
-    assert(!Accumulators.originals.contains(accIn.id))
+    assert(Accumulators.get(accEx.id).isDefined)
+    assert(Accumulators.get(accIn.id).isEmpty)
+  }
+
+  test("copy") {
+    val acc1 = new Accumulable[Long, Long](456L, LongAccumulatorParam, Some("x"), true, false)
+    val acc2 = acc1.copy()
+    assert(acc1.id === acc2.id)
+    assert(acc1.value === acc2.value)
+    assert(acc1.name === acc2.name)
+    assert(acc1.isInternal === acc2.isInternal)
+    assert(acc1.countFailedValues === acc2.countFailedValues)
+    assert(acc1 !== acc2)
+    // Modifying one does not affect the other
+    acc1.add(44L)
+    assert(acc1.value === 500L)
+    assert(acc2.value === 456L)
+    acc2.add(144L)
+    assert(acc1.value === 500L)
+    assert(acc2.value === 600L)
+  }
+
+  test("register multiple accums with same ID") {
+    // Make sure these are internal accums so we don't automatically register them already
+    val acc1 = new Accumulable[Int, Int](0, IntAccumulatorParam, None, true, true)
+    val acc2 = acc1.copy()
+    assert(acc1 !== acc2)
+    assert(acc1.id === acc2.id)
+    assert(Accumulators.originals.isEmpty)
+    assert(Accumulators.get(acc1.id).isEmpty)
+    Accumulators.register(acc1)
+    Accumulators.register(acc2)
+    // The second one does not override the first one
+    assert(Accumulators.originals.size === 1)
+    assert(Accumulators.get(acc1.id) === Some(acc1))
+  }
+
+  test("string accumulator param") {
+    val acc = new Accumulator("", StringAccumulatorParam, Some("darkness"))
+    assert(acc.value === "")
+    acc.setValue("feeds")
+    assert(acc.value === "feeds")
+    acc.add("your")
+    assert(acc.value === "your") // value is overwritten, not concatenated
+    acc += "soul"
+    assert(acc.value === "soul")
+    acc ++= "with"
+    assert(acc.value === "with")
+    acc.merge("kindness")
+    assert(acc.value === "kindness")
+  }
+
+  test("list accumulator param") {
+    val acc = new Accumulator(Seq.empty[Int], new ListAccumulatorParam[Int], Some("numbers"))
+    assert(acc.value === Seq.empty[Int])
+    acc.add(Seq(1, 2))
+    assert(acc.value === Seq(1, 2))
+    acc += Seq(3, 4)
+    assert(acc.value === Seq(1, 2, 3, 4))
+    acc ++= Seq(5, 6)
+    assert(acc.value === Seq(1, 2, 3, 4, 5, 6))
+    acc.merge(Seq(7, 8))
+    assert(acc.value === Seq(1, 2, 3, 4, 5, 6, 7, 8))
+    acc.setValue(Seq(9, 10))
+    assert(acc.value === Seq(9, 10))
   }
 
   test("value is reset on the executors") {
