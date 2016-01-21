@@ -406,7 +406,7 @@ object JavaTypeInference {
               expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
             })
           } else {
-            throw new UnsupportedOperationException(s"Cannot infer type for Java class ${other.getName} because it is not bean-compliant}")
+            throw new UnsupportedOperationException(s"Cannot infer type for Java class ${other.getName} because it is not bean-compliant")
           }
       }
     }
