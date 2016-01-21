@@ -237,6 +237,12 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("Eliminate the unnecessary union") {
+    val plan = Union(testRelation :: Nil)
+    val expected = testRelation
+    checkAnalysis(plan, expected)
+  }
+
   test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
     val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
     val plan = relation.select(CaseWhen(Seq((Literal(true), 'a.attr)), 'b).as("val"))

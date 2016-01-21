@@ -46,10 +46,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /*
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      Single Int Column Scan:      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-      -------------------------------------------------------------------------
-      Without whole stage codegen       6725.52            31.18         1.00 X
-      With whole stage codegen          2233.05            93.91         3.01 X
+      Single Int Column Scan:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      Without whole stage codegen             7775.53            26.97         1.00 X
+      With whole stage codegen                 342.15           612.94        22.73 X
     */
     benchmark.run()
   }
