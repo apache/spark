@@ -32,8 +32,19 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
     val intercept: Double) extends Serializable
 
 /**
- * Fits a generalized linear model (GLM) for a given family using
- * iteratively reweighted least squares (IRLS).
+ * Implements the method of iteratively reweighted least squares (IRLS) which is used to solve
+ * certain optimization problems by an iterative method. In each step of the iterations, it
+ * involves solving a weighted lease squares (WLS) problem by [[WeightedLeastSquares]].
+ * It can be used to find maximum likelihood estimates of a generalized linear model (GLM),
+ * find M-estimator in robust regression and some other optimization problems.
+ *
+ * @param initialModel the initial guess model.
+ * @param reweightFunc the reweight function which is used to update offsets and weights
+ *                     at each iteration.
+ * @param fitIntercept whether to fit intercept.
+ * @param regParam L2 regularization parameter used by WLS.
+ * @param maxIter maximum number of iterations.
+ * @param tol the convergence tolerance.
  */
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,
@@ -48,18 +59,21 @@ private[ml] class IterativelyReweightedLeastSquares(
     var converged = false
     var iter = 0
 
-    var zw: RDD[(Double, Double)] = null
+    var offsetsAndWeights: RDD[(Double, Double)] = null
     var model: WeightedLeastSquaresModel = initialModel
     var oldModel: WeightedLeastSquaresModel = initialModel
-
 
     while (iter < maxIter && !converged) {
 
       oldModel = model
-      zw = instances.map { instance => reweightFunc(instance, oldModel) }
+
+      // Update offsets and weights using reweightFunc
+      offsetsAndWeights = instances.map { instance => reweightFunc(instance, oldModel) }
+
+      // Estimate new model
       val wls = new WeightedLeastSquares(fitIntercept, regParam, false, false)
-      val newInstances = instances.zip(zw).map { case (instance, (z, w)) =>
-        Instance(z, w, instance.features)
+      val newInstances = instances.zip(offsetsAndWeights).map {
+        case (instance, (offset, weight)) => Instance(offset, weight, instance.features)
       }
       model = wls.fit(newInstances)
 
@@ -68,7 +82,6 @@ private[ml] class IterativelyReweightedLeastSquares(
       val deltaArray = oldParameters.zip(parameters).map { case (x: Double, y: Double) =>
         math.abs(x - y)
       }
-
       if (!deltaArray.exists(_ > tol)) {
         converged = true
         logInfo(s"IRLS converged in $iter iterations.")
