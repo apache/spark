@@ -90,8 +90,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             if (a.name == InternalAccumulator.RESULT_SIZE) {
               assert(a.update.getOrElse(0L) == 0L,
                 "task result size should not have been set on the executors")
-              new AccumulableInfo(
-                a.id, a.name, Some(size.toLong), a.value, a.internal, a.countFailedValues)
+              a.copy(update = Some(size.toLong))
             } else {
               a
             }

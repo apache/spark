@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
+import scala.util.Try
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.AccumulableInfo
@@ -121,8 +123,13 @@ case class ExceptionFailure(
   extends TaskFailedReason {
 
   // For backward compatibility; this was replaced with `accumUpdates` in Spark 2.0.
-  // TODO: actually reconstruct the metrics here
-  val metrics: Option[TaskMetrics] = None
+  val metrics: Option[TaskMetrics] = {
+    if (accumUpdates.nonEmpty) {
+      Try(TaskMetrics.fromAccumulatorUpdates(accumUpdates)).toOption
+    } else {
+      None
+    }
+  }
 
   /**
    * `preserveCause` is used to keep the exception itself so it is available to the

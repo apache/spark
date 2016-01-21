@@ -102,6 +102,17 @@ class Accumulable[R, T] private (
   private[spark] def isInternal: Boolean = internal
 
   /**
+   * Return a copy of this [[Accumulable]].
+   *
+   * The copy will have the same ID as the original and will not be registered with
+   * [[Accumulators]] again. This method exists so that the caller can avoid passing the
+   * same mutable instance around.
+   */
+  private[spark] def copy(): Accumulable[R, T] = {
+    new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues)
+  }
+
+  /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
