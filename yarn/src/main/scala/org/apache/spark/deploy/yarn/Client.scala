@@ -1053,12 +1053,13 @@ private[spark] class Client(
 
 }
 
-object Client extends Logging {
+private[deploy] object Client extends Logging {
 
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
-      logWarning("WARNING: This client is deprecated and will be removed in a " +
-        "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
+      logError("Error: Client main class should not be called. " +
+        "Use ./bin/spark-submit with \"--master yarn\"")
+      throw new SparkException("Client main class should not be called")
     }
 
     // Set an env variable indicating we are running in YARN mode.
