@@ -382,6 +382,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 // These helper methods are moved into an object so other test suites can reuse them.
 // This extends SparkFunSuite only because we want to use scalatest asserts.
 private[spark] object JsonProtocolSuite extends SparkFunSuite {
+  import InternalAccumulator._
 
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
@@ -1702,50 +1703,208 @@ private[spark] object JsonProtocolSuite extends SparkFunSuite {
     """
 
   private val executorMetricsUpdateJsonString =
-  s"""
-     |{
-     |  "Event": "SparkListenerExecutorMetricsUpdate",
-     |  "Executor ID": "exec3",
-     |  "Metrics Updated": [
-     |  {
-     |    "Task ID": 1,
-     |    "Stage ID": 2,
-     |    "Stage Attempt ID": 3,
-     |    "Task Metrics": {
-     |    "Executor Deserialize Time": 300,
-     |    "Executor Run Time": 400,
-     |    "Result Size": 500,
-     |    "JVM GC Time": 600,
-     |    "Result Serialization Time": 700,
-     |    "Memory Bytes Spilled": 800,
-     |    "Disk Bytes Spilled": 0,
-     |    "Input Metrics": {
-     |      "Data Read Method": "Hadoop",
-     |      "Bytes Read": 2100,
-     |      "Records Read": 21
-     |    },
-     |    "Output Metrics": {
-     |      "Data Write Method": "Hadoop",
-     |      "Bytes Written": 1200,
-     |      "Records Written": 12
-     |    },
-     |    "Updated Blocks": [
-     |      {
-     |        "Block ID": "rdd_0_0",
-     |        "Status": {
-     |          "Storage Level": {
-     |            "Use Disk": true,
-     |            "Use Memory": true,
-     |            "Deserialized": false,
-     |            "Replication": 2
-     |          },
-     |          "Memory Size": 0,
-     |          "Disk Size": 0
-     |        }
-     |      }
-     |    ]
-     |  }
-     |  }]
-     |}
-   """.stripMargin
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorMetricsUpdate",
+      |  "Executor ID": "exec3",
+      |  "Metrics Updated": [
+      |    {
+      |      "Task ID": 1,
+      |      "Stage ID": 2,
+      |      "Stage Attempt ID": 3,
+      |      "Accumulator Updates": [
+      |        {
+      |          "ID": 81,
+      |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
+      |          "Update": 300,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 82,
+      |          "Name": "$EXECUTOR_RUN_TIME",
+      |          "Update": 400,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 83,
+      |          "Name": "$RESULT_SIZE",
+      |          "Update": 500,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 84,
+      |          "Name": "$JVM_GC_TIME",
+      |          "Update": 600,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 85,
+      |          "Name": "$RESULT_SERIALIZATION_TIME",
+      |          "Update": 700,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 86,
+      |          "Name": "$MEMORY_BYTES_SPILLED",
+      |          "Update": 800,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 87,
+      |          "Name": "$DISK_BYTES_SPILLED",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 88,
+      |          "Name": "$PEAK_EXECUTION_MEMORY",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 89,
+      |          "Name": "$UPDATED_BLOCK_STATUSES",
+      |          "Update": [
+      |            {
+      |              "BlockID": "rdd_0_0",
+      |              "Status": {
+      |                "StorageLevel": {
+      |                  "UseDisk": true,
+      |                  "UseMemory": true,
+      |                  "Deserialized": false,
+      |                  "Replication": 2
+      |                },
+      |                "MemorySize": 0,
+      |                "DiskSize": 0
+      |              }
+      |            }
+      |          ],
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 90,
+      |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 91,
+      |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 92,
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 93,
+      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 94,
+      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 95,
+      |          "Name": "${shuffleRead.RECORDS_READ}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 96,
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 97,
+      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 98,
+      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 99,
+      |          "Name": "${input.READ_METHOD}",
+      |          "Update": "Hadoop",
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 100,
+      |          "Name": "${input.BYTES_READ}",
+      |          "Update": 2100,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 101,
+      |          "Name": "${input.RECORDS_READ}",
+      |          "Update": 21,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 102,
+      |          "Name": "${output.WRITE_METHOD}",
+      |          "Update": "Hadoop",
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 103,
+      |          "Name": "${output.BYTES_WRITTEN}",
+      |          "Update": 1200,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 104,
+      |          "Name": "${output.RECORDS_WRITTEN}",
+      |          "Update": 12,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 105,
+      |          "Name": "$TEST_ACCUM",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        }
+      |      ]
+      |    }
+      |  ]
+      |}
+    """.stripMargin
 }
