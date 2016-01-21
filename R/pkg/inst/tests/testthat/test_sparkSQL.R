@@ -335,7 +335,6 @@ writeLines(mockLinesMapType, mapTypeJsonPath)
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(sqlContext, complexTypeJsonPath)
-
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -490,19 +489,15 @@ test_that("insertInto() on a registered table", {
   unlink(parquetPath2)
 })
 
-test_that("table() returns a new DataFrame", {
+test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
-  tabledf <- table(sqlContext, "table1")
+  tabledf <- tableToDF(sqlContext, "table1")
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
+  tabledf2 <- tableToDF(sqlContext, "table1")
+  expect_equal(count(tabledf2), 3)
   dropTempTable(sqlContext, "table1")
-
-  # nolint start
-  # Test base::table is working
-  #a <- letters[1:3]
-  #expect_equal(class(table(a, sample(a))), "table")
-  # nolint end
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -734,7 +729,7 @@ test_that("head() and first() return the correct data", {
   expect_equal(ncol(testFirst), 2)
 })
 
-test_that("distinct() and unique on DataFrames", {
+test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
   lines <- c("{\"name\":\"Michael\"}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"Justin\", \"age\":19}",
@@ -750,6 +745,42 @@ test_that("distinct() and unique on DataFrames", {
   uniques2 <- unique(df)
   expect_is(uniques2, "DataFrame")
   expect_equal(count(uniques2), 3)
+
+  # Test dropDuplicates()
+  df <- createDataFrame(
+    sqlContext,
+    list(
+      list(2, 1, 2), list(1, 1, 1),
+      list(1, 2, 1), list(2, 1, 2),
+      list(2, 2, 2), list(2, 2, 1),
+      list(2, 1, 1), list(1, 1, 2),
+      list(1, 2, 2), list(1, 2, 1)),
+    schema = c("key", "value1", "value2"))
+  result <- collect(dropDuplicates(df))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 1, 2), c(1, 2, 1),
+    c(1, 2, 2), c(2, 1, 1), c(2, 1, 2),
+    c(2, 2, 1), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, c("key", "value1")))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, "key"))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(2, 1, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
 })
 
 test_that("sample on a DataFrame", {
@@ -793,11 +824,6 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
-
-  df$age2 <- NULL
-  expect_equal(columns(df), c("name", "age"))
-  df$age3 <- NULL
-  expect_equal(columns(df), c("name", "age"))
 })
 
 test_that("select with column", {
@@ -821,6 +847,27 @@ test_that("select with column", {
 
   expect_error(select(df, c("name", "age"), "name"),
                 "To select multiple columns, use a character vector or list for col")
+})
+
+test_that("drop column", {
+  df <- select(read.json(sqlContext, jsonPath), "name", "age")
+  df1 <- drop(df, "name")
+  expect_equal(columns(df1), c("age"))
+
+  df$age2 <- df$age
+  df1 <- drop(df, c("name", "age"))
+  expect_equal(columns(df1), c("age2"))
+
+  df1 <- drop(df, df$age)
+  expect_equal(columns(df1), c("name", "age2"))
+
+  df$age2 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+  df$age3 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+
+  # Test to make sure base::drop is not masked
+  expect_equal(drop(1:3 %*% 2:4), 20)
 })
 
 test_that("subsetting", {
@@ -1431,6 +1478,11 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF)[3], "newAge")
   expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 32)
 
+  # Replace existing column
+  newDF <- withColumn(df, "age", df$age + 2)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
@@ -1781,7 +1833,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(x), "map<string,string>")
 
   df <- selectExpr(read.json(sqlContext, jsonPath), "name", "(age * 1.21) as age")
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
 
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")
