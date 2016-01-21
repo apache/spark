@@ -20,9 +20,7 @@ package org.apache.spark.ml.optim
 import org.apache.spark.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Model fitted by [[IterativelyReweightedLeastSquares]].
@@ -38,61 +36,52 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * iteratively reweighted least squares (IRLS).
  */
 private[ml] class IterativelyReweightedLeastSquares(
-    val family: Family,
+    val initialModel: WeightedLeastSquaresModel,
+    val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double),
     val fitIntercept: Boolean,
     val regParam: Double,
-    val standardizeFeatures: Boolean,
-    val standardizeLabel: Boolean,
     val maxIter: Int,
     val tol: Double) extends Logging with Serializable {
 
   def fit(instances: RDD[Instance]): IterativelyReweightedLeastSquaresModel = {
 
-    val y = instances.map(_.label).persist(StorageLevel.MEMORY_AND_DISK)
-    val yMean = y.mean()
-    var mu = y.map { yi => family.startingMu(yi, yMean) }
-    var eta: RDD[Double] = null
-    var dev = family.deviance(y, mu)
-
     var converged = false
-    val nullDev = dev
-    var oldDev = dev
-    var deltaDev = 1.0
     var iter = 0
 
     var zw: RDD[(Double, Double)] = null
-    var model: WeightedLeastSquaresModel = null
+    var model: WeightedLeastSquaresModel = initialModel
+    var oldModel: WeightedLeastSquaresModel = initialModel
+
 
     while (iter < maxIter && !converged) {
 
-      zw = y.zip(mu).map { case (y, mu) =>
-        val eta = family.predict(mu)
-        val z = family.adjusted(y, mu, eta)
-        val w = family.weights(mu)
-        (z, w)
-      }
-      val wls = new WeightedLeastSquares(fitIntercept, regParam,
-        standardizeFeatures, standardizeLabel)
+      oldModel = model
+      zw = instances.map { instance => reweightFunc(instance, oldModel) }
+      val wls = new WeightedLeastSquares(fitIntercept, regParam, false, false)
       val newInstances = instances.zip(zw).map { case (instance, (z, w)) =>
-        Instance(z, w * instance.weight, instance.features)
+        Instance(z, w, instance.features)
       }
       model = wls.fit(newInstances)
-      eta = newInstances.map { instance =>
-        dot(instance.features, model.coefficients) + model.intercept
-      }
-      mu = eta.map { eta => family.fitted(eta) }
 
-      oldDev = dev
-      dev = family.deviance(y, mu)
-      deltaDev = dev - oldDev
-      if (math.abs(deltaDev) / (0.1 + math.abs(dev)) < tol) {
+      val oldParameters = Array.concat(Array(oldModel.intercept), oldModel.coefficients.toArray)
+      val parameters = Array.concat(Array(model.intercept), model.coefficients.toArray)
+      val deltaArray = oldParameters.zip(parameters).map { case (x: Double, y: Double) =>
+        math.abs(x - y)
+      }
+
+      if (!deltaArray.exists(_ > tol)) {
         converged = true
+        logInfo(s"IRLS converged in $iter iterations.")
       }
-      iter = iter + 1
-      logInfo(s"Iteration $iter : $deltaDev")
-    }
 
-    y.unpersist(blocking = false)
+      logInfo(s"Iteration $iter : relative tolerance = ${deltaArray.max}")
+      iter = iter + 1
+
+      if (iter == maxIter) {
+        logInfo(s"IRLS reached the max number of iterations: $maxIter.")
+      }
+
+    }
 
     new IterativelyReweightedLeastSquaresModel(model.coefficients, model.intercept)
   }

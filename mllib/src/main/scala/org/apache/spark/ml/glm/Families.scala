@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.optim
+package org.apache.spark.ml.glm
 
 import org.apache.spark.rdd.RDD
 
