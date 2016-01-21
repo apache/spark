@@ -51,16 +51,6 @@ class CountMinSketchImpl extends CountMinSketch {
     initTablesWith(depth, width, seed);
   }
 
-  public CountMinSketchImpl(int depth, int width, long totalCount, long[] hashA, long[][] table) {
-    this.depth = depth;
-    this.width = width;
-    this.eps = 2.0 / width;
-    this.confidence = 1 - 1 / Math.pow(2, depth);
-    this.hashA = hashA;
-    this.table = table;
-    this.totalCount = totalCount;
-  }
-
   private void initTablesWith(int depth, int width, int seed) {
     this.table = new long[depth][width];
     this.hashA = new long[depth];
