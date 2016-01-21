@@ -106,8 +106,9 @@ class JavaEvaluator(Evaluator, JavaWrapper):
 @inherit_doc
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol):
     """
-    Evaluator for binary classification, which expects two input
-    columns: rawPrediction and label.
+    Evaluator for binary classification, which expects two input columns: rawPrediction and label.
+    The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
+    1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> scoreAndLabels = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]),
