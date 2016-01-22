@@ -45,7 +45,8 @@ private[spark] class HttpServer(
     resourceBase: File,
     securityManager: SecurityManager,
     requestedPort: Int = 0,
-    serverName: String = "HTTP server")
+    serverName: String = "HTTP server",
+    advertisedPortSetting: Option[String] = None)
   extends Logging {
 
   private var server: Server = null
@@ -159,10 +160,34 @@ private[spark] class HttpServer(
     }
   }
 
+  private def getAdvertisedOrServerPort: Int = {
+    advertisedPortSetting match {
+      case Some(setting) =>
+        conf.getOption(setting).map(_.toInt).getOrElse(0) match {
+          case x if x > 0 => x
+          case _ => port
+        }
+      case None => port
+    }
+  }
+
   /**
-   * Get the URI of this HTTP server (http://host:port or https://host:port)
+   * Get the advertised URI of this HTTP server (http://host:port or https://host:port).
+   * This URI is what executors use to reply to the master.
    */
   def uri: String = {
+    if (server == null) {
+      throw new ServerStateException("Server is not started")
+    } else {
+      val scheme = if (securityManager.fileServerSSLOptions.enabled) "https" else "http"
+      s"$scheme://${Utils.localHostNameForURI()}:$getAdvertisedOrServerPort"
+    }
+  }
+
+  /**
+   * Get the bound URI of this HTTP server (http://host:port or https://host:port)
+   */
+  def boundUri: String = {
     if (server == null) {
       throw new ServerStateException("Server is not started")
     } else {

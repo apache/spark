@@ -39,8 +39,11 @@ private[spark] object RpcEnv {
       port: Int,
       conf: SparkConf,
       securityManager: SecurityManager,
-      clientMode: Boolean = false): RpcEnv = {
-    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
+      clientMode: Boolean = false,
+      advertisedHost: Option[String] = None,
+      advertisedPort: Option[Int] = None): RpcEnv = {
+    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode, advertisedHost,
+                              advertisedPort)
     new NettyRpcEnvFactory().create(config)
   }
 }
@@ -189,4 +192,6 @@ private[spark] case class RpcEnvConfig(
     host: String,
     port: Int,
     securityManager: SecurityManager,
-    clientMode: Boolean)
+    clientMode: Boolean,
+    advertisedHost: Option[String] = None,
+    advertisedPort: Option[Int] = None)

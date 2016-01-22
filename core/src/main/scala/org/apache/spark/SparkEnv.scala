@@ -245,10 +245,19 @@ object SparkEnv extends Logging {
 
     val securityManager = new SecurityManager(conf)
 
+    val driverAdvertisedData = if (isDriver) {
+      (conf.getOption("spark.driver.advertisedHost"),
+       conf.getOption("spark.driver.advertisedPort").map(_.toInt))
+    } else {
+      (None, None)
+    }
+
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
     // Create the ActorSystem for Akka and get the port it binds to.
     val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager,
-      clientMode = !isDriver)
+      clientMode = !isDriver,
+      advertisedHost = driverAdvertisedData._1,
+      advertisedPort = driverAdvertisedData._2)
     val actorSystem: ActorSystem = {
         val actorSystemPort =
           if (port == 0 || rpcEnv.address == null) {
