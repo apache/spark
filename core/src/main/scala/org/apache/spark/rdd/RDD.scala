@@ -1194,6 +1194,8 @@ abstract class RDD[T: ClassTag](
    * Take the first num elements of the RDD. It works by first scanning one partition, and use the
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
+   * Note that this method should only be used if the resulting array is expected to be small, as
+   * the whole thing is loaded into the driver's memory.
    *
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
