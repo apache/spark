@@ -292,8 +292,8 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
           function(col1, col2) {
             stopifnot(class(col1) == class(col2))
             if (class(col1) == "Column") {
-              col1 = col1@jc
-              col2 = col2@jc
+              col1 <- col1@jc
+              col2 <- col2@jc
             }
             jc <- callJStatic("org.apache.spark.sql.functions", "covar_pop", col1, col2)
             column(jc)
@@ -316,8 +316,8 @@ setMethod("covar_samp", signature(col1 = "characterOrColumn", col2 = "characterO
           function(col1, col2) {
             stopifnot(class(col1) == class(col2))
             if (class(col1) == "Column") {
-              col1 = col1@jc
-              col2 = col2@jc
+              col1 <- col1@jc
+              col2 <- col2@jc
             }
             jc <- callJStatic("org.apache.spark.sql.functions", "covar_samp", col1, col2)
             column(jc)
