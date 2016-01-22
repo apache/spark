@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// this function works exactly the same as UIUtils.formatDuration
 function formatDuration(milliseconds) {
   if (milliseconds < 100) {
     return milliseconds + " ms";
