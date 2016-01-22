@@ -426,11 +426,11 @@ setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("covar_samp", function(x, ...) {standardGeneric("covar_samp") })
+setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("covar_pop", function(x, ...) {standardGeneric("covar_pop") })
+setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
 #' @rdname summary
 #' @export

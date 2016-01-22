@@ -283,11 +283,19 @@ setMethod("corr", signature(x = "Column"),
 #' @name covar_pop
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{covar_pop(df$c, df$d)}
-setMethod("covar_pop", signature(x = "Column"),
-          function(x, col2) {
-            stopifnot(class(col2) == "Column")
-            jc <- callJStatic("org.apache.spark.sql.functions", "covar_pop", x@jc, col2@jc)
+#' @examples
+#' \dontrun{
+#' covar_pop(df$c, df$d)
+#' covar_pop("c", "d")
+#' }
+setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOrColumn"),
+          function(col1, col2) {
+            stopifnot(class(col1) == class(col2))
+            if (class(col1) == "Column") {
+              col1 = col1@jc
+              col2 = col2@jc
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "covar_pop", col1, col2)
             column(jc)
           })
 
@@ -299,11 +307,19 @@ setMethod("covar_pop", signature(x = "Column"),
 #' @name covar_samp
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{covar_samp(df$c, df$d)}
-setMethod("covar_samp", signature(x = "Column"),
-          function(x, col2) {
-            stopifnot(class(col2) == "Column")
-            jc <- callJStatic("org.apache.spark.sql.functions", "covar_samp", x@jc, col2@jc)
+#' @examples
+#' \dontrun{
+#' covar_samp(df$c, df$d)
+#' covar_samp("c", "d")
+#' }
+setMethod("covar_samp", signature(col1 = "characterOrColumn", col2 = "characterOrColumn"),
+          function(col1, col2) {
+            stopifnot(class(col1) == class(col2))
+            if (class(col1) == "Column") {
+              col1 = col1@jc
+              col2 = col2@jc
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "covar_samp", col1, col2)
             column(jc)
           })
 
