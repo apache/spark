@@ -502,7 +502,7 @@ object HiveTypeCoercion {
         CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
           resultType)
 
-      case _ => e
+      case _ => binaryOperator(e)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -512,8 +512,7 @@ object HiveTypeCoercion {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 
-        case e: BinaryArithmetic => binaryArithmetic(e)
-        case e: BinaryOperator => binaryOperator(e)
+        case e: BinaryOperator => binaryArithmetic(e)
 
         // TODO: MaxOf, MinOf, etc might want other rules
 
