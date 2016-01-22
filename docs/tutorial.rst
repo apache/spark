@@ -100,7 +100,7 @@ Airflow DAG object. Let's start by importing the libraries we will need.
     from airflow import DAG
 
     # Operators; we need this to operate!
-    from airflow.operators import BashOperator, MySqlOperator
+    from airflow.operators import BashOperator
 
 Default Arguments
 -----------------
@@ -111,7 +111,7 @@ of default parameters that we can use when creating tasks.
 
 .. code:: python
 
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     default_args = {
         'owner': 'airflow',
