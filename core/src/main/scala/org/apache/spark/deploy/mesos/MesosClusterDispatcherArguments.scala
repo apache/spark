@@ -28,6 +28,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
   var port = 7077
   var name = "Spark Cluster"
   var webUiPort = 8081
+  var webUiUrl: Option[String] = None
   var masterUrl: String = _
   var zookeeperUrl: Option[String] = None
   var propertiesFile: String = _
@@ -38,6 +39,10 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
+    case ("--webui-url") :: value :: tail =>
+      webUiUrl = Some(value)
+      parse(tail)
+
     case ("--host" | "-h") :: value :: tail =>
       Utils.checkHost(value, "Please use hostname " + value)
       host = value
@@ -47,7 +52,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
       port = value
       parse(tail)
 
-    case ("--webui-port" | "-p") :: IntParam(value) :: tail =>
+    case ("--webui-port") :: IntParam(value) :: tail =>
       webUiPort = value
       parse(tail)
 
@@ -98,6 +103,9 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
         "  -h HOST, --host HOST    Hostname to listen on\n" +
         "  -p PORT, --port PORT    Port to listen on (default: 7077)\n" +
         "  --webui-port WEBUI_PORT WebUI Port to listen on (default: 8081)\n" +
+        "  --webui-url  WEBUI_URL  The WebUI URL to be set in the underlying\n" +
+        "                          scheduler driver. If unset it defaults\n" +
+        "                          to the dispatcher WebUI URL.\n" +
         "  --name NAME             Framework name to show in Mesos UI\n" +
         "  -m --master MASTER      URI for connecting to Mesos master\n" +
         "  -z --zk ZOOKEEPER       Comma delimited URLs for connecting to \n" +
