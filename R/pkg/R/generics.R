@@ -418,7 +418,7 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
+setGeneric("cov", function(x, ...) {standardGeneric("cov") })
 
 #' @rdname statfunctions
 #' @export
