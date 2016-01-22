@@ -138,3 +138,32 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
 }
+
+/**
+ * A lazily generate row ordering comparator.
+ */
+class LazilyGenerateOrdering(val ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
+
+  def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
+    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+
+  @transient
+  lazy val generatedOrdering = GenerateOrdering.generate(ordering)
+
+  def compare(a: InternalRow, b: InternalRow): Int = {
+    generatedOrdering.compare(a, b)
+  }
+}
+
+object LazilyGenerateOrdering {
+
+  /**
+   * Creates a [[LazilyGenerateOrdering]] for the given schema, in natural ascending order.
+   */
+  def forSchema(schema: StructType): LazilyGenerateOrdering = {
+    new LazilyGenerateOrdering(schema.zipWithIndex.map {
+      case (field, ordinal) =>
+        SortOrder(BoundReference(ordinal, field.dataType, nullable = true), Ascending)
+    })
+  }
+}

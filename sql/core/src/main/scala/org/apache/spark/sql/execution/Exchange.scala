@@ -28,6 +28,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
@@ -157,10 +158,7 @@ case class Exchange(
           val mutablePair = new MutablePair[InternalRow, Null]()
           iter.map(row => mutablePair.update(row.copy(), null))
         }
-        // We need to use an interpreted ordering here because generated orderings cannot be
-        // serialized and this ordering needs to be created on the driver in order to be passed into
-        // Spark core code.
-        implicit val ordering = new InterpretedOrdering(sortingExpressions, child.output)
+        implicit val ordering = new LazilyGenerateOrdering(sortingExpressions, child.output)
         new RangePartitioner(numPartitions, rddForSampling, ascending = true)
       case SinglePartition =>
         new Partitioner {
