@@ -263,6 +263,38 @@ def corr(col1, col2):
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
 
 
+@since(2.0)
+def covar_pop(col1, col2):
+    """Returns a new :class:`Column` for the population covariance of ``col1``
+    and ``col2``.
+
+    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
+    >>> b = range(20)
+    >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
+    >>> covDf = df.agg(covar_pop("a", "b").alias('c'))
+    >>> covDf.select("c").collect()
+    [Row(c=565.25)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.covar_pop(_to_java_column(col1), _to_java_column(col2)))
+
+
+@since(2.0)
+def covar_samp(col1, col2):
+    """Returns a new :class:`Column` for the sample covariance of ``col1``
+    and ``col2``.
+
+    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
+    >>> b = range(20)
+    >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
+    >>> covDf = df.agg(covar_samp("a", "b").alias('c'))
+    >>> covDf.select("c").collect()
+    [Row(c=595.0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
+
+
 @since(1.3)
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
