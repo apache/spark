@@ -40,8 +40,8 @@ class LabeledPoint(object):
     :param label:
       Label for this data point.
     :param features:
-      Vector of features for this point (NumPy array, list, pyspark.mllib.linalg.SparseVector, or
-      scipy.sparse column matrix)
+      Vector of features for this point (NumPy array, list,
+      pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
 
     Note: 'label' and 'features' are accessible as class attributes.
 
@@ -273,11 +273,13 @@ class LinearRegressionWithSGD(object):
           - None for no regularization
           (default: None)
         :param intercept:
-          Boolean parameter which indicates the use or not of the augmented representation for
-          training data (i.e., whether bias features are activated or not).
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e., whether bias
+          features are activated or not).
           (default: False)
         :param validateData:
-          Boolean parameter which indicates if the algorithm should validate data before training.
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
           (default: True)
         :param convergenceTol:
           A condition which decides iteration termination.
@@ -417,11 +419,13 @@ class LassoWithSGD(object):
           The initial weights.
           (default: None)
         :param intercept:
-          Boolean parameter which indicates the use or not of the augmented representation for
-          training data (i.e. whether bias features are activated or not).
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e. whether bias
+          features are activated or not).
          (default: False)
         :param validateData:
-          Boolean parameter which indicates if the algorithm should validate data before training.
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
           (default: True)
         :param convergenceTol:
           A condition which decides iteration termination.
@@ -561,11 +565,13 @@ class RidgeRegressionWithSGD(object):
           The initial weights.
           (default: None)
         :param intercept:
-          Boolean parameter which indicates the use or not of the augmented representation for
-          training data (i.e. whether bias features are activated or not).
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e. whether bias
+          features are activated or not).
           (default: False)
         :param validateData:
-          Boolean parameter which indicates if the algorithm should validate data before training.
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
           (default: True)
         :param convergenceTol:
           A condition which decides iteration termination.
@@ -585,11 +591,11 @@ class IsotonicRegressionModel(Saveable, Loader):
     Regression model for isotonic regression.
 
     :param boundaries:
-      Array of boundaries for which predictions are known. Boundaries must be sorted in increasing
-      order.
+      Array of boundaries for which predictions are known. Boundaries must
+      be sorted in increasing order.
     :param predictions:
-      Array of predictions associated to the boundaries at the same index. Results of isotonic
-      regression and therefore monotone.
+      Array of predictions associated to the boundaries at the same index.
+      Results of isotonic regression and therefore monotone.
     :param isotonic:
       Indicates whether this is isotonic or antitonic.
 
