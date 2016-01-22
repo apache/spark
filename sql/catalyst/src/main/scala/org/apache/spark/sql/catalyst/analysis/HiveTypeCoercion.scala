@@ -406,6 +406,105 @@ object HiveTypeCoercion {
       PromotePrecision(Cast(e, dataType))
     }
 
+    private def binaryOperator(e: Expression): Expression = e match {
+      case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
+                                e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        val resultType = widerDecimalType(p1, s1, p2, s2)
+        b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
+
+      // Strength reduction for comparisons between an integral column and a decimal literal:
+      // 1. int_col > decimal_literal => int_col > floor(decimal_literal)
+      // 2. int_col >= decimal_literal => int_col >= ceil(decimal_literal)
+      // 3. int_col < decimal_literal => int_col < ceil(decimal_literal)
+      // 4. int_col <= decimal_literal => int_col <= floor(decimal_literal)
+      // 5. decimal_literal > int_col => ceil(decimal_literal) > int_col
+      // 6. decimal_literal >= int_col => floor(decimal_literal) >= int_col
+      // 7. decimal_literal < int_col => floor(decimal_literal) < int_col
+      // 8. decimal_literal <= int_col => ceil(decimal_literal) <= int_col
+      case GreaterThan(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
+        GreaterThan(i, Literal.create(value.floor.toInt, IntegerType))
+      case GreaterThanOrEqual(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
+        GreaterThanOrEqual(i, Literal.create(value.ceil.toInt, IntegerType))
+      case LessThan(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
+        LessThan(i, Literal.create(value.ceil.toInt, IntegerType))
+      case LessThanOrEqual(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
+        LessThanOrEqual(i, Literal.create(value.floor.toInt, IntegerType))
+      case GreaterThan(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
+        GreaterThan(Literal.create(value.ceil.toInt, IntegerType), i)
+      case GreaterThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
+        GreaterThanOrEqual(Literal.create(value.floor.toInt, IntegerType), i)
+      case LessThan(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
+        LessThan(Literal.create(value.floor.toInt, IntegerType), i)
+      case LessThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
+        LessThanOrEqual(Literal.create(value.ceil.toInt, IntegerType), i)
+
+      // Promote integers inside a binary expression with fixed-precision decimals to decimals,
+      // and fixed-precision decimals in an expression with floats / doubles to doubles
+      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+        (left.dataType, right.dataType) match {
+          case (t: IntegralType, DecimalType.Fixed(p, s)) =>
+            b.makeCopy(Array(Cast(left, DecimalType.forType(t)), right))
+          case (DecimalType.Fixed(p, s), t: IntegralType) =>
+            b.makeCopy(Array(left, Cast(right, DecimalType.forType(t))))
+          case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
+            b.makeCopy(Array(left, Cast(right, DoubleType)))
+          case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
+            b.makeCopy(Array(Cast(left, DoubleType), right))
+          case _ =>
+            b
+        }
+
+      case _ => e
+    }
+
+    private def binaryArithmetic(e: Expression): Expression = e match {
+      // Skip nodes who is already promoted
+      case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
+
+      case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+        CheckOverflow(Add(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
+
+      case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+        CheckOverflow(Subtract(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
+
+      case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        val resultType = DecimalType.bounded(p1 + p2 + 1, s1 + s2)
+        val widerType = widerDecimalType(p1, s1, p2, s2)
+        CheckOverflow(Multiply(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+          resultType)
+
+      case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
+        var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+        val diff = (intDig + decDig) - DecimalType.MAX_SCALE
+        if (diff > 0) {
+          decDig -= diff / 2 + 1
+          intDig = DecimalType.MAX_SCALE - decDig
+        }
+        val resultType = DecimalType.bounded(intDig + decDig, decDig)
+        val widerType = widerDecimalType(p1, s1, p2, s2)
+        CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+          resultType)
+
+      case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+        // resultType may have lower precision, so we cast them into wider type first.
+        val widerType = widerDecimalType(p1, s1, p2, s2)
+        CheckOverflow(Remainder(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+          resultType)
+
+      case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+        // resultType may have lower precision, so we cast them into wider type first.
+        val widerType = widerDecimalType(p1, s1, p2, s2)
+        CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+          resultType)
+
+      case _ => e
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
 
       // fix decimal precision for expressions
@@ -413,96 +512,8 @@ object HiveTypeCoercion {
         // Skip nodes whose children have not been resolved yet
         case e if !e.childrenResolved => e
 
-        // Skip nodes who is already promoted
-        case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
-
-        case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-          CheckOverflow(Add(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
-
-        case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-          CheckOverflow(Subtract(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
-
-        case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val resultType = DecimalType.bounded(p1 + p2 + 1, s1 + s2)
-          val widerType = widerDecimalType(p1, s1, p2, s2)
-          CheckOverflow(Multiply(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-            resultType)
-
-        case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
-          var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
-          val diff = (intDig + decDig) - DecimalType.MAX_SCALE
-          if (diff > 0) {
-            decDig -= diff / 2 + 1
-            intDig = DecimalType.MAX_SCALE - decDig
-          }
-          val resultType = DecimalType.bounded(intDig + decDig, decDig)
-          val widerType = widerDecimalType(p1, s1, p2, s2)
-          CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-            resultType)
-
-        case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-          // resultType may have lower precision, so we cast them into wider type first.
-          val widerType = widerDecimalType(p1, s1, p2, s2)
-          CheckOverflow(Remainder(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-            resultType)
-
-        case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-          // resultType may have lower precision, so we cast them into wider type first.
-          val widerType = widerDecimalType(p1, s1, p2, s2)
-          CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
-            resultType)
-
-        case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
-                                  e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-          val resultType = widerDecimalType(p1, s1, p2, s2)
-          b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
-
-        // Strength reduction for comparisons between an integral column and a decimal literal:
-        // 1. int_col > decimal_literal => int_col > floor(decimal_literal)
-        // 2. int_col >= decimal_literal => int_col >= ceil(decimal_literal)
-        // 3. int_col < decimal_literal => int_col < ceil(decimal_literal)
-        // 4. int_col <= decimal_literal => int_col <= floor(decimal_literal)
-        // 5. decimal_literal > int_col => ceil(decimal_literal) > int_col
-        // 6. decimal_literal >= int_col => floor(decimal_literal) >= int_col
-        // 7. decimal_literal < int_col => floor(decimal_literal) < int_col
-        // 8. decimal_literal <= int_col => ceil(decimal_literal) <= int_col
-        case GreaterThan(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
-          GreaterThan(i, Literal.create(value.floor.toInt, IntegerType))
-        case GreaterThanOrEqual(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
-          GreaterThanOrEqual(i, Literal.create(value.ceil.toInt, IntegerType))
-        case LessThan(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
-          LessThan(i, Literal.create(value.ceil.toInt, IntegerType))
-        case LessThanOrEqual(i @ IntegerType(), Literal(value: Decimal, _: DecimalType)) =>
-          LessThanOrEqual(i, Literal.create(value.floor.toInt, IntegerType))
-        case GreaterThan(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
-          GreaterThan(Literal.create(value.ceil.toInt, IntegerType), i)
-        case GreaterThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
-          GreaterThanOrEqual(Literal.create(value.floor.toInt, IntegerType), i)
-        case LessThan(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
-          LessThan(Literal.create(value.floor.toInt, IntegerType), i)
-        case LessThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegerType()) =>
-          LessThanOrEqual(Literal.create(value.ceil.toInt, IntegerType), i)
-
-        // Promote integers inside a binary expression with fixed-precision decimals to decimals,
-        // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-          (left.dataType, right.dataType) match {
-            case (t: IntegralType, DecimalType.Fixed(p, s)) =>
-              b.makeCopy(Array(Cast(left, DecimalType.forType(t)), right))
-            case (DecimalType.Fixed(p, s), t: IntegralType) =>
-              b.makeCopy(Array(left, Cast(right, DecimalType.forType(t))))
-            case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
-              b.makeCopy(Array(left, Cast(right, DoubleType)))
-            case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
-              b.makeCopy(Array(Cast(left, DoubleType), right))
-            case _ =>
-              b
-          }
+        case e: BinaryArithmetic => binaryArithmetic(e)
+        case e: BinaryOperator => binaryOperator(e)
 
         // TODO: MaxOf, MinOf, etc might want other rules
 
