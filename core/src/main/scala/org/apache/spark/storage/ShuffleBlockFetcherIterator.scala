@@ -269,7 +269,8 @@ final class ShuffleBlockFetcherIterator(
     // Add the remote requests into our queue in a random order
     fetchRequests ++= Utils.randomize(remoteRequests)
     assert ((0 == reqsInFlight) == (0 == bytesInFlight),
-      "reqsInFlight = " + reqsInFlight + ", bytesInFlight = " + bytesInFlight)
+      "expected reqsInFlight = 0 but found reqsInFlight = " + reqsInFlight +
+      ", expected bytesInFlight = 0 but found bytesInFlight = " + bytesInFlight)
 
     // Send out initial requests for blocks, up to our maxBytesInFlight
     fetchUpToMaxBytes()
