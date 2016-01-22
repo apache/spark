@@ -96,14 +96,16 @@ class LogisticRegressionModel(LinearClassificationModel):
     :param weights:
       Weights computed for every feature.
     :param intercept:
-      Intercept computed for this model. (Only used in Binary Logistic Regression. In  Multinomial
-      Logistic Regression, the intercepts will not be a single value, so the intercepts will be part
-      of the weights.)
+      Intercept computed for this model. (Only used in Binary Logistic
+      Regression. In Multinomial Logistic Regression, the intercepts will
+      not bea single value, so the intercepts will be part of the
+      weights.)
     :param numFeatures:
       The dimension of the features.
     :param numClasses:
-      The number of possible outcomes for k classes classification problem in Multinomial Logistic
-      Regression. By default, it is binary logistic regression so numClasses will be set to 2.
+      The number of possible outcomes for k classes classification problem
+      in Multinomial Logistic Regression. By default, it is binary
+      logistic regression so numClasses will be set to 2.
 
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 1.0]),
@@ -297,11 +299,13 @@ class LogisticRegressionWithSGD(object):
             - None for no regularization
           (default: "l2")
         :param intercept:
-          Boolean parameter which indicates the use or not of the augmented representation for
-          training data (i.e., whether bias features are activated or not).
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e., whether bias
+          features are activated or not).
           (default: False)
         :param validateData:
-          Boolean parameter which indicates if the algorithm should validate data before training.
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
           (default: True)
         :param convergenceTol:
           A condition which decides iteration termination.
@@ -345,8 +349,9 @@ class LogisticRegressionWithLBFGS(object):
             - None for no regularization
           (default: "l2")
         :param intercept:
-          Boolean parameter which indicates the use or not of the augmented representation for
-          training data (i.e., whether bias features are activated or not).
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e., whether bias
+          features are activated or not).
           (default: False)
         :param corrections:
           The number of corrections used in the LBFGS update.
@@ -355,10 +360,12 @@ class LogisticRegressionWithLBFGS(object):
           The convergence tolerance of iterations for L-BFGS.
           (default: 1e-4)
         :param validateData:
-          Boolean parameter which indicates if the algorithm should validate data before training.
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
           (default: True)
         :param numClasses:
-          The number of classes (i.e., outcomes) a label can take in Multinomial Logistic Regression.
+          The number of classes (i.e., outcomes) a label can take in
+          Multinomial Logistic Regression.
           (default: 2)
 
         >>> data = [
@@ -522,11 +529,13 @@ class SVMWithSGD(object):
             - None for no regularization
           (default: "l2")
         :param intercept:
-          Boolean parameter which indicates the use or not of the augmented representation for
-          training data (i.e. whether bias features are activated or not).
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e. whether bias
+          features are activated or not).
           (default: False)
         :param validateData:
-          Boolean parameter which indicates if the algorithm should validate data before training.
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
           (default: True)
         :param convergenceTol:
           A condition which decides iteration termination.
@@ -551,7 +560,8 @@ class NaiveBayesModel(Saveable, Loader):
     :param pi:
       Log of class priors, whose dimension is C, number of labels.
     :param theta:
-      Log of class conditional probabilities, whose dimension is C-by-D, where D is number of features.
+      Log of class conditional probabilities, whose dimension is C-by-D,
+      where D is number of features.
 
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 0.0]),
@@ -666,9 +676,9 @@ class NaiveBayes(object):
 @inherit_doc
 class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Train or predict a logistic regression model on streaming data. Training uses
-    Stochastic Gradient Descent to update the model based on each new batch of
-    incoming data from a DStream.
+    Train or predict a logistic regression model on streaming data.
+    Training uses Stochastic Gradient Descent to update the model based on
+    each new batch of incoming data from a DStream.
 
     Each batch of data is assumed to be an RDD of LabeledPoints.
     The number of data points per batch can vary, but the number
