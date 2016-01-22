@@ -156,5 +156,11 @@ object AccumulatorParam {
     def zero(initialValue: Float): Float = 0f
   }
 
+  implicit object MapAccumulatorParam extends AccumulatorParam[Map[String, Long]] {
+    def addInPlace(t1: Map[String, Long], t2: Map[String, Long]): Map[String, Long] = {
+      t1 ++ (for ((k, v) <- t2) yield (k -> (v + t1.getOrElse(k, 0L))))
+    }
+    def zero(initialValue: Map[String, Long]): Map[String, Long] = Map.empty[String, Long]
+  }
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 }
