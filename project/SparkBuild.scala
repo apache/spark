@@ -34,15 +34,24 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
-    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags, sketch) =
-    Seq(
-      "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
-      "streaming-flume", "streaming-akka", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq", "launcher", "unsafe", "test-tags", "sketch"
-    ).map(ProjectRef(buildLocation, _))
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver"
+  ).map(ProjectRef(buildLocation, _))
+
+  val streamingProjects@Seq(
+    streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka, streamingMqtt,
+    streamingTwitter, streamingZeromq
+  ) = Seq(
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-akka", "streaming-kafka",
+    "streaming-mqtt", "streaming-twitter", "streaming-zeromq"
+  ).map(ProjectRef(buildLocation, _))
+
+  val allProjects@Seq(
+    core, graphx, mllib, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
+  ) = Seq(
+    "core", "graphx", "mllib", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "test-tags", "sketch"
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
