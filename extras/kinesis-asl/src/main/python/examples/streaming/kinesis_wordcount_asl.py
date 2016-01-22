@@ -54,6 +54,8 @@
   See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more details on
   the Kinesis Spark Streaming integration.
 """
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext
