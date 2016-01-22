@@ -951,7 +951,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   protected def nodeToGenerate(node: ASTNode, outer: Boolean, child: LogicalPlan): Generate = {
     val Token("TOK_SELECT", Token("TOK_SELEXPR", clauses) :: Nil) = node
 
-    val alias = getClause("TOK_TABALIAS", clauses).children.head.text
+    val alias = cleanIdentifier(getClause("TOK_TABALIAS", clauses).children.head.text)
 
     val generator = clauses.head match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: childNode :: Nil) =>
