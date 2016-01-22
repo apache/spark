@@ -73,7 +73,7 @@ private[mesos] class MesosClusterDispatcher(
 
   def start(): Unit = {
     webUi.bind()
-    scheduler.frameworkUrl = webUi.activeWebUiUrl
+    scheduler.frameworkUrl = conf.getOption("spark.mesos.webui.url").getOrElse(webUi.activeWebUiUrl)
     scheduler.start()
     server.start()
   }
