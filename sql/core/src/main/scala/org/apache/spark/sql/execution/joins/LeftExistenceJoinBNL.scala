@@ -20,16 +20,20 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftExistenceJoin, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * Using BroadcastNestedLoopJoin to calculate left semi join result when there's no join keys
+ * Using BroadcastNestedLoopJoin to calculate left existence join result when there's no join keys
  * for hash join.
  */
-case class LeftSemiJoinBNL(
-    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
+case class LeftExistenceJoinBNL(
+    streamed: SparkPlan,
+    broadcast: SparkPlan,
+    condition: Option[Expression],
+    jt: LeftExistenceJoin)
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
@@ -48,9 +52,6 @@ case class LeftSemiJoinBNL(
   /** The Broadcast relation */
   override def right: SparkPlan = broadcast
 
-  @transient private lazy val boundCondition =
-    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numLeftRows = longMetric("numLeftRows")
     val numRightRows = longMetric("numRightRows")
@@ -65,21 +66,55 @@ case class LeftSemiJoinBNL(
     streamed.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
 
+      val criteria = jt match {
+        case LeftSemi =>
+          val boundCondition =
+            newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+
+          (streamedRow: InternalRow) => {
+          var i = 0
+          var matched = false
+
+          while (i < broadcastedRelation.value.size && !matched) {
+            val broadcastedRow = broadcastedRelation.value(i)
+            // break only if we find the matched row
+            if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+              matched = true
+            }
+            i += 1
+          }
+          matched
+        }
+        case LeftAnti =>
+          val boundNegCondition = condition match {
+            case Some(expr) => newPredicate(Not(expr), left.output ++ right.output)
+            case None => newPredicate(Literal(false), left.output ++ right.output)
+          }
+
+          (streamedRow: InternalRow) => {
+            var i = 0
+            var matched = true
+
+            // all of the rows in the broadcast should be matched with
+            // the negative predicate expression
+            while (i < broadcastedRelation.value.size && matched) {
+              val tmp = joinedRow(streamedRow, broadcastedRelation.value(i))
+              matched = boundNegCondition(tmp)
+              i += 1
+            }
+
+            matched
+          }
+      }
+
       streamedIter.filter(streamedRow => {
         numLeftRows += 1
-        var i = 0
-        var matched = false
+        val matched = criteria(streamedRow)
 
-        while (i < broadcastedRelation.value.size && !matched) {
-          val broadcastedRow = broadcastedRelation.value(i)
-          if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
-            matched = true
-          }
-          i += 1
-        }
         if (matched) {
           numOutputRows += 1
         }
+
         matched
       })
     }

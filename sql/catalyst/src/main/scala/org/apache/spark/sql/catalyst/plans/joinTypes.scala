@@ -24,13 +24,14 @@ object JoinType {
     case "leftouter" | "left" => LeftOuter
     case "rightouter" | "right" => RightOuter
     case "leftsemi" => LeftSemi
+    case "leftanti" => LeftAnti
     case _ =>
       val supported = Seq(
         "inner",
         "outer", "full", "fullouter",
         "leftouter", "left",
         "rightouter", "right",
-        "leftsemi")
+        "leftsemi", "leftanti")
 
       throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +
         "Supported join types include: " + supported.mkString("'", "', '", "'") + ".")
@@ -40,6 +41,8 @@ object JoinType {
 sealed abstract class JoinType {
   def sql: String
 }
+
+sealed trait LeftExistenceJoin extends JoinType
 
 case object Inner extends JoinType {
   override def sql: String = "INNER"
@@ -57,6 +60,10 @@ case object FullOuter extends JoinType {
   override def sql: String = "FULL OUTER"
 }
 
-case object LeftSemi extends JoinType {
+case object LeftSemi extends LeftExistenceJoin {
   override def sql: String = "LEFT SEMI"
+}
+
+case object LeftAnti extends LeftExistenceJoin {
+  override def sql: String = "LEFT ANTI"
 }

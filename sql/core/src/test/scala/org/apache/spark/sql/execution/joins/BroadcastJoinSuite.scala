@@ -77,7 +77,7 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("unsafe broadcast left semi join updates peak execution memory") {
-    testBroadcastJoin[BroadcastLeftSemiJoinHash]("unsafe broadcast left semi join", "leftsemi")
+    testBroadcastJoin[BroadcastLeftExistenceJoinHash]("unsafe broadcast left semi join", "leftsemi")
   }
 
 }
