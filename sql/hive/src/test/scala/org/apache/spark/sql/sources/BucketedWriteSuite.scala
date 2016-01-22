@@ -20,8 +20,6 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.net.URI
 
-import org.scalatest.exceptions.TestFailedException
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, SQLConf}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -94,7 +92,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         fail(s"Unable to find the related bucket files.")
       }
 
-      // We may loss the type information after write(e.g. json format doesn't keep schema
+      // We may lose the type information after write(e.g. json format doesn't keep schema
       // information), here we get the types from the original dataframe.
       val types = df.select((bucketCols ++ sortCols).map(col): _*).schema.map(_.dataType)
       val columns = (bucketCols ++ sortCols).zip(types).map {
@@ -188,6 +186,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   }
 
   test("write bucketed data with bucketing disabled") {
+    // The configuration BUCKETING_ENABLED does not affect the writing path
     withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
       for (source <- Seq("parquet", "json", "orc")) {
         withTable("bucketed_table") {
@@ -197,11 +196,8 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             .bucketBy(8, "j", "k")
             .saveAsTable("bucketed_table")
 
-          val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
           for (i <- 0 until 5) {
-            val e = intercept[TestFailedException](
-              testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j", "k")))
-            assert(e.getMessage().contains("Unable to find the related bucket files"))
+            testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("j", "k"))
           }
         }
       }

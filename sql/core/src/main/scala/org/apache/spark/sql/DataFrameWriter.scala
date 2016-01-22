@@ -21,7 +21,6 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -38,7 +37,7 @@ import org.apache.spark.sql.sources.HadoopFsRelation
  * @since 1.4.0
  */
 @Experimental
-final class DataFrameWriter private[sql](df: DataFrame) extends Logging {
+final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
@@ -174,7 +173,6 @@ final class DataFrameWriter private[sql](df: DataFrame) extends Logging {
    */
   def save(): Unit = {
     assertNotBucketed()
-    checkBucketConf()
     ResolvedDataSource(
       df.sqlContext,
       source,
@@ -265,13 +263,6 @@ final class DataFrameWriter private[sql](df: DataFrame) extends Logging {
     }
   }
 
-  private def checkBucketConf(): Unit = {
-    if (numBuckets.isDefined && !df.sqlContext.conf.bucketingEnabled()) {
-      logWarning(s"Treat bucketed tables as normal tables " +
-        s"since spark.sql.sources.bucketing.enabled is set to false.")
-    }
-  }
-
   /**
    * Saves the content of the [[DataFrame]] as the specified table.
    *
@@ -312,7 +303,6 @@ final class DataFrameWriter private[sql](df: DataFrame) extends Logging {
         insertInto(tableIdent)
 
       case _ =>
-        checkBucketConf()
         val cmd =
           CreateTableUsingAsSelect(
             tableIdent,
