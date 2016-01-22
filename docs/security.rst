@@ -65,11 +65,14 @@ It is however possible to configure without encryption if you really want to.
     uri = ldaps://<your.ldap.server>:<port>
     user_filter = objectClass=*
     user_name_attr = uid # in case of Active Directory you would use sAMAccountName
+    superuser_filter = memberOf=CN=airflow-super-users,OU=Groups,OU=RWC,OU=US,OU=NORAM,DC=example,DC=com
+    data_profiler_filter = memberOf=CN=airflow-data-profilers,OU=Groups,OU=RWC,OU=US,OU=NORAM,DC=example,DC=com
     bind_user = cn=Manager,dc=example,dc=com
     bind_password = insecure
     basedn = dc=example,dc=com
     cacert = /etc/ca/ldap_ca.crt
 
+The superuser_filter and data_profiler_filter are optional. If defined, these configurations allow you to specify LDAP groups that users must belong to in order to have superuser (admin) and data-profiler permissions. If undefined, all users will be superusers and data profilers.
 
 Roll your own
 '''''''''''''
