@@ -524,78 +524,82 @@ class HiveTypeCoercionSuite extends PlanTest {
   test("strength reduction for integer/decimal comparisons") {
     val rule = HiveTypeCoercion.DecimalPrecision
 
-    // If a is an int.
-    // a > 4.7 => a > 4
-    // e.g., 5 > 4.7 == 5 > 4  (true)
-    //       4 > 4.7 == 4 > 4  (false)
-    ruleTest(rule,
-      GreaterThan(AttributeReference("a", IntegerType)(),
-        Literal.create(Decimal(4.7), new DecimalType())),
-      GreaterThan(AttributeReference("a", IntegerType)(),
-        Literal.create(4, IntegerType)))
+    def testRule(dt: DataType): Unit = {
+      // If a is an int.
+      // a > 4.7 => a > 4
+      // e.g., 5 > 4.7 == 5 > 4  (true)
+      //       4 > 4.7 == 4 > 4  (false)
+      ruleTest(rule,
+        GreaterThan(AttributeReference("a", dt)(),
+          Literal.create(Decimal(4.7), new DecimalType())),
+        GreaterThan(AttributeReference("a", dt)(),
+          Literal.create(4L, LongType)))
 
-    // a >= 4.7 => a >= 5
-    // e.g., 5 >= 4.7 == 5 >= 5  (true)
-    //       4 >= 4.7 == 4 >= 5  (false)
-    ruleTest(rule,
-      GreaterThanOrEqual(AttributeReference("a", IntegerType)(),
-        Literal.create(Decimal(4.7), new DecimalType())),
-      GreaterThanOrEqual(AttributeReference("a", IntegerType)(),
-        Literal.create(5, IntegerType)))
+      // a >= 4.7 => a >= 5
+      // e.g., 5 >= 4.7 == 5 >= 5  (true)
+      //       4 >= 4.7 == 4 >= 5  (false)
+      ruleTest(rule,
+        GreaterThanOrEqual(AttributeReference("a", dt)(),
+          Literal.create(Decimal(4.7), new DecimalType())),
+        GreaterThanOrEqual(AttributeReference("a", dt)(),
+          Literal.create(5L, LongType)))
 
-    // a < 4.7 => a < 5
-    // e.g., 5 < 4.7 == 5 < 5   (false)
-    //       4 < 4.7 == 4 < 5   (true)
-    ruleTest(rule,
-      LessThan(AttributeReference("a", IntegerType)(),
-        Literal.create(Decimal(4.7), new DecimalType())),
-      LessThan(AttributeReference("a", IntegerType)(),
-        Literal.create(5, IntegerType)))
+      // a < 4.7 => a < 5
+      // e.g., 5 < 4.7 == 5 < 5   (false)
+      //       4 < 4.7 == 4 < 5   (true)
+      ruleTest(rule,
+        LessThan(AttributeReference("a", dt)(),
+          Literal.create(Decimal(4.7), new DecimalType())),
+        LessThan(AttributeReference("a", dt)(),
+          Literal.create(5L, LongType)))
 
-    // a <= 4.7 => a <= 4
-    // e.g., 5 <= 4.7 == 5 <= 4  (false)
-    //       4 <= 4.7 == 4 <= 4  (true)
-    ruleTest(rule,
-      LessThanOrEqual(AttributeReference("a", IntegerType)(),
-        Literal.create(Decimal(4.7), new DecimalType())),
-      LessThanOrEqual(AttributeReference("a", IntegerType)(),
-        Literal.create(4, IntegerType)))
+      // a <= 4.7 => a <= 4
+      // e.g., 5 <= 4.7 == 5 <= 4  (false)
+      //       4 <= 4.7 == 4 <= 4  (true)
+      ruleTest(rule,
+        LessThanOrEqual(AttributeReference("a", dt)(),
+          Literal.create(Decimal(4.7), new DecimalType())),
+        LessThanOrEqual(AttributeReference("a", dt)(),
+          Literal.create(4L, LongType)))
 
-    // 4.7 > a => 5 > a
-    // e.g., 4.7 > 5 == 5 > 5   (false)
-    //       4.7 > 4 == 5 > 4   (true)
-    ruleTest(rule,
-      GreaterThan(Literal.create(Decimal(4.7), new DecimalType()),
-        AttributeReference("a", IntegerType)()),
-      GreaterThan(Literal.create(5, IntegerType),
-        AttributeReference("a", IntegerType)()))
+      // 4.7 > a => 5 > a
+      // e.g., 4.7 > 5 == 5 > 5   (false)
+      //       4.7 > 4 == 5 > 4   (true)
+      ruleTest(rule,
+        GreaterThan(Literal.create(Decimal(4.7), new DecimalType()),
+          AttributeReference("a", dt)()),
+        GreaterThan(Literal.create(5L, LongType),
+          AttributeReference("a", dt)()))
 
-    // 4.7 >= a => 4 >= a
-    // e.g., 4.7 >= 5 == 4 >= 5  (false)
-    //       4.7 >= 4 == 4 >= 4  (true)
-    ruleTest(rule,
-      GreaterThanOrEqual(Literal.create(Decimal(4.7), new DecimalType()),
-        AttributeReference("a", IntegerType)()),
-      GreaterThanOrEqual(Literal.create(4, IntegerType),
-        AttributeReference("a", IntegerType)()))
+      // 4.7 >= a => 4 >= a
+      // e.g., 4.7 >= 5 == 4 >= 5  (false)
+      //       4.7 >= 4 == 4 >= 4  (true)
+      ruleTest(rule,
+        GreaterThanOrEqual(Literal.create(Decimal(4.7), new DecimalType()),
+          AttributeReference("a", dt)()),
+        GreaterThanOrEqual(Literal.create(4L, LongType),
+          AttributeReference("a", dt)()))
 
-    // 4.7 < a => 4 < a
-    // e.g., 4.7 < 5 == 4 < 5   (true)
-    //       4.7 < 4 == 4 < 4   (false)
-    ruleTest(rule,
-      LessThan(Literal.create(Decimal(4.7), new DecimalType()),
-        AttributeReference("a", IntegerType)()),
-      LessThan(Literal.create(4, IntegerType),
-        AttributeReference("a", IntegerType)()))
+      // 4.7 < a => 4 < a
+      // e.g., 4.7 < 5 == 4 < 5   (true)
+      //       4.7 < 4 == 4 < 4   (false)
+      ruleTest(rule,
+        LessThan(Literal.create(Decimal(4.7), new DecimalType()),
+          AttributeReference("a", dt)()),
+        LessThan(Literal.create(4L, LongType),
+          AttributeReference("a", dt)()))
 
-    // 4.7 <= a => 5 <= a
-    // e.g., 4.7 <= 5 == 5 <= 5  (true)
-    //       4.7 <= 4 == 5 <= 4  (false)
-    ruleTest(rule,
-      LessThanOrEqual(Literal.create(Decimal(4.7), new DecimalType()),
-        AttributeReference("a", IntegerType)()),
-      LessThanOrEqual(Literal.create(5, IntegerType),
-        AttributeReference("a", IntegerType)()))
+      // 4.7 <= a => 5 <= a
+      // e.g., 4.7 <= 5 == 5 <= 5  (true)
+      //       4.7 <= 4 == 5 <= 4  (false)
+      ruleTest(rule,
+        LessThanOrEqual(Literal.create(Decimal(4.7), new DecimalType()),
+          AttributeReference("a", dt)()),
+        LessThanOrEqual(Literal.create(5L, LongType),
+          AttributeReference("a", dt)()))
+    }
+
+    Seq(ByteType, ShortType, IntegerType, LongType).map(testRule)
   }
 }
 

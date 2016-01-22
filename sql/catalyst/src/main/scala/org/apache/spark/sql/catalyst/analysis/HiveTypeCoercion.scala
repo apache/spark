@@ -422,21 +422,21 @@ object HiveTypeCoercion {
       // 7. decimal_literal < int_col => floor(decimal_literal) < int_col
       // 8. decimal_literal <= int_col => ceil(decimal_literal) <= int_col
       case GreaterThan(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
-        GreaterThan(i, Literal.create(value.floor.toInt, IntegerType))
+        GreaterThan(i, Literal.create(value.floor.toLong, LongType))
       case GreaterThanOrEqual(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
-        GreaterThanOrEqual(i, Literal.create(value.ceil.toInt, IntegerType))
+        GreaterThanOrEqual(i, Literal.create(value.ceil.toLong, LongType))
       case LessThan(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
-        LessThan(i, Literal.create(value.ceil.toInt, IntegerType))
+        LessThan(i, Literal.create(value.ceil.toLong, LongType))
       case LessThanOrEqual(i @ IntegralType(), Literal(value: Decimal, _: DecimalType)) =>
-        LessThanOrEqual(i, Literal.create(value.floor.toInt, IntegerType))
+        LessThanOrEqual(i, Literal.create(value.floor.toLong, LongType))
       case GreaterThan(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
-        GreaterThan(Literal.create(value.ceil.toInt, IntegerType), i)
+        GreaterThan(Literal.create(value.ceil.toLong, LongType), i)
       case GreaterThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
-        GreaterThanOrEqual(Literal.create(value.floor.toInt, IntegerType), i)
+        GreaterThanOrEqual(Literal.create(value.floor.toLong, LongType), i)
       case LessThan(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
-        LessThan(Literal.create(value.floor.toInt, IntegerType), i)
+        LessThan(Literal.create(value.floor.toLong, LongType), i)
       case LessThanOrEqual(Literal(value: Decimal, _: DecimalType), i @ IntegralType()) =>
-        LessThanOrEqual(Literal.create(value.ceil.toInt, IntegerType), i)
+        LessThanOrEqual(Literal.create(value.ceil.toLong, LongType), i)
 
       // Promote integers inside a binary expression with fixed-precision decimals to decimals,
       // and fixed-precision decimals in an expression with floats / doubles to doubles
