@@ -21,8 +21,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.Aggregator
@@ -115,8 +115,6 @@ class GroupedDataset[K, V] private[sql](
       sqlContext,
       MapGroups(
         f,
-        resolvedKEncoder,
-        resolvedVEncoder,
         groupingAttributes,
         logicalPlan))
   }
@@ -305,13 +303,11 @@ class GroupedDataset[K, V] private[sql](
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    implicit val uEncoder = other.unresolvedVEncoder
     new Dataset[R](
       sqlContext,
       CoGroup(
         f,
-        this.resolvedKEncoder,
-        this.resolvedVEncoder,
-        other.resolvedVEncoder,
         this.groupingAttributes,
         other.groupingAttributes,
         this.logicalPlan,

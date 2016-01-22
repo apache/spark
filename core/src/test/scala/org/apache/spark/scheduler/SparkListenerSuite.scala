@@ -24,10 +24,9 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkException
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ResetSystemProperties
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
 class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers
   with ResetSystemProperties {
@@ -270,7 +269,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
           taskMetrics.inputMetrics should not be ('defined)
           taskMetrics.outputMetrics should not be ('defined)
           taskMetrics.shuffleWriteMetrics should be ('defined)
-          taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0L)
+          taskMetrics.shuffleWriteMetrics.get.bytesWritten should be > (0L)
         }
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
           taskMetrics.shuffleReadMetrics should be ('defined)

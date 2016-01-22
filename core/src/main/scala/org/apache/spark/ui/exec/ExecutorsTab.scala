@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{Resubmitted, ExceptionFailure, SparkContext}
+import org.apache.spark.{ExceptionFailure, Resubmitted, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -129,7 +129,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
         }
         metrics.shuffleWriteMetrics.foreach { shuffleWrite =>
           executorToShuffleWrite(eid) =
-            executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
+            executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.bytesWritten
         }
       }
     }

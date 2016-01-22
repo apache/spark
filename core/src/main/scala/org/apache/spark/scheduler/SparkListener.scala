@@ -29,12 +29,15 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
-import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.{Distribution, Utils}
 
 @DeveloperApi
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
-trait SparkListenerEvent
+trait SparkListenerEvent {
+  /* Whether output this event to the event log */
+  protected[spark] def logEvent: Boolean = true
+}
 
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
@@ -271,7 +274,7 @@ class StatsReportListener extends SparkListener with Logging {
 
     // Shuffle write
     showBytesDistribution("shuffle bytes written:",
-      (_, metric) => metric.shuffleWriteMetrics.map(_.shuffleBytesWritten), taskInfoMetrics)
+      (_, metric) => metric.shuffleWriteMetrics.map(_.bytesWritten), taskInfoMetrics)
 
     // Fetch & I/O
     showMillisDistribution("fetch wait time:",

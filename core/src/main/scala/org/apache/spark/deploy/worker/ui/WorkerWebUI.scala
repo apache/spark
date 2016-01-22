@@ -34,7 +34,8 @@ class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
     requestedPort: Int)
-  extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
+  extends WebUI(worker.securityMgr, worker.securityMgr.getSSLOptions("standalone"),
+    requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
   private[ui] val timeout = RpcUtils.askRpcTimeout(worker.conf)

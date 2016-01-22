@@ -20,8 +20,8 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.util.UUID
 
-import scala.util.Try
 import scala.language.implicitConversions
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfterAll
@@ -189,7 +189,7 @@ private[sql] trait SQLTestUtils
       .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
       .child
       .execute()
-      .map(row => Row.fromSeq(row.toSeq(schema)))
+      .map(row => Row.fromSeq(row.copy().toSeq(schema)))
 
     sqlContext.createDataFrame(childRDD, schema)
   }

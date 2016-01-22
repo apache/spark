@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master.ui
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationsListResource, ApplicationInfo,
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
   UIRoot}
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -32,8 +32,8 @@ class MasterWebUI(
     val master: Master,
     requestedPort: Int,
     customMasterPage: Option[MasterPage] = None)
-  extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging
-  with UIRoot {
+  extends WebUI(master.securityMgr, master.securityMgr.getSSLOptions("standalone"),
+    requestedPort, master.conf, name = "MasterUI") with Logging with UIRoot {
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)

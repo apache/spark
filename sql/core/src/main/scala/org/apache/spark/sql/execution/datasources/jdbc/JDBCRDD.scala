@@ -17,22 +17,22 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Date, DriverManager, ResultSet, ResultSetMetaData, SQLException, Timestamp}
+import java.sql.{Connection, Date, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.util.Properties
 
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -40,7 +40,6 @@ import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
   override def index: Int = idx
 }
-
 
 private[sql] object JDBCRDD extends Logging {
 
@@ -120,7 +119,7 @@ private[sql] object JDBCRDD extends Logging {
    */
   def resolveTable(url: String, table: String, properties: Properties): StructType = {
     val dialect = JdbcDialects.get(url)
-    val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
+    val conn: Connection = JdbcUtils.createConnectionFactory(url, properties)()
     try {
       val statement = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0")
       try {
@@ -228,36 +227,13 @@ private[sql] object JDBCRDD extends Logging {
     })
   }
 
-  /**
-   * Given a driver string and an url, return a function that loads the
-   * specified driver string then returns a connection to the JDBC url.
-   * getConnector is run on the driver code, while the function it returns
-   * is run on the executor.
-   *
-   * @param driver - The class name of the JDBC driver for the given url, or null if the class name
-   *                 is not necessary.
-   * @param url - The JDBC url to connect to.
-   *
-   * @return A function that loads the driver and connects to the url.
-   */
-  def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
-    () => {
-      try {
-        if (driver != null) DriverRegistry.register(driver)
-      } catch {
-        case e: ClassNotFoundException =>
-          logWarning(s"Couldn't find class $driver", e)
-      }
-      DriverManager.getConnection(url, properties)
-    }
-  }
+
 
   /**
    * Build and return JDBCRDD from the given information.
    *
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
-   * @param driver - The class name of the JDBC driver for the given url.
    * @param url - The JDBC url to connect to.
    * @param fqTable - The fully-qualified table name (or paren'd SQL query) to use.
    * @param requiredColumns - The names of the columns to SELECT.
@@ -270,7 +246,6 @@ private[sql] object JDBCRDD extends Logging {
   def scanTable(
       sc: SparkContext,
       schema: StructType,
-      driver: String,
       url: String,
       properties: Properties,
       fqTable: String,
@@ -281,7 +256,7 @@ private[sql] object JDBCRDD extends Logging {
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
-      getConnector(driver, url, properties),
+      JdbcUtils.createConnectionFactory(url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
       quotedColumns,

@@ -22,13 +22,12 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
-
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -75,8 +74,7 @@ private[spark] abstract class Task[T](
       attemptNumber,
       taskMemoryManager,
       metricsSystem,
-      internalAccumulators,
-      runningLocally = false)
+      internalAccumulators)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
     context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)

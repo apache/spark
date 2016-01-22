@@ -222,6 +222,18 @@ streaming_flume_sink = Module(
 )
 
 
+streaming_akka = Module(
+    name="streaming-akka",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/akka",
+    ],
+    sbt_test_goals=[
+        "streaming-akka/test",
+    ]
+)
+
+
 streaming_flume = Module(
     name="streaming-flume",
     dependencies=[streaming],
@@ -406,15 +418,6 @@ build = Module(
     should_run_build_tests=True
 )
 
-ec2 = Module(
-    name="ec2",
-    dependencies=[],
-    source_file_regexes=[
-        "ec2/",
-    ]
-)
-
-
 yarn = Module(
     name="yarn",
     dependencies=[],
@@ -435,7 +438,7 @@ yarn = Module(
 # No other modules should directly depend on this module.
 root = Module(
     name="root",
-    dependencies=[],
+    dependencies=[build],  # Changes to build should trigger all tests.
     source_file_regexes=[],
     # In order to run all of the tests, enable every test profile:
     build_profile_flags=list(set(

@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.util
 
+import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.TestingUtils._
-import org.scalatest.exceptions.TestFailedException
 
 class TestingUtilsSuite extends SparkFunSuite {
 

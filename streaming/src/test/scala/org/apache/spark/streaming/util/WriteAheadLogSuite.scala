@@ -19,8 +19,8 @@ package org.apache.spark.streaming.util
 import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
+import java.util.concurrent.{CountDownLatch, RejectedExecutionException, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{RejectedExecutionException, TimeUnit, CountDownLatch, ThreadPoolExecutor}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -31,17 +31,16 @@ import scala.language.{implicitConversions, postfixOps}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Matchers._
+import org.mockito.Matchers.{eq => meq, _}
 import org.mockito.Mockito._
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.{PrivateMethodTester, BeforeAndAfterEach, BeforeAndAfter}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{CompletionIterator, ThreadUtils, ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
 
 /** Common tests for WriteAheadLogs that we would like to test with different configurations. */
 abstract class CommonWriteAheadLogTests(
@@ -155,7 +154,7 @@ abstract class CommonWriteAheadLogTests(
     // Recover old files and generate a second set of log files
     val dataToWrite2 = generateRandomData()
     manualClock.advance(100000)
-    writeDataUsingWriteAheadLog(testDir, dataToWrite2, closeFileAfterWrite, allowBatching ,
+    writeDataUsingWriteAheadLog(testDir, dataToWrite2, closeFileAfterWrite, allowBatching,
       manualClock)
     val logFiles2 = getLogFilesInDirectory(testDir)
     assert(logFiles2.size > logFiles1.size)

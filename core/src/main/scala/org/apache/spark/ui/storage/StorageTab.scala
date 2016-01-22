@@ -20,9 +20,9 @@ package org.apache.spark.ui.storage
 import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ui._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
+import org.apache.spark.ui._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storage") {
@@ -63,8 +63,8 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
    */
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val metrics = taskEnd.taskMetrics
-    if (metrics != null && metrics.updatedBlocks.isDefined) {
-      updateRDDInfo(metrics.updatedBlocks.get)
+    if (metrics != null && metrics.updatedBlockStatuses.nonEmpty) {
+      updateRDDInfo(metrics.updatedBlockStatuses)
     }
   }
 

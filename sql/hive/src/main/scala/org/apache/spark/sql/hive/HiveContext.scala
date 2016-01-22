@@ -37,36 +37,24 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
-import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{InternalRow, ParserInterface}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, SqlParser}
-import org.apache.spark.sql.execution.datasources.{ResolveDataSource, DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck, ResolveDataSource}
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.execution.{CacheManager, ExecutedCommand, ExtractPythonUDFs, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkContext}
-
-
-/**
- * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
- */
-private[hive] class HiveQLDialect(sqlContext: HiveContext) extends ParserDialect {
-  override def parse(sqlText: String): LogicalPlan = {
-    sqlContext.executionHive.withHiveState {
-      HiveQl.parseSql(sqlText)
-    }
-  }
-}
 
 /**
  * Returns the current database of metadataHive.
@@ -343,12 +331,12 @@ class HiveContext private[hive](
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     catalog.invalidateTable(tableIdent)
   }
 
@@ -362,7 +350,7 @@ class HiveContext private[hive](
    * @since 1.2.0
    */
   def analyze(tableName: String) {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent))
 
     relation match {
@@ -554,20 +542,16 @@ class HiveContext private[hive](
   }
 
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  protected[sql] override def getSQLDialect(): ParserDialect = {
-    if (conf.dialect == "hiveql") {
-      new HiveQLDialect(this)
-    } else {
-      super.getSQLDialect()
-    }
+  @transient
+  protected[sql] override val sqlParser: ParserInterface = {
+    new SparkSQLParser(new ExtendedHiveQlParser(this))
   }
 
   @transient
-  private val hivePlanner = new SparkPlanner with HiveStrategies {
+  private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
     val hiveContext = self
 
     override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(

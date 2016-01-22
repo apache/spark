@@ -70,6 +70,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(inputCol), new ArrayType(StringType, true))
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }

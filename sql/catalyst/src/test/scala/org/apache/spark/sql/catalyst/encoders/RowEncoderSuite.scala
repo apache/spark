@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -99,7 +99,7 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
-      .add("udt", new ExamplePointUDT, false))
+      .add("udt", new ExamplePointUDT))
 
   encodeDecodeTest(
     new StructType()

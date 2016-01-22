@@ -19,8 +19,8 @@ package org.apache.spark.streaming.kinesis
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 
 abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
   extends KinesisFunSuite with BeforeAndAfterAll {
@@ -158,9 +158,9 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       testBlockRemove: Boolean = false
     ): Unit = {
     require(shardIds.size > 1, "Need at least 2 shards to test")
-    require(numPartitionsInBM <= shardIds.size ,
+    require(numPartitionsInBM <= shardIds.size,
       "Number of partitions in BlockManager cannot be more than the Kinesis test shards available")
-    require(numPartitionsInKinesis <= shardIds.size ,
+    require(numPartitionsInKinesis <= shardIds.size,
       "Number of partitions in Kinesis cannot be more than the Kinesis test shards available")
     require(numPartitionsInBM <= numPartitions,
       "Number of partitions in BlockManager cannot be more than that in RDD")

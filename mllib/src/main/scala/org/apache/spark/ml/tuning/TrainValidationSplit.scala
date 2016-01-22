@@ -118,6 +118,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     $(estimator).transformSchema(schema)
   }
 
@@ -172,6 +173,7 @@ class TrainValidationSplitModel private[ml] (
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     bestModel.transformSchema(schema)
   }
 

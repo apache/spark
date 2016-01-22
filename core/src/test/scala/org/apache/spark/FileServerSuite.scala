@@ -27,9 +27,9 @@ import org.apache.commons.lang3.RandomUtils
 
 import org.apache.spark.util.Utils
 
-import SSLSampleConfigs._
-
 class FileServerSuite extends SparkFunSuite with LocalSparkContext {
+
+  import SSLSampleConfigs._
 
   @transient var tmpDir: File = _
   @transient var tmpFile: File = _

@@ -82,19 +82,15 @@ class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with Before
     assert(value.toList === List(5, 6, 7))
   }
 
-  test("get uncached local rdd") {
-    // Local computation should not persist the resulting value, so don't expect a put().
-    when(blockManager.get(RDDBlockId(0, 0))).thenReturn(None)
-
-    val context = new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty, runningLocally = true)
-    val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
-    assert(value.toList === List(1, 2, 3, 4))
-  }
-
   test("verify task metrics updated correctly") {
     cacheManager = sc.env.cacheManager
     val context = TaskContext.empty()
-    cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
-    assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 2)
+    try {
+      TaskContext.setTaskContext(context)
+      cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
+      assert(context.taskMetrics.updatedBlockStatuses.size === 2)
+    } finally {
+      TaskContext.unset()
+    }
   }
 }

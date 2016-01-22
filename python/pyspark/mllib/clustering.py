@@ -38,10 +38,127 @@ from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
 
-__all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
-           'PowerIterationClusteringModel', 'PowerIterationClustering',
-           'StreamingKMeans', 'StreamingKMeansModel',
+__all__ = ['BisectingKMeansModel', 'BisectingKMeans', 'KMeansModel', 'KMeans',
+           'GaussianMixtureModel', 'GaussianMixture', 'PowerIterationClusteringModel',
+           'PowerIterationClustering', 'StreamingKMeans', 'StreamingKMeansModel',
            'LDA', 'LDAModel']
+
+
+@inherit_doc
+class BisectingKMeansModel(JavaModelWrapper):
+    """
+    .. note:: Experimental
+
+    A clustering model derived from the bisecting k-means method.
+
+    >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
+    >>> bskm = BisectingKMeans()
+    >>> model = bskm.train(sc.parallelize(data, 2), k=4)
+    >>> p = array([0.0, 0.0])
+    >>> model.predict(p)
+    0
+    >>> model.k
+    4
+    >>> model.computeCost(p)
+    0.0
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self, java_model):
+        super(BisectingKMeansModel, self).__init__(java_model)
+        self.centers = [c.toArray() for c in self.call("clusterCenters")]
+
+    @property
+    @since('2.0.0')
+    def clusterCenters(self):
+        """Get the cluster centers, represented as a list of NumPy
+        arrays."""
+        return self.centers
+
+    @property
+    @since('2.0.0')
+    def k(self):
+        """Get the number of clusters"""
+        return self.call("k")
+
+    @since('2.0.0')
+    def predict(self, x):
+        """
+        Find the cluster that each of the points belongs to in this
+        model.
+
+        :param x: the point (or RDD of points) to determine
+          compute the clusters for.
+        """
+        if isinstance(x, RDD):
+            vecs = x.map(_convert_to_vector)
+            return self.call("predict", vecs)
+
+        x = _convert_to_vector(x)
+        return self.call("predict", x)
+
+    @since('2.0.0')
+    def computeCost(self, x):
+        """
+        Return the Bisecting K-means cost (sum of squared distances of
+        points to their nearest center) for this model on the given
+        data. If provided with an RDD of points returns the sum.
+
+        :param point: the point or RDD of points to compute the cost(s).
+        """
+        if isinstance(x, RDD):
+            vecs = x.map(_convert_to_vector)
+            return self.call("computeCost", vecs)
+
+        return self.call("computeCost", _convert_to_vector(x))
+
+
+class BisectingKMeans(object):
+    """
+    .. note:: Experimental
+
+    A bisecting k-means algorithm based on the paper "A comparison of
+    document clustering techniques" by Steinbach, Karypis, and Kumar,
+    with modification to fit Spark.
+    The algorithm starts from a single cluster that contains all points.
+    Iteratively it finds divisible clusters on the bottom level and
+    bisects each of them using k-means, until there are `k` leaf
+    clusters in total or no leaf clusters are divisible.
+    The bisecting steps of clusters on the same level are grouped
+    together to increase parallelism. If bisecting all divisible
+    clusters on the bottom level would result more than `k` leaf
+    clusters, larger clusters get higher priority.
+
+    Based on
+    U{http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf}
+    Steinbach, Karypis, and Kumar, A comparison of document clustering
+    techniques, KDD Workshop on Text Mining, 2000.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @since('2.0.0')
+    def train(self, rdd, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=-1888008604):
+        """
+        Runs the bisecting k-means algorithm return the model.
+
+        :param rdd: input RDD to be trained on
+        :param k: The desired number of leaf clusters (default: 4).
+            The actual number could be smaller if there are no divisible
+            leaf clusters.
+        :param maxIterations: the max number of k-means iterations to
+            split clusters (default: 20)
+        :param minDivisibleClusterSize: the minimum number of points
+            (if >= 1.0) or the minimum proportion of points (if < 1.0)
+            of a divisible cluster (default: 1)
+        :param seed: a random seed (default: -1888008604 from
+            classOf[BisectingKMeans].getName.##)
+        """
+        java_model = callMLlibFunc(
+            "trainBisectingKMeans", rdd.map(_convert_to_vector),
+            k, maxIterations, minDivisibleClusterSize, seed)
+        return BisectingKMeansModel(java_model)
 
 
 @inherit_doc
@@ -118,7 +235,13 @@ class KMeansModel(Saveable, Loader):
 
     @since('0.9.0')
     def predict(self, x):
-        """Find the cluster to which x belongs in this model."""
+        """
+        Find the cluster that each of the points belongs to in this
+        model.
+
+        :param x: the point (or RDD of points) to determine
+            compute the clusters for.
+        """
         best = 0
         best_distance = float("inf")
         if isinstance(x, RDD):
@@ -136,7 +259,10 @@ class KMeansModel(Saveable, Loader):
     def computeCost(self, rdd):
         """
         Return the K-means cost (sum of squared distances of points to
-        their nearest center) for this model on the given data.
+        their nearest center) for this model on the given
+        data.
+
+        :param point: the RDD of points to compute the cost on.
         """
         cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
                              [_convert_to_vector(c) for c in self.centers])
@@ -173,7 +299,7 @@ class KMeans(object):
         """Train a k-means clustering model."""
         if runs != 1:
             warnings.warn(
-                "Support for runs is deprecated in 1.6.0. This param will have no effect in 1.7.0.")
+                "Support for runs is deprecated in 1.6.0. This param will have no effect in 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
@@ -202,15 +328,24 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
-    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2))
+    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2), 2)
     >>> model = GaussianMixture.train(clusterdata_1, 3, convergenceTol=0.0001,
     ...                                 maxIterations=50, seed=10)
     >>> labels = model.predict(clusterdata_1).collect()
     >>> labels[0]==labels[1]
     False
     >>> labels[1]==labels[2]
-    True
+    False
     >>> labels[4]==labels[5]
+    True
+    >>> model.predict([-0.1,-0.05])
+    0
+    >>> softPredicted = model.predictSoft([-0.1,-0.05])
+    >>> abs(softPredicted[0] - 1.0) < 0.001
+    True
+    >>> abs(softPredicted[1] - 0.0) < 0.001
+    True
+    >>> abs(softPredicted[2] - 0.0) < 0.001
     True
 
     >>> path = tempfile.mkdtemp()
@@ -277,26 +412,27 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     @since('1.3.0')
     def predict(self, x):
         """
-        Find the cluster to which the points in 'x' has maximum membership
-        in this model.
+        Find the cluster to which the point 'x' or each point in RDD 'x'
+        has maximum membership in this model.
 
-        :param x:    RDD of data points.
-        :return:     cluster_labels. RDD of cluster labels.
+        :param x:    vector or RDD of vector represents data points.
+        :return:     cluster label or RDD of cluster labels.
         """
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
             return cluster_labels
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            z = self.predictSoft(x)
+            return z.argmax()
 
     @since('1.3.0')
     def predictSoft(self, x):
         """
-        Find the membership of each point in 'x' to all mixture components.
+        Find the membership of point 'x' or each point in RDD 'x' to all mixture components.
 
-        :param x:    RDD of data points.
-        :return:     membership_matrix. RDD of array of double values.
+        :param x:    vector or RDD of vector represents data points.
+        :return:     the membership value to all mixture components for vector 'x'
+                     or each vector in RDD 'x'.
         """
         if isinstance(x, RDD):
             means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
@@ -304,8 +440,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
                                               _convert_to_vector(self.weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            return self.call("predictSoft", _convert_to_vector(x)).toArray()
 
     @classmethod
     @since('1.5.0')
@@ -346,7 +481,7 @@ class GaussianMixture(object):
             if initialModel.k != k:
                 raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
                                 % (initialModel.k, k))
-            initialModelWeights = initialModel.weights
+            initialModelWeights = list(initialModel.weights)
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
         java_model = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),

@@ -79,6 +79,9 @@ trait NamedExpression extends Expression {
   /** Returns the metadata when an expression is a reference to another expression with metadata. */
   def metadata: Metadata = Metadata.empty
 
+  /** Returns a copy of this expression with a new `exprId`. */
+  def newInstance(): NamedExpression
+
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -130,8 +133,8 @@ case class Alias(child: Expression, name: String)(
   override def eval(input: InternalRow): Any = child.eval(input)
 
   /** Just a simple passthrough for code generation. */
-  override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
+  override def gen(ctx: CodegenContext): ExprCode = child.gen(ctx)
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = ""
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -143,6 +146,9 @@ case class Alias(child: Expression, name: String)(
       }
     }
   }
+
+  def newInstance(): NamedExpression =
+    Alias(child, name)(qualifiers = qualifiers, explicitMetadata = explicitMetadata)
 
   override def toAttribute: Attribute = {
     if (resolved) {
@@ -163,6 +169,12 @@ case class Alias(child: Expression, name: String)(
       name == a.name && exprId == a.exprId && child == a.child && qualifiers == a.qualifiers &&
         explicitMetadata == a.explicitMetadata
     case _ => false
+  }
+
+  override def sql: String = {
+    val qualifiersString =
+      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+    s"${child.sql} AS $qualifiersString`$name`"
   }
 }
 
@@ -271,6 +283,12 @@ case class AttributeReference(
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
   override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
+
+  override def sql: String = {
+    val qualifiersString =
+      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+    s"$qualifiersString`$name`"
+  }
 }
 
 /**
