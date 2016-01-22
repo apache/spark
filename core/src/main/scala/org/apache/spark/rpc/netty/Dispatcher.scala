@@ -28,6 +28,7 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.SparkContext
 
 /**
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
@@ -145,12 +146,18 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
       callbackIfStopped: (Exception) => Unit): Unit = {
     val shouldCallOnStop = synchronized {
       val data = endpoints.get(endpointName)
-      if (stopped || data == null) {
-        true
-      } else {
+      val sc = SparkContext.get()
+      if (!stopped && data != null) {
         data.inbox.post(message)
         receivers.offer(data)
         false
+      } else if (sc != null && sc.isStopped) {
+        // in the middle of executing SparkContext.stop()
+        logWarning("Unable to post RPC message, SparkContext is shutting down")
+        false
+      } else {
+        // callback with error
+        true
       }
     }
     if (shouldCallOnStop) {
