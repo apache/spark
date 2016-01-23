@@ -45,8 +45,6 @@ import org.apache.spark.sql.types._
  *   sum(e1)      p1 + 10                                 s1
  *   avg(e1)      p1 + 4                                  s1 + 4
  *
- * Catalyst also has unlimited-precision decimals. For those, all ops return unlimited precision.
- *
  * To implement the rules for fixed-precision types, we introduce casts to turn them to unlimited
  * precision, do the math on unlimited-precision numbers, then introduce casts back to the
  * required fixed precision. This allows us to do all rounding and overflow handling in the
