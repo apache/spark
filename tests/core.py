@@ -251,7 +251,7 @@ class CoreTest(unittest.TestCase):
                 return obj
         t = operators.TriggerDagRunOperator(
             task_id='test_trigger_dagrun',
-            dag_id='example_bash_operator',
+            trigger_dag_id='example_bash_operator',
             python_callable=trigga,
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
