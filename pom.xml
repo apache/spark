@@ -104,6 +104,7 @@
     <module>external/flume</module>
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
+    <module>external/akka</module>
     <module>external/mqtt</module>
     <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
@@ -567,6 +568,11 @@
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
         <version>4.0.29.Final</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty</artifactId>
+        <version>3.8.0.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>

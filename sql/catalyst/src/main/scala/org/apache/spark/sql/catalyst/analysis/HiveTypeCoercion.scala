@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -27,7 +30,7 @@ import org.apache.spark.sql.types._
 
 
 /**
- * A collection of [[Rule Rules]] that can be used to coerce differing types that participate in
+ * A collection of [[Rule]] that can be used to coerce differing types that participate in
  * operations into compatible ones.
  *
  * Most of these rules are based on Hive semantics, but they do not introduce any dependencies on
@@ -219,31 +222,59 @@ object HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if p.analyzed => p
 
-      case s @ SetOperation(left, right) if s.childrenResolved
-          && left.output.length == right.output.length && !s.resolved =>
+      case s @ SetOperation(left, right) if s.childrenResolved &&
+          left.output.length == right.output.length && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+        assert(newChildren.length == 2)
+        s.makeCopy(Array(newChildren.head, newChildren.last))
 
-        // Tracks the list of data types to widen.
-        // Some(dataType) means the right-hand side and the left-hand side have different types,
-        // and there is a target type to widen both sides to.
-        val targetTypes: Seq[Option[DataType]] = left.output.zip(right.output).map {
-          case (lhs, rhs) if lhs.dataType != rhs.dataType =>
-            findWiderTypeForTwo(lhs.dataType, rhs.dataType)
-          case other => None
-        }
+      case s: Union if s.childrenResolved &&
+          s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
+        s.makeCopy(Array(newChildren))
+    }
 
-        if (targetTypes.exists(_.isDefined)) {
-          // There is at least one column to widen.
-          s.makeCopy(Array(widenTypes(left, targetTypes), widenTypes(right, targetTypes)))
-        } else {
-          // If we cannot find any column to widen, then just return the original set.
-          s
-        }
+    /** Build new children with the widest types for each attribute among all the children */
+    private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+      require(children.forall(_.output.length == children.head.output.length))
+
+      // Get a sequence of data types, each of which is the widest type of this specific attribute
+      // in all the children
+      val targetTypes: Seq[DataType] =
+        getWidestTypes(children, attrIndex = 0, mutable.Queue[DataType]())
+
+      if (targetTypes.nonEmpty) {
+        // Add an extra Project if the targetTypes are different from the original types.
+        children.map(widenTypes(_, targetTypes))
+      } else {
+        // Unable to find a target type to widen, then just return the original set.
+        children
+      }
+    }
+
+    /** Get the widest type for each attribute in all the children */
+    @tailrec private def getWidestTypes(
+        children: Seq[LogicalPlan],
+        attrIndex: Int,
+        castedTypes: mutable.Queue[DataType]): Seq[DataType] = {
+      // Return the result after the widen data types have been found for all the children
+      if (attrIndex >= children.head.output.length) return castedTypes.toSeq
+
+      // For the attrIndex-th attribute, find the widest type
+      findWiderCommonType(children.map(_.output(attrIndex).dataType)) match {
+        // If unable to find an appropriate widen type for this column, return an empty Seq
+        case None => Seq.empty[DataType]
+        // Otherwise, record the result in the queue and find the type for the next column
+        case Some(widenType) =>
+          castedTypes.enqueue(widenType)
+          getWidestTypes(children, attrIndex + 1, castedTypes)
+      }
     }
 
     /** Given a plan, add an extra project on top to widen some columns' data types. */
-    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[Option[DataType]]): LogicalPlan = {
+    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(targetTypes).map {
-        case (e, Some(dt)) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
         case (e, _) => e
       }
       Project(casted, plan)
@@ -661,12 +692,11 @@ object HiveTypeCoercion {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if left.dataType != right.dataType =>
-        findTightestCommonTypeToString(left.dataType, right.dataType).map { widestType =>
+        findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
           val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
           val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
           If(pred, newLeft, newRight)
         }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
-
       // Convert If(null literal, _, _) into boolean type.
       // In the optimizer, we should short-circuit this directly into false value.
       case If(pred, left, right) if pred.dataType == NullType =>
