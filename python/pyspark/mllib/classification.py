@@ -91,7 +91,8 @@ class LinearClassificationModel(LinearModel):
 class LogisticRegressionModel(LinearClassificationModel):
 
     """
-    Classification model trained using Multinomial/Binary Logistic Regression.
+    Classification model trained using Multinomial/Binary Logistic
+    Regression.
 
     :param weights:
       Weights computed for every feature.
@@ -191,8 +192,8 @@ class LogisticRegressionModel(LinearClassificationModel):
     @since('1.4.0')
     def numClasses(self):
         """
-        Number of possible outcomes for k classes classification problem in Multinomial
-        Logistic Regression.
+        Number of possible outcomes for k classes classification problem
+        in Multinomial Logistic Regression.
         """
         return self._numClasses
 
