@@ -34,13 +34,24 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
-    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
-    Seq("catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
-      "streaming-flume", "streaming-akka", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver"
+  ).map(ProjectRef(buildLocation, _))
+
+  val streamingProjects@Seq(
+    streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka, streamingMqtt,
+    streamingTwitter, streamingZeromq
+  ) = Seq(
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-akka", "streaming-kafka",
+    "streaming-mqtt", "streaming-twitter", "streaming-zeromq"
+  ).map(ProjectRef(buildLocation, _))
+
+  val allProjects@Seq(
+    core, graphx, mllib, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
+  ) = Seq(
+    "core", "graphx", "mllib", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "test-tags", "sketch"
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
@@ -232,11 +243,15 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  // TODO: remove streamingAkka from this list after 2.0.0
-  allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, unsafe, streamingAkka, testTags).contains(x)).foreach {
-      x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
-    }
+  // TODO: remove streamingAkka and sketch from this list after 2.0.0
+  allProjects.filterNot { x =>
+    Seq(
+      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
+      unsafe, streamingAkka, testTags, sketch
+    ).contains(x)
+  }.foreach { x =>
+    enable(MimaBuild.mimaSettings(sparkHome, x))(x)
+  }
 
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
