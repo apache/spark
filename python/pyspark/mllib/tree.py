@@ -180,7 +180,8 @@ class DecisionTree(object):
         :param minInfoGain:
           Min info gain required to create a split.
           (default: 0.0)
-        :return: DecisionTreeModel
+        :return:
+          DecisionTreeModel.
 
         Example usage:
 
@@ -246,7 +247,8 @@ class DecisionTree(object):
         :param minInfoGain:
           Min info gain required to create a split.
           (default: 0.0)
-        :return: DecisionTreeModel
+        :return:
+          DecisionTreeModel.
 
         Example usage:
 
@@ -324,11 +326,10 @@ class RandomForest(object):
         Method to train a decision tree model for binary or multiclass
         classification.
 
-        :param data: Training dataset:
-          RDD of LabeledPoint. Labels should take values {0, 1, ...,
-          numClasses-1}.
-        :param numClasses:
-          Number of classes for classification.
+        :param data:
+          Training dataset: RDD of LabeledPoint. Labels should take values
+          {0, 1, ..., numClasses-1}.:param numClasses: Number of classes
+          for classification.
         :param categoricalFeaturesInfo:
           Map storing arity of categorical features. E.g., an entry (n ->
           k) indicates that feature n is categorical with k categories
@@ -356,8 +357,8 @@ class RandomForest(object):
         :param seed:
           Random seed for bootstrapping and choosing feature subsets.
           (default: None)
-
-        :return: RandomForestModel that can be used for prediction
+        :return:
+          RandomForestModel that can be used for prediction.
 
         Example usage:
 
@@ -442,7 +443,8 @@ class RandomForest(object):
         :param seed:
           Random seed for bootstrapping and choosing feature subsets.
           (default: None)
-        :return: RandomForestModel that can be used for prediction
+        :return:
+          RandomForestModel that can be used for prediction.
 
         Example usage:
 
@@ -544,9 +546,8 @@ class GradientBoostedTrees(object):
           Maximum number of bins used for splitting features. DecisionTree
           requires maxBins >= max categories
           (default: 32)
-
-        :return: GradientBoostedTreesModel that can be used for
-                 prediction
+        :return:
+          GradientBoostedTreesModel that can be used for prediction.
 
         Example usage:
 
@@ -613,9 +614,8 @@ class GradientBoostedTrees(object):
           Maximum number of bins used for splitting features. DecisionTree
           requires maxBins >= max categories
           (default: 32)
-
-        :return: GradientBoostedTreesModel that can be used for
-                 prediction
+        :return:
+          GradientBoostedTreesModel that can be used for prediction.
 
         Example usage:
 
