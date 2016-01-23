@@ -22,6 +22,7 @@ import java.nio.charset.Charset
 import org.apache.hadoop.io.compress._
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.util.Utils
 
 private[sql] case class CSVParameters(@transient parameters: Map[String, String]) extends Logging {
@@ -78,7 +79,7 @@ private[sql] case class CSVParameters(@transient parameters: Map[String, String]
 
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
-    name.map(CSVCompressionCodecs.getCodecClassName)
+    name.map(CompressionCodecs.getCodecClassName)
   }
 
   val maxColumns = 20480
@@ -112,30 +113,5 @@ private[csv] object ParseModes {
     mode.toUpperCase == PERMISSIVE_MODE
   } else {
     true // We default to permissive is the mode string is not valid
-  }
-}
-
-private[csv] object CSVCompressionCodecs {
-  private val shortCompressionCodecNames = Map(
-    "bzip2" -> classOf[BZip2Codec].getName,
-    "gzip" -> classOf[GzipCodec].getName,
-    "lz4" -> classOf[Lz4Codec].getName,
-    "snappy" -> classOf[SnappyCodec].getName)
-
-  /**
-   * Return the full version of the given codec class.
-   * If it is already a class name, just return it.
-   */
-  def getCodecClassName(name: String): String = {
-    val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
-    try {
-      // Validate the codec name
-      Utils.classForName(codecName)
-      codecName
-    } catch {
-      case e: ClassNotFoundException =>
-        throw new IllegalArgumentException(s"Codec [$codecName] " +
-          s"is not available. Known codecs are ${shortCompressionCodecNames.keys.mkString(", ")}.")
-    }
   }
 }
