@@ -789,9 +789,12 @@ counter = 0
 rdd = sc.parallelize(data)
 
 # Wrong: Don't do this!!
-rdd.foreach(lambda x: counter += x)
+def increment_counter(x):
+    global counter
+    counter += x
+rdd.foreach(increment_counter)
 
-print("Counter value: " + counter)
+print("Counter value: ", counter)
 
 {% endhighlight %}
 </div>
