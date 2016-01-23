@@ -626,9 +626,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       val e = intercept[Exception] {
         Await.result(f, 1 seconds)
       }
-      assert(e.isInstanceOf[TimeoutException] || // For Akka
-        e.isInstanceOf[NotSerializableException] // For Netty
-      )
+      assert(e.isInstanceOf[NotSerializableException])
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()

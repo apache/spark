@@ -48,7 +48,6 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RegisterExecutor(
       executorId: String,
       executorRef: RpcEndpointRef,
-      hostPort: String,
       cores: Int,
       logUrls: Map[String, String])
     extends CoarseGrainedClusterMessage

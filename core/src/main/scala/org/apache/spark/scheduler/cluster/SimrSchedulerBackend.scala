@@ -49,7 +49,7 @@ private[spark] class SimrSchedulerBackend(
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
 
     logInfo("Writing to HDFS file: "  + driverFilePath)
-    logInfo("Writing Akka address: "  + driverUrl)
+    logInfo("Writing Driver address: "  + driverUrl)
     logInfo("Writing Spark UI Address: " + appUIAddress)
 
     // Create temporary file to prevent race condition where executors get empty driverUrl file

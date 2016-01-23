@@ -181,10 +181,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     "SSL_DHE_RSA_WITH_AES_128_CBC_SHA256")
 
     val securityManager = new SecurityManager(conf)
-    val akkaSSLOptions = securityManager.getSSLOptions("akka")
 
     assert(securityManager.fileServerSSLOptions.enabled === true)
-    assert(akkaSSLOptions.enabled === true)
 
     assert(securityManager.sslSocketFactory.isDefined === true)
     assert(securityManager.hostnameVerifier.isDefined === true)
@@ -198,16 +196,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.fileServerSSLOptions.keyPassword === Some("password"))
     assert(securityManager.fileServerSSLOptions.protocol === Some("TLSv1.2"))
     assert(securityManager.fileServerSSLOptions.enabledAlgorithms === expectedAlgorithms)
-
-    assert(akkaSSLOptions.trustStore.isDefined === true)
-    assert(akkaSSLOptions.trustStore.get.getName === "truststore")
-    assert(akkaSSLOptions.keyStore.isDefined === true)
-    assert(akkaSSLOptions.keyStore.get.getName === "keystore")
-    assert(akkaSSLOptions.trustStorePassword === Some("password"))
-    assert(akkaSSLOptions.keyStorePassword === Some("password"))
-    assert(akkaSSLOptions.keyPassword === Some("password"))
-    assert(akkaSSLOptions.protocol === Some("TLSv1.2"))
-    assert(akkaSSLOptions.enabledAlgorithms === expectedAlgorithms)
   }
 
   test("ssl off setup") {

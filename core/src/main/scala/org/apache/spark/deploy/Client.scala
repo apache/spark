@@ -219,11 +219,7 @@ object Client {
     val conf = new SparkConf()
     val driverArgs = new ClientArguments(args)
 
-    if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
-      conf.set("spark.akka.logLifecycleEvents", "true")
-    }
     conf.set("spark.rpc.askTimeout", "10")
-    conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
     val rpcEnv =
