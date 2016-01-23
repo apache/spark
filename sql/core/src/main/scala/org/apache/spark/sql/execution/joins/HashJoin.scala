@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.types.{LongType, IntegralType}
 
 
 trait HashJoin {
@@ -47,11 +48,41 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
+  /**
+    * Rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+    */
+  def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+    var keyExpr: Expression = null
+    var width = 0
+    keys.foreach { e =>
+      e.dataType match {
+        case dt: IntegralType if dt.defaultSize <= 8 - width =>
+          if (width == 0) {
+            keyExpr = Cast(e, LongType)
+            width = dt.defaultSize
+          } else {
+            val bits = dt.defaultSize * 8
+            keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
+              BitwiseAnd(Cast(e, LongType), Literal((1 << bits) - 1)))
+            width -= bits
+          }
+        case other =>
+          return keys
+      }
+    }
+    keyExpr :: Nil
+  }
+
+  protected val canJoinKeyFitWithinLong: Boolean = {
+    val key = rewriteKeyExpr(buildKeys)
+    key.length == 1 && key.head.dataType.isInstanceOf[LongType]
+  }
+
   protected def buildSideKeyGenerator: Projection =
-    UnsafeProjection.create(buildKeys, buildPlan.output)
+      UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
 
   protected def streamSideKeyGenerator: Projection =
-    UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    UnsafeProjection.create(rewriteKeyExpr(streamedKeys), streamedPlan.output)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)

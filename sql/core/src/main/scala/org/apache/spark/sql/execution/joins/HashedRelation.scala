@@ -40,6 +40,9 @@ import org.apache.spark.util.collection.CompactBuffer
  */
 private[execution] sealed trait HashedRelation {
   def get(key: InternalRow): Seq[InternalRow]
+  def get(key: Long): Seq[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
 
   // This is a helper method to implement Externalizable, and is used by
   // GeneralHashedRelation and UniqueKeyHashedRelation
@@ -58,11 +61,42 @@ private[execution] sealed trait HashedRelation {
   }
 }
 
+private[execution] trait UniqueHashedRelation extends HashedRelation {
+
+  def getValue(key: InternalRow): InternalRow
+  def getValue(key: Long): InternalRow = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+    * The buffer re-used in get().
+    */
+  private val buffer = CompactBuffer[InternalRow](null)
+
+  override def get(key: InternalRow): Seq[InternalRow] = {
+    val row = getValue(key)
+    if (row != null) {
+      buffer.update(0, row)
+      buffer
+    } else {
+      null
+    }
+  }
+  override def get(key: Long): Seq[InternalRow] = {
+    val row = getValue(key)
+    if (row != null) {
+      buffer.update(0, row)
+      buffer
+    } else {
+      null
+    }
+  }
+}
 
 /**
  * A general [[HashedRelation]] backed by a hash map that maps the key into a sequence of values.
  */
-private[joins] final class GeneralHashedRelation(
+private[joins] class GeneralHashedRelation(
     private var hashTable: JavaHashMap[InternalRow, CompactBuffer[InternalRow]])
   extends HashedRelation with Externalizable {
 
@@ -85,19 +119,14 @@ private[joins] final class GeneralHashedRelation(
  * A specialized [[HashedRelation]] that maps key into a single value. This implementation
  * assumes the key is unique.
  */
-private[joins]
-final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalRow, InternalRow])
-  extends HashedRelation with Externalizable {
+private[joins] class UniqueKeyHashedRelation(
+  private var hashTable: JavaHashMap[InternalRow, InternalRow])
+  extends UniqueHashedRelation with Externalizable {
 
   // Needed for serialization (it is public to make Java serialization work)
   def this() = this(null)
 
-  override def get(key: InternalRow): Seq[InternalRow] = {
-    val v = hashTable.get(key)
-    if (v eq null) null else CompactBuffer(v)
-  }
-
-  def getValue(key: InternalRow): InternalRow = hashTable.get(key)
+  override def getValue(key: InternalRow): InternalRow = hashTable.get(key)
 
   override def writeExternal(out: ObjectOutput): Unit = {
     writeBytes(out, SparkSqlSerializer.serialize(hashTable))
@@ -409,5 +438,145 @@ private[joins] object UnsafeHashedRelation {
     }
 
     new UnsafeHashedRelation(hashTable)
+  }
+}
+
+private[joins] trait LongHashedRelation extends HashedRelation {
+  override def get(key: InternalRow): Seq[InternalRow] = {
+    get(key.getLong(0))
+  }
+}
+
+private[joins] final class GeneralLongHashedRelation(
+  private var hashTable: JavaHashMap[Long, CompactBuffer[InternalRow]])
+  extends LongHashedRelation with Externalizable {
+
+  // Needed for serialization (it is public to make Java serialization work)
+  def this() = this(null)
+
+  override def get(key: Long): Seq[InternalRow] = hashTable.get(key)
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    writeBytes(out, SparkSqlSerializer.serialize(hashTable))
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    hashTable = SparkSqlSerializer.deserialize(readBytes(in))
+  }
+}
+
+private[joins] final class UniqueLongHashedRelation(
+  private var hashTable: JavaHashMap[Long, InternalRow])
+  extends UniqueHashedRelation with LongHashedRelation with Externalizable {
+
+  // Needed for serialization (it is public to make Java serialization work)
+  def this() = this(null)
+
+  override def getValue(key: InternalRow): InternalRow = {
+    getValue(key.getLong(0))
+  }
+
+  override def getValue(key: Long): InternalRow = {
+    hashTable.get(key)
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    writeBytes(out, SparkSqlSerializer.serialize(hashTable))
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    hashTable = SparkSqlSerializer.deserialize(readBytes(in))
+  }
+}
+
+private[joins] final class LongArrayRelation(
+  private var start: Long,
+  private var array: Array[InternalRow])
+  extends UniqueHashedRelation with LongHashedRelation with Externalizable {
+
+  // Needed for serialization (it is public to make Java serialization work)
+  def this() = this(0L, null)
+
+  override def getValue(key: InternalRow): InternalRow = {
+    getValue(key.getLong(0))
+  }
+
+  override def getValue(key: Long): InternalRow = {
+    val idx = key - start
+    if (idx >= 0 && idx < array.length) {
+      array(idx.toInt)
+    } else {
+      null
+    }
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    out.writeLong(start)
+    writeBytes(out, SparkSqlSerializer.serialize(array))
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    start = in.readLong()
+    array = SparkSqlSerializer.deserialize(readBytes(in))
+  }
+}
+
+private[joins] object LongHashedRelation {
+  def apply(
+    input: Iterator[InternalRow],
+    numInputRows: LongSQLMetric,
+    keyGenerator: Projection,
+    sizeEstimate: Int): HashedRelation = {
+
+    // Use a Java hash table here because unsafe maps expect fixed size records
+    val hashTable = new JavaHashMap[Long, CompactBuffer[InternalRow]](sizeEstimate)
+
+    // Create a mapping of buildKeys -> rows
+    var keyIsUnique = true
+    var minKey = Long.MaxValue
+    var maxKey = Long.MinValue
+    while (input.hasNext) {
+      val unsafeRow = input.next().asInstanceOf[UnsafeRow]
+      numInputRows += 1
+      val rowKey = keyGenerator(unsafeRow)
+      if (!rowKey.anyNull) {
+        val key = rowKey.getLong(0)
+        minKey = math.min(minKey, key)
+        maxKey = math.max(maxKey, key)
+        val existingMatchList = hashTable.get(key)
+        val matchList = if (existingMatchList == null) {
+          val newMatchList = new CompactBuffer[InternalRow]()
+          hashTable.put(key, newMatchList)
+          newMatchList
+        } else {
+          keyIsUnique = false
+          existingMatchList
+        }
+        matchList += unsafeRow.copy()
+      }
+    }
+
+    if (keyIsUnique) {
+      if (maxKey - minKey <= hashTable.size() * 5) {
+        // The keys are dense enough, so use LongArrayRelation
+        val array = new Array[InternalRow]((maxKey - minKey).toInt + 1)
+        val iter = hashTable.entrySet().iterator()
+        while (iter.hasNext) {
+          val entry = iter.next()
+          array(entry.getKey.toInt - minKey.toInt) = entry.getValue()(0)
+        }
+        new LongArrayRelation(minKey, array)
+      } else {
+        val uniqHashTable = new JavaHashMap[Long, InternalRow](hashTable.size)
+        val iter = hashTable.entrySet().iterator()
+        while (iter.hasNext) {
+          val entry = iter.next()
+          uniqHashTable.put(entry.getKey, entry.getValue()(0))
+        }
+        new UniqueLongHashedRelation(uniqHashTable)
+      }
+    } else {
+      new GeneralLongHashedRelation(hashTable)
+    }
   }
 }

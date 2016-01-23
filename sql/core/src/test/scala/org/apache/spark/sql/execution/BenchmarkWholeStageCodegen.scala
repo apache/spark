@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Benchmark
+import org.apache.spark.sql.functions._
 
 /**
   * Benchmark to measure whole stage codegen performance.
@@ -77,6 +78,30 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     -------------------------------------------------------------------------------
     Aggregate w/o codegen                   8271.75             6.34         1.00 X
     Aggregate w codegen                     5066.57            10.35         1.63 X
+    */
+    benchmark.run()
+  }
+
+  def testBroadcastHashJoin(values: Int): Unit = {
+    val benchmark = new Benchmark("BroadcastHashJoin", values)
+
+    val dim = broadcast(sqlContext.range(1 << 16).selectExpr("id as k", "cast(id as string) as v"))
+
+    benchmark.addCase("BroadcastHashJoin w/o codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).join(dim, (col("id") % 60000) === col("k")).count()
+    }
+    benchmark.addCase(s"BroadcastHashJoin w codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).join(dim, (col("id") % 60000) === col("k")).count()
+    }
+
+    /*
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Aggregate with keys:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------------
+    Aggregate w/o codegen                  13071.57             4.01         1.00 X
+    Aggregate w codegen                     5072.56            10.34         2.58 X
     */
     benchmark.run()
   }
@@ -150,6 +175,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   test("benchmark") {
     // testWholeStage(1024 * 1024 * 200)
     // testAggregateWithKey(1024 * 1024 * 50)
+    testBroadcastHashJoin(1024 * 1024 * 50)
+
     // testBytesToBytesMap(1024 * 1024 * 50)
   }
 }

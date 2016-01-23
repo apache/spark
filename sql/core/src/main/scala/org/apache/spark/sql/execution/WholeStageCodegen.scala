@@ -226,7 +226,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         }
        """
       // try to compile, helpful for debug
-      // println(s"${CodeFormatter.format(source)}")
+      println(s"${CodeFormatter.format(source)}")
 
       val clazz = CodeGenerator.compile(source)
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
