@@ -453,10 +453,8 @@ class Analyzer(
           i.copy(right = dedupRight(left, right))
         case e @ Except(left, right) =>
           e.copy(right = dedupRight(left, right))
-        case u @ Union(left, right) =>
-          u.copy(right = dedupRight(left, right))
-        case cg @ CoGroup(_, _, _, _, _, _, _, _, left, right) =>
-          cg.copy(right = dedupRight(left, right))
+        case cg: CoGroup =>
+          cg.copy(right = dedupRight(cg.left, cg.right))
         case other => other
       }
 

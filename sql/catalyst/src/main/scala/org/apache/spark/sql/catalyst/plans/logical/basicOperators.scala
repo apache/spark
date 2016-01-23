@@ -145,10 +145,6 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
-  def duplicateResolved: Boolean =
-    children.tail.forall( child =>
-      child.outputSet.intersect(children.head.outputSet).isEmpty)
-
   override def statistics: Statistics = {
     val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
