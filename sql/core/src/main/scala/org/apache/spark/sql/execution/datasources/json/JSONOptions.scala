@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.json
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
+
 /**
  * Options for the JSON data source.
  *
@@ -32,7 +34,8 @@ case class JSONOptions(
     allowSingleQuotes: Boolean = true,
     allowNumericLeadingZeros: Boolean = false,
     allowNonNumericNumbers: Boolean = false,
-    allowBackslashEscapingAnyCharacter: Boolean = false) {
+    allowBackslashEscapingAnyCharacter: Boolean = false,
+    compressionCodec: Option[String] = None) {
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
@@ -45,7 +48,6 @@ case class JSONOptions(
       allowBackslashEscapingAnyCharacter)
   }
 }
-
 
 object JSONOptions {
   def createFromConfigMap(parameters: Map[String, String]): JSONOptions = JSONOptions(
@@ -64,6 +66,10 @@ object JSONOptions {
     allowNonNumericNumbers =
       parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true),
     allowBackslashEscapingAnyCharacter =
-      parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
+      parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false),
+    compressionCodec = {
+      val name = parameters.get("compression").orElse(parameters.get("codec"))
+      name.map(CompressionCodecs.getCodecClassName)
+    }
   )
 }

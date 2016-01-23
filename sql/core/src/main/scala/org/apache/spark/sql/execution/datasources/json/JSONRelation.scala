@@ -23,6 +23,7 @@ import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -162,6 +163,15 @@ private[sql] class JSONRelation(
   }
 
   override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
+    val conf = job.getConfiguration
+    options.compressionCodec.foreach { codec =>
+      conf.set("mapreduce.output.fileoutputformat.compress", "true")
+      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+      conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
+      conf.set("mapreduce.map.output.compress", "true")
+      conf.set("mapreduce.map.output.compress.codec", codec)
+    }
+
     new BucketedOutputWriterFactory {
       override def newInstance(
           path: String,
