@@ -289,12 +289,8 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(topNode.impurity !== -1.0)
 
     // set impurity and predict for child nodes
-    if (topNode.leftNode.get.predict.predict === 0.0) {
-      assert(topNode.rightNode.get.predict.predict === 1.0)
-    } else {
-      assert(topNode.leftNode.get.predict.predict === 1.0)
-      assert(topNode.rightNode.get.predict.predict === 0.0)
-    }
+    assert(topNode.leftNode.get.predict.predict === 0.0)
+    assert(topNode.rightNode.get.predict.predict === 1.0)
     assert(topNode.leftNode.get.impurity === 0.0)
     assert(topNode.rightNode.get.impurity === 0.0)
   }
@@ -336,12 +332,8 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(topNode.impurity !== -1.0)
 
     // set impurity and predict for child nodes
-    if (topNode.leftNode.get.predict.predict === 0.0) {
-      assert(topNode.rightNode.get.predict.predict === 1.0)
-    } else {
-      assert(topNode.leftNode.get.predict.predict === 1.0)
-      assert(topNode.rightNode.get.predict.predict === 0.0)
-    }
+    assert(topNode.leftNode.get.predict.predict === 0.0)
+    assert(topNode.rightNode.get.predict.predict === 1.0)
     assert(topNode.leftNode.get.impurity === 0.0)
     assert(topNode.rightNode.get.impurity === 0.0)
   }

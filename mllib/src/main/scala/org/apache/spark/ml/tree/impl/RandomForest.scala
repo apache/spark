@@ -720,36 +720,30 @@ private[ml] object RandomForest extends Logging {
            *
            * centroidForCategories is a list: (category, centroid)
            */
-          val centroidForCategories = if (binAggregates.metadata.isMulticlass) {
-            // For categorical variables in multiclass classification,
-            // the bins are ordered by the impurity of their corresponding labels.
-            Range(0, numCategories).map { case featureValue =>
-              val categoryStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
-              val centroid = if (categoryStats.count != 0) {
+          val centroidForCategories = Range(0, numCategories).map { case featureValue =>
+            val categoryStats =
+              binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
+            val centroid = if (categoryStats.count != 0) {
+              if (binAggregates.metadata.isMulticlass) {
+                // multiclass classification
+                // For categorical variables in multiclass classification,
+                // the bins are ordered by the impurity of their corresponding labels.
                 categoryStats.calculate()
+              } else if (binAggregates.metadata.isClassification) {
+                // binary classification
+                // For categorical variables in binary classification,
+                // the bins are ordered by the count of class 1.
+                categoryStats.stats(1)
               } else {
-                Double.MaxValue
+                // regression
+                // For categorical variables in regression and binary classification,
+                // the bins are ordered by the prediction.
+                categoryStats.predict
               }
-              (featureValue, centroid)
+            } else {
+              Double.MaxValue
             }
-          } else { // regression or binary classification
-            // For categorical variables in regression and binary classification,
-            // the bins are ordered by the centroid of their corresponding labels.
-            Range(0, numCategories).map { case featureValue =>
-              val categoryStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
-              val centroid = if (categoryStats.count != 0) {
-                if (categoryStats.count == 2) {
-                  categoryStats.stats(1)
-                } else {
-                  categoryStats.predict
-                }
-              } else {
-                Double.MaxValue
-              }
-              (featureValue, centroid)
-            }
+            (featureValue, centroid)
           }
 
           logDebug("Centroids for categorical variable: " + centroidForCategories.mkString(","))
