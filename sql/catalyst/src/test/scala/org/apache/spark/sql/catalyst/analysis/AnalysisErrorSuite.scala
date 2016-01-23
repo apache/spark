@@ -270,7 +270,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
-    assert(error.message.contains("Failure when resolving conflicting references in Join"))
+    assert(error.message.contains("Failure when resolving conflicting references\n" +
+      "in operator 'Join"))
     assert(error.message.contains("Conflicting attributes"))
   }
 

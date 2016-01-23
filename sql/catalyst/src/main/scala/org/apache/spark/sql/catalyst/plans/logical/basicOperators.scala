@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -91,10 +92,12 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+
   final override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      duplicateResolved
 }
 
 private[sql] object SetOperation {
@@ -142,6 +145,10 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
+  def duplicateResolved: Boolean =
+    children.tail.forall( child =>
+      child.outputSet.intersect(children.head.outputSet).isEmpty)
+
   override def statistics: Statistics = {
     val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
@@ -169,13 +176,11 @@ case class Join(
     }
   }
 
-  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
-
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
     childrenResolved &&
       expressions.forall(_.resolved) &&
-      selfJoinResolved &&
+      duplicateResolved &&
       condition.forall(_.dataType == BooleanType)
   }
 }
@@ -249,7 +254,7 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode {
+    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
   require(step != 0, "step cannot be 0")
   val numElements: BigInt = {
     val safeStart = BigInt(start)
@@ -261,6 +266,9 @@ case class Range(
       (safeEnd - safeStart) / step + 1
     }
   }
+
+  override def newInstance(): Range =
+    Range(start, end, step, numSlices, output.map(_.newInstance()))
 
   override def statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements

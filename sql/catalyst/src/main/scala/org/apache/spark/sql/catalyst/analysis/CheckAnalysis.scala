@@ -214,12 +214,12 @@ trait CheckAnalysis {
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
-          // Special handling for cases when self-join introduce duplicate expression ids.
-          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+          case j: BinaryNode if !j.duplicateResolved =>
+            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             failAnalysis(
               s"""
-                 |Failure when resolving conflicting references in Join:
+                 |Failure when resolving conflicting references
+                 |in operator ${operator.simpleString}:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                  |""".stripMargin)
