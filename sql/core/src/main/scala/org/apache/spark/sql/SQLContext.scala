@@ -74,6 +74,7 @@ class SQLContext private[sql](
   def this(sparkContext: SparkContext) = {
     this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
   }
+
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user

@@ -140,6 +140,24 @@ object IntegerLiteral {
 }
 
 /**
+ * Extractor for and other utility methods for decimal literals.
+ */
+object DecimalLiteral {
+  def apply(v: Long): Literal = Literal(Decimal(v))
+
+  def apply(v: Double): Literal = Literal(Decimal(v))
+
+  def unapply(e: Expression): Option[Decimal] = e match {
+    case Literal(v, _: DecimalType) => Some(v.asInstanceOf[Decimal])
+    case _ => None
+  }
+
+  def largerThanLargestLong(v: Decimal): Boolean = v > Decimal(Long.MaxValue)
+
+  def smallerThanSmallestLong(v: Decimal): Boolean = v < Decimal(Long.MinValue)
+}
+
+/**
  * In order to do type checking, use Literal.create() instead of constructor
  */
 case class Literal protected (value: Any, dataType: DataType)
