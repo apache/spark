@@ -21,7 +21,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * An implementation of Count-Min sketch data structure for the following data types:
+ * A Count-Min sketch is a probabilistic data structure used for summarizing streams of data in
+ * sub-linear space.  Currently, supported data types include:
  * <ul>
  *   <li>{@link Byte}</li>
  *   <li>{@link Short}</li>
@@ -29,8 +30,7 @@ import java.io.OutputStream;
  *   <li>{@link Long}</li>
  *   <li>{@link String}</li>
  * </ul>
- * A Count-Min sketch is a probabilistic data structure used for summarizing streams of data in
- * sub-linear space.  Each {@link CountMinSketch} is initialized with a random seed, and a pair
+ * Each {@link CountMinSketch} is initialized with a random seed, and a pair
  * of parameters:
  * <ol>
  *   <li>relative error (or {@code eps}), and

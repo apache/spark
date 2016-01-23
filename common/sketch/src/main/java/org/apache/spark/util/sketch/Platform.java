@@ -21,6 +21,8 @@ import java.lang.reflect.Field;
 
 import sun.misc.Unsafe;
 
+// This class is duplicated from `org.apache.spark.unsafe.Platform` to make sure spark-sketch has no
+// external dependencies.
 final class Platform {
 
   private static final Unsafe _UNSAFE;
