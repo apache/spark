@@ -693,12 +693,20 @@ class StreamingContext private[streaming] (
           // interrupted. See SPARK-12001 for more details. Because the body of this case can be
           // executed twice in the case of a partial stop, all methods called here need to be
           // idempotent.
-          scheduler.stop(stopGracefully)
+          Utils.tryLogNonFatalError {
+            scheduler.stop(stopGracefully)
+          }
           // Removing the streamingSource to de-register the metrics on stop()
-          env.metricsSystem.removeSource(streamingSource)
-          uiTab.foreach(_.detach())
+          Utils.tryLogNonFatalError {
+            env.metricsSystem.removeSource(streamingSource)
+          }
+          Utils.tryLogNonFatalError {
+            uiTab.foreach(_.detach())
+          }
           StreamingContext.setActiveContext(null)
-          waiter.notifyStop()
+          Utils.tryLogNonFatalError {
+            waiter.notifyStop()
+          }
           if (shutdownHookRef != null) {
             shutdownHookRefToRemove = shutdownHookRef
             shutdownHookRef = null
