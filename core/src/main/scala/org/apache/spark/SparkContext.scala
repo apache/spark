@@ -2185,7 +2185,7 @@ object SparkContext extends Logging {
   /**
    * Return SparkContext
    */
-  def get(): SparkContext = {
+  private[spark] def get(): SparkContext = {
     activeContext.get()
   }
 
