@@ -84,6 +84,23 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private MemoryBlock currentPage = null;
 
   /**
+   * The data page that will be used to store keys and values for newly accessed hashtable entry.
+   * When table lookup is performed, the found entry will be stored in this page. Next time lookup
+   * will first try to find target entry in this page.
+   */
+  private MemoryBlock cachePage = null;
+
+  /**
+   * The hashcode for the newly accessed hashtable entry.
+   */
+  private int cacheHashcode = 0;
+
+  /**
+   * The fullKeyAddress for the newly accessed hashtable entry.
+   */
+  private long cacheFullKeyAddress = 0;
+
+  /**
    * Offset into `currentPage` that points to the location where new data can be inserted into
    * the page. This does not incorporate the page's base offset.
    */
@@ -433,6 +450,28 @@ public final class BytesToBytesMap extends MemoryConsumer {
       numKeyLookups++;
     }
     final int hashcode = HASHER.hashUnsafeWords(keyBase, keyOffset, keyLength);
+
+    // Look up in cache
+    if (hashcode == cacheHashcode && cachePage != null) {
+      final Object base = cachePage.getBaseObject();
+      long offset = cachePage.getBaseOffset();
+      final int cacheKeyLength = Platform.getInt(base, offset);
+      offset += 4;
+
+      if (keyLength == cacheKeyLength) {
+        final boolean areEqual = ByteArrayMethods.arrayEquals(
+          keyBase,
+          keyOffset,
+          base,
+          offset,
+          keyLength
+        );
+        if (areEqual) {
+          loc.updateAddressesAndSizes(cacheFullKeyAddress);
+        }
+      }
+    }
+
     int pos = hashcode & mask;
     int step = 1;
     while (true) {
@@ -460,6 +499,18 @@ public final class BytesToBytesMap extends MemoryConsumer {
               keyLength
             );
             if (areEqual) {
+              // Caching the newly found entry.
+              if (acquireNewCachePage(4 + keyLength)) {
+                cacheHashcode = hashcode;
+                cacheFullKeyAddress = longArray.get(pos * 2);
+
+                final Object base = cachePage.getBaseObject();
+                long offset = cachePage.getBaseOffset();
+
+                Platform.putInt(base, offset, keyLength);
+                offset += 4;
+                Platform.copyMemory(storedkeyBase, storedkeyOffset, base, offset, keyLength);
+              }
               return;
             } else {
               if (enablePerfMetrics) {
@@ -699,6 +750,24 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Acquire a new cache page from the memory manager.
+   * @return whether there is enough space to allocate the new page.
+   */
+  private boolean acquireNewCachePage(long required) {
+    if (cachePage != null) {
+      freePage(cachePage);
+      cachePage = null;
+    }
+
+    try {
+      cachePage = allocatePage(required);
+    } catch (OutOfMemoryError e) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * Acquire a new page from the memory manager.
    * @return whether there is enough space to allocate the new page.
    */
@@ -758,6 +827,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
       freePage(dataPage);
     }
     assert(dataPages.isEmpty());
+
+    if (cachePage != null) {
+      freePage(cachePage);
+    }
 
     while (!spillWriters.isEmpty()) {
       File file = spillWriters.removeFirst().getFile();
@@ -854,6 +927,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
     }
+    if (cachePage != null) {
+      freePage(cachePage);
+      cachePage = null;
+    }
+    cacheHashcode = 0;
+    cacheFullKeyAddress = 0;
     currentPage = null;
     pageCursor = 0;
   }
