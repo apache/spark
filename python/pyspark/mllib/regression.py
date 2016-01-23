@@ -41,7 +41,7 @@ class LabeledPoint(object):
       Label for this data point.
     :param features:
       Vector of features for this point (NumPy array, list,
-      pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
+      pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix).
 
     Note: 'label' and 'features' are accessible as class attributes.
 
@@ -422,7 +422,7 @@ class LassoWithSGD(object):
           Boolean parameter which indicates the use or not of the
           augmented representation for training data (i.e. whether bias
           features are activated or not).
-         (default: False)
+          (default: False)
         :param validateData:
           Boolean parameter which indicates if the algorithm should
           validate data before training.
