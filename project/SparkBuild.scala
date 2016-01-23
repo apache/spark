@@ -243,11 +243,15 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  // TODO: remove streamingAkka from this list after 2.0.0
-  allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, unsafe, streamingAkka, testTags).contains(x)).foreach {
-      x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
-    }
+  // TODO: remove streamingAkka and sketch from this list after 2.0.0
+  allProjects.filterNot { x =>
+    Seq(
+      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
+      unsafe, streamingAkka, testTags, sketch
+    ).contains(x)
+  }.foreach { x =>
+    enable(MimaBuild.mimaSettings(sparkHome, x))(x)
+  }
 
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
