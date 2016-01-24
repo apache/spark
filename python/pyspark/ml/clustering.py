@@ -209,7 +209,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = sqlContext.createDataFrame(data, ["features"])
-    >>> bkm = BisectingKMeans(k=2)
+    >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
     >>> model = bkm.fit(df)
     >>> centers = model.clusterCenters()
     >>> len(centers)
@@ -256,7 +256,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
                   seed=-1888008604, k=4, minDivisibleClusterSize=1.0):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                  seed=-1888008604, k=4, minDivisibleClusterSize=1.0):
+                  seed=-1888008604, k=4, minDivisibleClusterSize=1.0)
         Sets params for BisectingKMeans.
         """
         kwargs = self.setParams._input_kwargs
