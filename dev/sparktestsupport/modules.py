@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
+from functools import total_ordering
 import itertools
 import re
 
 all_modules = []
 
 
+@total_ordering
 class Module(object):
     """
     A module is the basic abstraction in our test runner script. Each module consists of a set of
@@ -74,6 +76,18 @@ class Module(object):
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
+
+    def __repr__(self):
+        return "Module<%s>" % self.name
+
+    def __lt__(self, other):
+        return self.name < other.name
+
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __ne__(self, other):
+        return not (self.name == other.name)
 
 
 sql = Module(
