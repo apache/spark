@@ -277,8 +277,8 @@ class ExternalAppendOnlyMap[K, V, C](
         "ExternalAppendOnlyMap.iterator is destructive and should only be called once.")
     }
     if (spilledMaps.isEmpty) {
-        CompletionIterator[(K, C), Iterator[(K, C)]](
-          destructiveIterator(currentMap.iterator), freeCurrentMap())
+      CompletionIterator[(K, C), Iterator[(K, C)]](
+        destructiveIterator(currentMap.iterator), freeCurrentMap())
     } else {
       new ExternalIterator()
     }
