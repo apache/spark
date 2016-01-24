@@ -1,0 +1,3 @@
+jira==1.0.3
+PyGithub==1.26.0
+Unidecode==0.04.19
