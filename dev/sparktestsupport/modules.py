@@ -89,6 +89,9 @@ class Module(object):
     def __ne__(self, other):
         return not (self.name == other.name)
 
+    def __hash__(self)
+        return hash(self.name)
+
 
 catalyst = Module(
     name="catalyst",
