@@ -176,18 +176,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     (1 to 2).foreach { attemptId => doDownloadTest("local-1430917381535", Some(attemptId)) }
   }
 
-  test("download legacy logs - all attempts") {
-    doDownloadTest("local-1426533911241", None, legacy = true)
-  }
-
-  test("download legacy logs - single  attempts") {
-    (1 to 2). foreach {
-      attemptId => doDownloadTest("local-1426533911241", Some(attemptId), legacy = true)
-    }
-  }
-
   // Test that the files are downloaded correctly, and validate them.
-  def doDownloadTest(appId: String, attemptId: Option[Int], legacy: Boolean = false): Unit = {
+  def doDownloadTest(appId: String, attemptId: Option[Int]): Unit = {
 
     val url = attemptId match {
       case Some(id) =>
@@ -205,22 +195,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     var entry = zipStream.getNextEntry
     entry should not be null
     val totalFiles = {
-      if (legacy) {
-        attemptId.map { x => 3 }.getOrElse(6)
-      } else {
-        attemptId.map { x => 1 }.getOrElse(2)
-      }
+      attemptId.map { x => 1 }.getOrElse(2)
     }
     var filesCompared = 0
     while (entry != null) {
       if (!entry.isDirectory) {
         val expectedFile = {
-          if (legacy) {
-            val splits = entry.getName.split("/")
-            new File(new File(logDir, splits(0)), splits(1))
-          } else {
-            new File(logDir, entry.getName)
-          }
+          new File(logDir, entry.getName)
         }
         val expected = Files.toString(expectedFile, Charsets.UTF_8)
         val actual = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
