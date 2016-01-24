@@ -262,7 +262,9 @@ private[spark] class ExternalSorter[K, V, C](
         memoryOrDiskIterator = (0 until numPartitions).iterator.flatMap { p =>
           val iterator = spillReader.readNextPartition()
           iterator.map(cur => ((p, cur._1), cur._2))
-         }
+        }
+        map = null
+        buffer =null
         true
       }
     } else {
@@ -753,12 +755,18 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   def stop(): Unit = {
-    map = null // So that the memory can be garbage-collected
-    buffer = null // So that the memory can be garbage-collected
     spills.foreach(s => s.file.delete())
     spills.clear()
     forceSpillFile.foreach(_.file.delete())
-    releaseMemory()
+    if (map != null || buffer != null) {
+      map = null // So that the memory can be garbage-collected
+      buffer = null // So that the memory can be garbage-collected
+      releaseMemory()
+    }
+  }
+
+  override def toString(): String = {
+    return this.getClass.getName + "@" + java.lang.Integer.toHexString(this.hashCode())
   }
 
   /**

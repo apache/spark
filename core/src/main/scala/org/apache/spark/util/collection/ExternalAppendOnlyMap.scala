@@ -246,6 +246,7 @@ class ExternalAppendOnlyMap[K, V, C](
     val diskMapIterator = new DiskMapIterator(file, blockId, batchSizes)
     if (collection == null) {
       memoryOrDiskIterator = diskMapIterator
+      currentMap = null
     } else {
       spilledMaps.append(diskMapIterator)
     }
@@ -276,16 +277,18 @@ class ExternalAppendOnlyMap[K, V, C](
         "ExternalAppendOnlyMap.iterator is destructive and should only be called once.")
     }
     if (spilledMaps.isEmpty) {
-      destructiveIterator(
-        CompletionIterator[(K, C), Iterator[(K, C)]](currentMap.iterator, freeCurrentMap()))
+        CompletionIterator[(K, C), Iterator[(K, C)]](
+          destructiveIterator(currentMap.iterator), freeCurrentMap())
     } else {
       new ExternalIterator()
     }
   }
 
   private def freeCurrentMap(): Unit = {
-    currentMap = null // So that the memory can be garbage-collected
-    releaseMemory()
+    if (currentMap != null) {
+      currentMap = null // So that the memory can be garbage-collected
+      releaseMemory()
+    }
   }
 
   /**
@@ -299,8 +302,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = destructiveIterator(CompletionIterator[(K, C), Iterator[(K, C)]](
-      currentMap.destructiveSortedIterator(keyComparator), freeCurrentMap()))
+    private val sortedMap = CompletionIterator[(K, C), Iterator[(K, C)]](destructiveIterator(
+      currentMap.destructiveSortedIterator(keyComparator)), freeCurrentMap())
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -561,6 +564,10 @@ class ExternalAppendOnlyMap[K, V, C](
 
   /** Convenience function to hash the given (K, C) pair by the key. */
   private def hashKey(kc: (K, C)): Int = ExternalAppendOnlyMap.hash(kc._1)
+
+  override def toString(): String = {
+    return this.getClass.getName + "@" + java.lang.Integer.toHexString(this.hashCode())
+  }
 }
 
 private[spark] object ExternalAppendOnlyMap {
