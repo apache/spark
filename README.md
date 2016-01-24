@@ -67,6 +67,7 @@ Currently **officially** using Airflow:
 * Lyft
 * [Sense360](https://github.com/Sense360) [[@kamilmroczek](https://github.com/KamilMroczek)]
 * [Sidecar](https://hello.getsidecar.com/) [[@getsidecar](https://github.com/getsidecar)]
+* [SimilarWeb](https://www.similarweb.com/) [[@similarweb](https://github.com/similarweb)]
 * Stripe [@jbalogh]
 * [WeTransfer](https://github.com/WeTransfer) [[@jochem](https://github.com/jochem)]
 * Wooga
