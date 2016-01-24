@@ -14,38 +14,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.metrics.sink
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import com.codahale.metrics.{MetricRegistry, Slf4jReporter}
+private[spark] trait HasPollingPeriod {
+  def properties: Properties
 
-import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
+  protected val (pollPeriod, pollUnit) = {
+    val PERIOD_KEY = "period"
+    val DEFAULT_PERIOD = 10
 
-private[spark] class Slf4jSink(
-  override val properties: Properties,
-  val registry: MetricRegistry,
-  securityMgr: SecurityManager
-) extends Sink with HasPollingPeriod {
+    val UNIT_KEY = "unit"
+    val DEFAULT_UNIT = TimeUnit.SECONDS
 
-  val reporter = Slf4jReporter.forRegistry(registry)
-    .convertDurationsTo(TimeUnit.MILLISECONDS)
-    .convertRatesTo(TimeUnit.SECONDS)
-    .build()
+    val pp = Option(properties.getProperty(PERIOD_KEY)) match {
+      case Some(s) => s.toInt
+      case None => DEFAULT_PERIOD
+    }
+    val pu = Option(properties.getProperty(UNIT_KEY)) match {
+      case Some(s) => TimeUnit.valueOf(s.toUpperCase)
+      case None => DEFAULT_UNIT
+    }
 
-  override def start() {
-    reporter.start(pollPeriod, pollUnit)
-  }
-
-  override def stop() {
-    reporter.stop()
-  }
-
-  override def report() {
-    reporter.report()
+    // perform validation against the minimal 1 second period
+    val MINIMAL_PERIOD = 1
+    val period = DEFAULT_UNIT.convert(pp, pu)
+    require(period > MINIMAL_PERIOD, s"Given polling period $pp $pu below the " +
+        s"minimal polling period ($MINIMAL_PERIOD $DEFAULT_UNIT)")
+    (pp, pu)
   }
 }
-

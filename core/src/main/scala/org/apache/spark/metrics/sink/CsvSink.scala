@@ -24,40 +24,26 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics.{CsvReporter, MetricRegistry}
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
 
-private[spark] class CsvSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
-  val CSV_KEY_PERIOD = "period"
-  val CSV_KEY_UNIT = "unit"
-  val CSV_KEY_DIR = "directory"
+private[spark] class CsvSink(
+  override val properties: Properties,
+  val registry: MetricRegistry,
+  securityMgr: SecurityManager
+) extends Sink with HasPollingPeriod {
 
-  val CSV_DEFAULT_PERIOD = 10
-  val CSV_DEFAULT_UNIT = "SECONDS"
-  val CSV_DEFAULT_DIR = "/tmp/"
+  val DIR_KEY = "directory"
+  val DEFAULT_DIR = "/tmp/"
 
-  val pollPeriod = Option(property.getProperty(CSV_KEY_PERIOD)) match {
-    case Some(s) => s.toInt
-    case None => CSV_DEFAULT_PERIOD
-  }
-
-  val pollUnit: TimeUnit = Option(property.getProperty(CSV_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
-    case None => TimeUnit.valueOf(CSV_DEFAULT_UNIT)
-  }
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
-
-  val pollDir = Option(property.getProperty(CSV_KEY_DIR)) match {
+  val pollDir = Option(properties.getProperty(DIR_KEY)) match {
     case Some(s) => s
-    case None => CSV_DEFAULT_DIR
+    case None => DEFAULT_DIR
   }
 
-  val reporter: CsvReporter = CsvReporter.forRegistry(registry)
-      .formatFor(Locale.US)
-      .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .convertRatesTo(TimeUnit.SECONDS)
-      .build(new File(pollDir))
+  val reporter = CsvReporter.forRegistry(registry)
+    .formatFor(Locale.US)
+    .convertDurationsTo(TimeUnit.MILLISECONDS)
+    .convertRatesTo(TimeUnit.SECONDS)
+    .build(new File(pollDir))
 
   override def start() {
     reporter.start(pollPeriod, pollUnit)

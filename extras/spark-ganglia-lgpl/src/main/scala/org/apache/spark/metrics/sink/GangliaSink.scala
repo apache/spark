@@ -26,51 +26,37 @@ import info.ganglia.gmetric4j.gmetric.GMetric
 import info.ganglia.gmetric4j.gmetric.GMetric.UDPAddressingMode
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
 
-class GangliaSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
-  val GANGLIA_KEY_PERIOD = "period"
-  val GANGLIA_DEFAULT_PERIOD = 10
+class GangliaSink(
+  override val properties: Properties,
+  val registry: MetricRegistry,
+  securityMgr: SecurityManager
+) extends Sink with HasPollingPeriod {
 
-  val GANGLIA_KEY_UNIT = "unit"
-  val GANGLIA_DEFAULT_UNIT: TimeUnit = TimeUnit.SECONDS
-
-  val GANGLIA_KEY_MODE = "mode"
-  val GANGLIA_DEFAULT_MODE: UDPAddressingMode = GMetric.UDPAddressingMode.MULTICAST
+  val MODE_KEY = "mode"
+  val DEFAULT_MODE = GMetric.UDPAddressingMode.MULTICAST
 
   // TTL for multicast messages. If listeners are X hops away in network, must be at least X.
-  val GANGLIA_KEY_TTL = "ttl"
-  val GANGLIA_DEFAULT_TTL = 1
+  val TTL_KEY = "ttl"
+  val DEFAULT_TTL = 1
 
-  val GANGLIA_KEY_HOST = "host"
-  val GANGLIA_KEY_PORT = "port"
+  val HOST_KEY = "host"
+  val PORT_KEY = "port"
 
-  def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
+  def propertyToOption(prop: String): Option[String] = Option(properties.getProperty(prop))
 
-  if (!propertyToOption(GANGLIA_KEY_HOST).isDefined) {
-    throw new Exception("Ganglia sink requires 'host' property.")
-  }
+  require(propertyToOption(HOST_KEY).isDefined, "Ganglia sink requires 'host' property.")
+  require(propertyToOption(PORT_KEY).isDefined, "Ganglia sink requires 'port' property.")
 
-  if (!propertyToOption(GANGLIA_KEY_PORT).isDefined) {
-    throw new Exception("Ganglia sink requires 'port' property.")
-  }
-
-  val host = propertyToOption(GANGLIA_KEY_HOST).get
-  val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
-  val ttl = propertyToOption(GANGLIA_KEY_TTL).map(_.toInt).getOrElse(GANGLIA_DEFAULT_TTL)
-  val mode: UDPAddressingMode = propertyToOption(GANGLIA_KEY_MODE)
-    .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(GANGLIA_DEFAULT_MODE)
-  val pollPeriod = propertyToOption(GANGLIA_KEY_PERIOD).map(_.toInt)
-    .getOrElse(GANGLIA_DEFAULT_PERIOD)
-  val pollUnit: TimeUnit = propertyToOption(GANGLIA_KEY_UNIT)
-    .map(u => TimeUnit.valueOf(u.toUpperCase))
-    .getOrElse(GANGLIA_DEFAULT_UNIT)
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
+  val host = propertyToOption(HOST_KEY).get
+  val port = propertyToOption(PORT_KEY).get.toInt
+  val ttl = propertyToOption(TTL_KEY).map(_.toInt).getOrElse(DEFAULT_TTL)
+  val mode: UDPAddressingMode = propertyToOption(MODE_KEY)
+    .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(DEFAULT_MODE)
 
   val ganglia = new GMetric(host, port, mode, ttl)
-  val reporter: GangliaReporter = GangliaReporter.forRegistry(registry)
+
+  val reporter = GangliaReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .build(ganglia)

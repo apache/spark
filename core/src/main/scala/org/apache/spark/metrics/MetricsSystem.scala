@@ -18,7 +18,6 @@
 package org.apache.spark.metrics
 
 import java.util.Properties
-import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
@@ -66,10 +65,10 @@ import org.apache.spark.util.Utils
  * [options] is the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
-    val instance: String,
-    conf: SparkConf,
-    securityMgr: SecurityManager)
-  extends Logging {
+  val instance: String,
+  conf: SparkConf,
+  securityMgr: SecurityManager
+) extends Logging {
 
   private[this] val metricsConfig = new MetricsConfig(conf)
 
@@ -97,12 +96,12 @@ private[spark] class MetricsSystem private (
     running = true
     registerSources()
     registerSinks()
-    sinks.foreach(_.start)
+    sinks.foreach(_.start())
   }
 
   def stop() {
     if (running) {
-      sinks.foreach(_.stop)
+      sinks.foreach(_.stop())
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
     }
@@ -195,10 +194,9 @@ private[spark] class MetricsSystem private (
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             logError("Sink class " + classPath + " cannot be instantiated")
             throw e
-          }
         }
       }
     }
@@ -208,17 +206,6 @@ private[spark] class MetricsSystem private (
 private[spark] object MetricsSystem {
   val SINK_REGEX = "^sink\\.(.+)\\.(.+)".r
   val SOURCE_REGEX = "^source\\.(.+)\\.(.+)".r
-
-  private[this] val MINIMAL_POLL_UNIT = TimeUnit.SECONDS
-  private[this] val MINIMAL_POLL_PERIOD = 1
-
-  def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
-    val period = MINIMAL_POLL_UNIT.convert(pollPeriod, pollUnit)
-    if (period < MINIMAL_POLL_PERIOD) {
-      throw new IllegalArgumentException("Polling period " + pollPeriod + " " + pollUnit +
-        " below than minimal polling period ")
-    }
-  }
 
   def createMetricsSystem(
       instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {

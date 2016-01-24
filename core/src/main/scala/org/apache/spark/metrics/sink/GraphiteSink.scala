@@ -25,59 +25,40 @@ import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.graphite.{Graphite, GraphiteReporter, GraphiteUDP}
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
 
-private[spark] class GraphiteSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
-  val GRAPHITE_DEFAULT_PERIOD = 10
-  val GRAPHITE_DEFAULT_UNIT = "SECONDS"
-  val GRAPHITE_DEFAULT_PREFIX = ""
+private[spark] class GraphiteSink(
+  override val properties: Properties,
+  val registry: MetricRegistry,
+  securityMgr: SecurityManager
+) extends Sink with HasPollingPeriod {
+  val PREFIX_KEY = "prefix"
+  val DEFAULT_PREFIX = ""
 
-  val GRAPHITE_KEY_HOST = "host"
-  val GRAPHITE_KEY_PORT = "port"
-  val GRAPHITE_KEY_PERIOD = "period"
-  val GRAPHITE_KEY_UNIT = "unit"
-  val GRAPHITE_KEY_PREFIX = "prefix"
-  val GRAPHITE_KEY_PROTOCOL = "protocol"
+  val HOST_KEY = "host"
+  val PORT_KEY = "port"
+  val PROTOCOL_KEY = "protocol"
 
-  def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
+  def propertyToOption(prop: String): Option[String] = Option(properties.getProperty(prop))
 
-  if (!propertyToOption(GRAPHITE_KEY_HOST).isDefined) {
-    throw new Exception("Graphite sink requires 'host' property.")
-  }
+  require(propertyToOption(HOST_KEY).isDefined, "Graphite sink requires 'host' property.")
+  require(propertyToOption(PORT_KEY).isDefined, "Graphite sink requires 'port' property.")
 
-  if (!propertyToOption(GRAPHITE_KEY_PORT).isDefined) {
-    throw new Exception("Graphite sink requires 'port' property.")
-  }
+  val host = propertyToOption(HOST_KEY).get
+  val port = propertyToOption(PORT_KEY).get.toInt
 
-  val host = propertyToOption(GRAPHITE_KEY_HOST).get
-  val port = propertyToOption(GRAPHITE_KEY_PORT).get.toInt
+  val prefix = propertyToOption(PREFIX_KEY).getOrElse(DEFAULT_PREFIX)
 
-  val pollPeriod = propertyToOption(GRAPHITE_KEY_PERIOD) match {
-    case Some(s) => s.toInt
-    case None => GRAPHITE_DEFAULT_PERIOD
-  }
-
-  val pollUnit: TimeUnit = propertyToOption(GRAPHITE_KEY_UNIT) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
-    case None => TimeUnit.valueOf(GRAPHITE_DEFAULT_UNIT)
-  }
-
-  val prefix = propertyToOption(GRAPHITE_KEY_PREFIX).getOrElse(GRAPHITE_DEFAULT_PREFIX)
-
-  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
-
-  val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase) match {
+  val graphite = propertyToOption(PROTOCOL_KEY).map(_.toLowerCase) match {
     case Some("udp") => new GraphiteUDP(new InetSocketAddress(host, port))
     case Some("tcp") | None => new Graphite(new InetSocketAddress(host, port))
     case Some(p) => throw new Exception(s"Invalid Graphite protocol: $p")
   }
 
-  val reporter: GraphiteReporter = GraphiteReporter.forRegistry(registry)
-      .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .convertRatesTo(TimeUnit.SECONDS)
-      .prefixedWith(prefix)
-      .build(graphite)
+  val reporter = GraphiteReporter.forRegistry(registry)
+    .convertDurationsTo(TimeUnit.MILLISECONDS)
+    .convertRatesTo(TimeUnit.SECONDS)
+    .prefixedWith(prefix)
+    .build(graphite)
 
   override def start() {
     reporter.start(pollPeriod, pollUnit)
