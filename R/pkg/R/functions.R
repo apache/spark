@@ -287,6 +287,8 @@ setMethod("corr", signature(x = "Column"),
 #' \dontrun{
 #' cov(df$c, df$d)
 #' cov("c", "d")
+#' covar_samp(df$c, df$d)
+#' covar_samp("c", "d")
 #' }
 setMethod("cov", signature(x = "characterOrColumn"),
           function(x, col2) {
