@@ -220,7 +220,12 @@ object EvaluatePython {
       ArrayBasedMapData(keys, values)
 
     case (c, StructType(fields)) if c.getClass.isArray =>
-      new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
+      val array = c.asInstanceOf[Array[_]]
+      assert(
+        array.length == fields.length,
+        s"Row length ${array.length} and schema length ${fields.length} don't match"
+      )
+      new GenericInternalRow(array.zip(fields).map {
         case (e, f) => fromJava(e, f.dataType)
       })
 
