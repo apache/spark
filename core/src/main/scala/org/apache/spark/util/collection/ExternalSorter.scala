@@ -264,7 +264,7 @@ private[spark] class ExternalSorter[K, V, C](
           iterator.map(cur => ((p, cur._1), cur._2))
         }
         map = null
-        buffer =null
+        buffer = null
         true
       }
     } else {
