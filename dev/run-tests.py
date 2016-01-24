@@ -44,7 +44,7 @@ def determine_modules_for_files(filenames):
     If a file is not associated with a more specific submodule, then this method will consider that
     file to belong to the 'root' module.
 
-    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/test/foo"]))
+    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
     ['pyspark-core', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
@@ -108,8 +108,8 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'hive-thriftserver', 'mllib', 'pyspark-sql', 'examples', 'pyspark-mllib', 'sparkr',
-     'pyspark-ml']
+    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver', 'pyspark-sql', 'sparkr',
+     'pyspark-mllib', 'pyspark-ml']
     """
     # If we're going to have to run all of the tests, then we can just short-circuit
     # and return 'root'. No module depends on root, so if it appears then it will be

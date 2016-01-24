@@ -90,19 +90,40 @@ class Module(object):
         return not (self.name == other.name)
 
 
-sql = Module(
-    name="sql",
+catalyst = Module(
+    name="catalyst",
     dependencies=[],
     source_file_regexes=[
-        "sql/(?!hive-thriftserver)",
+        "sql/catalyst/",
+    ],
+    sbt_test_goals=[
+        "catalyst/test",
+    ],
+)
+
+
+sql = Module(
+    name="sql",
+    dependencies=[catalyst],
+    source_file_regexes=[
+        "sql/core/",
+    ],
+    sbt_test_goals=[
+        "sql/test",
+    ],
+)
+
+hive = Module(
+    name="hive",
+    dependencies=[sql],
+    source_file_regexes=[
+        "sql/hive/",
         "bin/spark-sql",
     ],
     build_profile_flags=[
         "-Phive",
     ],
     sbt_test_goals=[
-        "catalyst/test",
-        "sql/test",
         "hive/test",
     ],
     test_tags=[
@@ -113,7 +134,7 @@ sql = Module(
 
 hive_thriftserver = Module(
     name="hive-thriftserver",
-    dependencies=[sql],
+    dependencies=[hive],
     source_file_regexes=[
         "sql/hive-thriftserver",
         "sbin/start-thriftserver.sh",
@@ -296,7 +317,7 @@ mllib = Module(
 
 examples = Module(
     name="examples",
-    dependencies=[graphx, mllib, streaming, sql],
+    dependencies=[graphx, mllib, streaming, hive],
     source_file_regexes=[
         "examples/",
     ],
@@ -328,7 +349,7 @@ pyspark_core = Module(
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, sql],
+    dependencies=[pyspark_core, hive],
     source_file_regexes=[
         "python/pyspark/sql"
     ],
@@ -418,7 +439,7 @@ pyspark_ml = Module(
 
 sparkr = Module(
     name="sparkr",
-    dependencies=[sql, mllib],
+    dependencies=[hive, mllib],
     source_file_regexes=[
         "R/",
     ],
