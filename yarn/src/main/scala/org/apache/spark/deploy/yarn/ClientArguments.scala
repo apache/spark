@@ -41,7 +41,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amMemory: Int = 512 // MB
   var amCores: Int = 1
   var appName: String = "Spark"
-  var priority = 0
+  var priority = sparkConf.get("spark.yarn.priority", "0").toInt
   var principal: String = null
   var keytab: String = null
   def isClusterMode: Boolean = userClass != null

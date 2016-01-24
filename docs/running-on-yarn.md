@@ -272,6 +272,13 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.priority</code></td>
+  <td><code>0</code></td>
+  <td>
+    The priority of spark application which is submitted to YARN.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.jar</code></td>
   <td>(none)</td>
   <td>
