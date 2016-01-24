@@ -158,6 +158,23 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
+  test("write bucketed data with the overlapping blockBy and partitionBy columns") {
+    for (source <- Seq("parquet", "json", "orc")) {
+      withTable("bucketed_table") {
+        df.write
+          .format(source)
+          .partitionBy("i")
+          .bucketBy(8, "i", "k")
+          .sortBy("k")
+          .saveAsTable("bucketed_table")
+
+        for (i <- 0 until 5) {
+          testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("k"), Seq("k"))
+        }
+      }
+    }
+  }
+
   test("write bucketed data without partitionBy") {
     for (source <- Seq("parquet", "json", "orc")) {
       withTable("bucketed_table") {

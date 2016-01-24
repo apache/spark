@@ -21,6 +21,7 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -37,7 +38,7 @@ import org.apache.spark.sql.sources.HadoopFsRelation
  * @since 1.4.0
  */
 @Experimental
-final class DataFrameWriter private[sql](df: DataFrame) {
+final class DataFrameWriter private[sql](df: DataFrame) extends Logging  {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
@@ -232,6 +233,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
+
+
     if (sortColumnNames.isDefined) {
       require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
     }
@@ -240,7 +243,30 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       n <- numBuckets
     } yield {
       require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
-      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
+
+      if (normalizedParCols.isEmpty) {
+        BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
+      } else {
+        // When partitionBy and blockBy are used at the same time, the overlapping columns are
+        // useless. Thus, we removed these overlapping columns from blockBy.
+        val bucketColumns: Seq[String] =
+          normalizedBucketColNames.get.filterNot(normalizedParCols.get.contains)
+
+        if (bucketColumns.nonEmpty) {
+          if (bucketColumns.length != normalizedBucketColNames.get.length) {
+            val removedColumns: Seq[String] =
+              normalizedBucketColNames.get.filter(normalizedParCols.get.contains)
+            logInfo(s"BucketBy columns is changed to '${bucketColumnNames.mkString(", ")}' after " +
+              s"removing the columns '${removedColumns.mkString(", ")}' that are part of " +
+              s"PartitionBy columns '${partitioningColumns.mkString(", ")}'")
+          }
+          BucketSpec(n, bucketColumns, normalizedSortColNames.getOrElse(Nil))
+        } else {
+          throw new AnalysisException(s"BucketBy columns (${bucketColumnNames.mkString(", ")}) " +
+            "should not be the subset of PartitionBy columns " +
+            s"'${partitioningColumns.mkString(", ")}'")
+        }
+      }
     }
   }
 
