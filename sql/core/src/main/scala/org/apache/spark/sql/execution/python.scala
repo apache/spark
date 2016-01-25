@@ -221,10 +221,12 @@ object EvaluatePython {
 
     case (c, StructType(fields)) if c.getClass.isArray =>
       val array = c.asInstanceOf[Array[_]]
-      assert(
-        array.length == fields.length,
-        s"Row length ${array.length} and schema length ${fields.length} don't match"
-      )
+      if (array.length != fields.length) {
+        throw new IllegalStateException(
+          s"Input row doesn't have expected number of values required by the schema. " +
+          s"${fields.length} fields are required while ${array.length} values are provided."
+        )
+      }
       new GenericInternalRow(array.zip(fields).map {
         case (e, f) => fromJava(e, f.dataType)
       })

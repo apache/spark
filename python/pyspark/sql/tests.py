@@ -369,7 +369,7 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
         df = self.sqlCtx.createDataFrame(rdd, schema)
-        message = ".*assertion failed: Row length 1 and schema length 2 don't match.*"
+        message = ".*Input row doesn't have expected number of values required by the schema.*"
         with self.assertRaisesRegexp(Exception, message):
             df.show()
 
