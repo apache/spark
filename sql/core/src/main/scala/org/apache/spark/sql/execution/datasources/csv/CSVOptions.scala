@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.Charset
 
-import org.apache.hadoop.io.compress._
-
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
-import org.apache.spark.util.Utils
 
-private[sql] case class CSVParameters(@transient parameters: Map[String, String]) extends Logging {
+private[sql] class CSVOptions(
+    @transient private val parameters: Map[String, String])
+  extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)

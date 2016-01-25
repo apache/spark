@@ -15,29 +15,10 @@
  * limitations under the License.
  */
 
-#plan-viz-graph .label {
-  font-weight: normal;
-  text-shadow: none;
-}
+package org.apache.spark.util.sketch;
 
-#plan-viz-graph svg g.cluster rect {
-  fill: #A0DFFF;
-  stroke: #3EC0FF;
-  stroke-width: 1px;
-}
-
-#plan-viz-graph svg g.node rect {
-  fill: #C3EBFF;
-  stroke: #3EC0FF;
-  stroke-width: 1px;
-}
-
-/* Hightlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child {
-  font-weight: bold;
-}
-
-#plan-viz-graph svg path {
-  stroke: #444;
-  stroke-width: 1.5px;
+public class IncompatibleMergeException extends Exception {
+  public IncompatibleMergeException(String message) {
+    super(message);
+  }
 }
