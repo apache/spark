@@ -320,56 +320,46 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // verify whether the blocks exist in both the stores
     Seq(driverStore, executorStore).foreach { case s =>
-      s.getLocal(broadcast0BlockId) should not be (None)
-      s.unpin(broadcast0BlockId)
-      s.getLocal(broadcast1BlockId) should not be (None)
-      s.unpin(broadcast1BlockId)
-      s.getLocal(broadcast2BlockId) should not be (None)
-      s.unpin(broadcast2BlockId)
-      s.getLocal(broadcast2BlockId2) should not be (None)
-      s.unpin(broadcast2BlockId2)
+      assert(s.hasLocalBlock(broadcast0BlockId))
+      assert(s.hasLocalBlock(broadcast1BlockId))
+      assert(s.hasLocalBlock(broadcast2BlockId))
+      assert(s.hasLocalBlock(broadcast2BlockId2))
     }
 
     // remove broadcast 0 block only from executors
     master.removeBroadcast(0, removeFromMaster = false, blocking = true)
 
     // only broadcast 0 block should be removed from the executor store
-    executorStore.getLocal(broadcast0BlockId) should be (None)
-    executorStore.getLocal(broadcast1BlockId) should not be (None)
-    executorStore.unpin(broadcast1BlockId)
-    executorStore.getLocal(broadcast2BlockId) should not be (None)
-    executorStore.unpin(broadcast2BlockId)
+    assert(!executorStore.hasLocalBlock(broadcast0BlockId))
+    assert(executorStore.hasLocalBlock(broadcast1BlockId))
+    assert(executorStore.hasLocalBlock(broadcast2BlockId))
 
     // nothing should be removed from the driver store
-    driverStore.getLocal(broadcast0BlockId) should not be (None)
-    driverStore.unpin(broadcast0BlockId)
-    driverStore.getLocal(broadcast1BlockId) should not be (None)
-    driverStore.unpin(broadcast1BlockId)
-    driverStore.getLocal(broadcast2BlockId) should not be (None)
-    driverStore.unpin(broadcast2BlockId)
+    assert(driverStore.hasLocalBlock(broadcast0BlockId))
+    assert(driverStore.hasLocalBlock(broadcast1BlockId))
+    assert(driverStore.hasLocalBlock(broadcast2BlockId))
 
     // remove broadcast 0 block from the driver as well
     master.removeBroadcast(0, removeFromMaster = true, blocking = true)
-    driverStore.getLocal(broadcast0BlockId) should be (None)
-    driverStore.getLocal(broadcast1BlockId) should not be (None)
-    driverStore.unpin(broadcast1BlockId)
+    assert(!driverStore.hasLocalBlock(broadcast0BlockId))
+    assert(driverStore.hasLocalBlock(broadcast1BlockId))
 
     // remove broadcast 1 block from both the stores asynchronously
     // and verify all broadcast 1 blocks have been removed
     master.removeBroadcast(1, removeFromMaster = true, blocking = false)
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      driverStore.getLocal(broadcast1BlockId) should be (None)
-      executorStore.getLocal(broadcast1BlockId) should be (None)
+      assert(!driverStore.hasLocalBlock(broadcast1BlockId))
+      assert(!executorStore.hasLocalBlock(broadcast1BlockId))
     }
 
     // remove broadcast 2 from both the stores asynchronously
     // and verify all broadcast 2 blocks have been removed
     master.removeBroadcast(2, removeFromMaster = true, blocking = false)
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      driverStore.getLocal(broadcast2BlockId) should be (None)
-      driverStore.getLocal(broadcast2BlockId2) should be (None)
-      executorStore.getLocal(broadcast2BlockId) should be (None)
-      executorStore.getLocal(broadcast2BlockId2) should be (None)
+      assert(!driverStore.hasLocalBlock(broadcast2BlockId))
+      assert(!driverStore.hasLocalBlock(broadcast2BlockId2))
+      assert(!executorStore.hasLocalBlock(broadcast2BlockId))
+      assert(!executorStore.hasLocalBlock(broadcast2BlockId2))
     }
     executorStore.stop()
     driverStore.stop()

@@ -414,6 +414,15 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Return true if local block manager contains the given block and false otherwise.
+   * Calling this method will _not_ implicitly pin the block, making this method useful
+   * when writing tests.
+   */
+  def hasLocalBlock(blockId: BlockId): Boolean = {
+    doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]].isDefined
+  }
+
+  /**
    * Get block from the local block manager as serialized bytes.
    */
   def getLocalBytes(blockId: BlockId): Option[ByteBuffer] = {
