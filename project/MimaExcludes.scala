@@ -127,6 +127,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockStore$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockManager"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockStore")
+      ) ++ Seq(
+        // SPARK-12149 Added new fields to ExecutorSummary
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       ) ++
       // SPARK-12665 Remove deprecated and unused classes
       Seq(
@@ -162,7 +165,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.StreamingContext.actorStream$default$4"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.StreamingContext.actorStream$default$3"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.StreamingContext.actorStream"),
-        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.api.java.JavaStreamingContext.actorStream")
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.api.java.JavaStreamingContext.actorStream"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.streaming.zeromq.ZeroMQReceiver"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.streaming.receiver.ActorReceiver$Supervisor")
       ) ++ Seq(
         // SPARK-12847 Remove StreamingListenerBus and post all Streaming events to the same thread as Spark events
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.AsynchronousListenerBus$"),
@@ -299,6 +304,9 @@ object MimaExcludes {
         // SPARK-3580 Add getNumPartitions method to JavaRDD
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
+      ) ++ Seq(
+        // SPARK-12149 Added new fields to ExecutorSummary
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       ) ++
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.

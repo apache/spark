@@ -944,52 +944,12 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.akka.frameSize</code></td>
+  <td><code>spark.rpc.message.maxSize</code></td>
   <td>128</td>
   <td>
     Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
-    jobs with many thousands of map and reduce tasks and see messages about the frame size.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.heartbeat.interval</code></td>
-  <td>1000s</td>
-  <td>
-    This is set to a larger value to disable the transport failure detector that comes built in to
-    Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger
-    interval value reduces network overhead and a smaller value ( ~ 1 s) might be more
-    informative for Akka's failure detector. Tune this in combination of <code>spark.akka.heartbeat.pauses</code>
-    if you need to. A likely positive use case for using failure detector would be: a sensistive
-    failure detector can help evict rogue executors quickly. However this is usually not the case
-    as GC pauses and network lags are expected in a real Spark cluster. Apart from that enabling
-    this leads to a lot of exchanges of heart beats between nodes leading to flooding the network
-    with those.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>6000s</td>
-  <td>
-     This is set to a larger value to disable the transport failure detector that comes built in to Akka.
-     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart
-     beat pause for Akka. This can be used to control sensitivity to GC pauses. Tune
-     this along with <code>spark.akka.heartbeat.interval</code> if you need to.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.threads</code></td>
-  <td>4</td>
-  <td>
-    Number of actor threads to use for communication. Can be useful to increase on large clusters
-    when the driver has a lot of CPU cores.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.timeout</code></td>
-  <td>100s</td>
-  <td>
-    Communication timeout between Spark nodes.
+    jobs with many thousands of map and reduce tasks and see messages about the RPC message size.
   </td>
 </tr>
 <tr>
@@ -1016,27 +976,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the executor to listen on. This is used for communicating with the driver.
-    This is only relevant when using the Akka RPC backend.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.fileserver.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP file server to listen on.
-    This is only relevant when using the Akka RPC backend.
-  </td>
-</tr>
-<tr>
   <td><code>spark.network.timeout</code></td>
   <td>120s</td>
   <td>
     Default timeout for all network interactions. This config will be used in place of
-    <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
+    <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
@@ -1418,8 +1362,7 @@ Apart from these, the following properties are also available, and may be useful
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            either <code>akka</code> for Akka based connections or <code>fs</code> for file
-            server.</p>
+            only <code>fs</code> for file server.</p>
         </td>
     </tr>
     <tr>
