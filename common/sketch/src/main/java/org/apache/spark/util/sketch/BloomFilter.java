@@ -120,11 +120,13 @@ public abstract class BloomFilter {
     return (long) (-n * Math.log(p) / (Math.log(2) * Math.log(2)));
   }
 
+  static final double DEFAULT_FPP = 0.03;
+
   /**
-   * Creates a {@link BloomFilter} with given {@code expectedNumItems} and a default 3% {@code fpp}.
+   * Creates a {@link BloomFilter} with given {@code expectedNumItems} and the default {@code fpp}.
    */
   public static BloomFilter create(long expectedNumItems) {
-    return create(expectedNumItems, 0.03);
+    return create(expectedNumItems, DEFAULT_FPP);
   }
 
   /**

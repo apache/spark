@@ -23,6 +23,7 @@ import scala.util.Random
 import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
+  private final val EPSILON = 0.01
 
   def testAccuracy[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     test(s"accuracy - $typeName") {
@@ -36,33 +37,20 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
       val filter = BloomFilter.create(numInsertion, fpp)
 
       // insert first `numInsertion` items.
-      var i = 0
-      while (i < numInsertion) {
-        filter.put(allItems(i))
-        i += 1
-      }
+      allItems.take(numInsertion).foreach(filter.put)
 
-      i = 0
-      while (i < numInsertion) {
-        // false negative is not allowed.
-        assert(filter.mightContain(allItems(i)))
-        i += 1
-      }
+      // false negative is not allowed.
+      assert(allItems.take(numInsertion).forall(filter.mightContain))
 
       // The number of inserted items doesn't exceed `expectedNumItems`, so the `expectedFpp`
       // should not be significantly higher than the one we passed in to create this bloom filter.
-      assert(filter.expectedFpp() - fpp < 0.001)
+      assert(filter.expectedFpp() - fpp < EPSILON)
 
-      var errorCount = 0
-      while (i < numItems) {
-        if (filter.mightContain(allItems(i))) errorCount += 1
-        i += 1
-      }
+      val errorCount = allItems.drop(numInsertion).count(filter.mightContain)
 
       // Also check the actual fpp is not significantly higher than we expected.
       val actualFpp = errorCount.toDouble / (numItems - numInsertion)
-      // Skip error count that is too small.
-      assert(errorCount < 50 || actualFpp - fpp < 0.001)
+      assert(actualFpp - fpp < EPSILON)
     }
   }
 
@@ -83,9 +71,8 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
       filter1.mergeInPlace(filter2)
 
       // After merge, `filter1` has `numItems` items which doesn't exceed `expectedNumItems`, so the
-      // `expectedFpp` should not be significantly higher than the default one: 3%
-      // Skip byte type as it has too little distinct values.
-      assert(typeName == "Byte" || 0.03 - filter1.expectedFpp() < 0.001)
+      // `expectedFpp` should not be significantly higher than the default one.
+      assert(filter1.expectedFpp() - BloomFilter.DEFAULT_FPP < EPSILON)
 
       items1.foreach(i => assert(filter1.mightContain(i)))
       items2.foreach(i => assert(filter1.mightContain(i)))
@@ -97,7 +84,7 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     testMergeInPlace[T](typeName, numItems)(itemGen)
   }
 
-  testItemType[Byte]("Byte", 200) { _.nextInt().toByte }
+  testItemType[Byte]("Byte", 160) { _.nextInt().toByte }
 
   testItemType[Short]("Short", 1000) { _.nextInt().toShort }
 

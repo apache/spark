@@ -51,7 +51,7 @@ class BitArraySuite extends FunSuite { // scalastyle:ignore funsuite
     val bitArray = new BitArray(320)
     val indexes = (1 to 100).map(_ => r.nextInt(320).toLong).distinct
 
-    indexes.map(bitArray.set)
+    indexes.foreach(bitArray.set)
     indexes.foreach(i => assert(bitArray.get(i)))
     assert(bitArray.cardinality() == indexes.length)
   }
@@ -66,8 +66,8 @@ class BitArraySuite extends FunSuite { // scalastyle:ignore funsuite
     val indexes1 = (1 to 100).map(_ => r.nextInt(64 * 6).toLong).distinct
     val indexes2 = (1 to 100).map(_ => r.nextInt(64 * 6).toLong).distinct
 
-    indexes1.map(bitArray1.set)
-    indexes2.map(bitArray2.set)
+    indexes1.foreach(bitArray1.set)
+    indexes2.foreach(bitArray2.set)
 
     bitArray1.putAll(bitArray2)
     indexes1.foreach(i => assert(bitArray1.get(i)))
