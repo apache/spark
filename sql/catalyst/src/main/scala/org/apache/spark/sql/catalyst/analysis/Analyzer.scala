@@ -389,7 +389,7 @@ class Analyzer(
         attributes(index - 1)
       } else {
         throw new UnresolvedException(agg,
-          s"""Order by position: $index does not exist \n
+          s"""Aggregate by position: $index does not exist \n
               |The Select List is indexed from 1 to ${attributes.size}""".stripMargin)
       }
     }
