@@ -149,7 +149,6 @@ class Pipeline(Estimator):
     .. versionadded:: 1.3.0
     """
 
-    # a placeholder to make it appear in the generated doc
     stages = Param(Params._dummy(), "stages", "pipeline stages")
 
     @keyword_only

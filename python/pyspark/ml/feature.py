@@ -56,7 +56,6 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     threshold = Param(Params._dummy(), "threshold",
                       "threshold in binary classification prediction, in range [0, 1]")
 
@@ -123,7 +122,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.3.0
     """
 
-    # a placeholder to make it appear in the generated doc
     splits = \
         Param(Params._dummy(), "splits",
               "Split points for mapping continuous features into buckets. With n+1 splits, " +
@@ -201,7 +199,6 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     minTF = Param(
         Params._dummy(), "minTF", "Filter to ignore rare words in" +
         " a document. For each document, terms with frequency/count less than the given" +
@@ -226,22 +223,9 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
                                             self.uid)
-        self.minTF = Param(
-            self, "minTF", "Filter to ignore rare words in" +
-            " a document. For each document, terms with frequency/count less than the given" +
-            " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
-            " times the term must appear in the document); if this is a double in [0,1), then " +
-            "this specifies a fraction (out of the document's token count). Note that the " +
-            "parameter is only used in transform of CountVectorizerModel and does not affect" +
-            "fitting. Default 1.0")
-        self.minDF = Param(
-            self, "minDF", "Specifies the minimum number of" +
-            " different documents a term must appear in to be included in the vocabulary." +
-            " If this is an integer >= 1, this specifies the number of documents the term must" +
-            " appear in; if this is a double in [0,1), then this specifies the fraction of " +
-            "documents. Default 1.0")
-        self.vocabSize = Param(
-            self, "vocabSize", "max size of the vocabulary. Default 1 << 18.")
+        self.minTF = CountVectorizer.minTF._copy_new_parent(self)
+        self.minDF = CountVectorizer.minDF._copy_new_parent(self)
+        self.vocabSize = CountVectorizer.vocabSize._copy_new_parent(self)
         self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1 << 18)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -350,7 +334,6 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     inverse = Param(Params._dummy(), "inverse", "Set transformer to perform inverse DCT, " +
                     "default False.")
 
@@ -413,7 +396,6 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     scalingVec = Param(Params._dummy(), "scalingVec", "vector for hadamard product, " +
                        "it must be MLlib Vector type.")
 
@@ -520,7 +502,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     minDocFreq = Param(Params._dummy(), "minDocFreq",
                        "minimum of documents in which a term should appear for filtering")
 
@@ -611,7 +592,6 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     min = Param(Params._dummy(), "min", "Lower bound of the output feature range")
     max = Param(Params._dummy(), "max", "Upper bound of the output feature range")
 
@@ -733,7 +713,6 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     n = Param(Params._dummy(), "n", "number of elements per n-gram (>=1)")
 
     @keyword_only
@@ -796,7 +775,6 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     p = Param(Params._dummy(), "p", "the p norm value.")
 
     @keyword_only
@@ -875,7 +853,6 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category")
 
     @keyword_only
@@ -938,7 +915,6 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     degree = Param(Params._dummy(), "degree", "the polynomial degree to expand (>= 1)")
 
     @keyword_only
@@ -1014,7 +990,6 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)")
     gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing")
@@ -1129,7 +1104,6 @@ class SQLTransformer(JavaTransformer):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     statement = Param(Params._dummy(), "statement", "SQL statement")
 
     @keyword_only
@@ -1191,7 +1165,6 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     withMean = Param(Params._dummy(), "withMean", "Center data with mean")
     withStd = Param(Params._dummy(), "withStd", "Scale to unit standard deviation")
 
@@ -1359,7 +1332,6 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make the labels show up in generated doc
     labels = Param(Params._dummy(), "labels",
                    "Optional array of labels specifying index-string mapping." +
                    " If not provided or if empty, then metadata from inputCol is used instead.")
@@ -1411,7 +1383,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
 
     .. versionadded:: 1.6.0
     """
-    # a placeholder to make the stopwords show up in generated doc
+
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out")
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words")
@@ -1630,7 +1602,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     maxCategories = Param(Params._dummy(), "maxCategories",
                           "Threshold for the number of values a categorical feature can take " +
                           "(>= 2). If a feature is found to have > maxCategories values, then " +
@@ -1732,7 +1703,6 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     indices = Param(Params._dummy(), "indices", "An array of indices to select features from " +
                     "a vector column. There can be no overlap with names.")
     names = Param(Params._dummy(), "names", "An array of feature names to select features from " +
@@ -1828,7 +1798,6 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     vectorSize = Param(Params._dummy(), "vectorSize",
                        "the dimension of codes after transforming from words")
     numPartitions = Param(Params._dummy(), "numPartitions",
@@ -1965,7 +1934,6 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     k = Param(Params._dummy(), "k", "the number of principal components")
 
     @keyword_only
@@ -2066,7 +2034,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     formula = Param(Params._dummy(), "formula", "R model formula")
 
     @keyword_only

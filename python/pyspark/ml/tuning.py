@@ -115,18 +115,11 @@ class CrossValidator(Estimator, HasSeed):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
-
-    # a placeholder to make it appear in the generated doc
     estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
-
-    # a placeholder to make it appear in the generated doc
     evaluator = Param(
         Params._dummy(), "evaluator",
         "evaluator used to select hyper-parameters that maximize the cross-validated metric")
-
-    # a placeholder to make it appear in the generated doc
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
 
     @keyword_only

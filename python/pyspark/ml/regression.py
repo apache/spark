@@ -162,7 +162,6 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     DenseVector([0.0, 1.0])
     """
 
-    # a placeholder to make it appear in the generated doc
     isotonic = \
         Param(Params._dummy(), "isotonic",
               "whether the output sequence should be isotonic/increasing (true) or" +
@@ -256,7 +255,6 @@ class TreeEnsembleParams(DecisionTreeParams):
     Mixin for Decision Tree-based ensemble algorithms parameters.
     """
 
-    # a placeholder to make it appear in the generated doc
     subsamplingRate = Param(Params._dummy(), "subsamplingRate", "Fraction of the training data " +
                             "used for learning each decision tree, in range (0, 1].")
 
@@ -287,7 +285,6 @@ class TreeRegressorParams(Params):
     """
 
     supportedImpurities = ["variance"]
-    # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
@@ -320,7 +317,6 @@ class RandomForestParams(TreeEnsembleParams):
     """
 
     supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
-    # a placeholder to make it appear in the generated doc
     numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).")
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
@@ -597,7 +593,6 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     lossType = Param(Params._dummy(), "lossType",
                      "Loss function which GBT tries to minimize (case-insensitive). " +
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
@@ -699,7 +694,6 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     censorCol = Param(Params._dummy(), "censorCol",
                       "censor column name. The value of this column could be 0 or 1. " +
                       "If the value is 1, it means the event has occurred i.e. " +

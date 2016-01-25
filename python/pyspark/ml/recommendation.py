@@ -85,7 +85,6 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     rank = Param(Params._dummy(), "rank", "rank of the factorization")
     numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks")
     numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks")
