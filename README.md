@@ -85,4 +85,5 @@ Currently **officially** using Airflow:
 * [Airflow: Tips, Tricks, and Pitfalls @ Handy](https://medium.com/handy-tech/airflow-tips-tricks-and-pitfalls-9ba53fba14eb#.o2snqeoz7)
 * [Airflow at Agari Blog Post](http://agari.com/blog/airflow-agari)
 * Airflow Chef recipe (community contributed) [github] (https://github.com/bahchis/airflow-cookbook) [chef] (https://supermarket.chef.io/cookbooks/airflow)
+* Airflow Puppet Module (community contributed) [github] (https://github.com/similarweb/puppet-airflow) [puppet forge] (https://forge.puppetlabs.com/similarweb/airflow)
 * [Gitter (live chat) Channel](https://gitter.im/airbnb/airflow)
