@@ -87,7 +87,8 @@ case class SortBasedAggregate(
           aggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
-          newMutableProjection,
+          (expressions, inputSchema) =>
+            newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
           numInputRows,
           numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
