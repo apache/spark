@@ -1987,6 +1987,8 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
     >>> model = pca.fit(df)
     >>> model.transform(df).collect()[0].pca_features
     DenseVector([1.648..., -4.013...])
+    >>> model.explainedVariance
+    DenseVector([0.794..., 0.205...])
 
     .. versionadded:: 1.5.0
     """
@@ -2051,6 +2053,15 @@ class PCAModel(JavaModel):
         Each column is one principal component.
         """
         return self._call_java("pc")
+
+    @property
+    @since("2.0.0")
+    def explainedVariance(self):
+        """
+        Returns a vector of proportions of variance
+        explained by each principal component.
+        """
+        return self._call_java("explainedVariance")
 
 
 @inherit_doc

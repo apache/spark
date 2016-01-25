@@ -428,6 +428,10 @@ setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
+#' @rdname drop
+#' @export
+setGeneric("drop", function(x, ...) { standardGeneric("drop") })
+
 #' @rdname dropduplicates
 #' @export
 setGeneric("dropDuplicates",
@@ -535,7 +539,7 @@ setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("samp
 
 #' @rdname saveAsTable
 #' @export
-setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
+setGeneric("saveAsTable", function(df, tableName, source = NULL, mode = "error", ...) {
   standardGeneric("saveAsTable")
 })
 
@@ -548,7 +552,15 @@ setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
 #' @rdname write.df
 #' @export
-setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
+setGeneric("write.df", function(df, path, source = NULL, mode = "error", ...) {
+  standardGeneric("write.df")
+})
+
+#' @rdname write.df
+#' @export
+setGeneric("saveDF", function(df, path, source = NULL, mode = "error", ...) {
+  standardGeneric("saveDF")
+})
 
 #' @rdname write.json
 #' @export
