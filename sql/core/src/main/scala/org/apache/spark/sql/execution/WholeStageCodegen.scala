@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.joins.{BuildRight, BuildLeft, BroadcastHashJoin}
 
 /**
   * An interface for those physical operators that support codegen.
@@ -134,7 +135,7 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
 
-  override def supportCodegen: Boolean = true
+  override def supportCodegen: Boolean = false
 
   override def upstream(): RDD[InternalRow] = {
     child.execute()
@@ -340,6 +341,15 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
 
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
+            // The build side can't be compiled together
+            case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
+              val input = apply(left)
+              inputs += input
+              b.copy(left = input)
+            case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
+              val input = apply(right)
+              inputs += input
+              b.copy(right = input)
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input
