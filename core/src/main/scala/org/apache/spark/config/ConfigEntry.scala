@@ -221,7 +221,15 @@ private[spark] object ConfigEntry {
       defaultValue: Option[String] = None,
       doc: String = "",
       isPublic: Boolean = true): ConfigEntry[Long] = {
-    def byteFromString(str: String): Long = JavaUtils.byteStringAs(str, unit)
+    def byteFromString(str: String): Long = {
+      val (input, multiplier) =
+        if (str.length() > 0 && str.charAt(0) == '-') {
+          (str.substring(1), -1)
+        } else {
+          (str, 1)
+        }
+      multiplier * JavaUtils.byteStringAs(input, unit)
+    }
     def byteToString(v: Long): String = unit.convertTo(v, ByteUnit.BYTE) + "b"
 
     new ConfigEntry(
