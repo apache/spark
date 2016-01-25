@@ -364,6 +364,15 @@ class SQLTests(ReusedPySparkTestCase):
         df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
         self.assertEqual(10, df3.count())
 
+    def test_create_dataframe_schema_mismatch(self):
+        input = [Row(a=1)]
+        rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
+        schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
+        df = self.sqlCtx.createDataFrame(rdd, schema)
+        message = ".*Input row doesn't have expected number of values required by the schema.*"
+        with self.assertRaisesRegexp(Exception, message):
+            df.show()
+
     def test_serialize_nested_array_and_map(self):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
         rdd = self.sc.parallelize(d)
@@ -1259,6 +1268,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.sql.tests import *
     if xmlrunner:
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
     else:

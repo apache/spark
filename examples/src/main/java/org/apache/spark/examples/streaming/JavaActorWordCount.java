@@ -31,7 +31,8 @@ import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.receiver.JavaActorReceiver;
+import org.apache.spark.streaming.akka.AkkaUtils;
+import org.apache.spark.streaming.akka.JavaActorReceiver;
 
 /**
  * A sample actor as receiver, is also simplest. This receiver actor
@@ -56,6 +57,7 @@ class JavaSampleActorReceiver<T> extends JavaActorReceiver {
     remotePublisher.tell(new SubscribeReceiver(getSelf()), getSelf());
   }
 
+  @Override
   public void onReceive(Object msg) throws Exception {
     store((T) msg);
   }
@@ -100,18 +102,20 @@ public class JavaActorWordCount {
     String feederActorURI = "akka.tcp://test@" + host + ":" + port + "/user/FeederActor";
 
     /*
-     * Following is the use of actorStream to plug in custom actor as receiver
+     * Following is the use of AkkaUtils.createStream to plug in custom actor as receiver
      *
      * An important point to note:
      * Since Actor may exist outside the spark framework, It is thus user's responsibility
      * to ensure the type safety, i.e type of data received and InputDstream
      * should be same.
      *
-     * For example: Both actorStream and JavaSampleActorReceiver are parameterized
+     * For example: Both AkkaUtils.createStream and JavaSampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
-    JavaDStream<String> lines = jssc.actorStream(
-        Props.create(JavaSampleActorReceiver.class, feederActorURI), "SampleReceiver");
+    JavaDStream<String> lines = AkkaUtils.createStream(
+        jssc,
+        Props.create(JavaSampleActorReceiver.class, feederActorURI),
+        "SampleReceiver");
 
     // compute wordcount
     lines.flatMap(new FlatMapFunction<String, String>() {
