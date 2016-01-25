@@ -50,7 +50,8 @@ private[spark] class SparkUI private (
     var appName: String,
     val basePath: String,
     val startTime: Long)
-  extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
+  extends WebUI(securityManager, securityManager.getSSLOptions("ui"), SparkUI.getUIPort(conf),
+    conf, basePath, "SparkUI")
   with Logging
   with UIRoot {
 
@@ -194,7 +195,7 @@ private[spark] object SparkUI {
 
     val environmentListener = new EnvironmentListener
     val storageStatusListener = new StorageStatusListener
-    val executorsListener = new ExecutorsListener(storageStatusListener)
+    val executorsListener = new ExecutorsListener(storageStatusListener, conf)
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 

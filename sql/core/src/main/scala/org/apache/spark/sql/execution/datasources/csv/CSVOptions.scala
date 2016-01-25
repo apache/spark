@@ -20,8 +20,11 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.nio.charset.Charset
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
 
-private[sql] case class CSVParameters(parameters: Map[String, String]) extends Logging {
+private[sql] class CSVOptions(
+    @transient parameters: Map[String, String])
+  extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -35,7 +38,7 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
     val param = parameters.getOrElse(paramName, default.toString)
-    if (param.toLowerCase() == "true") {
+    if (param.toLowerCase == "true") {
       true
     } else if (param.toLowerCase == "false") {
       false
@@ -44,9 +47,11 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(parameters.getOrElse("delimiter", ","))
+  val delimiter = CSVTypeCast.toChar(
+    parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val charset = parameters.getOrElse("charset", Charset.forName("UTF-8").name())
+  val charset = parameters.getOrElse("encoding",
+    parameters.getOrElse("charset", Charset.forName("UTF-8").name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
@@ -71,6 +76,11 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
+  val compressionCodec: Option[String] = {
+    val name = parameters.get("compression").orElse(parameters.get("codec"))
+    name.map(CompressionCodecs.getCodecClassName)
+  }
+
   val maxColumns = 20480
 
   val maxCharsPerColumn = 100000
@@ -83,7 +93,6 @@ private[sql] case class CSVParameters(parameters: Map[String, String]) extends L
 }
 
 private[csv] object ParseModes {
-
   val PERMISSIVE_MODE = "PERMISSIVE"
   val DROP_MALFORMED_MODE = "DROPMALFORMED"
   val FAIL_FAST_MODE = "FAILFAST"

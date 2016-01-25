@@ -418,9 +418,9 @@ TinyintLiteral
     (Digit)+ 'Y'
     ;
 
-DecimalLiteral
+DoubleLiteral
     :
-    Number 'B' 'D'
+    Number 'D'
     ;
 
 ByteLengthLiteral
