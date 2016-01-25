@@ -29,11 +29,14 @@ import org.apache.spark.unsafe.types.UTF8String;
  * A helper class to write data into global row buffer using `UnsafeRow` format.
  *
  * It will remember the offset of row buffer which it starts to write, and move the cursor of row
- * buffer while writing.  If a new record comes, the cursor of row buffer will be reset, so we need
- * to also call `reset` of this class before writing, to update the `startingOffset` and clear out
- * null bits.  Note that if we use it to write data into the result unsafe row, which means we will
- * always write from the very beginning of the global row buffer, we don't need to update
- * `startingOffset` and can just call `zeroOutNullBytes` before writing new record.
+ * buffer while writing.  If new data(can be the input record if this is the outermost writer, or
+ * nested struct if this is an inner writer) comes, the starting cursor of row buffer may be
+ * changed, so we need to call `UnsafeRowWriter.reset` before writing, to update the
+ * `startingOffset` and clear out null bits.
+ *
+ * Note that if this is the outermost writer, which means we will always write from the very
+ * beginning of the global row buffer, we don't need to update `startingOffset` and can just call
+ * `zeroOutNullBytes` before writing new data.
  */
 public class UnsafeRowWriter {
 
@@ -43,6 +46,17 @@ public class UnsafeRowWriter {
   private final int nullBitsSize;
   private final int fixedSize;
 
+  public UnsafeRowWriter(BufferHolder holder, int numFields) {
+    this.holder = holder;
+    this.nullBitsSize = UnsafeRow.calculateBitSetWidthInBytes(numFields);
+    this.fixedSize = nullBitsSize + 8 * numFields;
+    this.startingOffset = holder.cursor;
+  }
+
+  /**
+   * Resets the `startingOffset` according to the current cursor of row buffer, and clear out null
+   * bits.  This should be called before we write a new nested struct to the row buffer.
+   */
   public void reset() {
     this.startingOffset = holder.cursor;
 
@@ -53,17 +67,13 @@ public class UnsafeRowWriter {
     zeroOutNullBytes();
   }
 
+  /**
+   * Clears out null bits.  This should be called before we write a new row to row buffer.
+   */
   public void zeroOutNullBytes() {
     for (int i = 0; i < nullBitsSize; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }
-  }
-
-  public UnsafeRowWriter(BufferHolder holder, int numFields) {
-    this.holder = holder;
-    this.nullBitsSize = UnsafeRow.calculateBitSetWidthInBytes(numFields);
-    this.fixedSize = nullBitsSize + 8 * numFields;
-    this.startingOffset = holder.cursor;
   }
 
   private void zeroOutPaddingBytes(int numBytes) {

@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Benchmark
 
 /**
- * Benchmark [[UnsafeProjection]] for flat schema(primitive-type fields).
+ * Benchmark [[UnsafeProjection]] for fixed-length/primitive-type fields.
  */
 object UnsafeProjectionBenchmark {
 
@@ -86,7 +86,7 @@ object UnsafeProjectionBenchmark {
     val rows3 = generateRows(schema3, numRows)
     val projection3 = UnsafeProjection.create(attrs3, attrs3)
 
-    benchmark.addCase("primitive types") { _ =>
+    benchmark.addCase("7 primitive types") { _ =>
       for (_ <- 1 to iters) {
         var sum = 0L
         var i = 0
@@ -110,7 +110,7 @@ object UnsafeProjectionBenchmark {
     val rows4 = generateRows(schema4, numRows)
     val projection4 = UnsafeProjection.create(attrs4, attrs4)
 
-    benchmark.addCase("nullable primitive types") { _ =>
+    benchmark.addCase("7 nullable primitive types") { _ =>
       for (_ <- 1 to iters) {
         var sum = 0L
         var i = 0
@@ -122,6 +122,15 @@ object UnsafeProjectionBenchmark {
     }
 
 
+    /*
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    unsafe projection:                 Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------------
+    single long                             1533.34           175.07         1.00 X
+    single nullable long                    2306.73           116.37         0.66 X
+    primitive types                         8403.93            31.94         0.18 X
+    nullable primitive types               12448.39            21.56         0.12 X
+     */
     benchmark.run()
   }
 }
