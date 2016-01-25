@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -54,6 +56,25 @@ import java.io.OutputStream;
  * This implementation is largely based on the {@code CountMinSketch} class from stream-lib.
  */
 abstract public class CountMinSketch {
+  /**
+   * Version number of the serialized binary format.
+   */
+  public enum Version {
+    V1(1);
+
+    private final int versionNumber;
+
+    Version(int versionNumber) {
+      this.versionNumber = versionNumber;
+    }
+
+    public int getVersionNumber() {
+      return versionNumber;
+    }
+  }
+
+  public abstract Version version();
+
   /**
    * Returns the relative error (or {@code eps}) of this {@link CountMinSketch}.
    */
@@ -99,19 +120,44 @@ abstract public class CountMinSketch {
    *
    * Note that only Count-Min sketches with the same {@code depth}, {@code width}, and random seed
    * can be merged.
+   *
+   * @exception CountMinSketchMergeException if the {@code other} {@link CountMinSketch} has
+   *            incompatible depth, width, relative-error, confidence, or random seed.
    */
-  public abstract CountMinSketch mergeInPlace(CountMinSketch other);
+  public abstract CountMinSketch mergeInPlace(CountMinSketch other)
+      throws CountMinSketchMergeException;
 
   /**
    * Writes out this {@link CountMinSketch} to an output stream in binary format.
    */
-  public abstract void writeTo(OutputStream out);
+  public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
    * Reads in a {@link CountMinSketch} from an input stream.
    */
-  public static CountMinSketch readFrom(InputStream in) {
-    throw new UnsupportedOperationException("Not implemented yet");
+  public static CountMinSketch readFrom(InputStream in) throws IOException {
+    DataInputStream dis = new DataInputStream(in);
+
+    // Ignores version number
+    dis.readInt();
+
+    long totalCount = dis.readLong();
+    int depth = dis.readInt();
+    int width = dis.readInt();
+
+    long hashA[] = new long[depth];
+    for (int i = 0; i < depth; ++i) {
+      hashA[i] = dis.readLong();
+    }
+
+    long table[][] = new long[depth][width];
+    for (int i = 0; i < depth; ++i) {
+      for (int j = 0; j < width; ++j) {
+        table[i][j] = dis.readLong();
+      }
+    }
+
+    return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
   }
 
   /**

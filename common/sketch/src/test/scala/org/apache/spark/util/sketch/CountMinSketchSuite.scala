@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.sketch
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -28,6 +30,16 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
   private val confidence = 0.99
 
   private val seed = 42
+
+  private def checkSerDe(sketch: CountMinSketch): Unit = {
+    val out = new ByteArrayOutputStream()
+    sketch.writeTo(out)
+
+    val in = new ByteArrayInputStream(out.toByteArray)
+    val deserialized = CountMinSketch.readFrom(in)
+
+    assert(sketch === deserialized)
+  }
 
   def testAccuracy[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
     test(s"accuracy - $typeName") {
@@ -45,7 +57,10 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
       }
 
       val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
+      checkSerDe(sketch)
+
       sampledItemIndices.foreach(i => sketch.add(allItems(i)))
+      checkSerDe(sketch)
 
       val probCorrect = {
         val numErrors = allItems.map { item =>
@@ -75,11 +90,16 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
       val sketches = perSketchItems.map { items =>
         val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
+        checkSerDe(sketch)
+
         items.foreach(sketch.add)
+        checkSerDe(sketch)
+
         sketch
       }
 
       val mergedSketch = sketches.reduce(_ mergeInPlace _)
+      checkSerDe(mergedSketch)
 
       val expectedSketch = {
         val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
@@ -109,4 +129,22 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
   testItemType[Long]("Long") { _.nextLong() }
 
   testItemType[String]("String") { r => r.nextString(r.nextInt(20)) }
+
+  test("incompatible merge") {
+    intercept[CountMinSketchMergeException] {
+      CountMinSketch.create(10, 10, 1).mergeInPlace(null)
+    }
+
+    intercept[CountMinSketchMergeException] {
+      val sketch1 = CountMinSketch.create(10, 20, 1)
+      val sketch2 = CountMinSketch.create(10, 20, 2)
+      sketch1.mergeInPlace(sketch2)
+    }
+
+    intercept[CountMinSketchMergeException] {
+      val sketch1 = CountMinSketch.create(10, 10, 1)
+      val sketch2 = CountMinSketch.create(10, 20, 2)
+      sketch1.mergeInPlace(sketch2)
+    }
+  }
 }
