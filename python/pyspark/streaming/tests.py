@@ -1635,6 +1635,7 @@ kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
 if __name__ == "__main__":
+    from pyspark.streaming.tests import *
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
     mqtt_assembly_jar = search_mqtt_assembly_jar()

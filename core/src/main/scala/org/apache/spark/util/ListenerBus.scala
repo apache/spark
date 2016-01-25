@@ -36,8 +36,16 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
-  final def addListener(listener: L) {
+  final def addListener(listener: L): Unit = {
     listeners.add(listener)
+  }
+
+  /**
+   * Remove a listener and it won't receive any events. This method is thread-safe and can be called
+   * in any thread.
+   */
+  final def removeListener(listener: L): Unit = {
+    listeners.remove(listener)
   }
 
   /**
@@ -52,7 +60,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
     while (iter.hasNext) {
       val listener = iter.next()
       try {
-        onPostEvent(listener, event)
+        doPostEvent(listener, event)
       } catch {
         case NonFatal(e) =>
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
@@ -64,7 +72,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * Post an event to the specified listener. `onPostEvent` is guaranteed to be called in the same
    * thread.
    */
-  def onPostEvent(listener: L, event: E): Unit
+  protected def doPostEvent(listener: L, event: E): Unit
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
