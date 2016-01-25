@@ -788,7 +788,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .saveAsTable(tableName)
       invalidateTable(tableName)
       val metastoreTable = catalog.client.getTable("default", tableName)
-      val expectedBlockByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
+      val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val expectedSortByColumns = StructType(df.schema("c") :: Nil)
 
       val numBuckets = metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt
@@ -800,16 +800,16 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val numSortCols = metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt
       assert(numSortCols == 1)
 
-      val actualBlockByColumns =
+      val actualBucketByColumns =
         StructType(
           (0 until numBucketCols).map { index =>
             df.schema(metastoreTable.properties(s"spark.sql.sources.schema.bucketCol.$index"))
           })
-      // Make sure blockBy columns are correctly stored in metastore.
+      // Make sure bucketBy columns are correctly stored in metastore.
       assert(
-        expectedBlockByColumns.sameType(actualBlockByColumns),
-        s"Partitions columns stored in metastore $actualBlockByColumns is not the " +
-          s"partition columns defined by the saveAsTable operation $expectedBlockByColumns.")
+        expectedBucketByColumns.sameType(actualBucketByColumns),
+        s"Partitions columns stored in metastore $actualBucketByColumns is not the " +
+          s"partition columns defined by the saveAsTable operation $expectedBucketByColumns.")
 
       val actualSortByColumns =
         StructType(

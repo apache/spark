@@ -242,7 +242,7 @@ final class DataFrameWriter private[sql](df: DataFrame) extends Logging  {
     } yield {
       require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
 
-      // partitionBy columns cannot be used in blockedBy
+      // partitionBy columns cannot be used in bucketBy
       if (normalizedParCols.nonEmpty &&
         normalizedBucketColNames.get.toSet.intersect(normalizedParCols.get.toSet).nonEmpty) {
           throw new AnalysisException(
