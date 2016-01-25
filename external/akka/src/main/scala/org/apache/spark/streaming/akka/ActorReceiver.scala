@@ -282,18 +282,17 @@ private[akka] case class ByteBufferData(bytes: ByteBuffer) extends ActorReceiver
  * Here's a way to start more supervisor/workers as its children.
  *
  * @example {{{
- *            context.parent ! Props(new Supervisor)
- *          }}} OR {{{
- *            context.parent ! Props(new Worker, "Worker")
- *          }}}
+ *  context.parent ! Props(new Supervisor)
+ * }}} OR {{{
+ *  context.parent ! Props(new Worker, "Worker")
+ * }}}
  */
 private[akka] class ActorReceiverSupervisor[T: ClassTag](
-                                                          actorSystemCreator: () => ActorSystem,
-                                                          props: Props,
-                                                          name: String,
-                                                          storageLevel: StorageLevel,
-                                                          receiverSupervisorStrategy: SupervisorStrategy
-                                                        ) extends Receiver[T](storageLevel) with Logging {
+   actorSystemCreator: () => ActorSystem,
+   props: Props,
+   name: String,
+   storageLevel: StorageLevel,
+   receiverSupervisorStrategy: SupervisorStrategy) extends Receiver[T](storageLevel) with Logging {
 
   private lazy val actorSystem = actorSystemCreator()
   protected lazy val actorSupervisor = actorSystem.actorOf(Props(new Supervisor),
