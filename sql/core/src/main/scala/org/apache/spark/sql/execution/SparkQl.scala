@@ -66,9 +66,9 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           "TOK_QUERY"), createTableArgs)
 
         val tableIdent: TableIdentifier = tabName match {
-          case Token("TOK_TABNAME", Token(dbName, _) :: Token(tableName, _) :: Nil) =>
+          case Token("TOK_TABNAME", Token(dbName, Nil) :: Token(tableName, Nil) :: Nil) =>
             new TableIdentifier(cleanIdentifier(tableName), Some(cleanIdentifier(dbName)))
-          case Token("TOK_TABNAME", Token(tableName, _) :: Nil) =>
+          case Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) =>
             TableIdentifier(cleanIdentifier(tableName))
         }
 
@@ -77,7 +77,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }
 
         val provider = providerNameParts.map {
-          case Token(name, _) => name
+          case Token(name, Nil) => name
         }.mkString(".")
 
         val options = tableOpts.map { opts =>
@@ -86,7 +86,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
               options.map {
                 case Token("TOK_TABLEOPTION", keysAndValue) =>
                   val key = keysAndValue.init.map {
-                    case Token(k, _) => k
+                    case Token(k, Nil) => k
                   }.mkString(".")
                   val value = unquoteString(keysAndValue.last.text)
                   (key, unquoteString(value))
@@ -146,7 +146,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           tableType match {
             case Token("TOK_TABTYPE", Token("TOK_TABNAME", nameParts) :: Nil) =>
               nameParts match {
-                case Token(dbName, _) :: Token(tableName, _) :: Nil =>
+                case Token(dbName, Nil) :: Token(tableName, Nil) :: Nil =>
                   // It is describing a table with the format like "describe db.table".
                   // TODO: Actually, a user may mean tableName.columnName. Need to resolve this
                   // issue.
@@ -154,7 +154,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
                     cleanIdentifier(tableName), Some(cleanIdentifier(dbName)))
                   datasources.DescribeCommand(
                     UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
-                case Token(dbName, _) :: Token(tableName, _) :: Token(colName, _) :: Nil =>
+                case Token(dbName, Nil) :: Token(tableName, Nil) :: Token(colName, Nil) :: Nil =>
                   // It is describing a column with the format like "describe db.table column".
                   nodeToDescribeFallback(node)
                 case tableName :: Nil =>
