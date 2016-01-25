@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
@@ -97,13 +97,13 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         val asClause = tableAs.map(nodeToPlan(_))
 
         if (temp.isDefined && allowExisting.isDefined) {
-          throw new DDLException(
+          throw new AnalysisException(
             "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.")
         }
 
         if (asClause.isDefined) {
           if (columns.isDefined) {
-            throw new DDLException(
+            throw new AnalysisException(
               "a CREATE TABLE AS SELECT statement does not allow column definitions.")
           }
 

@@ -156,6 +156,7 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-12689 Migrate DDL parsing to the newly absorbed parser
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.execution.datasources.DDLParser"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.execution.datasources.DDLException"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.ddlParser")
       ) ++ Seq(
         // SPARK-7799 Add "streaming-akka" project

@@ -493,6 +493,7 @@ descFuncNames
     | functionIdentifier
     ;
 
+//We are allowed to use From and To in CreateTableUsing command's options (actually seems we can use any string as the option key). But we can't simply add them into nonReserved because by doing that we mess other existing rules. So we create a looseIdentifier and looseNonReserved here.
 looseIdentifier
     :
     Identifier

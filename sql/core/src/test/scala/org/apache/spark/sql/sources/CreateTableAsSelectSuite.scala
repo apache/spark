@@ -22,7 +22,6 @@ import java.io.{File, IOException}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.DDLException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
