@@ -542,7 +542,7 @@ class TaskInstance(Base):
     end_date = Column(DateTime)
     duration = Column(Float)
     state = Column(String(20))
-    try_number = Column(Integer, default=1)
+    try_number = Column(Integer, default=0)
     hostname = Column(String(1000))
     unixname = Column(String(1000))
     job_id = Column(Integer)
@@ -566,7 +566,7 @@ class TaskInstance(Base):
         self.queue = task.queue
         self.pool = task.pool
         self.priority_weight = task.priority_weight_total
-        self.try_number = 1
+        self.try_number = 0
         self.test_mode = False  # can be changed when calling 'run'
         self.force = False  # can be changed when calling 'run'
         self.unixname = getpass.getuser()
@@ -955,10 +955,11 @@ class TaskInstance(Base):
             )
         elif force or self.state in State.runnable():
             HR = "\n" + ("-" * 80) + "\n"  # Line break
-            attempts = task.retries + 1
-            msg = (
-                "Starting run {self.try_number} out of {attempts}, "
-                "starting @{iso}")
+            tot_tries = task.retries + 1
+            if self.try_number == 0:
+                msg = "First run"
+            else:
+                msg = "Attempt {self.try_number} out of {tot_tries}"
             self.try_number += 1
             msg = msg.format(**locals())
             logging.info(HR + msg + HR)

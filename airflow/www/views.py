@@ -1982,7 +1982,8 @@ class TaskInstanceModelView(ModelViewOnly):
     column_list = (
         'state', 'dag_id', 'task_id', 'execution_date', 'operator',
         'start_date', 'end_date', 'duration', 'job_id', 'hostname',
-        'unixname', 'priority_weight', 'queue', 'queued_dttm', 'pool', 'log')
+        'unixname', 'priority_weight', 'queue', 'queued_dttm', 'try_number',
+        'pool', 'log')
     can_delete = True
     page_size = 500
 
