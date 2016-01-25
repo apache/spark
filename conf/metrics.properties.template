@@ -57,19 +57,20 @@
 #    added to Java properties using -Dspark.metrics.conf=xxx if you want to
 #    customize metrics system. You can also put the file in ${SPARK_HOME}/conf
 #    and it will be loaded automatically.
-#    5. The MetricsServlet sink is added by default as a sink in the master, worker and
-#    driver, and you can send HTTP requests to the "/metrics/json" endpoint to get a
-#    snapshot of all the registered metrics in JSON format. For master, requests to
-#    the "/metrics/master/json" and "/metrics/applications/json" endpoints can be
-#    sent separately to get metrics snapshots of the master instance and applications.
-#    This MetricsServlet does not have to be configured.
+#    5. The MetricsServlet sink is added by default as a sink in the master,
+#    worker and driver, and you can send HTTP requests to the "/metrics/json"
+#    endpoint to get a snapshot of all the registered metrics in JSON format.
+#    For master, requests to the "/metrics/master/json" and
+#    "/metrics/applications/json" endpoints can be sent separately to get
+#    metrics snapshots of the master instance and applications. This
+#    MetricsServlet does not have to be configured.
 
 ## List of available common sources and their properties.
 
 # org.apache.spark.metrics.source.JvmSource
 #   Note: Currently, JvmSource is the only available common source.
-#         It can be added to an instance by setting the "class" option to its fully
-#         qualified class name (see examples below).
+#         It can be added to an instance by setting the "class" option to its
+#         fully qualified class name (see examples below).
 
 ## List of available sinks and their properties.
 
@@ -86,7 +87,8 @@
 
 # org.apache.spark.metrics.sink.GangliaSink
 #   Name:     Default:   Description:
-#   host      NONE       Hostname or multicast group of the Ganglia server, must be set
+#   host      NONE       Hostname or multicast group of the Ganglia server,
+#                        must be set
 #   port      NONE       Port of the Ganglia server(s), must be set
 #   period    10         Poll period
 #   unit      seconds    Unit of the poll period
@@ -98,9 +100,11 @@
 # org.apache.spark.metrics.sink.MetricsServlet
 #   Name:     Default:   Description:
 #   path      VARIES*    Path prefix from the web server root
-#   sample    false      Whether to show entire set of samples for histograms ('false' or 'true')
+#   sample    false      Whether to show entire set of samples for histograms
+#                        ('false' or 'true')
 #
-# * Default path is /metrics/json for all instances except the master. The master has two paths:
+# * Default path is /metrics/json for all instances except the master. The
+#   master has two paths:
 #     /metrics/applications/json # App information
 #     /metrics/master/json       # Master information
 
@@ -127,7 +131,8 @@
 
 # Polling period for the ConsoleSink specific for the master instance
 #master.sink.console.period=15
-# Unit of the polling period for the ConsoleSink specific for the master instance
+# Unit of the polling period for the ConsoleSink specific for the master
+# instance
 #master.sink.console.unit=seconds
 
 # Enable CsvSink for all instances by class name
