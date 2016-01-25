@@ -161,7 +161,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test("write bucketed data with the overlapping blockBy and partitionBy columns") {
+  test("write bucketed data with the overlapping bucketBy and partitionBy columns") {
     intercept[AnalysisException](df.write
       .partitionBy("i")
       .bucketBy(8, "i", "k")
@@ -169,7 +169,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       .saveAsTable("bucketed_table"))
   }
 
-  test("write bucketed data with the identical blockBy and partitionBy columns") {
+  test("write bucketed data with the identical bucketBy and partitionBy columns") {
     intercept[AnalysisException](df.write
       .partitionBy("i")
       .bucketBy(8, "i")
