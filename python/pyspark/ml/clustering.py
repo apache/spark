@@ -234,10 +234,10 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                 seed=-1888008604, k=4, minDivisibleClusterSize=1.0):
+                 seed=None, k=4, minDivisibleClusterSize=1.0):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                 seed=-1888008604, k=4, minDivisibleClusterSize=1.0)
+                 seed=None, k=4, minDivisibleClusterSize=1.0)
         """
         super(BisectingKMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.BisectingKMeans",
@@ -246,17 +246,17 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         self.minDivisibleClusterSize = Param(self, "minDivisibleClusterSize",
                                              "the minimum number of points (if >= 1.0) " +
                                              "or the minimum proportion")
-        self._setDefault(maxIter=20, seed=-1888008604, k=4, minDivisibleClusterSize=1.0)
+        self._setDefault(maxIter=20, k=4, minDivisibleClusterSize=1.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                  seed=-1888008604, k=4, minDivisibleClusterSize=1.0):
+                  seed=None, k=4, minDivisibleClusterSize=1.0):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                  seed=-1888008604, k=4, minDivisibleClusterSize=1.0)
+                  seed=None, k=4, minDivisibleClusterSize=1.0)
         Sets params for BisectingKMeans.
         """
         kwargs = self.setParams._input_kwargs
