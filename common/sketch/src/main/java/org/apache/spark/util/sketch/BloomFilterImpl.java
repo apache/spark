@@ -135,12 +135,29 @@ public class BloomFilterImpl extends BloomFilter {
   }
 
   @Override
-  public BloomFilter mergeInPlace(BloomFilter other) {
-    if (!isCompatible(other)) {
-      throw new IllegalArgumentException("Can't merge incompatible bloom filter");
+  public BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException {
+    // Duplicates the logic of `isCompatible` here to provide better error message.
+    if (other == null) {
+      throw new IncompatibleMergeException("Cannot merge null bloom filter");
+    }
+
+    if (!(other instanceof BloomFilter)) {
+      throw new IncompatibleMergeException(
+        "Cannot merge bloom filter of class " + other.getClass().getName()
+      );
     }
 
     BloomFilterImpl that = (BloomFilterImpl) other;
+
+    if (this.bitSize() != that.bitSize()) {
+      throw new IncompatibleMergeException("Cannot merge bloom filters with different bit size");
+    }
+
+    if (this.numHashFunctions != that.numHashFunctions) {
+      throw new IncompatibleMergeException(
+        "Cannot merge bloom filters with different number of hash functions");
+    }
+
     this.bits.putAll(that.bits);
     return this;
   }

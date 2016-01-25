@@ -93,4 +93,22 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
   testItemType[Long]("Long", 100000) { _.nextLong() }
 
   testItemType[String]("String", 100000) { r => r.nextString(r.nextInt(512)) }
+
+  test("incompatible merge") {
+    intercept[IncompatibleMergeException] {
+      BloomFilter.create(1000).mergeInPlace(null)
+    }
+
+    intercept[IncompatibleMergeException] {
+      val filter1 = BloomFilter.create(1000, 6400)
+      val filter2 = BloomFilter.create(1000, 3200)
+      filter1.mergeInPlace(filter2)
+    }
+
+    intercept[IncompatibleMergeException] {
+      val filter1 = BloomFilter.create(1000, 6400)
+      val filter2 = BloomFilter.create(2000, 6400)
+      filter1.mergeInPlace(filter2)
+    }
+  }
 }

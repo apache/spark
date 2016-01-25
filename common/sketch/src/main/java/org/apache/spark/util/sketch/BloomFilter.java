@@ -85,7 +85,7 @@ public abstract class BloomFilter {
    * @param other The bloom filter to combine this bloom filter with. It is not mutated.
    * @throws IllegalArgumentException if {@code isCompatible(that) == false}
    */
-  public abstract BloomFilter mergeInPlace(BloomFilter other);
+  public abstract BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException;
 
   /**
    * Returns {@code true} if the element <i>might</i> have been put in this Bloom filter,
