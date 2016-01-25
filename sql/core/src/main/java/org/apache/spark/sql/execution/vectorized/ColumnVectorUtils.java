@@ -25,12 +25,14 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.expressions.StringTranslate;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -83,7 +85,8 @@ public class ColumnVectorUtils {
         } else if (dt instanceof DoubleType) {
           row.setDouble(i, struct.getDouble(i));
         } else if (dt instanceof StringType) {
-          row.update(i, toString(struct.getByteArray(i)));
+          ColumnVector.Array a = struct.getByteArray(i);
+          row.update(i, UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length));
         } else if (dt instanceof StructType) {
           GenericMutableRow child = toRow(struct.getStruct(i));
           row.update(i, child);
@@ -104,13 +107,46 @@ public class ColumnVectorUtils {
   public static GenericArrayData toGenericArray(ColumnVector.Array array) {
     DataType dt = array.data.dataType();
     List<Object> list = new ArrayList<Object>(array.length);
-    if (dt instanceof IntegerType) {
-      ColumnVector data = array.data;
+    ColumnVector data = array.data;
+
+    if (dt instanceof ByteType) {
+      for (int i = 0; i < array.length; i++) {
+        if (data.getIsNull(array.offset + i)) {
+          list.add(null);
+        } else {
+          list.add(data.getByte(array.offset + i));
+        }
+      }
+    } else if (dt instanceof IntegerType) {
       for (int i = 0; i < array.length; i++) {
         if (data.getIsNull(array.offset + i)) {
           list.add(null);
         } else {
           list.add(data.getInt(array.offset + i));
+        }
+      }
+    } else if (dt instanceof DoubleType) {
+      for (int i = 0; i < array.length; i++) {
+        if (data.getIsNull(array.offset + i)) {
+          list.add(null);
+        } else {
+          list.add(data.getDouble(array.offset + i));
+        }
+      }
+    } else if (dt instanceof LongType) {
+      for (int i = 0; i < array.length; i++) {
+        if (data.getIsNull(array.offset + i)) {
+          list.add(null);
+        } else {
+          list.add(data.getLong(array.offset + i));
+        }
+      }
+    } else if (dt instanceof StringType) {
+      for (int i = 0; i < array.length; i++) {
+        if (data.getIsNull(array.offset + i)) {
+          list.add(null);
+        } else {
+          list.add(toString(data.getByteArray(array.offset + i)));
         }
       }
     } else {

@@ -23,7 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -556,103 +556,51 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
-  private def compareRows(schema: StructType, r1: ColumnarBatch.Row, r2: Row, seed: Long = 0) {
-    schema.fields.zipWithIndex.foreach { v => {
+
+  private def doubleEquals(d1: Double, d2: Double): Boolean = {
+    if (d1.isNaN && d2.isNaN) {
+      true
+    } else {
+      d1 == d2
+    }
+  }
+
+  private def compareStruct(fields: Seq[StructField], r1: InternalRow, r2: Row, seed: Long) {
+    fields.zipWithIndex.foreach { v => {
       assert(r1.isNullAt(v._2) == r2.isNullAt(v._2), "Seed = " + seed)
       if (!r1.isNullAt(v._2)) {
         v._1.dataType match {
           case ByteType => assert(r1.getByte(v._2) == r2.getByte(v._2), "Seed = " + seed)
           case IntegerType => assert(r1.getInt(v._2) == r2.getInt(v._2), "Seed = " + seed)
           case LongType => assert(r1.getLong(v._2) == r2.getLong(v._2), "Seed = " + seed)
-          case DoubleType => assert(r1.getDouble(v._2) == r2.getDouble(v._2), "Seed = " + seed)
-          case StringType => assert(r1.getString(v._2) == r2.getString(v._2), "Seed = " + seed)
-          case ArrayType(_, n) =>
-            assert(r1.getArray(v._2).array === r2.getList(v._2).toArray, "Seed = " + seed)
-          case StructType(fields) =>
-            assert(r1.getStruct(v._2, fields.length).toString === r2.getStruct(v._2).toString(),
-              "Seed = " + seed)
+          case DoubleType => assert(doubleEquals(r1.getDouble(v._2), r2.getDouble(v._2)),
+            "Seed = " + seed)
+          case StringType =>
+            r1.getString(v._2)
+            r2.getString(v._2)
+            assert(r1.getString(v._2) == r2.getString(v._2), "Seed = " + seed)
+          case ArrayType(childType, n) =>
+            val a1 = r1.getArray(v._2).array
+            val a2 = r2.getList(v._2).toArray
+            assert(a1.length == a2.length, "Seed = " + seed)
+            childType match {
+              case DoubleType => {
+                var i = 0
+                while (i < a1.length) {
+                  assert(doubleEquals(a1(i).asInstanceOf[Double], a2(i).asInstanceOf[Double]),
+                    "Seed = " + seed)
+                  i += 1
+                }
+              }
+              case _ => assert(a1 === a2, "Seed = " + seed)
+            }
+          case StructType(childFields) =>
+            compareStruct(childFields, r1.getStruct(v._2, fields.length), r2.getStruct(v._2), seed)
+          case _ =>
+            throw new NotImplementedError("Not implemented " + v._1.dataType)
         }
       }
     }}
-  }
-
-  // Generates a random schema containing `totalFields`.
-  private def randomSchema(rand: Random, totalFields: Int, flatSchema: Boolean): StructType = {
-    val types = Array(ByteType, IntegerType, LongType, DoubleType, StringType)
-    val fields = mutable.ArrayBuffer.empty[StructField]
-    var i = 0
-    var numFields = totalFields
-    while (numFields > 0) {
-      val t = types(rand.nextInt(types.length))
-      if (!flatSchema && rand.nextFloat() < 0.33f) {
-        if (rand.nextBoolean()) {
-          // Array
-          fields += new StructField("col_" + i, ArrayType(IntegerType), rand.nextBoolean())
-          numFields -= 1
-        } else {
-          // Struct
-          // TODO: do empty structs make sense?
-          val n = Math.max(rand.nextInt(numFields), 1)
-          val nested = randomSchema(rand, n, flatSchema)
-          fields += new StructField("col_" + i, nested, rand.nextBoolean())
-          numFields -= n
-        }
-      } else {
-        fields += new StructField("col_" + i, t, rand.nextBoolean())
-        numFields -= 1
-      }
-      i += 1
-    }
-    StructType(fields)
-  }
-
-  // Generates a random value for `dt`
-  private def randomValue(rand: Random, dt: DataType, nullable: Boolean): Any = {
-    if (nullable && rand.nextBoolean()) {
-      null
-    } else {
-      dt match {
-        case ByteType => rand.nextInt.toByte
-        case IntegerType => rand.nextInt()
-        case LongType => rand.nextLong()
-        case DoubleType => rand.nextDouble()
-        case StringType => "abc"
-      }
-    }
-  }
-
-  // Generates a random row for `schema`.
-  private def randomRow(rand: Random, schema: StructType): Row = {
-    val fields = mutable.ArrayBuffer.empty[Any]
-    schema.fields.foreach { f =>
-      f.dataType match {
-        case ArrayType(e, nulls) => {
-          val data = if (f.nullable && rand.nextInt(3) == 0) {
-            null
-          } else {
-            val arr = mutable.ArrayBuffer.empty[Any]
-            val n = rand.nextInt(10)
-            var i = 0
-            while (i < n) {
-              arr += randomValue(rand, e, nulls)
-              i += 1
-            }
-            arr
-          }
-          fields += data
-        }
-        case StructType(children) => {
-          val data = if (f.nullable && rand.nextInt(3) == 0) {
-            null
-          } else {
-            randomRow(rand, StructType(children))
-          }
-          fields += data
-        }
-        case _ => fields += randomValue(rand, f.dataType, f.nullable)
-      }
-    }
-    Row.fromSeq(fields)
   }
 
   test("Convert rows") {
@@ -672,7 +620,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val it = batch.rowIterator()
       val referenceIt = rows.iterator
       while (it.hasNext) {
-        compareRows(schema, it.next(), referenceIt.next())
+        compareStruct(schema, it.next(), referenceIt.next(), 0)
       }
       batch.close()
     }
@@ -682,18 +630,23 @@ class ColumnarBatchSuite extends SparkFunSuite {
    * This test generates a random schema data, serializes it to column batches and verifies the
    * results.
    */
-  def randomRows(flatSchema: Boolean, numFields: Int) {
+  def testRandomRows(flatSchema: Boolean, numFields: Int) {
+    val types = Array(ByteType, IntegerType, LongType, DoubleType, StringType)
     val seed = System.currentTimeMillis()
-    val NUM_ROWS = 4000
+    val NUM_ROWS = 500
     val NUM_ITERS = 10
     val random = new Random(seed)
     var i = 0
     while (i < NUM_ITERS) {
-      val schema = randomSchema(random, numFields, flatSchema)
+      val schema = if (flatSchema) {
+        RandomDataGenerator.randomSchema(random, numFields, types)
+      } else {
+        RandomDataGenerator.randomNestedSchema(random, numFields, types)
+      }
       val rows = mutable.ArrayBuffer.empty[Row]
       var j = 0
       while (j < NUM_ROWS) {
-        val row = randomRow(random, schema)
+        val row = RandomDataGenerator.randomRow(random, schema)
         rows += row
         j += 1
       }
@@ -705,7 +658,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         val referenceIt = rows.iterator
         var k = 0
         while (it.hasNext) {
-          compareRows(schema, it.next(), referenceIt.next(), seed)
+          compareStruct(schema, it.next(), referenceIt.next(), seed)
           k += 1
         }
         batch.close()
@@ -715,10 +668,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Random flat schema") {
-    randomRows(true, 10)
+    testRandomRows(true, 10)
   }
 
   test("Random nested schema") {
-    randomRows(false, 30)
+    testRandomRows(false, 30)
   }
 }

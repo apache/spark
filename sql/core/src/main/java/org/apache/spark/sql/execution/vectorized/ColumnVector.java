@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.*;
  * To handle nested schemas, ColumnVector has two types: Arrays and Structs. In both cases these
  * columns have child columns. All of the data is stored in the child columns and the parent column
  * contains nullability, and in the case of Arrays, the lengths and offsets into the child column.
+ * Lengths and offsets are encoded identically to INTs.
  * Maps are just a special case of a two field struct.
  * Strings are handled as an Array of ByteType.
  *
