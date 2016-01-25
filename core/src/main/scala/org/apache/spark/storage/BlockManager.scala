@@ -632,13 +632,13 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release one reference to the given block.
+   * Release one pin of the given block.
    */
-  def release(blockId: BlockId): Unit = {
+  def unpin(blockId: BlockId): Unit = {
     pinCounts.unpin(blockId)
   }
 
-  def releaseAllReferencesForTask(taskAttemptId: Long): Unit = {
+  def releaseAllPinsForTask(taskAttemptId: Long): Unit = {
     pinCounts.releaseAllPinsForTask(taskAttemptId)
   }
 

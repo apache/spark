@@ -218,7 +218,7 @@ private[spark] class Executor(
           threwException = false
           res
         } finally {
-          env.blockManager.releaseAllReferencesForTask(taskId)
+          env.blockManager.releaseAllPinsForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
           if (freedMemory > 0) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
