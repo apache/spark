@@ -84,7 +84,9 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
   def testMergeInPlace[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
     test(s"mergeInPlace - $typeName") {
-      val r = new Random()
+      // Uses fixed seed to ensure reproducible test execution
+      val r = new Random(31)
+
       val numToMerge = 5
       val numItemsPerSketch = 100000
       val perSketchItems = Array.fill(numToMerge, numItemsPerSketch) {
