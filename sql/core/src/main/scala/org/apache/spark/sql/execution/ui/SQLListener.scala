@@ -219,7 +219,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
     case SparkListenerSQLExecutionStart(executionId, description, details,
       physicalPlanDescription, sparkPlanInfo, time) =>
       val physicalPlanGraph = SparkPlanGraph(sparkPlanInfo)
-      val sqlPlanMetrics = physicalPlanGraph.nodes.flatMap { node =>
+      val sqlPlanMetrics = physicalPlanGraph.allNodes.flatMap { node =>
         node.metrics.map(metric => metric.accumulatorId -> metric)
       }
       val executionUIData = new SQLExecutionUIData(

@@ -300,6 +300,14 @@ class LogisticRegression @Since("1.2.0") (
           s"training is not needed.")
         (Vectors.sparse(numFeatures, Seq()), Double.NegativeInfinity, Array.empty[Double])
       } else {
+        if (!$(fitIntercept) && numClasses == 2 && histogram(0) == 0.0) {
+          logWarning(s"All labels are one and fitIntercept=false. It's a dangerous ground, " +
+            s"so the algorithm may not converge.")
+        } else if (!$(fitIntercept) && numClasses == 1) {
+          logWarning(s"All labels are zero and fitIntercept=false. It's a dangerous ground, " +
+            s"so the algorithm may not converge.")
+        }
+
         val featuresMean = summarizer.mean.toArray
         val featuresStd = summarizer.variance.toArray.map(math.sqrt)
 

@@ -113,6 +113,18 @@ hive_thriftserver = Module(
 )
 
 
+sketch = Module(
+    name="sketch",
+    dependencies=[],
+    source_file_regexes=[
+        "common/sketch/",
+    ],
+    sbt_test_goals=[
+        "sketch/test"
+    ]
+)
+
+
 graphx = Module(
     name="graphx",
     dependencies=[],
