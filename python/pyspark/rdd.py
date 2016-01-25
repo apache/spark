@@ -33,18 +33,6 @@ from collections import defaultdict
 from itertools import chain
 from functools import reduce
 from math import sqrt, log, isinf, isnan, pow, ceil
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
-if sys.version_info[:2] <= (2, 6):
-    try:
-        import unittest2 as unittest
-    except ImportError:
-        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
-        sys.exit(1)
-else:
-    import unittest
 
 if sys.version > '3':
     basestring = unicode = str
@@ -2432,18 +2420,15 @@ class PipelinedRDD(RDD):
 
 
 def _test():
+    from pyspark.doctesthelper import run_doctests
     import doctest
     from pyspark.context import SparkContext
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs['sc'] = SparkContext('local[4]', 'PythonTest')
-    t = doctest.DocTestSuite(globs=globs, optionflags=doctest.ELLIPSIS)
-    if xmlrunner:
-        result = xmlrunner.XMLTestRunner(output='target/test-reports',
-                                         verbosity=3).run(t)
-    else:
-        result = unittest.TextTestRunner(verbosity=3).run(t)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if not result.wasSuccessful():
         exit(-1)

@@ -15,19 +15,6 @@
 # limitations under the License.
 #
 
-import sys
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
-if sys.version_info[:2] <= (2, 6):
-    try:
-        import unittest2 as unittest
-    except ImportError:
-        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
-        sys.exit(1)
-else:
-    import unittest
 
 from pyspark import since
 from pyspark.ml.util import *
@@ -309,6 +296,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 if __name__ == "__main__":
     import doctest
     import pyspark.ml.clustering
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
     import tempfile
@@ -322,12 +310,8 @@ if __name__ == "__main__":
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
-        t = doctest.DocTestSuite(globs=globs, optionflags=doctest.ELLIPSIS)
-        if xmlrunner:
-            result = xmlrunner.XMLTestRunner(output='target/test-reports',
-                                             verbosity=3).run(t)
-        else:
-            result = unittest.TextTestRunner(verbosity=3).run(t)
+        result = run_doctests(__file__, globs=globs,
+                              optionflags=doctest.ELLIPSIS)
         sc.stop()
     finally:
         from shutil import rmtree

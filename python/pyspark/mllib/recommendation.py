@@ -16,20 +16,7 @@
 #
 
 import array
-import sys
 from collections import namedtuple
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
-if sys.version_info[:2] <= (2, 6):
-    try:
-        import unittest2 as unittest
-    except ImportError:
-        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
-        sys.exit(1)
-else:
-    import unittest
 
 from pyspark import SparkContext, since
 from pyspark.rdd import RDD
@@ -330,18 +317,15 @@ class ALS(object):
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     import pyspark.mllib.recommendation
     from pyspark.sql import SQLContext
     globs = pyspark.mllib.recommendation.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    t = doctest.DocTestSuite(globs=globs, optionflags=doctest.ELLIPSIS)
-    if xmlrunner:
-        result = xmlrunner.XMLTestRunner(output='target/test-reports',
-                                         verbosity=3).run(t)
-    else:
-        result = unittest.TextTestRunner(verbosity=3).run(t)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if not result.wasSuccessful():
         exit(-1)

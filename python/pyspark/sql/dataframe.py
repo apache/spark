@@ -18,18 +18,6 @@
 import sys
 import warnings
 import random
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
-if sys.version_info[:2] <= (2, 6):
-    try:
-        import unittest2 as unittest
-    except ImportError:
-        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
-        sys.exit(1)
-else:
-    import unittest
 
 if sys.version >= '3':
     basestring = unicode = str
@@ -1461,6 +1449,7 @@ class DataFrameStatFunctions(object):
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.dataframe
@@ -1479,14 +1468,9 @@ def _test():
                                   Row(name='Tom', age=None, height=None),
                                   Row(name=None, age=None, height=None)]).toDF()
 
-    t = doctest.DocTestSuite(pyspark.sql.dataframe, globs=globs,
-                             optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE |
-                             doctest.REPORT_NDIFF)
-    if xmlrunner:
-        result = xmlrunner.XMLTestRunner(output='target/test-reports',
-                                         verbosity=3).run(t)
-    else:
-        result = unittest.TextTestRunner(verbosity=3).run(t)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE |
+                          doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if not result.wasSuccessful():
         exit(-1)

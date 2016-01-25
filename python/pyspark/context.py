@@ -24,18 +24,6 @@ import sys
 import threading
 from threading import RLock
 from tempfile import NamedTemporaryFile
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
-if sys.version_info[:2] <= (2, 6):
-    try:
-        import unittest2 as unittest
-    except ImportError:
-        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
-        sys.exit(1)
-else:
-    import unittest
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -963,18 +951,15 @@ class SparkContext(object):
 
 def _test():
     import atexit
+    from pyspark.doctesthelper import run_doctests
     import doctest
     import tempfile
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest')
     globs['tempdir'] = tempfile.mkdtemp()
     atexit.register(lambda: shutil.rmtree(globs['tempdir']))
-    t = doctest.DocTestSuite(globs=globs, optionflags=doctest.ELLIPSIS)
-    if xmlrunner:
-        result = xmlrunner.XMLTestRunner(output='target/test-reports',
-                                         verbosity=3).run(t)
-    else:
-        result = unittest.TextTestRunner(verbosity=3).run(t)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if not result.wasSuccessful():
         exit(-1)

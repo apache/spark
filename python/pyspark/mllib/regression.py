@@ -17,19 +17,6 @@
 
 import numpy as np
 from numpy import array
-import sys
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
-if sys.version_info[:2] <= (2, 6):
-    try:
-        import unittest2 as unittest
-    except ImportError:
-        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
-        sys.exit(1)
-else:
-    import unittest
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
@@ -819,16 +806,13 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     from pyspark import SparkContext
     import pyspark.mllib.regression
     globs = pyspark.mllib.regression.__dict__.copy()
     globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
-    t = doctest.DocTestSuite(globs=globs, optionflags=doctest.ELLIPSIS)
-    if xmlrunner:
-        result = xmlrunner.XMLTestRunner(output='target/test-reports',
-                                         verbosity=3).run(t)
-    else:
-        result = unittest.TextTestRunner(verbosity=3).run(t)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if not result.wasSuccessful():
         exit(-1)
