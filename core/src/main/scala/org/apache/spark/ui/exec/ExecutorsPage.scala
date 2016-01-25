@@ -230,13 +230,14 @@ private[ui] class ExecutorsPage(
     </table>
   }
 
-  private def taskData(maxTasks: Int,
-                        activeTasks: Int,
-                        failedTasks: Int,
-                        completedTasks: Int,
-                        totalTasks: Int,
-                        totalDuration: Long,
-                        totalGCTime: Long):
+  private def taskData(
+    maxTasks: Int,
+    activeTasks: Int,
+    failedTasks: Int,
+    completedTasks: Int,
+    totalTasks: Int,
+    totalDuration: Long,
+    totalGCTime: Long):
   Seq[Node] = {
     // Determine Color Opacity from 0.5-1
     // activeTasks range from 0 to maxTasks
@@ -249,14 +250,14 @@ private[ui] class ExecutorsPage(
     // failedTasks range max at 10% failure, alpha max = 1
     val failedTasksAlpha =
       if (totalTasks > 0) {
-        math.min (10 * failedTasks.toDouble / totalTasks, 1) * 0.5 + 0.5
+        math.min(10 * failedTasks.toDouble / totalTasks, 1) * 0.5 + 0.5
       } else {
         1
       }
     // totalDuration range from 0 to 50% GC time, alpha max = 1
     val totalDurationAlpha =
       if (totalDuration > 0) {
-        math.min (totalGCTime.toDouble / totalDuration + 0.5, 1)
+        math.min(totalGCTime.toDouble / totalDuration + 0.5, 1)
       } else {
         1
       }
