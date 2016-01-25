@@ -778,7 +778,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("Saving information for sortBy and bucketBy columns") {
     val df = (1 to 10).map(i => (i, i + 1, s"str$i", s"str${i + 1}")).toDF("a", "b", "c", "d")
-    val tableName = s"partitionInfo_${System.currentTimeMillis()}"
+    val tableName = s"bucketingInfo_${System.currentTimeMillis()}"
 
     withTable(tableName) {
       df.write

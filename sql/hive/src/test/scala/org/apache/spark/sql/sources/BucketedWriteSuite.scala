@@ -163,8 +163,8 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("write bucketed data with the overlapping bucketBy and partitionBy columns") {
     intercept[AnalysisException](df.write
-      .partitionBy("i")
-      .bucketBy(8, "i", "k")
+      .partitionBy("i", "j")
+      .bucketBy(8, "j", "k")
       .sortBy("k")
       .saveAsTable("bucketed_table"))
   }
