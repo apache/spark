@@ -242,29 +242,15 @@ final class DataFrameWriter private[sql](df: DataFrame) extends Logging  {
     } yield {
       require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
 
-      if (normalizedParCols.isEmpty) {
-        BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
-      } else {
-        // When partitionBy and blockBy are used at the same time, the overlapping columns are
-        // useless. Thus, we removed these overlapping columns from blockBy.
-        val bucketColumns: Seq[String] =
-          normalizedBucketColNames.get.filterNot(normalizedParCols.get.contains)
-
-        if (bucketColumns.nonEmpty) {
-          if (bucketColumns.length != normalizedBucketColNames.get.length) {
-            val removedColumns: Seq[String] =
-              normalizedBucketColNames.get.filter(normalizedParCols.get.contains)
-            logInfo(s"bucketBy columns is changed to '${bucketColumnNames.get.mkString(", ")}' " +
-              s"after removing the columns '${removedColumns.mkString(", ")}' that are part of " +
-              s"partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
-          }
-          BucketSpec(n, bucketColumns, normalizedSortColNames.getOrElse(Nil))
-        } else {
+      // partitionBy columns cannot be used in blockedBy
+      if (normalizedParCols.nonEmpty &&
+        normalizedBucketColNames.get.toSet.intersect(normalizedParCols.get.toSet).nonEmpty) {
           throw new AnalysisException(
-            s"bucketBy columns '${bucketColumnNames.get.mkString(", ")}' should not be the " +
-            s"subset of partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
-        }
+            s"bucketBy columns '${bucketColumnNames.get.mkString(", ")}' should not be part of " +
+            s"partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
       }
+
+      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
     }
   }
 
