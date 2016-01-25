@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive
 
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.plans.logical.ScriptTransformation
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
@@ -39,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.AnalysisException
 
@@ -244,6 +246,15 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
+      case Token("TOK_DFS", Nil) =>
+        HiveNativeCommand(node.remainder)
+
+      case Token("TOK_ADDFILE", Nil) =>
+        AddFile(node.remainder)
+
+      case Token("TOK_ADDJAR", Nil) =>
+        AddJar(node.remainder)
+
       // Special drop table that also uncaches.
       case Token("TOK_DROPTABLE", Token("TOK_TABNAME", tableNameParts) :: ifExists) =>
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")

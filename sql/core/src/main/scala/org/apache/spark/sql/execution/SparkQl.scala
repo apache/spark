@@ -27,6 +27,18 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
+      case Token("TOK_SETCONFIG", Nil) =>
+        val keyValueSeparatorIndex = node.remainder.indexOf('=')
+        if (keyValueSeparatorIndex >= 0) {
+          val key = node.remainder.substring(0, keyValueSeparatorIndex).trim
+          val value = node.remainder.substring(keyValueSeparatorIndex + 1).trim
+          SetCommand(Some(key -> Option(value)))
+        } else if (node.remainder.nonEmpty) {
+          SetCommand(Some(node.remainder -> None))
+        } else {
+          SetCommand(None)
+        }
+
       // Just fake explain for any of the native commands.
       case Token("TOK_EXPLAIN", explainArgs) if isNoExplainCommand(explainArgs.head.text) =>
         ExplainCommand(OneRowRelation)

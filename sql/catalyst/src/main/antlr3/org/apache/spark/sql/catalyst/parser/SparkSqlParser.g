@@ -374,6 +374,10 @@ TOK_SET_AUTOCOMMIT;
 TOK_CACHETABLE;
 TOK_UNCACHETABLE;
 TOK_CLEARCACHE;
+TOK_SETCONFIG;
+TOK_DFS;
+TOK_ADDFILE;
+TOK_ADDJAR;
 }
 
 
@@ -695,11 +699,12 @@ catch (RecognitionException e) {
 
 // starting rule
 statement
-	: KW_SET KW_CONFIG -> ^(KW_SET)
-	| KW_DFS^
-    | KW_ADD^
-    | explainStatement EOF
+    : explainStatement EOF
     | execStatement EOF
+    | KW_ADD KW_JAR -> ^(TOK_ADDJAR)
+    | KW_ADD KW_FILE -> ^(TOK_ADDFILE)
+    | KW_DFS -> ^(TOK_DFS)
+    | (KW_SET)=> KW_SET -> ^(TOK_SETCONFIG)
 	;
 
 explainStatement
@@ -2450,12 +2455,11 @@ BEGIN user defined transaction boundaries; follows SQL 2003 standard exactly exc
 sqlTransactionStatement
 @init { pushMsg("transaction statement", state); }
 @after { popMsg(state); }
-  :
-  startTransactionStatement
-	|	commitStatement
-	|	rollbackStatement
-	| setAutoCommitStatement
-	;
+  : startTransactionStatement
+  | commitStatement
+  | rollbackStatement
+  | setAutoCommitStatement
+  ;
 
 startTransactionStatement
   :

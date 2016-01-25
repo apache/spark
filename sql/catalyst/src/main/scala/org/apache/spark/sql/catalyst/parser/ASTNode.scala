@@ -60,6 +60,12 @@ case class ASTNode(
   /** Source text. */
   lazy val source = stream.toString(startIndex, stopIndex)
 
+  /** Get the source text that remains after this token. */
+  lazy val remainder = {
+    stream.fill()
+    stream.toString(stopIndex + 1, stream.size() - 1).trim()
+  }
+
   def text: String = token.getText
 
   def tokenType: Int = token.getType
