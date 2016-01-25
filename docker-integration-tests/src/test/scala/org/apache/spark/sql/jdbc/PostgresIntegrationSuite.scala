@@ -83,7 +83,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(10) == Seq(1, 2))
     assert(rows(0).getSeq(11) == Seq("a", null, "b"))
     assert(rows(0).getSeq(12).toSeq == Seq(0.11f, 0.22f))
-    assert(rows(0).getSeq[java.math.BigDecimal](13).map(_.doubleValue).toSeq == Seq(1.5, 3.25))
+    val c13Expected = Seq(1.5, 3.25).map(new java.math.BigDecimal(_))
+    assert(rows(0).getSeq[java.math.BigDecimal](13).zipWithIndex.forall { case (v, idx) =>
+        v.compareTo(c13Expected(idx)) == 0
+    })
   }
 
   test("Basic write test") {
