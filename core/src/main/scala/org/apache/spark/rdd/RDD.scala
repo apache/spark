@@ -829,6 +829,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   * Note that this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
@@ -1195,7 +1197,7 @@ abstract class RDD[T: ClassTag](
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
    * Note that this method should only be used if the resulting array is expected to be small, as
-   * the whole thing is loaded into the driver's memory.
+   * all the data is loaded into the driver's memory.
    *
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
