@@ -81,20 +81,38 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
+      skipUnnecessaryAggregate: Boolean,
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
-    // 1. Create an Aggregate Operator for partial aggregations.
-
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
-    val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
-    val partialAggregateAttributes =
-      partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-    val partialResultExpressions =
-      groupingAttributes ++
-        partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
-    val partialAggregate = createAggregate(
+    if (skipUnnecessaryAggregate) {
+      // A single-stage aggregation is enough to get the final result because input data are
+      // already clustered.
+      val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+      val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
+
+      createAggregate(
+        requiredChildDistributionExpressions = Some(groupingAttributes),
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = completeAggregateExpressions,
+        aggregateAttributes = completeAggregateAttributes,
+        initialInputBufferOffset = 0,
+        resultExpressions = resultExpressions,
+        child = child
+      ) :: Nil
+    } else {
+      // 1. Create an Aggregate Operator for partial aggregations.
+
+      val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
+      val partialAggregateAttributes =
+        partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+      val partialResultExpressions =
+        groupingAttributes ++
+          partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+
+      val partialAggregate = createAggregate(
         requiredChildDistributionExpressions = None,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = partialAggregateExpressions,
@@ -103,13 +121,13 @@ object AggUtils {
         resultExpressions = partialResultExpressions,
         child = child)
 
-    // 2. Create an Aggregate Operator for final aggregations.
-    val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
-    // The attributes of the final aggregation buffer, which is presented as input to the result
-    // projection:
-    val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
+      // 2. Create an Aggregate Operator for final aggregations.
+      val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
+      // The attributes of the final aggregation buffer, which is presented as input to the result
+      // projection:
+      val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
-    val finalAggregate = createAggregate(
+      val finalAggregate = createAggregate(
         requiredChildDistributionExpressions = Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
@@ -118,7 +136,8 @@ object AggUtils {
         resultExpressions = resultExpressions,
         child = partialAggregate)
 
-    finalAggregate :: Nil
+      finalAggregate :: Nil
+    }
   }
 
   def planAggregateWithOneDistinct(
@@ -232,7 +251,7 @@ object AggUtils {
           // aggregateFunctionToAttribute
           val attr = functionsWithDistinct(i).resultAttribute
           (expr, attr)
-      }.unzip
+        }.unzip
 
       createAggregate(
         requiredChildDistributionExpressions = Some(groupingAttributes),

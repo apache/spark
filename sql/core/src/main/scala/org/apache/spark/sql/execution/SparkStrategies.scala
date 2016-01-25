@@ -271,10 +271,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 planLater(child))
             }
           } else if (functionsWithDistinct.isEmpty) {
+            // Check if the child operator satisfies the group-by distribution requirements
+            val childPlan = planLater(child)
+            val skipUnnecessaryAggregate = if (groupingExpressions != Nil) {
+              childPlan.outputPartitioning.satisfies(ClusteredDistribution(groupingExpressions))
+            } else {
+              false
+            }
+
             aggregate.AggUtils.planAggregateWithoutDistinct(
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
+              skipUnnecessaryAggregate,
               planLater(child))
           } else {
             aggregate.AggUtils.planAggregateWithOneDistinct(
