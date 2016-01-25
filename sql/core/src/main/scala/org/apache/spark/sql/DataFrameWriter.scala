@@ -256,15 +256,15 @@ final class DataFrameWriter private[sql](df: DataFrame) extends Logging  {
           if (bucketColumns.length != normalizedBucketColNames.get.length) {
             val removedColumns: Seq[String] =
               normalizedBucketColNames.get.filter(normalizedParCols.get.contains)
-            logInfo(s"BucketBy columns is changed to '${bucketColumnNames.mkString(", ")}' after " +
-              s"removing the columns '${removedColumns.mkString(", ")}' that are part of " +
-              s"PartitionBy columns '${partitioningColumns.mkString(", ")}'")
+            logInfo(s"bucketBy columns is changed to '${bucketColumnNames.get.mkString(", ")}' " +
+              s"after removing the columns '${removedColumns.mkString(", ")}' that are part of " +
+              s"partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
           }
           BucketSpec(n, bucketColumns, normalizedSortColNames.getOrElse(Nil))
         } else {
-          throw new AnalysisException(s"BucketBy columns (${bucketColumnNames.mkString(", ")}) " +
-            "should not be the subset of PartitionBy columns " +
-            s"'${partitioningColumns.mkString(", ")}'")
+          throw new AnalysisException(
+            s"bucketBy columns '${bucketColumnNames.get.mkString(", ")}' should not be the " +
+            s"subset of partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
         }
       }
     }

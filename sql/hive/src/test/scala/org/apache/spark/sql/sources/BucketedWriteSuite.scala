@@ -92,10 +92,13 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         fail(s"Unable to find the related bucket files.")
       }
 
+      // Remove the duplicate columns in bucketCols and sortCols;
+      // Otherwise, we got analysis errors due to duplicate names
+      val selectedColumns = (bucketCols ++ sortCols).distinct
       // We may lose the type information after write(e.g. json format doesn't keep schema
       // information), here we get the types from the original dataframe.
-      val types = df.select((bucketCols ++ sortCols).map(col): _*).schema.map(_.dataType)
-      val columns = (bucketCols ++ sortCols).zip(types).map {
+      val types = df.select(selectedColumns.map(col): _*).schema.map(_.dataType)
+      val columns = selectedColumns.zip(types).map {
         case (colName, dt) => col(colName).cast(dt)
       }
 
@@ -169,8 +172,22 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           .saveAsTable("bucketed_table")
 
         for (i <- 0 until 5) {
+          // After column pruning, the actual bucketBy columns only contain `k`, which
+          // is identical to the sortBy column.
           testBucketing(new File(tableDir, s"i=$i"), source, 8, Seq("k"), Seq("k"))
         }
+      }
+    }
+  }
+
+  test("write bucketed data with the identical blockBy and partitionBy columns") {
+    for (source <- Seq("parquet", "json", "orc")) {
+      withTable("bucketed_table") {
+        intercept[AnalysisException](df.write
+          .format(source)
+          .partitionBy("i")
+          .bucketBy(8, "i")
+          .saveAsTable("bucketed_table"))
       }
     }
   }
