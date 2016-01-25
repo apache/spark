@@ -17,11 +17,30 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
+/*
+ * Binary format of a serialized CountMinSketchImpl, version 1 (all values written in big-endian
+ * order):
+ *
+ * - Version number, always 1 (32 bit)
+ * - Total count of added items (64 bit)
+ * - Depth (32 bit)
+ * - Width (32 bit)
+ * - Hash functions (depth * 64 bit)
+ * - Count table
+ *   - Row 0 (width * 64 bit)
+ *   - Row 1 (width * 64 bit)
+ *   - ...
+ *   - Row depth - 1 (width * 64 bit)
+ */
 class CountMinSketchImpl extends CountMinSketch {
   public static final long PRIME_MODULUS = (1L << 31) - 1;
 
@@ -33,7 +52,7 @@ class CountMinSketchImpl extends CountMinSketch {
   private double eps;
   private double confidence;
 
-  public CountMinSketchImpl(int depth, int width, int seed) {
+  CountMinSketchImpl(int depth, int width, int seed) {
     this.depth = depth;
     this.width = width;
     this.eps = 2.0 / width;
@@ -41,7 +60,7 @@ class CountMinSketchImpl extends CountMinSketch {
     initTablesWith(depth, width, seed);
   }
 
-  public CountMinSketchImpl(double eps, double confidence, int seed) {
+  CountMinSketchImpl(double eps, double confidence, int seed) {
     // 2/w = eps ; w = 2/eps
     // 1/2^depth <= 1-confidence ; depth >= -log2 (1-confidence)
     this.eps = eps;
@@ -49,6 +68,53 @@ class CountMinSketchImpl extends CountMinSketch {
     this.width = (int) Math.ceil(2 / eps);
     this.depth = (int) Math.ceil(-Math.log(1 - confidence) / Math.log(2));
     initTablesWith(depth, width, seed);
+  }
+
+  CountMinSketchImpl(int depth, int width, long totalCount, long hashA[], long table[][]) {
+    this.depth = depth;
+    this.width = width;
+    this.eps = 2.0 / width;
+    this.confidence = 1 - 1 / Math.pow(2, depth);
+    this.hashA = hashA;
+    this.table = table;
+    this.totalCount = totalCount;
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (other == this) {
+      return true;
+    }
+
+    if (other == null || !(other instanceof CountMinSketchImpl)) {
+      return false;
+    }
+
+    CountMinSketchImpl that = (CountMinSketchImpl) other;
+
+    return
+      this.depth == that.depth &&
+      this.width == that.width &&
+      this.totalCount == that.totalCount &&
+      Arrays.equals(this.hashA, that.hashA) &&
+      Arrays.deepEquals(this.table, that.table);
+  }
+
+  @Override
+  public int hashCode() {
+    int hash = depth;
+
+    hash = hash * 31 + width;
+    hash = hash * 31 + (int) (totalCount ^ (totalCount >>> 32));
+    hash = hash * 31 + Arrays.hashCode(hashA);
+    hash = hash * 31 + Arrays.deepHashCode(table);
+
+    return hash;
+  }
+
+  @Override
+  public Version version() {
+    return Version.V1;
   }
 
   private void initTablesWith(int depth, int width, int seed) {
@@ -221,27 +287,29 @@ class CountMinSketchImpl extends CountMinSketch {
   }
 
   @Override
-  public CountMinSketch mergeInPlace(CountMinSketch other) {
+  public CountMinSketch mergeInPlace(CountMinSketch other) throws IncompatibleMergeException {
     if (other == null) {
-      throw new CMSMergeException("Cannot merge null estimator");
+      throw new IncompatibleMergeException("Cannot merge null estimator");
     }
 
     if (!(other instanceof CountMinSketchImpl)) {
-      throw new CMSMergeException("Cannot merge estimator of class " + other.getClass().getName());
+      throw new IncompatibleMergeException(
+          "Cannot merge estimator of class " + other.getClass().getName()
+      );
     }
 
     CountMinSketchImpl that = (CountMinSketchImpl) other;
 
     if (this.depth != that.depth) {
-      throw new CMSMergeException("Cannot merge estimators of different depth");
+      throw new IncompatibleMergeException("Cannot merge estimators of different depth");
     }
 
     if (this.width != that.width) {
-      throw new CMSMergeException("Cannot merge estimators of different width");
+      throw new IncompatibleMergeException("Cannot merge estimators of different width");
     }
 
     if (!Arrays.equals(this.hashA, that.hashA)) {
-      throw new CMSMergeException("Cannot merge estimators of different seed");
+      throw new IncompatibleMergeException("Cannot merge estimators of different seed");
     }
 
     for (int i = 0; i < this.table.length; ++i) {
@@ -256,13 +324,48 @@ class CountMinSketchImpl extends CountMinSketch {
   }
 
   @Override
-  public void writeTo(OutputStream out) {
-    throw new UnsupportedOperationException("Not implemented yet");
+  public void writeTo(OutputStream out) throws IOException {
+    DataOutputStream dos = new DataOutputStream(out);
+
+    dos.writeInt(version().getVersionNumber());
+
+    dos.writeLong(this.totalCount);
+    dos.writeInt(this.depth);
+    dos.writeInt(this.width);
+
+    for (int i = 0; i < this.depth; ++i) {
+      dos.writeLong(this.hashA[i]);
+    }
+
+    for (int i = 0; i < this.depth; ++i) {
+      for (int j = 0; j < this.width; ++j) {
+        dos.writeLong(table[i][j]);
+      }
+    }
   }
 
-  protected static class CMSMergeException extends RuntimeException {
-    public CMSMergeException(String message) {
-      super(message);
+  public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
+    DataInputStream dis = new DataInputStream(in);
+
+    // Ignores version number
+    dis.readInt();
+
+    long totalCount = dis.readLong();
+    int depth = dis.readInt();
+    int width = dis.readInt();
+
+    long hashA[] = new long[depth];
+    for (int i = 0; i < depth; ++i) {
+      hashA[i] = dis.readLong();
     }
+
+    long table[][] = new long[depth][width];
+    for (int i = 0; i < depth; ++i) {
+      for (int j = 0; j < width; ++j) {
+        table[i][j] = dis.readLong();
+      }
+    }
+
+    return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
   }
 }
