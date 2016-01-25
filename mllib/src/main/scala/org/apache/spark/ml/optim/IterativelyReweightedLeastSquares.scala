@@ -36,7 +36,7 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * certain optimization problems by an iterative method. In each step of the iterations, it
  * involves solving a weighted lease squares (WLS) problem by [[WeightedLeastSquares]].
  * It can be used to find maximum likelihood estimates of a generalized linear model (GLM),
- * find M-estimator in robust regression and some other optimization problems.
+ * find M-estimator in robust regression and other optimization problems.
  *
  * @param initialModel the initial guess model.
  * @param reweightFunc the reweight function which is used to update offsets and weights
@@ -71,11 +71,10 @@ private[ml] class IterativelyReweightedLeastSquares(
       offsetsAndWeights = instances.map { instance => reweightFunc(instance, oldModel) }
 
       // Estimate new model
-      val wls = new WeightedLeastSquares(fitIntercept, regParam, false, false)
       val newInstances = instances.zip(offsetsAndWeights).map {
         case (instance, (offset, weight)) => Instance(offset, weight, instance.features)
       }
-      model = wls.fit(newInstances)
+      model = new WeightedLeastSquares(fitIntercept, regParam, false, false).fit(newInstances)
 
       val oldParameters = Array.concat(Array(oldModel.intercept), oldModel.coefficients.toArray)
       val parameters = Array.concat(Array(model.intercept), model.coefficients.toArray)

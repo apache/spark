@@ -31,7 +31,12 @@ import org.apache.spark.rdd.RDD
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double,
-    val diagInvAtWA: DenseVector) extends Serializable
+    val diagInvAtWA: DenseVector) extends Serializable {
+
+  def predict(features: Vector): Double = {
+    BLAS.dot(coefficients, features) + intercept
+  }
+}
 
 /**
  * Weighted least squares solver via normal equation.

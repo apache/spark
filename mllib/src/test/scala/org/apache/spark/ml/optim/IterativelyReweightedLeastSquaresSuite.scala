@@ -19,8 +19,6 @@ package org.apache.spark.ml.optim
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.glm._
-import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -61,7 +59,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
     ), 2)
   }
 
-  test("IRLS against GLM with Binomial") {
+  test("IRLS against GLM with Binomial errors") {
     /*
        R code:
 
@@ -80,23 +78,24 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
     import IterativelyReweightedLeastSquaresSuite._
 
-    val family = Binomial(Logit)
-    val regParam = 0.0
-    val maxIter = 25
-    val tol = 1e-8
-
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val initial = initialModel(family, instances1, fitIntercept, regParam)
+      val newInstances = instances1.map { instance =>
+        val mu = (instance.label + 0.5) / 2.0
+        val eta = math.log(mu / (1.0 - mu))
+        Instance(eta, instance.weight, instance.features)
+      }
+      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0,
+        standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
       val irls = new IterativelyReweightedLeastSquares(initial, BinomialReweightFunc,
-        fitIntercept, regParam, maxIter, tol).fit(instances1)
+        fitIntercept, regParam = 0.0, maxIter = 25, tol = 1e-8).fit(instances1)
       val actual = Vectors.dense(irls.intercept, irls.coefficients(0), irls.coefficients(1))
       assert(actual ~== expected(idx) absTol 1e-4)
       idx += 1
     }
   }
 
-  test("IRLS against GLM with Poisson") {
+  test("IRLS against GLM with Poisson errors") {
     /*
        R code:
 
@@ -115,23 +114,25 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
     import IterativelyReweightedLeastSquaresSuite._
 
-    val family = Poisson(Log)
-    val regParam = 0.0
-    val maxIter = 25
-    val tol = 1e-8
-
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val initial = initialModel(family, instances2, fitIntercept, regParam)
+      val yMean = instances2.map(_.label).mean
+      val newInstances = instances2.map { instance =>
+        val mu = (instance.label + yMean) / 2.0
+        val eta = math.log(mu)
+        Instance(eta, instance.weight, instance.features)
+      }
+      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0,
+        standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
       val irls = new IterativelyReweightedLeastSquares(initial, PoissonReweightFunc,
-        fitIntercept, regParam, maxIter, tol).fit(instances2)
+        fitIntercept, regParam = 0.0, maxIter = 25, tol = 1e-8).fit(instances2)
       val actual = Vectors.dense(irls.intercept, irls.coefficients(0), irls.coefficients(1))
       assert(actual ~== expected(idx) absTol 1e-4)
       idx += 1
     }
   }
 
-  test("IRLS against Quantile Regression / L1Regression") {
+  test("IRLS against L1Regression") {
     /*
        R code:
 
@@ -152,16 +153,12 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
     import IterativelyReweightedLeastSquaresSuite._
 
-    val regParam = 0.0
-    val maxIter = 200
-    val tol = 1e-7
-
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val wls = new WeightedLeastSquares(fitIntercept, regParam, false, false)
-      val initial = wls.fit(instances2)
+      val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0,
+        standardizeFeatures = false, standardizeLabel = false).fit(instances2)
       val irls = new IterativelyReweightedLeastSquares(initial, L1RegressionReweightFunc,
-        fitIntercept, regParam, maxIter, tol).fit(instances2)
+        fitIntercept, regParam = 0.0, maxIter = 200, tol = 1e-7).fit(instances2)
       val actual = Vectors.dense(irls.intercept, irls.coefficients(0), irls.coefficients(1))
       assert(actual ~== expected(idx) absTol 1e-4)
       idx += 1
@@ -171,46 +168,30 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
 object IterativelyReweightedLeastSquaresSuite {
 
-  def initialModel(
-      family: Family,
-      instances: RDD[Instance],
-      fitIntercept: Boolean,
-      regParam: Double): WeightedLeastSquaresModel = {
-    val wls = new WeightedLeastSquares(fitIntercept, regParam, false, false)
-    val yMean = instances.map(_.label).mean
-    val newInstances = instances.map { instance =>
-      val eta = family.predict((instance.label + yMean) / 2.0)
-      Instance(eta, instance.weight, instance.features)
-    }
-    wls.fit(newInstances)
-  }
-
   def BinomialReweightFunc(
       instance: Instance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
-    val family = Binomial(Logit)
-    val eta = dot(instance.features, model.coefficients) + model.intercept
-    val mu = family.fitted(eta)
-    val z = family.adjusted(instance.label, mu, eta)
-    val w = family.weights(mu) * instance.weight
+    val eta = model.predict(instance.features)
+    val mu = 1.0 / (1.0 + math.exp(-1.0 * eta))
+    val z = eta + (instance.label - mu) / (mu * (1.0 - mu))
+    val w = mu * (1 - mu) * instance.weight
     (z, w)
   }
 
   def PoissonReweightFunc(
       instance: Instance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
-    val family = Poisson(Log)
-    val eta = dot(instance.features, model.coefficients) + model.intercept
-    val mu = family.fitted(eta)
-    val z = family.adjusted(instance.label, mu, eta)
-    val w = family.weights(mu) * instance.weight
+    val eta = model.predict(instance.features)
+    val mu = math.exp(eta)
+    val z = eta + (instance.label - mu) / mu
+    val w = mu * instance.weight
     (z, w)
   }
 
   def L1RegressionReweightFunc(
       instance: Instance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
-    val eta = dot(instance.features, model.coefficients) + model.intercept
+    val eta = model.predict(instance.features)
     val e = math.max(math.abs(eta - instance.label), 1e-7)
     val w = 1 / e
     val y = instance.label
