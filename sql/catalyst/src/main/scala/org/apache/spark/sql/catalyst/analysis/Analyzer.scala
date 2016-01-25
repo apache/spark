@@ -165,11 +165,15 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case e: ExtractValue => Alias(e, e.sql)()
-              case other => Alias(other, optionalAliasName.getOrElse(s"_c$i"))()
+              case e: ExtractValue => Alias(e, usePrettyAttribute(e).sql)()
+              case e => Alias(e, optionalAliasName.getOrElse(usePrettyAttribute(e).sql))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
+    }
+
+    private def usePrettyAttribute(e: Expression): Expression = e transform {
+      case a: Attribute => PrettyAttribute(a.name)
     }
 
     private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =

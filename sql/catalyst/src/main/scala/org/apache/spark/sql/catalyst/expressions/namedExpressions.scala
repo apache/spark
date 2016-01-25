@@ -315,6 +315,7 @@ case class PrettyAttribute(name: String, dataType: DataType = NullType)
   extends Attribute with Unevaluable {
 
   override def toString: String = name
+  override def sql: String = toString
 
   override def withNullability(newNullability: Boolean): Attribute =
     throw new UnsupportedOperationException

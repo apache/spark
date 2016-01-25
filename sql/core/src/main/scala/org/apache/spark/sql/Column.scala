@@ -141,13 +141,17 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
     } match {
       case ne: NamedExpression => ne
-      case other => Alias(expr, expr.sql)()
+      case other => Alias(expr, usePrettyAttribute(expr).sql)()
     }
 
-    case expr: Expression => Alias(expr, expr.sql)()
+    case expr: Expression => Alias(expr, usePrettyAttribute(expr).sql)()
   }
 
-  override def toString: String = expr.sql
+  override def toString: String = usePrettyAttribute(expr).sql
+
+  private def usePrettyAttribute(e: Expression): Expression = e.transform {
+    case a: Attribute => PrettyAttribute(a.name)
+  }
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
