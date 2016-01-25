@@ -1330,6 +1330,9 @@ class DataFrame(object):
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         This is only available if Pandas is installed and available.
 
         >>> df.toPandas()  # doctest: +SKIP

@@ -766,6 +766,8 @@ class RDD(object):
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
             port = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
@@ -1253,6 +1255,9 @@ class RDD(object):
         It works by first scanning one partition, and use the results from
         that partition to estimate the number of additional partitions needed
         to satisfy the limit.
+
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
 
         Translated from the Scala implementation in RDD#take().
 
