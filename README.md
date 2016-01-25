@@ -55,6 +55,7 @@ Currently **officially** using Airflow:
 * Agari [@r39132](https://github.com/r39132)
 * [Bellhops](https://github.com/bellhops)
 * BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
+* [Clover Health] (https://www.cloverhealth.com) [[@gwax](https://github.com/gwax) & [@vansivallab](https://github.com/vansivallab)]
 * Chartboost [[@cgelman](https://github.com/cgelman) & [@dclubb](https://github.com/dclubb)]
 * [Cotap](https://github.com/cotap/) [[@maraca](https://github.com/maraca) & [@richardchew](https://github.com/richardchew)]
 * Easy Taxi [[@caique-lima](https://github.com/caique-lima)]
