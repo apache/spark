@@ -59,7 +59,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     assert(getParam(output.BYTES_WRITTEN) === LongAccumulatorParam)
     // default to Long
     assert(getParam(METRICS_PREFIX + "anything") === LongAccumulatorParam)
-    intercept[AssertionError] {
+    intercept[IllegalArgumentException] {
       getParam("something that does not start with the right prefix")
     }
   }
@@ -135,8 +135,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("internal accumulators in TaskContext") {
-    sc = new SparkContext("local", "test")
-    val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null)
+    val taskContext = TaskContext.empty()
     val accumUpdates = taskContext.taskMetrics.accumulatorUpdates()
     assert(accumUpdates.size > 0)
     val testAccum = taskContext.taskMetrics.getAccum(TEST_ACCUM)

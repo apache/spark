@@ -17,6 +17,8 @@
 
 package org.apache.spark.executor
 
+import org.scalatest.Assertions
+
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel, TestBlockId}
 
@@ -33,20 +35,90 @@ class TaskMetricsSuite extends SparkFunSuite {
     val tm2 = new TaskMetrics(internalAccums)
     assert(tm1.accumulatorUpdates().size === internalAccums.size)
     assert(tm2.accumulatorUpdates().size === internalAccums.size)
-    val unnamedAccum = new Accumulator(0, IntAccumulatorParam, None, internal = true)
-    val dupNamedAccum = new Accumulator(0, IntAccumulatorParam, Some(RESULT_SIZE), internal = true)
-    val externalAccum = new Accumulator(0, IntAccumulatorParam, Some("x"))
-    val internalAccums2 = internalAccums ++ Seq(unnamedAccum)
-    val internalAccums3 = internalAccums ++ Seq(dupNamedAccum)
-    val internalAccums4 = internalAccums ++ Seq(externalAccum)
     // TaskMetrics constructor expects minimal set of initial accumulators
-    intercept[AssertionError] { new TaskMetrics(Seq.empty[Accumulator[_]]) }
-    // initial accums must be named
-    intercept[AssertionError] { new TaskMetrics(internalAccums2) }
-    // initial accums must not have duplicate names
-    intercept[AssertionError] { new TaskMetrics(internalAccums3) }
-    // initial accums must be internal
-    intercept[AssertionError] { new TaskMetrics(internalAccums4) }
+    intercept[IllegalArgumentException] { new TaskMetrics(Seq.empty[Accumulator[_]]) }
+  }
+
+  test("create with unnamed accum") {
+    intercept[IllegalArgumentException] {
+      new TaskMetrics(
+        InternalAccumulator.create() ++ Seq(
+          new Accumulator(0, IntAccumulatorParam, None, internal = true)))
+    }
+  }
+
+  test("create with duplicate name accum") {
+    intercept[IllegalArgumentException] {
+      new TaskMetrics(
+        InternalAccumulator.create() ++ Seq(
+          new Accumulator(0, IntAccumulatorParam, Some(RESULT_SIZE), internal = true)))
+    }
+  }
+
+  test("create with external accum") {
+    intercept[IllegalArgumentException] {
+      new TaskMetrics(
+        InternalAccumulator.create() ++ Seq(
+          new Accumulator(0, IntAccumulatorParam, Some("x"))))
+    }
+  }
+
+  test("create shuffle read metrics") {
+    import shuffleRead._
+    val accums = InternalAccumulator.createShuffleReadAccums()
+      .map { a => (a.name.get, a) }.toMap[String, Accumulator[_]]
+    accums(REMOTE_BLOCKS_FETCHED).setValueAny(1)
+    accums(LOCAL_BLOCKS_FETCHED).setValueAny(2)
+    accums(REMOTE_BYTES_READ).setValueAny(3L)
+    accums(LOCAL_BYTES_READ).setValueAny(4L)
+    accums(FETCH_WAIT_TIME).setValueAny(5L)
+    accums(RECORDS_READ).setValueAny(6L)
+    val sr = new ShuffleReadMetrics(accums)
+    assert(sr.remoteBlocksFetched === 1)
+    assert(sr.localBlocksFetched === 2)
+    assert(sr.remoteBytesRead === 3L)
+    assert(sr.localBytesRead === 4L)
+    assert(sr.fetchWaitTime === 5L)
+    assert(sr.recordsRead === 6L)
+  }
+
+  test("create shuffle write metrics") {
+    import shuffleWrite._
+    val accums = InternalAccumulator.createShuffleWriteAccums()
+      .map { a => (a.name.get, a) }.toMap[String, Accumulator[_]]
+    accums(BYTES_WRITTEN).setValueAny(1L)
+    accums(RECORDS_WRITTEN).setValueAny(2L)
+    accums(WRITE_TIME).setValueAny(3L)
+    val sw = new ShuffleWriteMetrics(accums)
+    assert(sw.bytesWritten === 1L)
+    assert(sw.recordsWritten === 2L)
+    assert(sw.writeTime === 3L)
+  }
+
+  test("create input metrics") {
+    import input._
+    val accums = InternalAccumulator.createInputAccums()
+      .map { a => (a.name.get, a) }.toMap[String, Accumulator[_]]
+    accums(BYTES_READ).setValueAny(1L)
+    accums(RECORDS_READ).setValueAny(2L)
+    accums(READ_METHOD).setValueAny(DataReadMethod.Hadoop.toString)
+    val im = new InputMetrics(accums)
+    assert(im.bytesRead === 1L)
+    assert(im.recordsRead === 2L)
+    assert(im.readMethod === DataReadMethod.Hadoop)
+  }
+
+  test("create output metrics") {
+    import output._
+    val accums = InternalAccumulator.createOutputAccums()
+      .map { a => (a.name.get, a) }.toMap[String, Accumulator[_]]
+    accums(BYTES_WRITTEN).setValueAny(1L)
+    accums(RECORDS_WRITTEN).setValueAny(2L)
+    accums(WRITE_METHOD).setValueAny(DataWriteMethod.Hadoop.toString)
+    val om = new OutputMetrics(accums)
+    assert(om.bytesWritten === 1L)
+    assert(om.recordsWritten === 2L)
+    assert(om.writeMethod === DataWriteMethod.Hadoop)
   }
 
   test("mutating values") {
@@ -274,8 +346,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     val sw1 = tm.registerShuffleWriteMetrics()
     val sw2 = tm.registerShuffleWriteMetrics()
     assert(sw1 === sw2)
-    assert(tm.shuffleWriteMetrics.isDefined)
-    assert(tm.shuffleWriteMetrics.get === sw1)
+    assert(tm.shuffleWriteMetrics === Some(sw1))
   }
 
   test("register multiple input metrics") {
@@ -286,8 +357,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     val im3 = tm.registerInputMetrics(DataReadMethod.Hadoop)
     assert(im1 === im2)
     assert(im1 !== im3)
-    assert(tm.inputMetrics.isDefined)
-    assert(tm.inputMetrics.get === im1)
+    assert(tm.inputMetrics === Some(im1))
     im2.setBytesRead(50L)
     im3.setBytesRead(100L)
     assert(tm.inputMetrics.get.bytesRead === 50L)
@@ -298,8 +368,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     val om1 = tm.registerOutputMetrics(DataWriteMethod.Hadoop)
     val om2 = tm.registerOutputMetrics(DataWriteMethod.Hadoop)
     assert(om1 === om2)
-    assert(tm.outputMetrics.isDefined)
-    assert(tm.outputMetrics.get === om1)
+    assert(tm.outputMetrics === Some(om1))
   }
 
   test("additional accumulables") {
@@ -331,8 +400,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 }
 
 
-// This extends SparkFunSuite only because we want its `assert` method.
-private[spark] object TaskMetricsSuite extends SparkFunSuite {
+private[spark] object TaskMetricsSuite extends Assertions {
 
   /**
    * Assert that the following three things are equal to `value`:
@@ -351,11 +419,9 @@ private[spark] object TaskMetricsSuite extends SparkFunSuite {
     val accum = accums.find(_.name == Some(metricName))
     assert(accum.isDefined)
     assertEquals(accum.get.value, value)
-    val accumUpdate = tm.accumulatorUpdates()
-      .find { case (k, _) => k == accum.get.id }
-      .map { case (_, v) => v }
-    assert(accumUpdate.isDefined)
-    assertEquals(accumUpdate.get, value)
+    val update = tm.accumulatorUpdates().collectFirst { case (k, v) if k == accum.get.id => v }
+    assert(update.isDefined)
+    assertEquals(update.get, value)
   }
 
 }

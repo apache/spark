@@ -65,11 +65,13 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
   private val initialAccumsMap: Map[String, Accumulator[_]] = {
     val map = new mutable.HashMap[String, Accumulator[_]]
     initialAccums.foreach { a =>
-      assert(a.name.isDefined, "initial accumulators passed to TaskMetrics must be named")
-      val name = a.name.get
-      assert(a.isInternal,
+      val name = a.name.getOrElse {
+        throw new IllegalArgumentException(
+          "initial accumulators passed to TaskMetrics must be named")
+      }
+      require(a.isInternal,
         s"initial accumulator '$name' passed to TaskMetrics must be marked as internal")
-      assert(!map.contains(name),
+      require(!map.contains(name),
         s"detected duplicate accumulator name '$name' when constructing TaskMetrics")
       map(name) = a
     }
@@ -156,12 +158,6 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
     _updatedBlockStatuses.add(v)
   private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v)
-
-  /**
-   * Host's name the task runs on.
-   */
-  @deprecated("hostname will be removed from TaskMetrics in the future", "2.0.0")
-  def hostname: String = Utils.localHostName()
 
   /**
    * Get a Long accumulator from the given map by name, assuming it exists.
@@ -334,7 +330,7 @@ private[spark] object TaskMetrics {
    * Get an accumulator from the given map by name, assuming it exists.
    */
   def getAccum[T](accumMap: Map[String, Accumulator[_]], name: String): Accumulator[T] = {
-    assert(accumMap.contains(name), s"metric '$name' is missing")
+    require(accumMap.contains(name), s"metric '$name' is missing")
     val accum = accumMap(name)
     try {
       // Note: we can't do pattern matching here because types are erased by compile time

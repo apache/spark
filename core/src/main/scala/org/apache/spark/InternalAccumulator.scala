@@ -86,7 +86,7 @@ private[spark] object InternalAccumulator {
    * Create an internal [[Accumulator]] by name, which must begin with [[METRICS_PREFIX]].
    */
   def create(name: String): Accumulator[_] = {
-    assert(name.startsWith(METRICS_PREFIX),
+    require(name.startsWith(METRICS_PREFIX),
       s"internal accumulator name must start with '$METRICS_PREFIX': $name")
     getParam(name) match {
       case p @ LongAccumulatorParam => newMetric[Long](0L, name, p)
@@ -104,7 +104,7 @@ private[spark] object InternalAccumulator {
    * which must begin with [[METRICS_PREFIX]].
    */
   def getParam(name: String): AccumulatorParam[_] = {
-    assert(name.startsWith(METRICS_PREFIX),
+    require(name.startsWith(METRICS_PREFIX),
       s"internal accumulator name must start with '$METRICS_PREFIX': $name")
     name match {
       case UPDATED_BLOCK_STATUSES => UpdatedBlockStatusesAccumulatorParam

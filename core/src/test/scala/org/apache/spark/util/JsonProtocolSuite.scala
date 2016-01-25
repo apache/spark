@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.Assertions
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
@@ -377,8 +378,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 }
 
 
-// This extends SparkFunSuite only because we want its `assert` method.
-private[spark] object JsonProtocolSuite extends SparkFunSuite {
+private[spark] object JsonProtocolSuite extends Assertions {
   private val jobSubmissionTime = 1421191042750L
   private val jobCompletionTime = 1421191296660L
   private val executorAddedTime = 1421458410000L

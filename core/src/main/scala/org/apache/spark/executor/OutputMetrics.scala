@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * Method by which output data was written.
+ * Operations are not thread-safe.
  */
 @DeveloperApi
 object DataWriteMethod extends Enumeration with Serializable {
