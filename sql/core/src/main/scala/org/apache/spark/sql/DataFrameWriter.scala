@@ -233,8 +233,6 @@ final class DataFrameWriter private[sql](df: DataFrame) extends Logging  {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-
-
     if (sortColumnNames.isDefined) {
       require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
     }
