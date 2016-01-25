@@ -284,7 +284,7 @@ function renderDot(dot, container, forJob) {
   renderer(container, g);
 
   // Find the stage cluster and mark it for styling and post-processing
-  container.selectAll("g.cluster[name*=\"Stage\"]").classed("stage", true);
+  container.selectAll("g.cluster[name^=\"Stage \"]").classed("stage", true);
 }
 
 /* -------------------- *

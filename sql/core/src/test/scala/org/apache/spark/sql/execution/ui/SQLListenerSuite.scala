@@ -83,7 +83,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val df = createTestDataFrame
     val accumulatorIds =
       SparkPlanGraph(SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan))
-        .nodes.flatMap(_.metrics.map(_.accumulatorId))
+        .allNodes.flatMap(_.metrics.map(_.accumulatorId))
     // Assume all accumulators are long
     var accumulatorValue = 0L
     val accumulatorUpdates = accumulatorIds.map { id =>
