@@ -86,6 +86,7 @@
   </mailingLists>
 
   <modules>
+    <module>common/sketch</module>
     <module>tags</module>
     <module>core</module>
     <module>graphx</module>
@@ -104,6 +105,7 @@
     <module>external/flume</module>
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
+    <module>external/akka</module>
     <module>external/mqtt</module>
     <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
@@ -152,9 +154,9 @@
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
-    <aws.kinesis.client.version>1.4.0</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.6.1</aws.kinesis.client.version>
     <!-- the producer is used in tests -->
-    <aws.kinesis.producer.version>0.10.1</aws.kinesis.producer.version>
+    <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
     <!--  commons-httpclient/commons-httpclient-->
@@ -167,7 +169,7 @@
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.5.3</fasterxml.jackson.version>
     <snappy.version>1.1.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
@@ -219,93 +221,6 @@
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
       <url>https://repo1.maven.org/maven2</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>apache-repo</id>
-      <name>Apache Repository</name>
-      <url>https://repository.apache.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>jboss-repo</id>
-      <name>JBoss Repository</name>
-      <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>mqtt-repo</id>
-      <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>cloudera-repo</id>
-      <name>Cloudera Repository</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>spark-hive-staging</id>
-      <name>Staging Repo for Hive 1.2.1 (Spark Version)</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1113</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-    </repository>
-    <repository>
-      <id>mapr-repo</id>
-      <name>MapR Repository</name>
-      <url>http://repository.mapr.com/maven/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <!-- returning unauthorized on some operations -->
-    <repository>
-      <id>spring-releases</id>
-      <name>Spring Release Repository</name>
-      <url>https://repo.spring.io/libs-release</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <!-- For transitive dependencies brougt by parquet-thrift -->
-    <repository>
-      <id>twttr-repo</id>
-      <name>Twttr Repository</name>
-      <url>http://maven.twttr.com</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -654,6 +569,11 @@
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
         <version>4.0.29.Final</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty</artifactId>
+        <version>3.8.0.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -1133,6 +1053,12 @@
         <artifactId>zookeeper</artifactId>
         <version>${zookeeper.version}</version>
         <scope>${hadoop.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.codehaus.jackson</groupId>
@@ -1858,7 +1784,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>1.4</version>
+          <version>1.4.1</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -1873,6 +1799,19 @@
                   <requireJavaVersion>
                     <version>${java.version}</version>
                   </requireJavaVersion>
+                  <bannedDependencies>
+                    <excludes>
+                      <!--
+                        Akka depends on io.netty:netty, which puts classes under the org.jboss.netty
+                        package. This conflicts with the classes in org.jboss.netty:netty
+                        artifact, so we have to ban that artifact here. In Netty 4.x, the classes
+                        are under the io.netty package, so it's fine for us to depend on both
+                        io.netty:netty and io.netty:netty-all.
+                      -->
+                      <exclude>org.jboss.netty</exclude>
+                    </excludes>
+                    <searchTransitive>true</searchTransitive>
+                  </bannedDependencies>
                 </rules>
               </configuration>
             </execution>
@@ -2251,17 +2190,6 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>org.spark-project.guava</shadedPattern>
-              <excludes>
-                <!--
-                  These classes cannot be relocated, because the Java API exposes the
-                  "Optional" type; the others are referenced by the Optional class.
-                -->
-                <exclude>com/google/common/base/Absent*</exclude>
-                <exclude>com/google/common/base/Function</exclude>
-                <exclude>com/google/common/base/Optional*</exclude>
-                <exclude>com/google/common/base/Present*</exclude>
-                <exclude>com/google/common/base/Supplier</exclude>
-              </excludes>
             </relocation>
           </relocations>
         </configuration>
@@ -2494,6 +2422,16 @@
       <id>hadoop-2.6</id>
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
+        <jets3t.version>0.9.3</jets3t.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+        <curator.version>2.6.0</curator.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.7</id>
+      <properties>
+        <hadoop.version>2.7.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>

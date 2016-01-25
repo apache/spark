@@ -356,7 +356,7 @@ object YarnSparkHadoopUtil {
    *
    * @return The correct OOM Error handler JVM option, platform dependent.
    */
-  def getOutOfMemoryErrorArgument : String = {
+  def getOutOfMemoryErrorArgument: String = {
     if (Utils.isWindows) {
       escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {

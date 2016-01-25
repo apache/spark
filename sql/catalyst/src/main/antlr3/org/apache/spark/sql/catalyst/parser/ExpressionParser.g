@@ -122,21 +122,13 @@ constant
     | BigintLiteral
     | SmallintLiteral
     | TinyintLiteral
-    | DecimalLiteral
-    | charSetStringLiteral
+    | DoubleLiteral
     | booleanValue
     ;
 
 stringLiteralSequence
     :
     StringLiteral StringLiteral+ -> ^(TOK_STRINGLITERALSEQUENCE StringLiteral StringLiteral+)
-    ;
-
-charSetStringLiteral
-@init { gParent.pushMsg("character string literal", state); }
-@after { gParent.popMsg(state); }
-    :
-    csName=CharSetName csLiteral=CharSetLiteral -> ^(TOK_CHARSETLITERAL $csName $csLiteral)
     ;
 
 dateLiteral
@@ -163,22 +155,38 @@ timestampLiteral
 
 intervalLiteral
     :
-    KW_INTERVAL StringLiteral qualifiers=intervalQualifiers ->
-    {
-      adaptor.create($qualifiers.tree.token.getType(), $StringLiteral.text)
-    }
+    (KW_INTERVAL intervalConstant KW_YEAR KW_TO KW_MONTH) => KW_INTERVAL intervalConstant KW_YEAR KW_TO KW_MONTH
+      -> ^(TOK_INTERVAL_YEAR_MONTH_LITERAL intervalConstant)
+    | (KW_INTERVAL intervalConstant KW_DAY KW_TO KW_SECOND) => KW_INTERVAL intervalConstant KW_DAY KW_TO KW_SECOND
+      -> ^(TOK_INTERVAL_DAY_TIME_LITERAL intervalConstant)
+    | KW_INTERVAL
+      ((intervalConstant KW_YEAR)=> year=intervalConstant KW_YEAR)?
+      ((intervalConstant KW_MONTH)=> month=intervalConstant KW_MONTH)?
+      ((intervalConstant KW_WEEK)=> week=intervalConstant KW_WEEK)?
+      ((intervalConstant KW_DAY)=> day=intervalConstant KW_DAY)?
+      ((intervalConstant KW_HOUR)=> hour=intervalConstant KW_HOUR)?
+      ((intervalConstant KW_MINUTE)=> minute=intervalConstant KW_MINUTE)?
+      ((intervalConstant KW_SECOND)=> second=intervalConstant KW_SECOND)?
+      (millisecond=intervalConstant KW_MILLISECOND)?
+      (microsecond=intervalConstant KW_MICROSECOND)?
+      -> ^(TOK_INTERVAL
+          ^(TOK_INTERVAL_YEAR_LITERAL $year?)
+          ^(TOK_INTERVAL_MONTH_LITERAL $month?)
+          ^(TOK_INTERVAL_WEEK_LITERAL $week?)
+          ^(TOK_INTERVAL_DAY_LITERAL $day?)
+          ^(TOK_INTERVAL_HOUR_LITERAL $hour?)
+          ^(TOK_INTERVAL_MINUTE_LITERAL $minute?)
+          ^(TOK_INTERVAL_SECOND_LITERAL $second?)
+          ^(TOK_INTERVAL_MILLISECOND_LITERAL $millisecond?)
+          ^(TOK_INTERVAL_MICROSECOND_LITERAL $microsecond?))
     ;
 
-intervalQualifiers
+intervalConstant
     :
-    KW_YEAR KW_TO KW_MONTH -> TOK_INTERVAL_YEAR_MONTH_LITERAL
-    | KW_DAY KW_TO KW_SECOND -> TOK_INTERVAL_DAY_TIME_LITERAL
-    | KW_YEAR -> TOK_INTERVAL_YEAR_LITERAL
-    | KW_MONTH -> TOK_INTERVAL_MONTH_LITERAL
-    | KW_DAY -> TOK_INTERVAL_DAY_LITERAL
-    | KW_HOUR -> TOK_INTERVAL_HOUR_LITERAL
-    | KW_MINUTE -> TOK_INTERVAL_MINUTE_LITERAL
-    | KW_SECOND -> TOK_INTERVAL_SECOND_LITERAL
+    sign=(MINUS|PLUS)? value=Number -> {
+      adaptor.create(Number, ($sign != null ? $sign.getText() : "") + $value.getText())
+    }
+    | StringLiteral
     ;
 
 expression
@@ -219,11 +227,17 @@ nullCondition
 
 precedenceUnaryPrefixExpression
     :
-    (precedenceUnaryOperator^)* precedenceFieldExpression
+    (precedenceUnaryOperator+)=> precedenceUnaryOperator^ precedenceUnaryPrefixExpression
+    | precedenceFieldExpression
     ;
 
 precedenceUnarySuffixExpression
-    : precedenceUnaryPrefixExpression (a=KW_IS nullCondition)?
+    :
+    (
+    (LPAREN precedenceUnaryPrefixExpression RPAREN) => LPAREN precedenceUnaryPrefixExpression (a=KW_IS nullCondition)? RPAREN
+    |
+    precedenceUnaryPrefixExpression (a=KW_IS nullCondition)?
+    )
     -> {$a != null}? ^(TOK_FUNCTION nullCondition precedenceUnaryPrefixExpression)
     -> precedenceUnaryPrefixExpression
     ;

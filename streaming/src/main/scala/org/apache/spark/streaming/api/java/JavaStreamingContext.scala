@@ -24,7 +24,6 @@ import java.util.{List => JList, Map => JMap}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
@@ -354,69 +353,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
     def fn: (Path) => Boolean = (x: Path) => filter.call(x).booleanValue()
     ssc.fileStream[K, V, F](directory, fn, newFilesOnly, conf)
-  }
-
-  /**
-   * Create an input stream with any arbitrary user implemented actor receiver.
-   * @param props Props object defining creation of the actor
-   * @param name Name of the actor
-   * @param storageLevel Storage level to use for storing the received objects
-   *
-   * @note An important point to note:
-   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
-   *       to ensure the type safety, i.e parametrized type of data received and actorStream
-   *       should be same.
-   */
-  def actorStream[T](
-      props: Props,
-      name: String,
-      storageLevel: StorageLevel,
-      supervisorStrategy: SupervisorStrategy
-    ): JavaReceiverInputDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    ssc.actorStream[T](props, name, storageLevel, supervisorStrategy)
-  }
-
-  /**
-   * Create an input stream with any arbitrary user implemented actor receiver.
-   * @param props Props object defining creation of the actor
-   * @param name Name of the actor
-   * @param storageLevel Storage level to use for storing the received objects
-   *
-   * @note An important point to note:
-   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
-   *       to ensure the type safety, i.e parametrized type of data received and actorStream
-   *       should be same.
-   */
-  def actorStream[T](
-      props: Props,
-      name: String,
-      storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    ssc.actorStream[T](props, name, storageLevel)
-  }
-
-  /**
-   * Create an input stream with any arbitrary user implemented actor receiver.
-   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
-   * @param props Props object defining creation of the actor
-   * @param name Name of the actor
-   *
-   * @note An important point to note:
-   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
-   *       to ensure the type safety, i.e parametrized type of data received and actorStream
-   *       should be same.
-   */
-  def actorStream[T](
-      props: Props,
-      name: String
-    ): JavaReceiverInputDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    ssc.actorStream[T](props, name)
   }
 
   /**
