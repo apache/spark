@@ -325,47 +325,47 @@ class CountMinSketchImpl extends CountMinSketch {
 
   @Override
   public void writeTo(OutputStream out) throws IOException {
-    DataOutputStream dos = new DataOutputStream(out);
+    try (DataOutputStream dos = new DataOutputStream(out)) {
+      dos.writeInt(version().getVersionNumber());
 
-    dos.writeInt(version().getVersionNumber());
+      dos.writeLong(this.totalCount);
+      dos.writeInt(this.depth);
+      dos.writeInt(this.width);
 
-    dos.writeLong(this.totalCount);
-    dos.writeInt(this.depth);
-    dos.writeInt(this.width);
+      for (int i = 0; i < this.depth; ++i) {
+        dos.writeLong(this.hashA[i]);
+      }
 
-    for (int i = 0; i < this.depth; ++i) {
-      dos.writeLong(this.hashA[i]);
-    }
-
-    for (int i = 0; i < this.depth; ++i) {
-      for (int j = 0; j < this.width; ++j) {
-        dos.writeLong(table[i][j]);
+      for (int i = 0; i < this.depth; ++i) {
+        for (int j = 0; j < this.width; ++j) {
+          dos.writeLong(table[i][j]);
+        }
       }
     }
   }
 
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
-    DataInputStream dis = new DataInputStream(in);
+    try (DataInputStream dis = new DataInputStream(in)) {
+      // Ignores version number
+      dis.readInt();
 
-    // Ignores version number
-    dis.readInt();
+      long totalCount = dis.readLong();
+      int depth = dis.readInt();
+      int width = dis.readInt();
 
-    long totalCount = dis.readLong();
-    int depth = dis.readInt();
-    int width = dis.readInt();
-
-    long hashA[] = new long[depth];
-    for (int i = 0; i < depth; ++i) {
-      hashA[i] = dis.readLong();
-    }
-
-    long table[][] = new long[depth][width];
-    for (int i = 0; i < depth; ++i) {
-      for (int j = 0; j < width; ++j) {
-        table[i][j] = dis.readLong();
+      long hashA[] = new long[depth];
+      for (int i = 0; i < depth; ++i) {
+        hashA[i] = dis.readLong();
       }
-    }
 
-    return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
+      long table[][] = new long[depth][width];
+      for (int i = 0; i < depth; ++i) {
+        for (int j = 0; j < width; ++j) {
+          table[i][j] = dis.readLong();
+        }
+      }
+
+      return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
+    }
   }
 }
