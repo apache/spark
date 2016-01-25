@@ -186,7 +186,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     val output = Seq(1 to 8, 101 to 108, 201 to 208)
     testOperation(
       input,
-      (s: DStream[Int]) => s.union(s.map(_ + 4)) ,
+      (s: DStream[Int]) => s.union(s.map(_ + 4)),
       output
     )
   }

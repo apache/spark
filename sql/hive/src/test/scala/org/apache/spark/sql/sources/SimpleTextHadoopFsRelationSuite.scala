@@ -156,9 +156,9 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     test(s"pruning and filtering: df.select(${projections.mkString(", ")}).where($filter)") {
       val df = partitionedDF.where(filter).select(projections: _*)
       val queryExecution = df.queryExecution
-      val executedPlan = queryExecution.executedPlan
+      val sparkPlan = queryExecution.sparkPlan
 
-      val rawScan = executedPlan.collect {
+      val rawScan = sparkPlan.collect {
         case p: PhysicalRDD => p
       } match {
         case Seq(scan) => scan
@@ -177,7 +177,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       assert(requiredColumns === SimpleTextRelation.requiredColumns)
 
       val nonPushedFilters = {
-        val boundFilters = executedPlan.collect {
+        val boundFilters = sparkPlan.collect {
           case f: execution.Filter => f
         } match {
           case Nil => Nil

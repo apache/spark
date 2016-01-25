@@ -24,11 +24,12 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions._
@@ -38,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, AnalyzeTable, DropTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.AnalysisException
 
@@ -78,7 +79,7 @@ private[hive] case class CreateViewAsSelect(
 }
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
-private[hive] object HiveQl extends SparkQl with Logging {
+private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging {
   protected val nativeCommands = Seq(
     "TOK_ALTERDATABASE_OWNER",
     "TOK_ALTERDATABASE_PROPERTIES",
@@ -167,8 +168,6 @@ private[hive] object HiveQl extends SparkQl with Logging {
     "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
 
-  protected val hqlParser = new ExtendedHiveQlParser
-
   /**
    * Returns the HiveConf
    */
@@ -184,9 +183,6 @@ private[hive] object HiveQl extends SparkQl with Logging {
     }
     ss.getConf
   }
-
-  /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = hqlParser.parse(sql)
 
   protected def getProperties(node: ASTNode): Seq[(String, String)] = node match {
     case Token("TOK_TABLEPROPLIST", list) =>
@@ -229,15 +225,16 @@ private[hive] object HiveQl extends SparkQl with Logging {
     CreateViewAsSelect(tableDesc, nodeToPlan(query), allowExist, replace, sql)
   }
 
-  protected override def createPlan(
-      sql: String,
-      node: ASTNode): LogicalPlan = {
-    if (nativeCommands.contains(node.text)) {
-      HiveNativeCommand(sql)
-    } else {
-      nodeToPlan(node) match {
-        case NativePlaceholder => HiveNativeCommand(sql)
-        case plan => plan
+  /** Creates LogicalPlan for a given SQL string. */
+  override def parsePlan(sql: String): LogicalPlan = {
+    safeParse(sql, ParseDriver.parsePlan(sql, conf)) { ast =>
+      if (nativeCommands.contains(ast.text)) {
+        HiveNativeCommand(sql)
+      } else {
+        nodeToPlan(ast) match {
+          case NativePlaceholder => HiveNativeCommand(sql)
+          case plan => plan
+        }
       }
     }
   }
@@ -668,7 +665,8 @@ private[hive] object HiveQl extends SparkQl with Logging {
         Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
           sys.error(s"Couldn't find function $functionName"))
       val functionClassName = functionInfo.getFunctionClass.getName
-      HiveGenericUDTF(new HiveFunctionWrapper(functionClassName), children.map(nodeToExpr))
+      HiveGenericUDTF(
+        functionName, new HiveFunctionWrapper(functionClassName), children.map(nodeToExpr))
     case other => super.nodeToGenerator(node)
   }
 

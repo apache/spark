@@ -75,7 +75,7 @@ class GaussianMixtureModel @Since("1.3.0") (
    */
   @Since("1.5.0")
   def predict(point: Vector): Int = {
-    val r = computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
+    val r = predictSoft(point)
     r.indexOf(r.max)
   }
 
@@ -177,7 +177,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
   }
 
   @Since("1.4.0")
-  override def load(sc: SparkContext, path: String) : GaussianMixtureModel = {
+  override def load(sc: SparkContext, path: String): GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats
     val k = (metadata \ "k").extract[Int]

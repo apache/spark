@@ -39,6 +39,7 @@ case class BroadcastHashJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     buildSide: BuildSide,
+    condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan)
   extends BinaryNode with HashJoin {

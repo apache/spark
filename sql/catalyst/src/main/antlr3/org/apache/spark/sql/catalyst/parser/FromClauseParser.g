@@ -151,8 +151,8 @@ fromSource
 @after { gParent.popMsg(state); }
     :
     (LPAREN KW_VALUES) => fromSource0
-    | (LPAREN) => LPAREN joinSource RPAREN -> joinSource
     | fromSource0
+    | (LPAREN joinSource) => LPAREN joinSource RPAREN -> joinSource
     ;
 
 
@@ -206,11 +206,8 @@ tableName
 @init { gParent.pushMsg("table name", state); }
 @after { gParent.popMsg(state); }
     :
-    db=identifier DOT tab=identifier
-    -> ^(TOK_TABNAME $db $tab)
-    |
-    tab=identifier
-    -> ^(TOK_TABNAME $tab)
+    id1=identifier (DOT id2=identifier)?
+    -> ^(TOK_TABNAME $id1 $id2?)
     ;
 
 viewName

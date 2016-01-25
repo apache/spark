@@ -1,9 +1,9 @@
 /**
-   Licensed to the Apache Software Foundation (ASF) under one or more 
-   contributor license agreements.  See the NOTICE file distributed with 
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
    this work for additional information regarding copyright ownership.
    The ASF licenses this file to You under the Apache License, Version 2.0
-   (the "License"); you may not use this file except in compliance with 
+   (the "License"); you may not use this file except in compliance with
    the License.  You may obtain a copy of the License at
 
        http://www.apache.org/licenses/LICENSE-2.0
@@ -116,16 +116,20 @@ TOK_DATELITERAL;
 TOK_DATETIME;
 TOK_TIMESTAMP;
 TOK_TIMESTAMPLITERAL;
+TOK_INTERVAL;
 TOK_INTERVAL_YEAR_MONTH;
 TOK_INTERVAL_YEAR_MONTH_LITERAL;
 TOK_INTERVAL_DAY_TIME;
 TOK_INTERVAL_DAY_TIME_LITERAL;
 TOK_INTERVAL_YEAR_LITERAL;
 TOK_INTERVAL_MONTH_LITERAL;
+TOK_INTERVAL_WEEK_LITERAL;
 TOK_INTERVAL_DAY_LITERAL;
 TOK_INTERVAL_HOUR_LITERAL;
 TOK_INTERVAL_MINUTE_LITERAL;
 TOK_INTERVAL_SECOND_LITERAL;
+TOK_INTERVAL_MILLISECOND_LITERAL;
+TOK_INTERVAL_MICROSECOND_LITERAL;
 TOK_STRING;
 TOK_CHAR;
 TOK_VARCHAR;
@@ -228,7 +232,6 @@ TOK_TMP_FILE;
 TOK_TABSORTCOLNAMEASC;
 TOK_TABSORTCOLNAMEDESC;
 TOK_STRINGLITERALSEQUENCE;
-TOK_CHARSETLITERAL;
 TOK_CREATEFUNCTION;
 TOK_DROPFUNCTION;
 TOK_RELOADFUNCTION;
@@ -509,7 +512,9 @@ import java.util.HashMap;
     xlateMap.put("KW_UPDATE", "UPDATE");
     xlateMap.put("KW_VALUES", "VALUES");
     xlateMap.put("KW_PURGE", "PURGE");
-
+    xlateMap.put("KW_WEEK", "WEEK");
+    xlateMap.put("KW_MILLISECOND", "MILLISECOND");
+    xlateMap.put("KW_MICROSECOND", "MICROSECOND");
 
     // Operators
     xlateMap.put("DOT", ".");
@@ -582,7 +587,7 @@ import java.util.HashMap;
 
     return header;
   }
-  
+
   @Override
   public String getErrorMessage(RecognitionException e, String[] tokenNames) {
     String msg = null;
@@ -619,7 +624,7 @@ import java.util.HashMap;
     }
     return msg;
   }
-  
+
   public void pushMsg(String msg, RecognizerSharedState state) {
     // ANTLR generated code does not wrap the @init code wit this backtracking check,
     //  even if the matching @after has it. If we have parser rules with that are doing
@@ -639,7 +644,7 @@ import java.util.HashMap;
   // counter to generate unique union aliases
   private int aliasCounter;
   private String generateUnionAlias() {
-    return "_u" + (++aliasCounter);
+    return "u_" + (++aliasCounter);
   }
   private char [] excludedCharForColumnName = {'.', ':'};
   private boolean containExcludedCharForCreateTableColumnName(String input) {
@@ -1235,7 +1240,7 @@ alterTblPartitionStatementSuffixSkewedLocation
   : KW_SET KW_SKEWED KW_LOCATION skewedLocations
   -> ^(TOK_ALTERTABLE_SKEWED_LOCATION skewedLocations)
   ;
-  
+
 skewedLocations
 @init { pushMsg("skewed locations", state); }
 @after { popMsg(state); }
@@ -1264,7 +1269,7 @@ alterStatementSuffixLocation
   -> ^(TOK_ALTERTABLE_LOCATION $newLoc)
   ;
 
-	
+
 alterStatementSuffixSkewedby
 @init {pushMsg("alter skewed by statement", state);}
 @after{popMsg(state);}
@@ -1336,10 +1341,10 @@ tabTypeExpr
    (identifier (DOT^
    (
    (KW_ELEM_TYPE) => KW_ELEM_TYPE
-   | 
+   |
    (KW_KEY_TYPE) => KW_KEY_TYPE
-   | 
-   (KW_VALUE_TYPE) => KW_VALUE_TYPE 
+   |
+   (KW_VALUE_TYPE) => KW_VALUE_TYPE
    | identifier
    ))*
    )?
@@ -1376,7 +1381,7 @@ descStatement
 analyzeStatement
 @init { pushMsg("analyze statement", state); }
 @after { popMsg(state); }
-    : KW_ANALYZE KW_TABLE (parttype=tableOrPartition) KW_COMPUTE KW_STATISTICS ((noscan=KW_NOSCAN) | (partialscan=KW_PARTIALSCAN) 
+    : KW_ANALYZE KW_TABLE (parttype=tableOrPartition) KW_COMPUTE KW_STATISTICS ((noscan=KW_NOSCAN) | (partialscan=KW_PARTIALSCAN)
                                                       | (KW_FOR KW_COLUMNS (statsColumnName=columnNameList)?))?
       -> ^(TOK_ANALYZE $parttype $noscan? $partialscan? KW_COLUMNS? $statsColumnName?)
     ;
@@ -1389,7 +1394,7 @@ showStatement
     | KW_SHOW KW_COLUMNS (KW_FROM|KW_IN) tableName ((KW_FROM|KW_IN) db_name=identifier)?
     -> ^(TOK_SHOWCOLUMNS tableName $db_name?)
     | KW_SHOW KW_FUNCTIONS (KW_LIKE showFunctionIdentifier|showFunctionIdentifier)?  -> ^(TOK_SHOWFUNCTIONS KW_LIKE? showFunctionIdentifier?)
-    | KW_SHOW KW_PARTITIONS tabName=tableName partitionSpec? -> ^(TOK_SHOWPARTITIONS $tabName partitionSpec?) 
+    | KW_SHOW KW_PARTITIONS tabName=tableName partitionSpec? -> ^(TOK_SHOWPARTITIONS $tabName partitionSpec?)
     | KW_SHOW KW_CREATE (
         (KW_DATABASE|KW_SCHEMA) => (KW_DATABASE|KW_SCHEMA) db_name=identifier -> ^(TOK_SHOW_CREATEDATABASE $db_name)
         |
@@ -1398,7 +1403,7 @@ showStatement
     | KW_SHOW KW_TABLE KW_EXTENDED ((KW_FROM|KW_IN) db_name=identifier)? KW_LIKE showStmtIdentifier partitionSpec?
     -> ^(TOK_SHOW_TABLESTATUS showStmtIdentifier $db_name? partitionSpec?)
     | KW_SHOW KW_TBLPROPERTIES tableName (LPAREN prptyName=StringLiteral RPAREN)? -> ^(TOK_SHOW_TBLPROPERTIES tableName $prptyName?)
-    | KW_SHOW KW_LOCKS 
+    | KW_SHOW KW_LOCKS
       (
       (KW_DATABASE|KW_SCHEMA) => (KW_DATABASE|KW_SCHEMA) (dbName=Identifier) (isExtended=KW_EXTENDED)? -> ^(TOK_SHOWDBLOCKS $dbName $isExtended?)
       |
@@ -1511,7 +1516,7 @@ showCurrentRole
 setRole
 @init {pushMsg("set role", state);}
 @after {popMsg(state);}
-    : KW_SET KW_ROLE 
+    : KW_SET KW_ROLE
     (
     (KW_ALL) => (all=KW_ALL) -> ^(TOK_SHOW_SET_ROLE Identifier[$all.text])
     |
@@ -1966,7 +1971,7 @@ columnNameOrderList
 skewedValueElement
 @init { pushMsg("skewed value element", state); }
 @after { popMsg(state); }
-    : 
+    :
       skewedColumnValues
      | skewedColumnValuePairList
     ;
@@ -1980,8 +1985,8 @@ skewedColumnValuePairList
 skewedColumnValuePair
 @init { pushMsg("column value pair", state); }
 @after { popMsg(state); }
-    : 
-      LPAREN colValues=skewedColumnValues RPAREN 
+    :
+      LPAREN colValues=skewedColumnValues RPAREN
       -> ^(TOK_TABCOLVALUES $colValues)
     ;
 
@@ -2001,11 +2006,11 @@ skewedColumnValue
 skewedValueLocationElement
 @init { pushMsg("skewed value location element", state); }
 @after { popMsg(state); }
-    : 
+    :
       skewedColumnValue
      | skewedColumnValuePair
     ;
-    
+
 columnNameOrder
 @init { pushMsg("column name order", state); }
 @after { popMsg(state); }
@@ -2078,6 +2083,7 @@ primitiveType
     | KW_SMALLINT      ->    TOK_SMALLINT
     | KW_INT           ->    TOK_INT
     | KW_BIGINT        ->    TOK_BIGINT
+    | KW_LONG          ->    TOK_BIGINT
     | KW_BOOLEAN       ->    TOK_BOOLEAN
     | KW_FLOAT         ->    TOK_FLOAT
     | KW_DOUBLE        ->    TOK_DOUBLE
@@ -2118,7 +2124,7 @@ unionType
 @after { popMsg(state); }
     : KW_UNIONTYPE LESSTHAN colTypeList GREATERTHAN -> ^(TOK_UNIONTYPE colTypeList)
     ;
-    
+
 setOperator
 @init { pushMsg("set operator", state); }
 @after { popMsg(state); }
@@ -2172,7 +2178,7 @@ fromStatement[boolean topLevel]
 	            {adaptor.create(Identifier, generateUnionAlias())}
 	           )
 	        )
-	       ^(TOK_INSERT 
+	       ^(TOK_INSERT
 	          ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
 	          ^(TOK_SELECT ^(TOK_SELEXPR TOK_ALLCOLREF))
 	        )
@@ -2216,6 +2222,8 @@ regularBody[boolean topLevel]
 selectStatement[boolean topLevel]
    :
    (
+   (
+   LPAREN
    s=selectClause
    f=fromClause?
    w=whereClause?
@@ -2227,6 +2235,20 @@ selectStatement[boolean topLevel]
    sort=sortByClause?
    win=window_clause?
    l=limitClause?
+   RPAREN
+   |
+   s=selectClause
+   f=fromClause?
+   w=whereClause?
+   g=groupByClause?
+   h=havingClause?
+   o=orderByClause?
+   c=clusterByClause?
+   d=distributeByClause?
+   sort=sortByClause?
+   win=window_clause?
+   l=limitClause?
+   )
    -> ^(TOK_QUERY $f? ^(TOK_INSERT ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
                      $s $w? $g? $h? $o? $c?
                      $d? $sort? $win? $l?))
@@ -2241,7 +2263,10 @@ selectStatement[boolean topLevel]
 
 setOpSelectStatement[CommonTree t, boolean topLevel]
    :
-   (u=setOperator b=simpleSelectStatement
+   ((
+    u=setOperator LPAREN b=simpleSelectStatement RPAREN
+    |
+    u=setOperator b=simpleSelectStatement)
    -> {$setOpSelectStatement.tree != null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
       ^(TOK_QUERY
           ^(TOK_FROM
@@ -2395,8 +2420,8 @@ setColumnsClause
    KW_SET columnAssignmentClause (COMMA columnAssignmentClause)* -> ^(TOK_SET_COLUMNS_CLAUSE columnAssignmentClause* )
    ;
 
-/* 
-  UPDATE <table> 
+/*
+  UPDATE <table>
   SET col1 = val1, col2 = val2... WHERE ...
 */
 updateStatement

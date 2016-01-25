@@ -21,8 +21,9 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -34,9 +35,23 @@ import org.apache.spark.sql.types._
   */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   def batches: Seq[Batch] = {
-    // SubQueries are only needed for analysis and can be removed before execution.
-    Batch("Remove SubQueries", FixedPoint(100),
-      EliminateSubQueries) ::
+    // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
+    // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
+    // However, because we also use the analyzer to canonicalized queries (for view definition),
+    // we do not eliminate subqueries or compute current time in the analyzer.
+    Batch("Finish Analysis", Once,
+      EliminateSubQueries,
+      ComputeCurrentTime) ::
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // Optimizer rules start here
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // - Do the first call of CombineUnions before starting the major Optimizer rules,
+    //   since it can reduce the number of iteration and the other rules could add/move
+    //   extra operators between two adjacent Union operators.
+    // - Call CombineUnions again in Batch("Operator Optimizations"),
+    //   since the other rules might make two separate Unions operators adjacent.
+    Batch("Union", Once,
+      CombineUnions) ::
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
@@ -54,16 +69,19 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ProjectCollapsing,
       CombineFilters,
       CombineLimits,
-      // Constant folding
+      CombineUnions,
+      // Constant folding and strength reduction
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      SimplifyConditionals,
       RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      EliminateSerialization) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -93,6 +111,19 @@ object SamplePushDown extends Rule[LogicalPlan] {
 }
 
 /**
+ * Removes cases where we are unnecessarily going between the object and serialized (InternalRow)
+ * representation of data item.  For example back to back map operations.
+ */
+object EliminateSerialization extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case m @ MapPartitions(_, input, _, child: ObjectOperator)
+        if !input.isInstanceOf[Attribute] && m.input.dataType == child.outputObject.dataType =>
+      val childWithoutSerialization = child.withObjectOutput
+      m.copy(input = childWithoutSerialization.output.head, child = childWithoutSerialization)
+  }
+}
+
+/**
  * Pushes certain operations to both sides of a Union, Intersect or Except operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
@@ -115,11 +146,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
-  private def buildRewrites(bn: BinaryNode): AttributeMap[Attribute] = {
-    assert(bn.isInstanceOf[Union] || bn.isInstanceOf[Intersect] || bn.isInstanceOf[Except])
-    assert(bn.left.output.size == bn.right.output.size)
-
-    AttributeMap(bn.left.output.zip(bn.right.output))
+  private def buildRewrites(left: LogicalPlan, right: LogicalPlan): AttributeMap[Attribute] = {
+    assert(left.output.size == right.output.size)
+    AttributeMap(left.output.zip(right.output))
   }
 
   /**
@@ -153,32 +182,38 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down filter into union
-    case Filter(condition, u @ Union(left, right)) =>
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(u)
-      Filter(nondeterministic,
-        Union(
-          Filter(deterministic, left),
-          Filter(pushToRight(deterministic, rewrites), right)
-        )
-      )
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, u @ Union(left, right)) =>
+    case p @ Project(projectList, Union(children)) =>
+      assert(children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
-        val rewrites = buildRewrites(u)
-        Union(
-          Project(projectList, left),
-          Project(projectList.map(pushToRight(_, rewrites)), right))
+        val newFirstChild = Project(projectList, children.head)
+        val newOtherChildren = children.tail.map ( child => {
+          val rewrites = buildRewrites(children.head, child)
+          Project(projectList.map(pushToRight(_, rewrites)), child)
+        } )
+        Union(newFirstChild +: newOtherChildren)
       } else {
         p
       }
 
-    // Push down filter through INTERSECT
-    case Filter(condition, i @ Intersect(left, right)) =>
+    // Push down filter into union
+    case Filter(condition, Union(children)) =>
+      assert(children.nonEmpty)
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(i)
+      val newFirstChild = Filter(deterministic, children.head)
+      val newOtherChildren = children.tail.map {
+        child => {
+          val rewrites = buildRewrites(children.head, child)
+          Filter(pushToRight(deterministic, rewrites), child)
+        }
+      }
+      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
+
+    // Push down filter through INTERSECT
+    case Filter(condition, Intersect(left, right)) =>
+      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Intersect(
           Filter(deterministic, left),
@@ -187,9 +222,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       )
 
     // Push down filter through EXCEPT
-    case Filter(condition, e @ Except(left, right)) =>
+    case Filter(condition, Except(left, right)) =>
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(e)
+      val rewrites = buildRewrites(left, right)
       Filter(nondeterministic,
         Except(
           Filter(deterministic, left),
@@ -332,6 +367,39 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
           CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
         )
         Project(cleanedProjection, child)
+      }
+
+    // TODO Eliminate duplicate code
+    // This clause is identical to the one above except that the inner operator is an `Aggregate`
+    // rather than a `Project`.
+    case p @ Project(projectList1, agg @ Aggregate(_, projectList2, child)) =>
+      // Create a map of Aliases to their values from the child projection.
+      // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
+      val aliasMap = AttributeMap(projectList2.collect {
+        case a: Alias => (a.toAttribute, a)
+      })
+
+      // We only collapse these two Projects if their overlapped expressions are all
+      // deterministic.
+      val hasNondeterministic = projectList1.exists(_.collect {
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
+      }.exists(!_.deterministic))
+
+      if (hasNondeterministic) {
+        p
+      } else {
+        // Substitute any attributes that are produced by the child projection, so that we safely
+        // eliminate it.
+        // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
+        // TODO: Fix TransformBase to avoid the cast below.
+        val substitutedProjection = projectList1.map(_.transform {
+          case a: Attribute => aliasMap.getOrElse(a, a)
+        }).asInstanceOf[Seq[NamedExpression]]
+        // collapse 2 projects may introduce unnecessary Aliases, trim them here.
+        val cleanedProjection = substitutedProjection.map(p =>
+          CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+        )
+        agg.copy(aggregateExpressions = cleanedProjection)
       }
   }
 }
@@ -484,113 +552,134 @@ object OptimizeIn extends Rule[LogicalPlan] {
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case and @ And(left, right) => (left, right) match {
-        // true && r  =>  r
-        case (Literal(true, BooleanType), r) => r
-        // l && true  =>  l
-        case (l, Literal(true, BooleanType)) => l
-        // false && r  =>  false
-        case (Literal(false, BooleanType), _) => Literal(false)
-        // l && false  =>  false
-        case (_, Literal(false, BooleanType)) => Literal(false)
-        // a && a  =>  a
-        case (l, r) if l fastEquals r => l
-        // a && (not(a) || b) => a && b
-        case (l, Or(l1, r)) if (Not(l) == l1) => And(l, r)
-        case (l, Or(r, l1)) if (Not(l) == l1) => And(l, r)
-        case (Or(l, l1), r) if (l1 == Not(r)) => And(l, r)
-        case (Or(l1, l), r) if (l1 == Not(r)) => And(l, r)
-        // (a || b) && (a || c)  =>  a || (b && c)
-        case _ =>
-          // 1. Split left and right to get the disjunctive predicates,
-          //   i.e. lhs = (a, b), rhs = (a, c)
-          // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-          // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-          // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
-          val lhs = splitDisjunctivePredicates(left)
-          val rhs = splitDisjunctivePredicates(right)
-          val common = lhs.filter(e => rhs.exists(e.semanticEquals(_)))
-          if (common.isEmpty) {
-            // No common factors, return the original predicate
-            and
+      case TrueLiteral And e => e
+      case e And TrueLiteral => e
+      case FalseLiteral Or e => e
+      case e Or FalseLiteral => e
+
+      case FalseLiteral And _ => FalseLiteral
+      case _ And FalseLiteral => FalseLiteral
+      case TrueLiteral Or _ => TrueLiteral
+      case _ Or TrueLiteral => TrueLiteral
+
+      case a And b if a.semanticEquals(b) => a
+      case a Or b if a.semanticEquals(b) => a
+
+      case a And (b Or c) if Not(a).semanticEquals(b) => And(a, c)
+      case a And (b Or c) if Not(a).semanticEquals(c) => And(a, b)
+      case (a Or b) And c if a.semanticEquals(Not(c)) => And(b, c)
+      case (a Or b) And c if b.semanticEquals(Not(c)) => And(a, c)
+
+      case a Or (b And c) if Not(a).semanticEquals(b) => Or(a, c)
+      case a Or (b And c) if Not(a).semanticEquals(c) => Or(a, b)
+      case (a And b) Or c if a.semanticEquals(Not(c)) => Or(b, c)
+      case (a And b) Or c if b.semanticEquals(Not(c)) => Or(a, c)
+
+      // Common factor elimination for conjunction
+      case and @ (left And right) =>
+        // 1. Split left and right to get the disjunctive predicates,
+        //   i.e. lhs = (a, b), rhs = (a, c)
+        // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+        // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+        // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
+        val lhs = splitDisjunctivePredicates(left)
+        val rhs = splitDisjunctivePredicates(right)
+        val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+        if (common.isEmpty) {
+          // No common factors, return the original predicate
+          and
+        } else {
+          val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
+          val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
+          if (ldiff.isEmpty || rdiff.isEmpty) {
+            // (a || b || c || ...) && (a || b) => (a || b)
+            common.reduce(Or)
           } else {
-            val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            if (ldiff.isEmpty || rdiff.isEmpty) {
-              // (a || b || c || ...) && (a || b) => (a || b)
-              common.reduce(Or)
-            } else {
-              // (a || b || c || ...) && (a || b || d || ...) =>
-              // ((c || ...) && (d || ...)) || a || b
-              (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
-            }
+            // (a || b || c || ...) && (a || b || d || ...) =>
+            // ((c || ...) && (d || ...)) || a || b
+            (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
           }
-      }  // end of And(left, right)
+        }
 
-      case or @ Or(left, right) => (left, right) match {
-        // true || r  =>  true
-        case (Literal(true, BooleanType), _) => Literal(true)
-        // r || true  =>  true
-        case (_, Literal(true, BooleanType)) => Literal(true)
-        // false || r  =>  r
-        case (Literal(false, BooleanType), r) => r
-        // l || false  =>  l
-        case (l, Literal(false, BooleanType)) => l
-        // a || a => a
-        case (l, r) if l fastEquals r => l
-        // (a && b) || (a && c)  =>  a && (b || c)
-        case _ =>
-           // 1. Split left and right to get the conjunctive predicates,
-           //   i.e.  lhs = (a, b), rhs = (a, c)
-           // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-           // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-           // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
-          val lhs = splitConjunctivePredicates(left)
-          val rhs = splitConjunctivePredicates(right)
-          val common = lhs.filter(e => rhs.exists(e.semanticEquals(_)))
-          if (common.isEmpty) {
-            // No common factors, return the original predicate
-            or
+      // Common factor elimination for disjunction
+      case or @ (left Or right) =>
+        // 1. Split left and right to get the conjunctive predicates,
+        //   i.e.  lhs = (a, b), rhs = (a, c)
+        // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+        // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+        // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
+        val lhs = splitConjunctivePredicates(left)
+        val rhs = splitConjunctivePredicates(right)
+        val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+        if (common.isEmpty) {
+          // No common factors, return the original predicate
+          or
+        } else {
+          val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
+          val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
+          if (ldiff.isEmpty || rdiff.isEmpty) {
+            // (a && b) || (a && b && c && ...) => a && b
+            common.reduce(And)
           } else {
-            val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals(_)))
-            if (ldiff.isEmpty || rdiff.isEmpty) {
-              // (a && b) || (a && b && c && ...) => a && b
-              common.reduce(And)
-            } else {
-              // (a && b && c && ...) || (a && b && d && ...) =>
-              // ((c && ...) || (d && ...)) && a && b
-              (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
-            }
+            // (a && b && c && ...) || (a && b && d && ...) =>
+            // ((c && ...) || (d && ...)) && a && b
+            (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
           }
-      }  // end of Or(left, right)
+        }
 
-      case not @ Not(exp) => exp match {
-        // not(true)  =>  false
-        case Literal(true, BooleanType) => Literal(false)
-        // not(false)  =>  true
-        case Literal(false, BooleanType) => Literal(true)
-        // not(l > r)  =>  l <= r
-        case GreaterThan(l, r) => LessThanOrEqual(l, r)
-        // not(l >= r)  =>  l < r
-        case GreaterThanOrEqual(l, r) => LessThan(l, r)
-        // not(l < r)  =>  l >= r
-        case LessThan(l, r) => GreaterThanOrEqual(l, r)
-        // not(l <= r)  =>  l > r
-        case LessThanOrEqual(l, r) => GreaterThan(l, r)
-        // not(l || r) => not(l) && not(r)
-        case Or(l, r) => And(Not(l), Not(r))
-        // not(l && r) => not(l) or not(r)
-        case And(l, r) => Or(Not(l), Not(r))
-        // not(not(e))  =>  e
-        case Not(e) => e
-        case _ => not
-      }  // end of Not(exp)
+      case Not(TrueLiteral) => FalseLiteral
+      case Not(FalseLiteral) => TrueLiteral
 
-      // if (true) a else b  =>  a
-      // if (false) a else b  =>  b
-      case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
+      case Not(a GreaterThan b) => LessThanOrEqual(a, b)
+      case Not(a GreaterThanOrEqual b) => LessThan(a, b)
+
+      case Not(a LessThan b) => GreaterThanOrEqual(a, b)
+      case Not(a LessThanOrEqual b) => GreaterThan(a, b)
+
+      case Not(a Or b) => And(Not(a), Not(b))
+      case Not(a And b) => Or(Not(a), Not(b))
+
+      case Not(Not(e)) => e
     }
+  }
+}
+
+/**
+ * Simplifies conditional expressions (if / case).
+ */
+object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case If(TrueLiteral, trueValue, _) => trueValue
+      case If(FalseLiteral, _, falseValue) => falseValue
+
+      case e @ CaseWhen(branches, elseValue) if branches.exists(_._1 == FalseLiteral) =>
+        // If there are branches that are always false, remove them.
+        // If there are no more branches left, just use the else value.
+        // Note that these two are handled together here in a single case statement because
+        // otherwise we cannot determine the data type for the elseValue if it is None (i.e. null).
+        val newBranches = branches.filter(_._1 != FalseLiteral)
+        if (newBranches.isEmpty) {
+          elseValue.getOrElse(Literal.create(null, e.dataType))
+        } else {
+          e.copy(branches = newBranches)
+        }
+
+      case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
+        // If the first branch is a true literal, remove the entire CaseWhen and use the value
+        // from that. Note that CaseWhen.branches should never be empty, and as a result the
+        // headOption (rather than head) added above is just a extra (and unnecessary) safeguard.
+        branches.head._2
+    }
+  }
+}
+
+/**
+ * Combines all adjacent [[Union]] operators into a single [[Union]].
+ */
+object CombineUnions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Unions(children) => Union(children)
   }
 }
 
@@ -917,7 +1006,7 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
  * Speeds up aggregates on fixed-precision decimals by executing them on unscaled Long values.
  *
  * This uses the same rules for increasing the precision and scale of the output as
- * [[org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.DecimalPrecision]].
+ * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecision]].
  */
 object DecimalAggregates extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS
@@ -974,5 +1063,22 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) =>
       val newGrouping = grouping.filter(!_.foldable)
       a.copy(groupingExpressions = newGrouping)
+  }
+}
+
+/**
+ * Computes the current date and time to make sure we return the same result in a single query.
+ */
+object ComputeCurrentTime extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val dateExpr = CurrentDate()
+    val timeExpr = CurrentTimestamp()
+    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
+    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
+
+    plan transformAllExpressions {
+      case CurrentDate() => currentDate
+      case CurrentTimestamp() => currentTime
+    }
   }
 }
