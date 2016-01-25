@@ -75,7 +75,7 @@ private[sql] class JSONRelation(
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
-  val options: JSONOptions = JSONOptions.createFromConfigMap(parameters)
+  val options: JSONOptions = new JSONOptions(parameters)
 
   /** Constraints to be imposed on schema to be stored. */
   private def checkConstraints(schema: StructType): Unit = {
