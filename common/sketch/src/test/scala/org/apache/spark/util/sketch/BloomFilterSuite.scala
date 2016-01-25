@@ -24,15 +24,14 @@ import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
 
-  def testAccuracy[T: ClassTag](
-      typeName: String, numItems: Int)(itemGenerator: Random => T): Unit = {
+  def testAccuracy[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     test(s"accuracy - $typeName") {
       // use a fixed seed to make the test predictable.
       val r = new Random(37)
       val fpp = 0.05
       val numInsertion = numItems / 10
 
-      val allItems = Array.fill(numItems)(itemGenerator(r))
+      val allItems = Array.fill(numItems)(itemGen(r))
 
       val filter = BloomFilter.create(numInsertion, fpp)
 
@@ -50,7 +49,7 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
         i += 1
       }
 
-      // The number of inserted items doesn't exceed `expectedInsertions`, so the `expectedFpp`
+      // The number of inserted items doesn't exceed `expectedNumItems`, so the `expectedFpp`
       // should not be significantly higher than the one we passed in to create this bloom filter.
       assert(filter.expectedFpp() - fpp < 0.001)
 
@@ -67,31 +66,35 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  def testMergeInPlace[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
+  def testMergeInPlace[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     test(s"mergeInPlace - $typeName") {
       // use a fixed seed to make the test predictable.
       val r = new Random(37)
 
-      val items1 = Array.fill(1000)(itemGenerator(r))
-      val items2 = Array.fill(1000)(itemGenerator(r))
+      val items1 = Array.fill(numItems / 2)(itemGen(r))
+      val items2 = Array.fill(numItems / 2)(itemGen(r))
 
-      val filter1 = BloomFilter.create(1000)
+      val filter1 = BloomFilter.create(numItems)
       items1.foreach(filter1.put)
 
-      val filter2 = BloomFilter.create(1000)
+      val filter2 = BloomFilter.create(numItems)
       items2.foreach(filter2.put)
 
       filter1.mergeInPlace(filter2)
+
+      // After merge, `filter1` has `numItems` items which doesn't exceed `expectedNumItems`, so the
+      // `expectedFpp` should not be significantly higher than the default one: 3%
+      // Skip byte type as it has too little distinct values.
+      assert(typeName == "Byte" || 0.03 - filter1.expectedFpp() < 0.001)
 
       items1.foreach(i => assert(filter1.mightContain(i)))
       items2.foreach(i => assert(filter1.mightContain(i)))
     }
   }
 
-  def testItemType[T: ClassTag](
-      typeName: String, numItems: Int)(itemGenerator: Random => T): Unit = {
-    testAccuracy[T](typeName, numItems)(itemGenerator)
-    testMergeInPlace[T](typeName)(itemGenerator)
+  def testItemType[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
+    testAccuracy[T](typeName, numItems)(itemGen)
+    testMergeInPlace[T](typeName, numItems)(itemGen)
   }
 
   testItemType[Byte]("Byte", 200) { _.nextInt().toByte }

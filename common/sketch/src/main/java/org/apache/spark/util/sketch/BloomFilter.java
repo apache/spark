@@ -40,8 +40,9 @@ package org.apache.spark.util.sketch;
  */
 public abstract class BloomFilter {
   /**
-   * Returns the probability that {@linkplain #mightContain(Object)} will erroneously return
-   * {@code true} for an object that has not actually been put in the {@code BloomFilter}.
+   * Returns the false positive probability, i.e. the probability that
+   * {@linkplain #mightContain(Object)} will erroneously return {@code true} for an object that
+   * has not actually been put in the {@code BloomFilter}.
    *
    * <p>Ideally, this number should be close to the {@code fpp} parameter
    * passed in to create this bloom filter, or smaller. If it is
@@ -64,7 +65,7 @@ public abstract class BloomFilter {
    *     filter. If the bits haven't changed, this <i>might</i> be the first time {@code object}
    *     has been added to the filter. Note that {@code put(t)} always returns the
    *     <i>opposite</i> result to what {@code mightContain(t)} would have returned at the time
-   *     it is called."
+   *     it is called.
    */
   public abstract boolean put(Object item);
 
@@ -116,27 +117,35 @@ public abstract class BloomFilter {
    * @param p false positive rate (must be 0 < p < 1)
    */
   private static long optimalNumOfBits(long n, double p) {
-    if (p == 0) {
-      p = Double.MIN_VALUE;
-    }
     return (long) (-n * Math.log(p) / (Math.log(2) * Math.log(2)));
   }
 
-  public static BloomFilter create(long expectedInsertions) {
-    return create(expectedInsertions, 0.03);
+  /**
+   * Creates a {@link BloomFilter} with given {@code expectedNumItems} and a default 3% {@code fpp}.
+   */
+  public static BloomFilter create(long expectedNumItems) {
+    return create(expectedNumItems, 0.03);
   }
 
-  public static BloomFilter create(long expectedInsertions, double fpp) {
+  /**
+   * Creates a {@link BloomFilter} with given {@code expectedNumItems} and {@code fpp}, it will pick
+   * an optimal {@code numBits} and {@code numHashFunctions} for the bloom filter.
+   */
+  public static BloomFilter create(long expectedNumItems, double fpp) {
     assert fpp > 0.0 : "False positive probability must be > 0.0";
     assert fpp < 1.0 : "False positive probability must be < 1.0";
-    long numBits = optimalNumOfBits(expectedInsertions, fpp);
-    return create(expectedInsertions, numBits);
+    long numBits = optimalNumOfBits(expectedNumItems, fpp);
+    return create(expectedNumItems, numBits);
   }
 
-  public static BloomFilter create(long expectedInsertions, long numBits) {
-    assert expectedInsertions > 0 : "Expected insertions must be > 0";
+  /**
+   * Creates a {@link BloomFilter} with given {@code expectedNumItems} and {@code numBits}, it will
+   * pick an optimal {@code numHashFunctions} which can minimize {@code fpp} for the bloom filter.
+   */
+  public static BloomFilter create(long expectedNumItems, long numBits) {
+    assert expectedNumItems > 0 : "Expected insertions must be > 0";
     assert numBits > 0 : "number of bits must be > 0";
-    int numHashFunctions = optimalNumOfHashFunctions(expectedInsertions, numBits);
-    return new DefaultBloomFilter(numHashFunctions, numBits);
+    int numHashFunctions = optimalNumOfHashFunctions(expectedNumItems, numBits);
+    return new BloomFilterImpl(numHashFunctions, numBits);
   }
 }
