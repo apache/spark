@@ -245,15 +245,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     master.removeBlock("a3-to-remove")
 
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("a1-to-remove") should be (None)
+      assert(!store.hasLocalBlock("a1-to-remove"))
       master.getLocations("a1-to-remove") should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("a2-to-remove") should be (None)
+      assert(!store.hasLocalBlock("a2-to-remove"))
       master.getLocations("a2-to-remove") should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("a3-to-remove") should not be (None)
+      assert(store.hasLocalBlock("a3-to-remove"))
       master.getLocations("a3-to-remove") should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
