@@ -426,6 +426,9 @@ class RDD(object):
         """
         Return a fixed-size sampled subset of this RDD.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
         20
@@ -1215,6 +1218,9 @@ class RDD(object):
         """
         Get the top N elements from a RDD.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         Note: It returns the list sorted in descending order.
 
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
@@ -1236,6 +1242,9 @@ class RDD(object):
         """
         Get the N elements from a RDD ordered in ascending order or as
         specified by the optional key function.
+
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
 
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7]).takeOrdered(6)
         [1, 2, 3, 4, 5, 6]
