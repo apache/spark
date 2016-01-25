@@ -323,13 +323,12 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
-    val skipHiveMetadata = options.getOrElse("skip_hive_metadata", "false").toBoolean
+    val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
     val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.relation) match {
-      case (Some(serde), relation: HadoopFsRelation) if skipHiveMetadata =>
+      case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-            "Input path(s): " + relation.paths.mkString("\n", "\n", "")
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
       case (Some(serde), relation: HadoopFsRelation)

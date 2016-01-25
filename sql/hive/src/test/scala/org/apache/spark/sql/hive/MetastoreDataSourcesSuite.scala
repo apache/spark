@@ -857,9 +857,11 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       partitionColumns = Array.empty[String],
       bucketSpec = None,
       provider = "parquet",
-      options = Map("path" -> "just a dummy path", "skip_hive_metadata" -> "false"),
+      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "false"),
       isExternal = false)
 
+    // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
+    // each column of the table is of native type StringType.
     assert(catalog.client.getTable("default", "not_skip_hive_metadata").schema
       .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == StringType))
 
@@ -869,9 +871,11 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       partitionColumns = Array.empty[String],
       bucketSpec = None,
       provider = "parquet",
-      options = Map("path" -> "just a dummy path", "skip_hive_metadata" -> "true"),
+      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "true"),
       isExternal = false)
 
+    // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
+    // the table has a column type as array of StringType.
     assert(catalog.client.getTable("default", "skip_hive_metadata").schema
       .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == ArrayType(StringType)))
   }
