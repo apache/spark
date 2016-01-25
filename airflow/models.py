@@ -954,7 +954,7 @@ class TaskInstance(Base):
             else:
                 msg = "Retry {self.try_number} out of {tot_tries}"
             msg = msg.format(**locals())
-            self.try_number = 1
+            self.try_number += 1
             logging.info(HR + msg + HR)
             self.start_date = datetime.now()
 
