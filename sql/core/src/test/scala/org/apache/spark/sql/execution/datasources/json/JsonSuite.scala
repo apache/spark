@@ -442,13 +442,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      sql("select num_str + 1.2BD from jsonTable where num_str > 14"),
+      sql("select num_str + 1.2 from jsonTable where num_str > 14"),
       Row(BigDecimal("92233720368547758071.2"))
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      sql("select num_str + 1.2BD from jsonTable where num_str >= 92233720368547758060BD"),
+      sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
       Row(new java.math.BigDecimal("92233720368547758071.2"))
     )
 
@@ -1464,6 +1464,34 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           )
         }
       }
+    }
+  }
+
+  test("SPARK-12872 Support to specify the option for compression codec") {
+    withTempDir { dir =>
+      val dir = Utils.createTempDir()
+      dir.delete()
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+
+      val jsonDF = sqlContext.read.json(path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      jsonDF.coalesce(1).write
+        .format("json")
+        .option("compression", "gZiP")
+        .save(jsonDir)
+
+      val compressedFiles = new File(jsonDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+
+      val jsonCopy = sqlContext.read
+        .format("json")
+        .load(jsonDir)
+
+      assert(jsonCopy.count == jsonDF.count)
+      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+      checkAnswer(jsonCopySome, jsonDFSome)
     }
   }
 

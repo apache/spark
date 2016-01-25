@@ -1192,23 +1192,10 @@ setMethod("$", signature(x = "DataFrame"),
 setMethod("$<-", signature(x = "DataFrame"),
           function(x, name, value) {
             stopifnot(class(value) == "Column" || is.null(value))
-            cols <- columns(x)
-            if (name %in% cols) {
-              if (is.null(value)) {
-                cols <- Filter(function(c) { c != name }, cols)
-              }
-              cols <- lapply(cols, function(c) {
-                if (c == name) {
-                  alias(value, name)
-                } else {
-                  col(c)
-                }
-              })
-              nx <- select(x, cols)
+
+            if (is.null(value)) {
+              nx <- drop(x, name)
             } else {
-              if (is.null(value)) {
-                return(x)
-              }
               nx <- withColumn(x, name, value)
             }
             x@sdf <- nx@sdf
@@ -1386,12 +1373,13 @@ setMethod("selectExpr",
 
 #' WithColumn
 #'
-#' Return a new DataFrame with the specified column added.
+#' Return a new DataFrame by adding a column or replacing the existing column
+#' that has the same name.
 #'
 #' @param x A DataFrame
-#' @param colName A string containing the name of the new column.
+#' @param colName A column name.
 #' @param col A Column expression.
-#' @return A DataFrame with the new column added.
+#' @return A DataFrame with the new column added or the existing column replaced.
 #' @family DataFrame functions
 #' @rdname withColumn
 #' @name withColumn
@@ -1404,12 +1392,16 @@ setMethod("selectExpr",
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
 #' newDF <- withColumn(df, "newCol", df$col1 * 5)
+#' # Replace an existing column
+#' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
 #' }
 setMethod("withColumn",
           signature(x = "DataFrame", colName = "character", col = "Column"),
           function(x, colName, col) {
-            select(x, x$"*", alias(col, colName))
+            sdf <- callJMethod(x@sdf, "withColumn", colName, col@jc)
+            dataFrame(sdf)
           })
+
 #' Mutate
 #'
 #' Return a new DataFrame with the specified columns added.
@@ -2005,7 +1997,13 @@ setMethod("write.df",
           signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "error", ...){
             if (is.null(source)) {
-              sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              } else if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRHivesc", envir = .sparkREnv)
+              } else {
+                stop("sparkRHive or sparkRSQL context has to be specified")
+              }
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
@@ -2063,13 +2061,18 @@ setMethod("saveDF",
 #' saveAsTable(df, "myfile")
 #' }
 setMethod("saveAsTable",
-          signature(df = "DataFrame", tableName = "character", source = "character",
-                    mode = "character"),
+          signature(df = "DataFrame", tableName = "character"),
           function(df, tableName, source = NULL, mode="error", ...){
             if (is.null(source)) {
-              sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
-              source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
-                                    "org.apache.spark.sql.parquet")
+              if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              } else if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRHivesc", envir = .sparkREnv)
+              } else {
+                stop("sparkRHive or sparkRSQL context has to be specified")
+              }
+               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
+                                     "org.apache.spark.sql.parquet")
             }
             jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
@@ -2401,4 +2404,47 @@ setMethod("str",
                 cat(paste0("\nDisplaying first ", ncol(localDF), " columns only."))
               }
             }
+          })
+
+#' drop
+#'
+#' Returns a new DataFrame with columns dropped.
+#' This is a no-op if schema doesn't contain column name(s).
+#' 
+#' @param x A SparkSQL DataFrame.
+#' @param cols A character vector of column names or a Column.
+#' @return A DataFrame
+#'
+#' @family DataFrame functions
+#' @rdname drop
+#' @name drop
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlCtx, path)
+#' drop(df, "col1")
+#' drop(df, c("col1", "col2"))
+#' drop(df, df$col1)
+#' }
+setMethod("drop",
+          signature(x = "DataFrame"),
+          function(x, col) {
+            stopifnot(class(col) == "character" || class(col) == "Column")
+
+            if (class(col) == "Column") {
+              sdf <- callJMethod(x@sdf, "drop", col@jc)
+            } else {
+              sdf <- callJMethod(x@sdf, "drop", as.list(col))
+            }
+            dataFrame(sdf)
+          })
+
+# Expose base::drop
+setMethod("drop",
+          signature(x = "ANY"),
+          function(x) {
+            base::drop(x)
           })
