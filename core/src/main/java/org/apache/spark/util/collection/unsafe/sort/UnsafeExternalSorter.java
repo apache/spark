@@ -479,7 +479,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           allocatedPages.clear();
         }
 
-        long spillSize = 0L;
+        long spillSize = released;
         if (lastPage != null) {
           spillSize += lastPage.size();
         }
