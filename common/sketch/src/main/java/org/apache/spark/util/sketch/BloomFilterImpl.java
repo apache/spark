@@ -79,6 +79,11 @@ public class BloomFilterImpl extends BloomFilter {
   @Override
   public boolean put(Object item) {
     long bitSize = bits.bitSize();
+
+    // Here we first hash the input element into 2 int hash values, h1 and h2, then produce n hash
+    // values by `h1 + i * h2` with 1 <= i <= numHashFunctions.
+    // Note that `CountMinSketch` use a different strategy for long type, it hash the input long
+    // element with every i to produce n hash values.
     long hash64 = hashObjectToLong(item);
     int h1 = (int) (hash64 >> 32);
     int h2 = (int) hash64;
