@@ -208,10 +208,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
-    val referenceCount = blockManager.getPinCount(blockId)
-    if (referenceCount != 0) {
+    val pinCount = blockManager.getPinCount(blockId)
+    if (pinCount != 0) {
       throw new IllegalStateException(
-        s"Cannot free block $blockId since it is still referenced $referenceCount times")
+        s"Cannot free block $blockId since it is still pinned $pinCount times")
     }
     val entry = entries.synchronized { entries.remove(blockId) }
     if (entry != null) {
@@ -468,7 +468,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
 
   /**
    * Reserve memory for unrolling the given block for this task.
- *
+   *
    * @return whether the request is granted.
    */
   def reserveUnrollMemoryForThisTask(blockId: BlockId, memory: Long): Boolean = {

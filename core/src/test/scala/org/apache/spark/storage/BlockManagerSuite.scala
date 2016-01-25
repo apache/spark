@@ -1312,7 +1312,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(result.data === Right(bytes))
   }
 
-  test("blocks with non-zero reference counts cannot be evicted from the MemoryStore") {
+  test("blocks with non-zero pin counts cannot be evicted from the MemoryStore") {
     store = makeBlockManager(12000)
     val arr = new Array[Byte](4000)
     // First store a1 and a2, both in memory, and a3, on disk only
@@ -1320,17 +1320,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("a2", arr, StorageLevel.MEMORY_ONLY_SER)
     assert(store.getSingle("a1").isDefined, "a1 was not in store")
     assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    // This put should fail because both a1 and a2 have non-zero reference counts:
+    // This put should fail because both a1 and a2 have non-zero pin counts:
     store.putSingle("a3", arr, StorageLevel.MEMORY_ONLY_SER)
     assert(store.getSingle("a3").isEmpty, "a3 was in store")
     assert(store.getSingle("a1").isDefined, "a1 was not in store")
     assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    // Release both references to block a2:
+    // Release both pins of block a2:
     store.unpin("a2")
     store.unpin("a2")
     assert(store.getPinCount("a2") === 0)
     // Block a1 is the least-recently accessed, so an LRU eviction policy would evict it before
-    // block a2. However, a1 still has references, so this put of a3 should evict a2 instead:
+    // block a2. However, a1 is still pinned so this put of a3 should evict a2 instead:
     store.putSingle("a3", arr, StorageLevel.MEMORY_ONLY_SER)
     assert(store.getSingle("a2").isEmpty, "a2 was in store")
     assert(store.getSingle("a1").isDefined, "a1 was not in store")
