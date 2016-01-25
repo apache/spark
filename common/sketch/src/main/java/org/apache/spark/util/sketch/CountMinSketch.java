@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.sketch;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -136,28 +135,7 @@ abstract public class CountMinSketch {
    * Reads in a {@link CountMinSketch} from an input stream.
    */
   public static CountMinSketch readFrom(InputStream in) throws IOException {
-    DataInputStream dis = new DataInputStream(in);
-
-    // Ignores version number
-    dis.readInt();
-
-    long totalCount = dis.readLong();
-    int depth = dis.readInt();
-    int width = dis.readInt();
-
-    long hashA[] = new long[depth];
-    for (int i = 0; i < depth; ++i) {
-      hashA[i] = dis.readLong();
-    }
-
-    long table[][] = new long[depth][width];
-    for (int i = 0; i < depth; ++i) {
-      for (int j = 0; j < width; ++j) {
-        table[i][j] = dis.readLong();
-      }
-    }
-
-    return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
+    return CountMinSketchImpl.readFrom(in);
   }
 
   /**

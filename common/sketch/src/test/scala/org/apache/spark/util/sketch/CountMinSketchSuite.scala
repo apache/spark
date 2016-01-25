@@ -31,6 +31,8 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
   private val seed = 42
 
+  // Serializes and deserializes a given `CountMinSketch`, then checks whether the deserialized
+  // version is equivalent to the original one.
   private def checkSerDe(sketch: CountMinSketch): Unit = {
     val out = new ByteArrayOutputStream()
     sketch.writeTo(out)
@@ -43,7 +45,8 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
   def testAccuracy[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
     test(s"accuracy - $typeName") {
-      val r = new Random()
+      // Uses fixed seed to ensure reproducible test execution
+      val r = new Random(31)
 
       val numAllItems = 1000000
       val allItems = Array.fill(numAllItems)(itemGenerator(r))

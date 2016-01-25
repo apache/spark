@@ -17,13 +17,30 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
+/*
+ * Binary format of a serialized CountMinSketchImpl, version 1 (all values written in big-endian
+ * order):
+ *
+ * - Version number, always 1 (32 bit)
+ * - Total count of added items (64 bit)
+ * - Depth (32 bit)
+ * - Width (32 bit)
+ * - Hash functions (depth * 64 bit)
+ * - Count table
+ *   - Row 0 (width * 64 bit)
+ *   - Row 1 (width * 64 bit)
+ *   - ...
+ *   - Row depth - 1 (width * 64 bit)
+ */
 class CountMinSketchImpl extends CountMinSketch {
   public static final long PRIME_MODULUS = (1L << 31) - 1;
 
@@ -35,7 +52,7 @@ class CountMinSketchImpl extends CountMinSketch {
   private double eps;
   private double confidence;
 
-  public CountMinSketchImpl(int depth, int width, int seed) {
+  CountMinSketchImpl(int depth, int width, int seed) {
     this.depth = depth;
     this.width = width;
     this.eps = 2.0 / width;
@@ -43,7 +60,7 @@ class CountMinSketchImpl extends CountMinSketch {
     initTablesWith(depth, width, seed);
   }
 
-  public CountMinSketchImpl(double eps, double confidence, int seed) {
+  CountMinSketchImpl(double eps, double confidence, int seed) {
     // 2/w = eps ; w = 2/eps
     // 1/2^depth <= 1-confidence ; depth >= -log2 (1-confidence)
     this.eps = eps;
@@ -53,7 +70,7 @@ class CountMinSketchImpl extends CountMinSketch {
     initTablesWith(depth, width, seed);
   }
 
-  public CountMinSketchImpl(int depth, int width, long totalCount, long hashA[], long table[][]) {
+  CountMinSketchImpl(int depth, int width, long totalCount, long hashA[], long table[][]) {
     this.depth = depth;
     this.width = width;
     this.eps = 2.0 / width;
@@ -75,24 +92,24 @@ class CountMinSketchImpl extends CountMinSketch {
 
     CountMinSketchImpl that = (CountMinSketchImpl) other;
 
-    if (this.depth == that.depth &&
-        this.width == that.width &&
-        this.totalCount == that.totalCount) {
-      for (int i = 0; i < depth; ++i) {
-        if (this.hashA[i] != that.hashA[i]) {
-          return false;
-        }
+    return
+      this.depth == that.depth &&
+      this.width == that.width &&
+      this.totalCount == that.totalCount &&
+      Arrays.equals(this.hashA, that.hashA) &&
+      Arrays.deepEquals(this.table, that.table);
+  }
 
-        for (int j = 0; j < width; ++j) {
-          if (this.table[i][j] != that.table[i][j]) {
-            return false;
-          }
-        }
-      }
-      return true;
-    } else {
-      return false;
-    }
+  @Override
+  public int hashCode() {
+    int hash = depth;
+
+    hash = hash * 31 + width;
+    hash = hash * 31 + (int) (totalCount ^ (totalCount >>> 32));
+    hash = hash * 31 + Arrays.hashCode(hashA);
+    hash = hash * 31 + Arrays.deepHashCode(table);
+
+    return hash;
   }
 
   @Override
@@ -323,5 +340,30 @@ class CountMinSketchImpl extends CountMinSketch {
         dos.writeLong(table[i][j]);
       }
     }
+  }
+
+  public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
+    DataInputStream dis = new DataInputStream(in);
+
+    // Ignores version number
+    dis.readInt();
+
+    long totalCount = dis.readLong();
+    int depth = dis.readInt();
+    int width = dis.readInt();
+
+    long hashA[] = new long[depth];
+    for (int i = 0; i < depth; ++i) {
+      hashA[i] = dis.readLong();
+    }
+
+    long table[][] = new long[depth][width];
+    for (int i = 0; i < depth; ++i) {
+      for (int j = 0; j < width; ++j) {
+        table[i][j] = dis.readLong();
+      }
+    }
+
+    return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
   }
 }
