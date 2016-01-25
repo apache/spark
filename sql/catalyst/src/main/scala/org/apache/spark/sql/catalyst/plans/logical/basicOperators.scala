@@ -176,10 +176,20 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     Statistics(sizeInBytes = sizeInBytes)
   }
 
+  def rewriteConstraints(
+      planA: LogicalPlan,
+      planB: LogicalPlan,
+      constraints: Set[Expression]): Set[Expression] = {
+    require(planA.output.size == planB.output.size)
+    val attributeRewrites = AttributeMap(planB.output.zip(planA.output))
+    constraints.map(_ transform {
+      case a: Attribute => attributeRewrites(a)
+    })
+  }
+
   override def constraints: Set[Expression] = {
-    println("left", leftConstraints)
-    println("right", rightConstraints)
-    leftConstraints.intersect(rightConstraints)
+    children.map(child => rewriteConstraints(children.head, child,
+      extractConstraintsFromChild(child))).reduce(_ intersect _)
   }
 }
 
