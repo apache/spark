@@ -107,7 +107,8 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
 
   protected def rightConstraints: Set[Expression] = {
     require(left.output.size == right.output.size)
-    val attributeRewrites = AttributeMap(left.output.zip(right.output))
+    val attributeRewrites = AttributeMap(right.output.zip(left.output))
+    println(extractConstraintsFromChild(right), attributeRewrites)
     extractConstraintsFromChild(right).map(_ transform {
       case a: Attribute => attributeRewrites(a)
     })
@@ -136,6 +137,8 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
   }
 
   override def constraints: Set[Expression] = {
+    println("left", leftConstraints)
+    println("right", rightConstraints)
     leftConstraints.intersect(rightConstraints)
   }
 }
@@ -182,6 +185,7 @@ case class Join(
 
   override def constraints: Set[Expression] = {
     joinType match {
+      case Inner =>
       case LeftSemi =>
         extractConstraintsFromChild(left)
       case LeftOuter =>

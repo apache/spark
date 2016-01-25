@@ -18,11 +18,9 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util._
 
 /**
  * This suite is used to test [[LogicalPlan]]'s `resolveOperators` and make sure it can correctly
@@ -71,17 +69,5 @@ class LogicalPlanSuite extends SparkFunSuite {
     plan2 resolveOperators function
 
     assert(invocationCount === 1)
-  }
-
-  test("propagating constraint in filter") {
-    val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    def resolveColumn(columnName: String): Expression =
-      tr.analyze.resolveQuoted(columnName, caseInsensitiveResolution).get
-    assert(tr.analyze.constraints.isEmpty)
-    assert(tr.select('a.attr).analyze.constraints.isEmpty)
-    assert(tr.where('a.attr > 10).analyze.constraints == Set(resolveColumn("a") > 10))
-    assert(tr.where('a.attr > 10).select('c.attr, 'b.attr).analyze.constraints.isEmpty)
-    assert(tr.where('a.attr > 10).select('c.attr, 'a.attr).where('c.attr < 100)
-      .analyze.constraints == Set(resolveColumn("a") > 10, resolveColumn("c") < 100))
   }
 }
