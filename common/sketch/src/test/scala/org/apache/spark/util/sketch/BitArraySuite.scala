@@ -18,13 +18,14 @@
 package org.apache.spark.util.sketch
 
 import scala.util.Random
+
 import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 class BitArraySuite extends FunSuite { // scalastyle:ignore funsuite
 
   test("error case when create BitArray") {
     intercept[IllegalArgumentException](new BitArray(0))
-    intercept[IllegalArgumentException](new BitArray(64l * Integer.MAX_VALUE + 1))
+    intercept[IllegalArgumentException](new BitArray(64L * Integer.MAX_VALUE + 1))
   }
 
   test("bitSize") {
