@@ -43,7 +43,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.{Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
-import org.apache.spark.util.collection.ReferenceCounter
+import org.apache.spark.util.collection.PinCounter
 
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
@@ -157,7 +157,7 @@ private[spark] class BlockManager(
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
-  private val referenceCounts = new ReferenceCounter[BlockId]
+  private val pinCounts = new PinCounter[BlockId]
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -408,7 +408,7 @@ private[spark] class BlockManager(
     logDebug(s"Getting local block $blockId")
     val res = doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
     if (res.isDefined) {
-      referenceCounts.retain(blockId)
+      pinCounts.pin(blockId)
     }
     res
   }
@@ -430,7 +430,7 @@ private[spark] class BlockManager(
       doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     }
     if (res.isDefined) {
-      referenceCounts.retain(blockId)
+      pinCounts.pin(blockId)
     }
     res
   }
@@ -547,7 +547,7 @@ private[spark] class BlockManager(
     logDebug(s"Getting remote block $blockId")
     val res = doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
     if (res.isDefined) {
-      referenceCounts.retain(blockId)
+      pinCounts.pin(blockId)
     }
     res
   }
@@ -559,7 +559,7 @@ private[spark] class BlockManager(
     logDebug(s"Getting remote block $blockId as bytes")
     val res = doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     if (res.isDefined) {
-      referenceCounts.retain(blockId)
+      pinCounts.pin(blockId)
     }
     res
   }
@@ -635,15 +635,15 @@ private[spark] class BlockManager(
    * Release one reference to the given block.
    */
   def release(blockId: BlockId): Unit = {
-    referenceCounts.release(blockId)
+    pinCounts.unpin(blockId)
   }
 
   def releaseAllReferencesForTask(taskAttemptId: Long): Unit = {
-    referenceCounts.releaseAllReferencesForTask(taskAttemptId)
+    pinCounts.releaseAllPinsForTask(taskAttemptId)
   }
 
-  private[storage] def getReferenceCount(blockId: BlockId): Int = {
-    referenceCounts.getReferenceCount(blockId)
+  private[storage] def getPinCount(blockId: BlockId): Int = {
+    pinCounts.getPinCount(blockId)
   }
 
   /**
@@ -1088,6 +1088,7 @@ private[spark] class BlockManager(
 
   /**
    * Remove all blocks belonging to the given RDD.
+   *
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {

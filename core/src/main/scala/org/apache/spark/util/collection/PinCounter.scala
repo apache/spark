@@ -25,21 +25,21 @@ import com.google.common.collect.ConcurrentHashMultiset
 import org.apache.spark.TaskContext
 
 /**
- * Thread-safe collection for maintaining both global and per-task reference counts for objects.
+ * Thread-safe collection for maintaining both global and per-task pin counts for objects.
  */
-private[spark] class ReferenceCounter[T] {
+private[spark] class PinCounter[T] {
 
   private type TaskAttemptId = Long
 
   /**
-   * Total references across all tasks.
+   * Total pins across all tasks.
    */
-  private[this] val allReferences = ConcurrentHashMultiset.create[T]()
+  private[this] val allPins = ConcurrentHashMultiset.create[T]()
 
   /**
-   * Total references per task. Used to auto-release references upon task completion.
+   * Total pins per task. Used to auto-release pins upon task completion.
    */
-  private[this] val referencesByTask = {
+  private[this] val pinsByTask = {
     // We need to explicitly box as java.lang.Long to avoid a type mismatch error:
     val loader = new CacheLoader[java.lang.Long, ConcurrentHashMultiset[T]] {
       override def load(t: java.lang.Long) = ConcurrentHashMultiset.create[T]()
@@ -48,61 +48,61 @@ private[spark] class ReferenceCounter[T] {
   }
 
   /**
-   * Returns the total reference count, across all tasks, for the given object.
+   * Returns the total pin count, across all tasks, for the given object.
    */
-  def getReferenceCount(obj: T): Int = allReferences.count(obj)
+  def getPinCount(obj: T): Int = allPins.count(obj)
 
   /**
-   * Increments the given object's reference count for the current task.
+   * Increments the given object's pin count for the current task.
    */
-  def retain(obj: T): Unit = retainForTask(currentTaskAttemptId, obj)
+  def pin(obj: T): Unit = retainForTask(currentTaskAttemptId, obj)
 
   /**
-   * Decrements the given object's reference count for the current task.
+   * Decrements the given object's pin count for the current task.
    */
-  def release(obj: T): Unit = releaseForTask(currentTaskAttemptId, obj)
+  def unpin(obj: T): Unit = releaseForTask(currentTaskAttemptId, obj)
 
   private def currentTaskAttemptId: TaskAttemptId = {
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
   }
 
   /**
-   * Increments the given object's reference count for the given task.
+   * Increments the given object's pin count for the given task.
    */
   def retainForTask(taskAttemptId: TaskAttemptId, obj: T): Unit = {
-    referencesByTask.get(taskAttemptId).add(obj)
-    allReferences.add(obj)
+    pinsByTask.get(taskAttemptId).add(obj)
+    allPins.add(obj)
   }
 
   /**
-   * Decrements the given object's reference count for the given task.
+   * Decrements the given object's pin count for the given task.
    */
   def releaseForTask(taskAttemptId: TaskAttemptId, obj: T): Unit = {
-    val countsForTask = referencesByTask.get(taskAttemptId)
-    val newReferenceCountForTask: Int = countsForTask.remove(obj, 1) - 1
-    val newTotalReferenceCount: Int = allReferences.remove(obj, 1) - 1
-    if (newReferenceCountForTask < 0) {
+    val countsForTask = pinsByTask.get(taskAttemptId)
+    val newPinCountForTask: Int = countsForTask.remove(obj, 1) - 1
+    val newTotalPinCount: Int = allPins.remove(obj, 1) - 1
+    if (newPinCountForTask < 0) {
       throw new IllegalStateException(
         s"Task $taskAttemptId released object $obj more times than it was retained")
     }
-    if (newTotalReferenceCount < 0) {
+    if (newTotalPinCount < 0) {
       throw new IllegalStateException(
         s"Task $taskAttemptId released object $obj more times than it was retained")
     }
   }
 
   /**
-   * Release all references held by the given task, clearing that task's reference bookkeeping
-   * structures and updating the global reference counts. This method should be called at the
+   * Release all pins held by the given task, clearing that task's pin bookkeeping
+   * structures and updating the global pin counts. This method should be called at the
    * end of a task (either by a task completion handler or in `TaskRunner.run()`).
    */
-  def releaseAllReferencesForTask(taskAttemptId: TaskAttemptId): Unit = {
-    val referenceCounts = referencesByTask.get(taskAttemptId)
-    referencesByTask.invalidate(taskAttemptId)
-    referenceCounts.entrySet().iterator().asScala.foreach { entry =>
+  def releaseAllPinsForTask(taskAttemptId: TaskAttemptId): Unit = {
+    val PinCounts = pinsByTask.get(taskAttemptId)
+    pinsByTask.invalidate(taskAttemptId)
+    PinCounts.entrySet().iterator().asScala.foreach { entry =>
       val obj = entry.getElement
       val taskRefCount = entry.getCount
-      val newRefCount = allReferences.remove(obj, taskRefCount) - taskRefCount
+      val newRefCount = allPins.remove(obj, taskRefCount) - taskRefCount
       if (newRefCount < 0) {
         throw new IllegalStateException(
           s"Task $taskAttemptId released object $obj more times than it was retained")
@@ -111,12 +111,12 @@ private[spark] class ReferenceCounter[T] {
   }
 
   /**
-   * Return the number of map entries in this reference counter's internal data structures.
+   * Return the number of map entries in this pin counter's internal data structures.
    * This is used in unit tests in order to detect memory leaks.
    */
   private[collection] def getNumberOfMapEntries: Long = {
-    allReferences.size() +
-      referencesByTask.size() +
-      referencesByTask.asMap().asScala.map(_._2.size()).sum
+    allPins.size() +
+      pinsByTask.size() +
+      pinsByTask.asMap().asScala.map(_._2.size()).sum
   }
 }

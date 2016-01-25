@@ -208,7 +208,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
-    val referenceCount = blockManager.getReferenceCount(blockId)
+    val referenceCount = blockManager.getPinCount(blockId)
     if (referenceCount != 0) {
       throw new IllegalStateException(
         s"Cannot free block $blockId since it is still referenced $referenceCount times")
@@ -412,7 +412,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
       def blockIsEvictable(blockId: BlockId): Boolean = {
-        blockManager.getReferenceCount(blockId) == 0 &&
+        blockManager.getPinCount(blockId) == 0 &&
           (rddToAdd.isEmpty || rddToAdd != getRddId(blockId))
       }
       // This is synchronized to ensure that the set of entries is not changed
@@ -468,6 +468,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
 
   /**
    * Reserve memory for unrolling the given block for this task.
+ *
    * @return whether the request is granted.
    */
   def reserveUnrollMemoryForThisTask(blockId: BlockId, memory: Long): Boolean = {

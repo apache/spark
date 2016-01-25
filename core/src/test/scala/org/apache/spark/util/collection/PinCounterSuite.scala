@@ -22,13 +22,13 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.{BlockId, TestBlockId}
 
-class ReferenceCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class PinCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  private var refCounter: ReferenceCounter[BlockId] = _
+  private var refCounter: PinCounter[BlockId] = _
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    refCounter = new ReferenceCounter()
+    refCounter = new PinCounter()
   }
 
   override protected def afterEach(): Unit = {
@@ -36,9 +36,9 @@ class ReferenceCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
     super.afterEach()
   }
 
-  test("initial reference counts are zero") {
+  test("initial pin counts are zero") {
     assert(refCounter.getNumberOfMapEntries === 0)
-    assert(refCounter.getReferenceCount(TestBlockId("dummy")) === 0)
+    assert(refCounter.getPinCount(TestBlockId("dummy")) === 0)
     assert(refCounter.getNumberOfMapEntries === 0)
   }
 
@@ -52,13 +52,13 @@ class ReferenceCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
     val block = TestBlockId("dummy")
     val taskAttemptId = 0L
     refCounter.retainForTask(taskAttemptId, block)
-    assert(refCounter.getReferenceCount(block) === 1)
+    assert(refCounter.getPinCount(block) === 1)
     refCounter.retainForTask(taskAttemptId, block)
-    assert(refCounter.getReferenceCount(block) === 2)
+    assert(refCounter.getPinCount(block) === 2)
     refCounter.releaseForTask(taskAttemptId, block)
-    assert(refCounter.getReferenceCount(block) === 1)
-    refCounter.releaseAllReferencesForTask(taskAttemptId)
-    assert(refCounter.getReferenceCount(block) === 0L)
+    assert(refCounter.getPinCount(block) === 1)
+    refCounter.releaseAllPinsForTask(taskAttemptId)
+    assert(refCounter.getPinCount(block) === 0L)
     // Ensure that we didn't leak memory / map entries:
     assert(refCounter.getNumberOfMapEntries === 0)
   }
@@ -74,19 +74,19 @@ class ReferenceCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
     refCounter.retainForTask(taskB, block)
     refCounter.retainForTask(taskA, block)
 
-    assert(refCounter.getReferenceCount(block) === 5)
+    assert(refCounter.getPinCount(block) === 5)
 
     refCounter.releaseForTask(taskA, block)
-    assert(refCounter.getReferenceCount(block) === 4)
+    assert(refCounter.getPinCount(block) === 4)
 
-    refCounter.releaseAllReferencesForTask(taskA)
-    assert(refCounter.getReferenceCount(block) === 2)
+    refCounter.releaseAllPinsForTask(taskA)
+    assert(refCounter.getPinCount(block) === 2)
 
     refCounter.releaseForTask(taskB, block)
     refCounter.releaseForTask(taskB, block)
-    assert(refCounter.getReferenceCount(block) === 0)
+    assert(refCounter.getPinCount(block) === 0)
 
-    refCounter.releaseAllReferencesForTask(taskB)
+    refCounter.releaseAllPinsForTask(taskB)
 
     // Ensure that we didn't leak memory / map entries:
     assert(refCounter.getNumberOfMapEntries === 0)
@@ -98,16 +98,16 @@ class ReferenceCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
     val taskAttemptId = 0L
 
     refCounter.retainForTask(taskAttemptId, blockA)
-    assert(refCounter.getReferenceCount(blockA) === 1)
-    assert(refCounter.getReferenceCount(blockB) === 0)
+    assert(refCounter.getPinCount(blockA) === 1)
+    assert(refCounter.getPinCount(blockB) === 0)
 
     refCounter.retainForTask(taskAttemptId, blockB)
     refCounter.retainForTask(taskAttemptId, blockB)
-    assert(refCounter.getReferenceCount(blockA) === 1)
-    assert(refCounter.getReferenceCount(blockB) === 2)
+    assert(refCounter.getPinCount(blockA) === 1)
+    assert(refCounter.getPinCount(blockB) === 2)
 
     // Ensure that we didn't leak memory / map entries:
-    refCounter.releaseAllReferencesForTask(taskAttemptId)
+    refCounter.releaseAllPinsForTask(taskAttemptId)
     assert(refCounter.getNumberOfMapEntries === 0)
   }
 

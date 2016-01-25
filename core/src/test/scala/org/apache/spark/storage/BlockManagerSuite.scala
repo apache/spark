@@ -1338,7 +1338,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Release both references to block a2:
     store.release("a2")
     store.release("a2")
-    assert(store.getReferenceCount("a2") === 0)
+    assert(store.getPinCount("a2") === 0)
     // Block a1 is the least-recently accessed, so an LRU eviction policy would evict it before
     // block a2. However, a1 still has references, so this put of a3 should evict a2 instead:
     store.putSingle("a3", arr, StorageLevel.MEMORY_ONLY_SER)
