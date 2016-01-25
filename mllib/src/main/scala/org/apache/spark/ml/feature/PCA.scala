@@ -102,6 +102,8 @@ object PCA extends DefaultParamsReadable[PCA] {
  * Model fitted by [[PCA]].
  *
  * @param pc A principal components Matrix. Each column is one principal component.
+ * @param explainedVariance A vector of proportions of variance explained by
+ *                          each principal component.
  */
 @Experimental
 class PCAModel private[ml] (
