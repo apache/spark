@@ -953,8 +953,8 @@ class TaskInstance(Base):
                 msg = "First run"
             else:
                 msg = "Attempt {self.try_number} out of {tot_tries}"
-            msg = msg.format(**locals())
             self.try_number += 1
+            msg = msg.format(**locals())
             logging.info(HR + msg + HR)
             self.start_date = datetime.now()
 
