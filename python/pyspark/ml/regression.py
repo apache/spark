@@ -79,12 +79,12 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> abs(model.intercept - model2.intercept) < 0.001
     True
-    >>> model_path = path + "/model"
+    >>> model_path = path + "/lr_model"
     >>> model.save(model_path)
     >>> model3 = LinearRegressionModel.load(model_path)
-    >>> abs(model.coefficients[0] - model3.coefficients[0]) < 0.001
+    >>> model.coefficients[0] == model3.coefficients[0]
     True
-    >>> abs(model.intercept - model3.intercept) < 0.001
+    >>> model.intercept == model3.intercept
     True
     >>> from shutil import rmtree
     >>> try:

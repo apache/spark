@@ -76,7 +76,9 @@ class Identifiable(object):
 @inherit_doc
 class MLWriter(object):
     """
-    Abstract class for utility classes that can save ML instances.
+    .. note:: Experimental
+
+    Utility class that can save ML instances.
 
     .. versionadded:: 2.0.0
     """
@@ -105,6 +107,8 @@ class MLWriter(object):
 @inherit_doc
 class MLWritable(object):
     """
+    .. note:: Experimental
+
     Mixin for ML instances that provide MLWriter through their Scala
     implementation.
 
@@ -127,19 +131,20 @@ class MLWritable(object):
 @inherit_doc
 class MLReader(object):
     """
-    Abstract class for utility classes that can load ML instances.
+    .. note:: Experimental
+
+    Utility class that can load ML instances.
 
     .. versionadded:: 2.0.0
     """
 
     def __init__(self, instance):
-        self._instance = instance
         self._jread = instance._java_obj.read()
 
     @since("2.0.0")
     def load(self, path):
         """Loads the ML component from the input path."""
-        self._instance.load(path)
+        self._jread.load(path)
 
     @since("2.0.0")
     def context(self, sqlContext):
@@ -151,6 +156,8 @@ class MLReader(object):
 @inherit_doc
 class MLReadable(object):
     """
+    .. note:: Experimental
+
     Mixin for objects that provide MLReader using its Scala implementation.
 
     .. versionadded:: 2.0.0
