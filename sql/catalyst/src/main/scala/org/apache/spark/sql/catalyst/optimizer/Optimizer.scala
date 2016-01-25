@@ -1006,7 +1006,7 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
  * Speeds up aggregates on fixed-precision decimals by executing them on unscaled Long values.
  *
  * This uses the same rules for increasing the precision and scale of the output as
- * [[org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.DecimalPrecision]].
+ * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecision]].
  */
 object DecimalAggregates extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS

@@ -86,6 +86,7 @@
   </mailingLists>
 
   <modules>
+    <module>common/sketch</module>
     <module>tags</module>
     <module>core</module>
     <module>graphx</module>
