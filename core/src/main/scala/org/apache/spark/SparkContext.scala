@@ -2183,13 +2183,6 @@ object SparkContext extends Logging {
   }
 
   /**
-   * Return SparkContext
-   */
-  private[spark] def get(): SparkContext = {
-    activeContext.get()
-  }
-
-  /**
    * Called at the beginning of the SparkContext constructor to ensure that no SparkContext is
    * running.  Throws an exception if a running context is detected and logs a warning if another
    * thread is constructing a SparkContext.  This warning is necessary because the current locking

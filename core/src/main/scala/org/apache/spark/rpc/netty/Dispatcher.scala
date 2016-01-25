@@ -28,7 +28,6 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
-import org.apache.spark.SparkContext
 
 /**
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
@@ -107,7 +106,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-      postMessage(name, message, (e) => logWarning(s"Message $message dropped.", e))
+      postMessage(name, message, (e) => logWarning(s"Message $message dropped."))
     }
   }
 
@@ -146,24 +145,18 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
       callbackIfStopped: (Exception) => Unit): Unit = {
     val shouldCallOnStop = synchronized {
       val data = endpoints.get(endpointName)
-      val sc = SparkContext.get()
-      if (!stopped && data != null) {
+      if (stopped || data == null) {
+        true
+      } else {
         data.inbox.post(message)
         receivers.offer(data)
         false
-      } else if (sc != null && sc.isStopped) {
-        // in the middle of executing SparkContext.stop()
-        logWarning("Unable to post RPC message, SparkContext is shutting down")
-        false
-      } else {
-        // callback with error
-        true
       }
     }
     if (shouldCallOnStop) {
       // We don't need to call `onStop` in the `synchronized` block
       val error = if (stopped) {
-          new IllegalStateException("RpcEnv already stopped.")
+          new RpcEnvStoppedException()
         } else {
           new SparkException(s"Could not find $endpointName or it has been stopped.")
         }
