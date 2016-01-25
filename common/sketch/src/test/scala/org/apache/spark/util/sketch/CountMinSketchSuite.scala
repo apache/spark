@@ -134,17 +134,17 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
   testItemType[String]("String") { r => r.nextString(r.nextInt(20)) }
 
   test("incompatible merge") {
-    intercept[CountMinSketchMergeException] {
+    intercept[IncompatibleMergeException] {
       CountMinSketch.create(10, 10, 1).mergeInPlace(null)
     }
 
-    intercept[CountMinSketchMergeException] {
+    intercept[IncompatibleMergeException] {
       val sketch1 = CountMinSketch.create(10, 20, 1)
       val sketch2 = CountMinSketch.create(10, 20, 2)
       sketch1.mergeInPlace(sketch2)
     }
 
-    intercept[CountMinSketchMergeException] {
+    intercept[IncompatibleMergeException] {
       val sketch1 = CountMinSketch.create(10, 10, 1)
       val sketch2 = CountMinSketch.create(10, 20, 2)
       sketch1.mergeInPlace(sketch2)

@@ -17,8 +17,8 @@
 
 package org.apache.spark.util.sketch;
 
-public class CountMinSketchMergeException extends Exception {
-  public CountMinSketchMergeException(String message) {
+public class IncompatibleMergeException extends Exception {
+  public IncompatibleMergeException(String message) {
     super(message);
   }
 }

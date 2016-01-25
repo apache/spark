@@ -120,11 +120,11 @@ abstract public class CountMinSketch {
    * Note that only Count-Min sketches with the same {@code depth}, {@code width}, and random seed
    * can be merged.
    *
-   * @exception CountMinSketchMergeException if the {@code other} {@link CountMinSketch} has
+   * @exception IncompatibleMergeException if the {@code other} {@link CountMinSketch} has
    *            incompatible depth, width, relative-error, confidence, or random seed.
    */
   public abstract CountMinSketch mergeInPlace(CountMinSketch other)
-      throws CountMinSketchMergeException;
+      throws IncompatibleMergeException;
 
   /**
    * Writes out this {@link CountMinSketch} to an output stream in binary format.

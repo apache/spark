@@ -287,27 +287,29 @@ class CountMinSketchImpl extends CountMinSketch {
   }
 
   @Override
-  public CountMinSketch mergeInPlace(CountMinSketch other) throws CountMinSketchMergeException {
+  public CountMinSketch mergeInPlace(CountMinSketch other) throws IncompatibleMergeException {
     if (other == null) {
-      throw new CountMinSketchMergeException("Cannot merge null estimator");
+      throw new IncompatibleMergeException("Cannot merge null estimator");
     }
 
     if (!(other instanceof CountMinSketchImpl)) {
-      throw new CountMinSketchMergeException("Cannot merge estimator of class " + other.getClass().getName());
+      throw new IncompatibleMergeException(
+          "Cannot merge estimator of class " + other.getClass().getName()
+      );
     }
 
     CountMinSketchImpl that = (CountMinSketchImpl) other;
 
     if (this.depth != that.depth) {
-      throw new CountMinSketchMergeException("Cannot merge estimators of different depth");
+      throw new IncompatibleMergeException("Cannot merge estimators of different depth");
     }
 
     if (this.width != that.width) {
-      throw new CountMinSketchMergeException("Cannot merge estimators of different width");
+      throw new IncompatibleMergeException("Cannot merge estimators of different width");
     }
 
     if (!Arrays.equals(this.hashA, that.hashA)) {
-      throw new CountMinSketchMergeException("Cannot merge estimators of different seed");
+      throw new IncompatibleMergeException("Cannot merge estimators of different seed");
     }
 
     for (int i = 0; i < this.table.length; ++i) {
