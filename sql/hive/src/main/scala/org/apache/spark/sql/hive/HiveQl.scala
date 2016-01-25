@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.plans.logical.ScriptTransformation
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
@@ -37,6 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.ParseUtils._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -569,7 +568,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
   protected override def nodeToTransformation(
       node: ASTNode,
-      child: LogicalPlan): Option[ScriptTransformation] = node match {
+      child: LogicalPlan): Option[logical.ScriptTransformation] = node match {
     case Token("TOK_SELEXPR",
       Token("TOK_TRANSFORM",
       Token("TOK_EXPLIST", inputExprs) ::
@@ -662,7 +661,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
         schemaLess)
 
       Some(
-        ScriptTransformation(
+        logical.ScriptTransformation(
           inputExprs.map(nodeToExpr),
           unescapedScript,
           output,
