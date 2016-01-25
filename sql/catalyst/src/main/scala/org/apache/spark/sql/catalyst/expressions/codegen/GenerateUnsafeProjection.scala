@@ -324,8 +324,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s"$result.setTotalSize($holder.totalSize());"
     }
 
-    // Reset the subexpression values for each row.
-    val subexprReset = ctx.subExprResetVariables.mkString("\n")
+    // Evaluate all the subexpression.
+    val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val writeExpressions =
       writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, holder, isTopLevel = true)
@@ -333,7 +333,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val code =
       s"""
         $resetBufferHolder
-        $subexprReset
+        $evalSubexpr
         $writeExpressions
         $updateRowSize
       """
