@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -25,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, SQLBuilder}
 import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
