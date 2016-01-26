@@ -854,7 +854,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       tableIdent = TableIdentifier("not_skip_hive_metadata"),
       userSpecifiedSchema = Some(schema),
       partitionColumns = Array.empty[String],
-      bucketSpec = None,
       provider = "parquet",
       options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "false"),
       isExternal = false)
@@ -868,7 +867,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       tableIdent = TableIdentifier("skip_hive_metadata"),
       userSpecifiedSchema = Some(schema),
       partitionColumns = Array.empty[String],
-      bucketSpec = None,
       provider = "parquet",
       options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "true"),
       isExternal = false)
