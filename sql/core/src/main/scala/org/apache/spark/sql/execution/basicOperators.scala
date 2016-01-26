@@ -185,49 +185,55 @@ case class Range(
       s"$number > $partitionEnd"
     }
 
+    val initRange = ctx.freshName("initRange")
+    ctx.addNewFunction(initRange,
+      s"""
+      private void $initRange(InternalRow row) {
+        $BigInt index = $BigInt.valueOf(row.getInt(0));
+        $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
+        $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
+        $BigInt step = $BigInt.valueOf(${step}L);
+        $BigInt start = $BigInt.valueOf(${start}L);
+
+        $BigInt st = index.multiply(numElement).divide(numSlice).multiply(step).add(start);
+        if (st.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
+         $number = Long.MAX_VALUE;
+        } else if (st.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
+         $number = Long.MIN_VALUE;
+        } else {
+         $number = st.longValue();
+        }
+
+        $BigInt end = index.add($BigInt.ONE).multiply(numElement).divide(numSlice)
+         .multiply(step).add(start);
+        if (end.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
+         $partitionEnd = Long.MAX_VALUE;
+        } else if (end.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
+         $partitionEnd = Long.MIN_VALUE;
+        } else {
+         $partitionEnd = end.longValue();
+        }
+      }""")
+
     s"""
-      | // initialize Range
-      | if (!$initTerm) {
-      |   $initTerm = true;
-      |   if (input.hasNext()) {
-      |     $BigInt index = $BigInt.valueOf(((InternalRow) input.next()).getInt(0));
-      |     $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
-      |     $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
-      |     $BigInt step = $BigInt.valueOf(${step}L);
-      |     $BigInt start = $BigInt.valueOf(${start}L);
-      |
-      |     $BigInt st = index.multiply(numElement).divide(numSlice).multiply(step).add(start);
-      |     if (st.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
-      |       $number = Long.MAX_VALUE;
-      |     } else if (st.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
-      |       $number = Long.MIN_VALUE;
-      |     } else {
-      |       $number = st.longValue();
-      |     }
-      |
-      |     $BigInt end = index.add($BigInt.ONE).multiply(numElement).divide(numSlice)
-      |       .multiply(step).add(start);
-      |     if (end.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
-      |       $partitionEnd = Long.MAX_VALUE;
-      |     } else if (end.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
-      |       $partitionEnd = Long.MIN_VALUE;
-      |     } else {
-      |       $partitionEnd = end.longValue();
-      |     }
-      |   } else {
-      |     return;
-      |   }
-      | }
-      |
-      | while (!$overflow && $checkEnd) {
-      |  long $value = $number;
-      |  $number += ${step}L;
-      |  if ($number < $value ^ ${step}L < 0) {
-      |    $overflow = true;
-      |  }
-      |  ${consume(ctx, Seq(ev))}
-      | }
-     """.stripMargin
+    // initialize Range
+    if (!$initTerm) {
+      $initTerm = true;
+      if (input.hasNext()) {
+        $initRange((InternalRow) input.next());
+      } else {
+        return;
+      }
+    }
+
+    while (!$overflow && $checkEnd) {
+     long $value = $number;
+     $number += ${step}L;
+     if ($number < $value ^ ${step}L < 0) {
+       $overflow = true;
+     }
+     ${consume(ctx, Seq(ev))}
+    }"""
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

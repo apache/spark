@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.util.Utils
 
 /**
   * An interface for those physical operators that support codegen.
@@ -197,33 +198,36 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
   override def output: Seq[Attribute] = plan.output
 
   override def doExecute(): RDD[InternalRow] = {
+    val ctx = new CodegenContext
+    val code = plan.produce(ctx, this)
+    val references = ctx.references.toArray
+    val source = s"""
+      public Object generate(Object[] references) {
+        return new GeneratedIterator(references);
+      }
+
+      class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
+
+        private Object[] references;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
+
+        public GeneratedIterator(Object[] references) {
+         this.references = references;
+         ${ctx.initMutableStates()}
+        }
+
+        protected void processNext() throws java.io.IOException {
+         $code
+        }
+      }
+      """
+
+    // try to compile, helpful for debug
+    // println(s"${CodeFormatter.format(source)}")
+    CodeGenerator.compile(source)
 
     plan.upstream().mapPartitions { iter =>
-      val ctx = new CodegenContext
-      val code = plan.produce(ctx, this)
-      val references = ctx.references.toArray
-      val source = s"""
-        public Object generate(Object[] references) {
-         return new GeneratedIterator(references);
-        }
-
-        class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
-
-         private Object[] references;
-         ${ctx.declareMutableStates()}
-
-         public GeneratedIterator(Object[] references) {
-           this.references = references;
-           ${ctx.initMutableStates()}
-         }
-
-         protected void processNext() throws java.io.IOException {
-           $code
-         }
-        }
-       """
-      // try to compile, helpful for debug
-      // println(s"${CodeFormatter.format(source)}")
 
       val clazz = CodeGenerator.compile(source)
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
@@ -268,13 +272,13 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
            | ${code.code.trim}
            | currentRow = ${code.value};
            | return;
-     """.stripMargin
+         """.stripMargin
       } else {
         // There is no columns
         s"""
            | currentRow = unsafeRow;
            | return;
-       """.stripMargin
+         """.stripMargin
       }
     }
   }
@@ -336,7 +340,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
         case plan: CodegenSupport if supportCodegen(plan) &&
           // Whole stage codegen is only useful when there are at least two levels of operators that
           // support it (save at least one projection/iterator).
-          plan.children.exists(supportCodegen) =>
+          (Utils.isTesting || plan.children.exists(supportCodegen)) =>
 
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
