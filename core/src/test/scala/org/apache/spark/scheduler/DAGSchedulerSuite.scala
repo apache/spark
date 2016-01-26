@@ -1581,9 +1581,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(Accumulators.get(acc1.id).isDefined)
     assert(Accumulators.get(acc2.id).isDefined)
     assert(Accumulators.get(acc3.id).isDefined)
-    val accInfo1 = new AccumulableInfo(acc1.id, acc1.name.get, Some(15L), None)
-    val accInfo2 = new AccumulableInfo(acc2.id, acc2.name.get, Some(13L), None)
-    val accInfo3 = new AccumulableInfo(acc3.id, acc3.name.get, Some(18L), None)
+    val accInfo1 = new AccumulableInfo(
+      acc1.id, acc1.name.get, Some(15L), None, internal = false, countFailedValues = false)
+    val accInfo2 = new AccumulableInfo(
+      acc2.id, acc2.name.get, Some(13L), None, internal = false, countFailedValues = false)
+    val accInfo3 = new AccumulableInfo(
+      acc3.id, acc3.name.get, Some(18L), None, internal = false, countFailedValues = false)
     val accumUpdates = Seq(accInfo1, accInfo2, accInfo3)
     val exceptionFailure = new ExceptionFailure(new SparkException("fondue?"), accumUpdates)
     submit(new MyRDD(sc, 1, Nil), Array(0))

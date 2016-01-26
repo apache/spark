@@ -35,9 +35,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   extends Logging {
 
   private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
+
+  // Exposed for testing.
   protected val getTaskResultExecutor: ExecutorService =
     ThreadUtils.newDaemonFixedThreadPool(THREADS, "task-result-getter")
 
+  // Exposed for testing.
   protected val serializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {
       sparkEnv.closureSerializer.newInstance()
@@ -89,7 +92,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           // we would have to serialize the result again after updating the size.
           result.accumUpdates = result.accumUpdates.map { a =>
             if (a.name == InternalAccumulator.RESULT_SIZE) {
-              assert(a.update.getOrElse(0L) == 0L,
+              assert(a.update == Some(0L),
                 "task result size should not have been set on the executors")
               a.copy(update = Some(size.toLong))
             } else {

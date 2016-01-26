@@ -96,7 +96,7 @@ private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
 
   override def enqueueSuccessfulTask(tsm: TaskSetManager, tid: Long, data: ByteBuffer): Unit = {
     // work on a copy since the super class still needs to use the buffer
-    val newBuffer = ByteBuffer.wrap(data.array())
+    val newBuffer = data.duplicate()
     _taskResults += env.closureSerializer.newInstance().deserialize[DirectTaskResult[_]](newBuffer)
     super.enqueueSuccessfulTask(tsm, tid, data)
   }

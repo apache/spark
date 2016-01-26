@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,12 +42,32 @@ case class AccumulableInfo private[spark] (
     update: Option[Any], // represents a partial update within a task
     value: Option[Any],
     private[spark] val internal: Boolean,
-    private[spark] val countFailedValues: Boolean) {
+    private[spark] val countFailedValues: Boolean)
 
-  // scalastyle:off
-  def this(id: Long, name: String, update: Option[Any], value: Option[Any]) {
-    this(id, name, update, value, false /* internal */, false /* countFailedValues */)
+
+/**
+ * A collection of deprecated constructors. This will be removed soon.
+ */
+object AccumulableInfo {
+
+  @deprecated("do not create AccumulableInfo", "2.0.0")
+  def apply(
+      id: Long,
+      name: String,
+      update: Option[String],
+      value: String,
+      internal: Boolean): AccumulableInfo = {
+    new AccumulableInfo(id, name, update, Option(value), internal, countFailedValues = false)
   }
-  // scalastyle:on
 
+  @deprecated("do not create AccumulableInfo", "2.0.0")
+  def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
+    new AccumulableInfo(
+      id, name, update, Option(value), internal = false, countFailedValues = false)
+  }
+
+  @deprecated("do not create AccumulableInfo", "2.0.0")
+  def apply(id: Long, name: String, value: String): AccumulableInfo = {
+    new AccumulableInfo(id, name, None, Option(value), internal = false, countFailedValues = false)
+  }
 }

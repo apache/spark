@@ -319,6 +319,10 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
 
   /**
    * Return the latest updates of accumulators in this task.
+   *
+   * The [[AccumulableInfo.update]] field is always defined and the [[AccumulableInfo.value]]
+   * field is always empty, since this represents the partial updates recorded in this task,
+   * not the aggregated value across multiple tasks.
    */
   def accumulatorUpdates(): Seq[AccumulableInfo] = accums.map { a =>
     new AccumulableInfo(
@@ -332,14 +336,14 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
     initialAccums
       .filter { a => a.localValue != a.zero }
       .foreach { a =>
-      a.name.get match {
-        case sr if sr.startsWith(SHUFFLE_READ_METRICS_PREFIX) => hasShuffleRead = true
-        case sw if sw.startsWith(SHUFFLE_WRITE_METRICS_PREFIX) => hasShuffleWrite = true
-        case in if in.startsWith(INPUT_METRICS_PREFIX) => hasInput = true
-        case out if out.startsWith(OUTPUT_METRICS_PREFIX) => hasOutput = true
-        case _ =>
+        a.name.get match {
+          case sr if sr.startsWith(SHUFFLE_READ_METRICS_PREFIX) => hasShuffleRead = true
+          case sw if sw.startsWith(SHUFFLE_WRITE_METRICS_PREFIX) => hasShuffleWrite = true
+          case in if in.startsWith(INPUT_METRICS_PREFIX) => hasInput = true
+          case out if out.startsWith(OUTPUT_METRICS_PREFIX) => hasOutput = true
+          case _ =>
+        }
       }
-    }
     if (hasShuffleRead) { _shuffleReadMetrics = Some(new ShuffleReadMetrics(initialAccumsMap)) }
     if (hasShuffleWrite) { _shuffleWriteMetrics = Some(new ShuffleWriteMetrics(initialAccumsMap)) }
     if (hasInput) { _inputMetrics = Some(new InputMetrics(initialAccumsMap)) }
@@ -384,8 +388,8 @@ private[spark] object TaskMetrics extends Logging {
     val (initialAccumInfos, otherAccumInfos) = accumUpdates
       .filter { info => info.update.isDefined }
       .partition { info =>
-      info.name != null && info.name.startsWith(InternalAccumulator.METRICS_PREFIX)
-    }
+        info.name != null && info.name.startsWith(InternalAccumulator.METRICS_PREFIX)
+      }
     val initialAccums = initialAccumInfos.map { info =>
       val accum = InternalAccumulator.create(info.name)
       accum.setValueAny(info.update.get)
