@@ -84,6 +84,7 @@ class MLWriter(object):
     """
 
     def __init__(self, instance):
+        instance._transfer_params_to_java()
         self._jwrite = instance._java_obj.write()
 
     @since("2.0.0")
@@ -125,7 +126,7 @@ class MLWritable(object):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
-        self._java_obj.save(path)
+        self.write().save(path)
 
 
 @inherit_doc

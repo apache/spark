@@ -73,6 +73,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> lr_path = path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LinearRegression.load(lr_path)
+    >>> lr2.getOrDefault(lr2.getParam("maxIter"))
+    5
     >>> model2 = lr2.fit(df)
     >>> abs(model.coefficients[0] - model2.coefficients[0]) < 0.001
     True
