@@ -1266,6 +1266,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val currentDatabase = sql("select current_database()").first().getString(0)
     sql("USE test")
     assert("test" == sql("select current_database()").first().getString(0))
+
+    sql("CREATE DATABASE hive_test_db")
+    sql("USE hive_test_db")
+    assert("hive_test_db" == sql("select current_database()").first().getString(0))
+
     sql(s"USE $currentDatabase")
     assert(currentDatabase == sql("select current_database()").first().getString(0))
   }
