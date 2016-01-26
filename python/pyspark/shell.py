@@ -32,15 +32,10 @@ from pyspark.context import SparkContext
 from pyspark.sql import SQLContext, HiveContext
 from pyspark.storagelevel import StorageLevel
 
-# this is the deprecated equivalent of ADD_JARS
-add_files = None
-if os.environ.get("ADD_FILES") is not None:
-    add_files = os.environ.get("ADD_FILES").split(',')
-
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-sc = SparkContext(pyFiles=add_files)
+sc = SparkContext()
 atexit.register(lambda: sc.stop())
 
 try:
@@ -67,10 +62,6 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_build()[0],
     platform.python_build()[1]))
 print("SparkContext available as sc, %s available as sqlContext." % sqlContext.__class__.__name__)
-
-if add_files is not None:
-    print("Warning: ADD_FILES environment variable is deprecated, use --py-files argument instead")
-    print("Adding files: [%s]" % ", ".join(add_files))
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:
