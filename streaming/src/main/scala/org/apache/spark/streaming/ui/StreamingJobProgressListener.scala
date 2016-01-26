@@ -91,7 +91,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = synchronized {
     val batchUIData = BatchUIData(batchStarted.batchInfo)
-    runningBatchUIData(batchStarted.batchInfo.batchTime) = BatchUIData(batchStarted.batchInfo)
+    runningBatchUIData(batchStarted.batchInfo.batchTime) = batchUIData
     waitingBatchUIData.remove(batchStarted.batchInfo.batchTime)
 
     totalReceivedRecords += batchUIData.numRecords

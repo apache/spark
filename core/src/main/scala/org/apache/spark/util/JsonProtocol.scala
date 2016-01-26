@@ -292,21 +292,38 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
-    val shuffleReadMetrics =
-      taskMetrics.shuffleReadMetrics.map(shuffleReadMetricsToJson).getOrElse(JNothing)
-    val shuffleWriteMetrics =
-      taskMetrics.shuffleWriteMetrics.map(shuffleWriteMetricsToJson).getOrElse(JNothing)
-    val inputMetrics =
-      taskMetrics.inputMetrics.map(inputMetricsToJson).getOrElse(JNothing)
-    val outputMetrics =
-      taskMetrics.outputMetrics.map(outputMetricsToJson).getOrElse(JNothing)
-    val updatedBlocks =
-      taskMetrics.updatedBlocks.map { blocks =>
-        JArray(blocks.toList.map { case (id, status) =>
-          ("Block ID" -> id.toString) ~
-          ("Status" -> blockStatusToJson(status))
-        })
+    val shuffleReadMetrics: JValue =
+      taskMetrics.shuffleReadMetrics.map { rm =>
+        ("Remote Blocks Fetched" -> rm.remoteBlocksFetched) ~
+        ("Local Blocks Fetched" -> rm.localBlocksFetched) ~
+        ("Fetch Wait Time" -> rm.fetchWaitTime) ~
+        ("Remote Bytes Read" -> rm.remoteBytesRead) ~
+        ("Local Bytes Read" -> rm.localBytesRead) ~
+        ("Total Records Read" -> rm.recordsRead)
       }.getOrElse(JNothing)
+    val shuffleWriteMetrics: JValue =
+      taskMetrics.shuffleWriteMetrics.map { wm =>
+        ("Shuffle Bytes Written" -> wm.shuffleBytesWritten) ~
+        ("Shuffle Write Time" -> wm.shuffleWriteTime) ~
+        ("Shuffle Records Written" -> wm.shuffleRecordsWritten)
+      }.getOrElse(JNothing)
+    val inputMetrics: JValue =
+      taskMetrics.inputMetrics.map { im =>
+        ("Data Read Method" -> im.readMethod.toString) ~
+        ("Bytes Read" -> im.bytesRead) ~
+        ("Records Read" -> im.recordsRead)
+      }.getOrElse(JNothing)
+    val outputMetrics: JValue =
+      taskMetrics.outputMetrics.map { om =>
+        ("Data Write Method" -> om.writeMethod.toString) ~
+        ("Bytes Written" -> om.bytesWritten) ~
+        ("Records Written" -> om.recordsWritten)
+      }.getOrElse(JNothing)
+    val updatedBlocks =
+      JArray(taskMetrics.updatedBlockStatuses.toList.map { case (id, status) =>
+        ("Block ID" -> id.toString) ~
+        ("Status" -> blockStatusToJson(status))
+      })
     ("Host Name" -> taskMetrics.hostname) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
@@ -320,33 +337,6 @@ private[spark] object JsonProtocol {
     ("Input Metrics" -> inputMetrics) ~
     ("Output Metrics" -> outputMetrics) ~
     ("Updated Blocks" -> updatedBlocks)
-  }
-
-  def shuffleReadMetricsToJson(shuffleReadMetrics: ShuffleReadMetrics): JValue = {
-    ("Remote Blocks Fetched" -> shuffleReadMetrics.remoteBlocksFetched) ~
-    ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
-    ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
-    ("Remote Bytes Read" -> shuffleReadMetrics.remoteBytesRead) ~
-    ("Local Bytes Read" -> shuffleReadMetrics.localBytesRead) ~
-    ("Total Records Read" -> shuffleReadMetrics.recordsRead)
-  }
-
-  def shuffleWriteMetricsToJson(shuffleWriteMetrics: ShuffleWriteMetrics): JValue = {
-    ("Shuffle Bytes Written" -> shuffleWriteMetrics.shuffleBytesWritten) ~
-    ("Shuffle Write Time" -> shuffleWriteMetrics.shuffleWriteTime) ~
-    ("Shuffle Records Written" -> shuffleWriteMetrics.shuffleRecordsWritten)
-  }
-
-  def inputMetricsToJson(inputMetrics: InputMetrics): JValue = {
-    ("Data Read Method" -> inputMetrics.readMethod.toString) ~
-    ("Bytes Read" -> inputMetrics.bytesRead) ~
-    ("Records Read" -> inputMetrics.recordsRead)
-  }
-
-  def outputMetricsToJson(outputMetrics: OutputMetrics): JValue = {
-    ("Data Write Method" -> outputMetrics.writeMethod.toString) ~
-    ("Bytes Written" -> outputMetrics.bytesWritten) ~
-    ("Records Written" -> outputMetrics.recordsWritten)
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -409,14 +399,12 @@ private[spark] object JsonProtocol {
     ("Number of Partitions" -> rddInfo.numPartitions) ~
     ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Memory Size" -> rddInfo.memSize) ~
-    ("ExternalBlockStore Size" -> rddInfo.externalBlockStoreSize) ~
     ("Disk Size" -> rddInfo.diskSize)
   }
 
   def storageLevelToJson(storageLevel: StorageLevel): JValue = {
     ("Use Disk" -> storageLevel.useDisk) ~
     ("Use Memory" -> storageLevel.useMemory) ~
-    ("Use ExternalBlockStore" -> storageLevel.useOffHeap) ~
     ("Deserialized" -> storageLevel.deserialized) ~
     ("Replication" -> storageLevel.replication)
   }
@@ -425,7 +413,6 @@ private[spark] object JsonProtocol {
     val storageLevel = storageLevelToJson(blockStatus.storageLevel)
     ("Storage Level" -> storageLevel) ~
     ("Memory Size" -> blockStatus.memSize) ~
-    ("ExternalBlockStore Size" -> blockStatus.externalBlockStoreSize) ~
     ("Disk Size" -> blockStatus.diskSize)
   }
 
@@ -723,58 +710,54 @@ private[spark] object JsonProtocol {
     metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])
     metrics.incMemoryBytesSpilled((json \ "Memory Bytes Spilled").extract[Long])
     metrics.incDiskBytesSpilled((json \ "Disk Bytes Spilled").extract[Long])
-    metrics.setShuffleReadMetrics(
-      Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson))
-    metrics.shuffleWriteMetrics =
-      Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
-    metrics.setInputMetrics(
-      Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson))
-    metrics.outputMetrics =
-      Utils.jsonOption(json \ "Output Metrics").map(outputMetricsFromJson)
-    metrics.updatedBlocks =
-      Utils.jsonOption(json \ "Updated Blocks").map { value =>
-        value.extract[List[JValue]].map { block =>
-          val id = BlockId((block \ "Block ID").extract[String])
-          val status = blockStatusFromJson(block \ "Status")
-          (id, status)
-        }
-      }
-    metrics
-  }
 
-  def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
-    val metrics = new ShuffleReadMetrics
-    metrics.incRemoteBlocksFetched((json \ "Remote Blocks Fetched").extract[Int])
-    metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
-    metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
-    metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
-    metrics.incLocalBytesRead((json \ "Local Bytes Read").extractOpt[Long].getOrElse(0))
-    metrics.incRecordsRead((json \ "Total Records Read").extractOpt[Long].getOrElse(0))
-    metrics
-  }
+    // Shuffle read metrics
+    Utils.jsonOption(json \ "Shuffle Read Metrics").foreach { readJson =>
+      val readMetrics = metrics.registerTempShuffleReadMetrics()
+      readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
+      readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
+      readMetrics.incRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
+      readMetrics.incLocalBytesRead((readJson \ "Local Bytes Read").extractOpt[Long].getOrElse(0L))
+      readMetrics.incFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
+      readMetrics.incRecordsRead((readJson \ "Total Records Read").extractOpt[Long].getOrElse(0L))
+      metrics.mergeShuffleReadMetrics()
+    }
 
-  def shuffleWriteMetricsFromJson(json: JValue): ShuffleWriteMetrics = {
-    val metrics = new ShuffleWriteMetrics
-    metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
-    metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
-    metrics.setShuffleRecordsWritten((json \ "Shuffle Records Written")
-      .extractOpt[Long].getOrElse(0))
-    metrics
-  }
+    // Shuffle write metrics
+    // TODO: Drop the redundant "Shuffle" since it's inconsistent with related classes.
+    Utils.jsonOption(json \ "Shuffle Write Metrics").foreach { writeJson =>
+      val writeMetrics = metrics.registerShuffleWriteMetrics()
+      writeMetrics.incBytesWritten((writeJson \ "Shuffle Bytes Written").extract[Long])
+      writeMetrics.incRecordsWritten((writeJson \ "Shuffle Records Written")
+        .extractOpt[Long].getOrElse(0L))
+      writeMetrics.incWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
+    }
 
-  def inputMetricsFromJson(json: JValue): InputMetrics = {
-    val metrics = new InputMetrics(
-      DataReadMethod.withName((json \ "Data Read Method").extract[String]))
-    metrics.incBytesRead((json \ "Bytes Read").extract[Long])
-    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(0))
-    metrics
-  }
+    // Output metrics
+    Utils.jsonOption(json \ "Output Metrics").foreach { outJson =>
+      val writeMethod = DataWriteMethod.withName((outJson \ "Data Write Method").extract[String])
+      val outputMetrics = metrics.registerOutputMetrics(writeMethod)
+      outputMetrics.setBytesWritten((outJson \ "Bytes Written").extract[Long])
+      outputMetrics.setRecordsWritten((outJson \ "Records Written").extractOpt[Long].getOrElse(0L))
+    }
 
-  def outputMetricsFromJson(json: JValue): OutputMetrics = {
-    val metrics = new OutputMetrics(
-      DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
-    metrics.setBytesWritten((json \ "Bytes Written").extract[Long])
-    metrics.setRecordsWritten((json \ "Records Written").extractOpt[Long].getOrElse(0))
+    // Input metrics
+    Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
+      val readMethod = DataReadMethod.withName((inJson \ "Data Read Method").extract[String])
+      val inputMetrics = metrics.registerInputMetrics(readMethod)
+      inputMetrics.incBytesRead((inJson \ "Bytes Read").extract[Long])
+      inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
+    }
+
+    // Updated blocks
+    Utils.jsonOption(json \ "Updated Blocks").foreach { blocksJson =>
+      metrics.setUpdatedBlockStatuses(blocksJson.extract[List[JValue]].map { blockJson =>
+        val id = BlockId((blockJson \ "Block ID").extract[String])
+        val status = blockStatusFromJson(blockJson \ "Status")
+        (id, status)
+      })
+    }
+
     metrics
   }
 
@@ -867,15 +850,11 @@ private[spark] object JsonProtocol {
     val numPartitions = (json \ "Number of Partitions").extract[Int]
     val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
     val memSize = (json \ "Memory Size").extract[Long]
-    // fallback to tachyon for backward compatibility
-    val externalBlockStoreSize = (json \ "ExternalBlockStore Size").toSome
-      .getOrElse(json \ "Tachyon Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
     val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel, parentIds, callsite, scope)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
-    rddInfo.externalBlockStoreSize = externalBlockStoreSize
     rddInfo.diskSize = diskSize
     rddInfo
   }
@@ -883,22 +862,16 @@ private[spark] object JsonProtocol {
   def storageLevelFromJson(json: JValue): StorageLevel = {
     val useDisk = (json \ "Use Disk").extract[Boolean]
     val useMemory = (json \ "Use Memory").extract[Boolean]
-    // fallback to tachyon for backward compatability
-    val useExternalBlockStore = (json \ "Use ExternalBlockStore").toSome
-      .getOrElse(json \ "Use Tachyon").extract[Boolean]
     val deserialized = (json \ "Deserialized").extract[Boolean]
     val replication = (json \ "Replication").extract[Int]
-    StorageLevel(useDisk, useMemory, useExternalBlockStore, deserialized, replication)
+    StorageLevel(useDisk, useMemory, deserialized, replication)
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
     val memorySize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
-    // fallback to tachyon for backward compatability
-    val externalBlockStoreSize = (json \ "ExternalBlockStore Size").toSome
-      .getOrElse(json \ "Tachyon Size").extract[Long]
-    BlockStatus(storageLevel, memorySize, diskSize, externalBlockStoreSize)
+    BlockStatus(storageLevel, memorySize, diskSize)
   }
 
   def executorInfoFromJson(json: JValue): ExecutorInfo = {

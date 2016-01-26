@@ -26,7 +26,7 @@ import org.apache.spark.api.java.function.Function2;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 
+/**
  * Computes an approximation to pi
  * Usage: JavaSparkPi [slices]
  */
