@@ -372,10 +372,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   private def countMinSketch(col: Column, zero: CountMinSketch): CountMinSketch = {
     val singleCol = df.select(col)
     val colType = singleCol.schema.head.dataType
-    val supportedTypes: Set[DataType] = Set(ByteType, ShortType, IntegerType, LongType, StringType)
 
     require(
-      supportedTypes.contains(colType),
+      colType == StringType || colType.isInstanceOf[IntegralType],
       s"Count-min Sketch only supports string type and integral types, " +
         s"and does not support type $colType."
     )
