@@ -112,11 +112,6 @@ class CountMinSketchImpl extends CountMinSketch {
     return hash;
   }
 
-  @Override
-  public Version version() {
-    return Version.V1;
-  }
-
   private void initTablesWith(int depth, int width, int seed) {
     this.table = new long[depth][width];
     this.hashA = new long[depth];
@@ -327,7 +322,7 @@ class CountMinSketchImpl extends CountMinSketch {
   public void writeTo(OutputStream out) throws IOException {
     DataOutputStream dos = new DataOutputStream(out);
 
-    dos.writeInt(version().getVersionNumber());
+    dos.writeInt(Version.V1.getVersionNumber());
 
     dos.writeLong(this.totalCount);
     dos.writeInt(this.depth);
