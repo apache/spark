@@ -459,6 +459,8 @@ class Analyzer(
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
+      // A special case for ObjectOperator, because the deserializer expressions in ObjectOperator
+      // should be resolved by their corresponding attributes instead of children's output.
       case o: ObjectOperator if containsUnresolvedDeserializer(o.deserializers.map(_._1)) =>
         val deserializerToAttributes = o.deserializers.map {
           case (deserializer, attributes) => new TreeNodeRef(deserializer) -> attributes
@@ -490,7 +492,7 @@ class Analyzer(
       }
     }
 
-    private def resolveDeserializer(
+    def resolveDeserializer(
         deserializer: Expression,
         attributes: Seq[Attribute]): Expression = {
       val unbound = deserializer transform {

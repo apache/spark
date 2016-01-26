@@ -94,8 +94,10 @@ class Dataset[T] private[sql](
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
 
   private val boundDeserializer: Expression = {
-    val fakePlan = DummyObjectOperator(unresolvedTEncoder.fromRowExpression, logicalPlan.output)
-    val resolved = new QueryExecution(sqlContext, fakePlan).analyzed.expressions.head
+    val deserializer = sqlContext.analyzer.ResolveReferences.resolveDeserializer(
+      unresolvedTEncoder.fromRowExpression, logicalPlan.output)
+    val fakePlan = Project(Alias(deserializer, "")() :: Nil, OneRowRelation)
+    val resolved = new QueryExecution(sqlContext, fakePlan).analyzed.expressions.head.children.head
     BindReferences.bindReference(resolved, logicalPlan.output)
   }
 

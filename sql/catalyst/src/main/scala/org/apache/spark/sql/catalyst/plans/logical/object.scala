@@ -34,8 +34,8 @@ trait ObjectOperator extends LogicalPlan {
 
   /**
    * An [[ObjectOperator]] may have one or more deserializers to convert internal rows to objects.
-   * For each deserializer, [[ObjectOperator]] should also provide the attributes that can resolve
-   * this deserializer.
+   * It must also provide the attributes that are available during the resolution of each
+   * deserializer.
    */
   def deserializers: Seq[(Expression, Seq[Attribute])]
 
@@ -63,18 +63,6 @@ trait ObjectOperator extends LogicalPlan {
       case other: AnyRef => other
     }.toArray
   }
-}
-
-/**
- * A dummy [[ObjectOperator]] that is used to trigger deserializer resolution in Analyzer and we
- * can get back the resolved deserializer later.
- */
-case class DummyObjectOperator(deserializer: Expression, attributes: Seq[Attribute])
-  extends LeafNode with ObjectOperator {
-
-  override def inputSet: AttributeSet = AttributeSet(attributes)
-  override def serializer: Seq[NamedExpression] = Nil
-  override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> attributes)
 }
 
 object MapPartitions {

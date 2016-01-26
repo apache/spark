@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
-import org.apache.spark.sql.catalyst.plans.logical.DummyObjectOperator
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
 
@@ -39,8 +39,11 @@ class EncoderResolutionSuite extends PlanTest {
       encoder: ExpressionEncoder[_],
       attributes: Seq[Attribute]): Expression = {
     encoder.validate(attributes)
-    val fakePlan = DummyObjectOperator(encoder.fromRowExpression, attributes)
-    SimplifyCasts(SimpleAnalyzer.execute(fakePlan)).expressions.head
+    val deserializer = SimpleAnalyzer.ResolveReferences.resolveDeserializer(
+      encoder.fromRowExpression, attributes)
+    val plan = Project(Alias(deserializer, "")() :: Nil, OneRowRelation)
+    val analyzedPlan = SimpleAnalyzer.execute(plan)
+    SimplifyCasts(SimpleAnalyzer.execute(analyzedPlan)).expressions.head.children.head
   }
 
   test("real type doesn't match encoder schema but they are compatible: product") {

@@ -27,8 +27,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences}
-import org.apache.spark.sql.catalyst.plans.logical.DummyObjectOperator
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BindReferences}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
@@ -293,8 +293,10 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
 
-      val fakePlan = DummyObjectOperator(encoder.fromRowExpression, schema)
-      val resolved = SimpleAnalyzer.execute(fakePlan).expressions.head
+      val deserializer = SimpleAnalyzer.ResolveReferences.resolveDeserializer(
+        encoder.fromRowExpression, schema)
+      val plan = Project(Alias(deserializer, "")() :: Nil, OneRowRelation)
+      val resolved = SimpleAnalyzer.execute(plan).expressions.head.children.head
       val bound = BindReferences.bindReference(resolved, schema)
       val boundEncoder = encoder.copy(fromRowExpression = bound)
 
