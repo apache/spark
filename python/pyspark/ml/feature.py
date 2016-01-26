@@ -30,10 +30,10 @@ from pyspark.mllib.linalg import _convert_to_vector
 __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel', 'DCT',
            'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'MinMaxScaler',
            'MinMaxScalerModel', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
-           'PolynomialExpansion', 'RegexTokenizer', 'RFormula', 'RFormulaModel', 'SQLTransformer',
-           'StandardScaler', 'StandardScalerModel', 'StopWordsRemover', 'StringIndexer',
-           'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'VectorSlicer',
-           'Word2Vec', 'Word2VecModel']
+           'PolynomialExpansion', 'QuantileDiscretizer', 'RegexTokenizer', 'RFormula',
+           'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
+           'StopWordsRemover', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
+           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel']
 
 
 @inherit_doc
@@ -989,6 +989,87 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of degree or its default value.
         """
         return self.getOrDefault(self.degree)
+
+
+@inherit_doc
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+    categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
+    into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
+    covering all real values. This attempts to find numBuckets partitions based on a sample of data,
+    but it may find fewer depending on the data sample values.
+
+    >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> qds = QuantileDiscretizer(numBuckets=2,
+    ...     inputCol="values", outputCol="buckets")
+    >>> bucketizer = qds.fit(df)
+    >>> splits = bucketizer.getSplits()
+    >>> splits[0]
+    -inf
+    >>> print("%2.1f" % round(splits[1], 1))
+    0.4
+    >>> bucketed = bucketizer.transform(df).head()
+    >>> bucketed.buckets
+    0.0
+
+    .. versionadded:: 2.0.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    numBuckets = Param(Params._dummy(), "numBuckets",
+                       "Maximum number of buckets (quantiles, or " +
+                       "categories) into which data points are grouped. Must be >= 2. Default 2.")
+
+    @keyword_only
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None):
+        """
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None)
+        """
+        super(QuantileDiscretizer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
+                                            self.uid)
+        self.numBuckets = Param(self, "numBuckets",
+                                "Maximum number of buckets (quantiles, or " +
+                                "categories) into which data points are grouped. Must be >= 2.")
+        self._setDefault(numBuckets=2)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None):
+        """
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None)
+        Set the params for the QuantileDiscretizer
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setNumBuckets(self, value):
+        """
+        Sets the value of :py:attr:`numBuckets`.
+        """
+        self._paramMap[self.numBuckets] = value
+        return self
+
+    @since("2.0.0")
+    def getNumBuckets(self):
+        """
+        Gets the value of numBuckets or its default value.
+        """
+        return self.getOrDefault(self.numBuckets)
+
+    def _create_model(self, java_model):
+        """
+        Private method to convert the java_model to a Python model.
+        """
+        return Bucketizer(splits=list(java_model.getSplits()),
+                          inputCol=self.getInputCol(),
+                          outputCol=self.getOutputCol())
 
 
 @inherit_doc
