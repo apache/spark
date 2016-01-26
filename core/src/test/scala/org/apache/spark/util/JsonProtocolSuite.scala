@@ -768,7 +768,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       id: Int,
       internal: Boolean = false,
       countFailedValues: Boolean = false): AccumulableInfo =
-    new AccumulableInfo(id, s"Accumulable$id", Some(s"delta$id"), Some(s"val$id"),
+    new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
       internal, countFailedValues)
 
   /**

@@ -284,7 +284,7 @@ private[spark] object JsonProtocol {
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
-    val name = accumulableInfo.name
+    val name = accumulableInfo.name.orNull
     ("ID" -> accumulableInfo.id) ~
     ("Name" -> name) ~
     ("Update" -> accumulableInfo.update.map { v => accumValueToJson(name, v) }) ~
@@ -723,9 +723,9 @@ private[spark] object JsonProtocol {
 
   def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
     val id = (json \ "ID").extract[Long]
-    val name = (json \ "Name").extract[String]
-    val update = Utils.jsonOption(json \ "Update").map { v => accumValueFromJson(name, v) }
-    val value = Utils.jsonOption(json \ "Value").map { v => accumValueFromJson(name, v) }
+    val name = (json \ "Name").extractOpt[String]
+    val update = Utils.jsonOption(json \ "Update").map { v => accumValueFromJson(name.orNull, v) }
+    val value = Utils.jsonOption(json \ "Value").map { v => accumValueFromJson(name.orNull, v) }
     val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
     val countFailedValues = (json \ "Count Failed Values").extractOpt[Boolean].getOrElse(false)
     new AccumulableInfo(id, name, update, value, internal, countFailedValues)
@@ -734,7 +734,7 @@ private[spark] object JsonProtocol {
   /**
    * Deserialize the value of an accumulator from JSON.
    *
-   * For accmulators representing internal task metrics, this looks up the relevant
+   * For accumulators representing internal task metrics, this looks up the relevant
    * [[AccumulatorParam]] to deserialize the value accordingly. For all other
    * accumulators, this will simply deserialize the value as a string.
    *

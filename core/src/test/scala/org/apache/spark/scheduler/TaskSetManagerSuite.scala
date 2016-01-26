@@ -166,7 +166,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
     val accumUpdates = taskSet.tasks.head.initialAccumulators.map { a =>
-      new AccumulableInfo(a.id, a.name.get, Some(0L), None, a.isInternal, a.countFailedValues)
+      new AccumulableInfo(a.id, a.name, Some(0L), None, a.isInternal, a.countFailedValues)
     }
 
     // Offer a host with NO_PREF as the constraint,
@@ -187,7 +187,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
     val accumUpdatesByTask: Array[Seq[AccumulableInfo]] =
       taskSet.tasks.map { _.initialAccumulators.map { a =>
-        new AccumulableInfo(a.id, a.name.get, Some(0L), None, a.isInternal, a.countFailedValues)
+        new AccumulableInfo(a.id, a.name, Some(0L), None, a.isInternal, a.countFailedValues)
       }}
 
     // First three offers should all find tasks

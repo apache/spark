@@ -271,7 +271,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           result._1,
           result._2,
           Seq(new AccumulableInfo(
-            accumId, "", Some(1), None, internal = false, countFailedValues = false))))
+            accumId, Some(""), Some(1), None, internal = false, countFailedValues = false))))
       }
     }
   }
@@ -349,11 +349,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("equals and hashCode AccumulableInfo") {
     val accInfo1 = new AccumulableInfo(
-      1, "Accumulable1", Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
+      1, Some("a1"), Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
     val accInfo2 = new AccumulableInfo(
-      1, "Accumulable1", Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
+      1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     val accInfo3 = new AccumulableInfo(
-      1, "Accumulable1", Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
+      1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     assert(accInfo1 !== accInfo2)
     assert(accInfo2 === accInfo3)
     assert(accInfo2.hashCode() === accInfo3.hashCode())
@@ -1582,11 +1582,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(Accumulators.get(acc2.id).isDefined)
     assert(Accumulators.get(acc3.id).isDefined)
     val accInfo1 = new AccumulableInfo(
-      acc1.id, acc1.name.get, Some(15L), None, internal = false, countFailedValues = false)
+      acc1.id, acc1.name, Some(15L), None, internal = false, countFailedValues = false)
     val accInfo2 = new AccumulableInfo(
-      acc2.id, acc2.name.get, Some(13L), None, internal = false, countFailedValues = false)
+      acc2.id, acc2.name, Some(13L), None, internal = false, countFailedValues = false)
     val accInfo3 = new AccumulableInfo(
-      acc3.id, acc3.name.get, Some(18L), None, internal = false, countFailedValues = false)
+      acc3.id, acc3.name, Some(18L), None, internal = false, countFailedValues = false)
     val accumUpdates = Seq(accInfo1, accInfo2, accInfo3)
     val exceptionFailure = new ExceptionFailure(new SparkException("fondue?"), accumUpdates)
     submit(new MyRDD(sc, 1, Nil), Array(0))
@@ -1956,8 +1956,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val accumUpdates = reason match {
       case Success =>
         task.initialAccumulators.map { a =>
-          new AccumulableInfo(
-            a.id, a.name.get, Some(a.zero), None, a.isInternal, a.countFailedValues)
+          new AccumulableInfo(a.id, a.name, Some(a.zero), None, a.isInternal, a.countFailedValues)
         }
       case ef: ExceptionFailure => ef.accumUpdates
       case _ => Seq.empty[AccumulableInfo]

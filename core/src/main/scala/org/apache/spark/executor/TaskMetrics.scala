@@ -325,8 +325,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    * not the aggregated value across multiple tasks.
    */
   def accumulatorUpdates(): Seq[AccumulableInfo] = accums.map { a =>
-    new AccumulableInfo(
-      a.id, a.name.orNull, Some(a.localValue), None, a.isInternal, a.countFailedValues)
+    new AccumulableInfo(a.id, a.name, Some(a.localValue), None, a.isInternal, a.countFailedValues)
   }
 
   // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.
@@ -387,11 +386,9 @@ private[spark] object TaskMetrics extends Logging {
     // registered later because they need not satisfy this requirement.
     val (initialAccumInfos, otherAccumInfos) = accumUpdates
       .filter { info => info.update.isDefined }
-      .partition { info =>
-        info.name != null && info.name.startsWith(InternalAccumulator.METRICS_PREFIX)
-      }
+      .partition { info => info.name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX)) }
     val initialAccums = initialAccumInfos.map { info =>
-      val accum = InternalAccumulator.create(info.name)
+      val accum = InternalAccumulator.create(info.name.get)
       accum.setValueAny(info.update.get)
       accum
     }

@@ -271,8 +271,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         }
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: AccumulableInfo): Elem =
-        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
+        (acc.name, acc.value) match {
+          case (Some(name), Some(value)) => <tr><td>{name}</td><td>{value}</td></tr>
+          case _ => Seq.empty[Node]
+        }
+      }
       val accumulableTable = UIUtils.listingTable(
         accumulableHeaders,
         accumulableRow,
@@ -889,7 +893,12 @@ private[ui] class TaskDataSource(
 
     val externalAccumulableReadable = info.accumulables
       .filterNot(_.internal)
-      .map { acc => StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}") }
+      .flatMap { a =>
+        (a.name, a.update) match {
+          case (Some(name), Some(update)) => Some(StringEscapeUtils.escapeHtml4(s"$name: $update"))
+          case _ => None
+        }
+      }
     val peakExecutionMemoryUsed = metrics.map(_.peakExecutionMemory).getOrElse(0L)
 
     val maybeInput = metrics.flatMap(_.inputMetrics)

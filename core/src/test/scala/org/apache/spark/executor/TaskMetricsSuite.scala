@@ -400,10 +400,10 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(newUpdates.contains(acc2.id))
     assert(newUpdates.contains(acc3.id))
     assert(newUpdates.contains(acc4.id))
-    assert(newUpdates(acc1.id).name === "a")
-    assert(newUpdates(acc2.id).name === "b")
-    assert(newUpdates(acc3.id).name === "c")
-    assert(newUpdates(acc4.id).name === "d")
+    assert(newUpdates(acc1.id).name === Some("a"))
+    assert(newUpdates(acc2.id).name === Some("b"))
+    assert(newUpdates(acc3.id).name === Some("c"))
+    assert(newUpdates(acc4.id).name === Some("d"))
     assert(newUpdates(acc1.id).update === Some(1))
     assert(newUpdates(acc2.id).update === Some(2))
     assert(newUpdates(acc3.id).update === Some(0))
@@ -471,7 +471,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("from accumulator updates") {
     val accumUpdates1 = InternalAccumulator.create().map { a =>
-      AccumulableInfo(a.id, a.name.orNull, Some(3L), None, a.isInternal, a.countFailedValues)
+      AccumulableInfo(a.id, a.name, Some(3L), None, a.isInternal, a.countFailedValues)
     }
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)
     assertUpdatesEquals(metrics1.accumulatorUpdates(), accumUpdates1)
@@ -523,7 +523,7 @@ private[spark] object TaskMetricsSuite extends Assertions {
     val accum = accums.find(_.name == Some(metricName))
     assert(accum.isDefined)
     assertEquals(accum.get.value, value)
-    val accumUpdate = tm.accumulatorUpdates().find(_.name == metricName)
+    val accumUpdate = tm.accumulatorUpdates().find(_.name == Some(metricName))
     assert(accumUpdate.isDefined)
     assert(accumUpdate.get.value === None)
     assertEquals(accumUpdate.get.update, Some(value))
@@ -552,8 +552,7 @@ private[spark] object TaskMetricsSuite extends Assertions {
    * info as an accumulator update.
    */
   def makeInfo(a: Accumulable[_, _]): AccumulableInfo = {
-    new AccumulableInfo(
-      a.id, a.name.orNull, Some(a.value), None, a.isInternal, a.countFailedValues)
+    new AccumulableInfo(a.id, a.name, Some(a.value), None, a.isInternal, a.countFailedValues)
   }
 
 }
