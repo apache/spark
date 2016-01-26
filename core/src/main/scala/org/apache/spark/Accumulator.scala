@@ -105,8 +105,8 @@ private[spark] object Accumulators extends Logging {
    * Note: if an accumulator is registered here, it should also be registered with the active
    * context cleaner for cleanup so as to avoid memory leaks.
    *
-   * If an [[Accumulable]] with the same ID was already registered, do nothing instead of
-   * overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
+   * If an [[Accumulable]] with the same ID was already registered, this does nothing instead
+   * of overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
    * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
    */
   def register(a: Accumulable[_, _]): Unit = synchronized {
@@ -128,10 +128,8 @@ private[spark] object Accumulators extends Logging {
   def get(id: Long): Option[Accumulable[_, _]] = synchronized {
     originals.get(id).map { weakRef =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
-      weakRef.get match {
-        case Some(accum) => accum
-        case None =>
-          throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
+      weakRef.get.getOrElse {
+        throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
       }
     }
   }

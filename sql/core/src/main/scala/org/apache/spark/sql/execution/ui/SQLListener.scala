@@ -330,7 +330,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.stageId,
       taskEnd.stageAttemptId,
       taskEnd.taskInfo.accumulables.map { a =>
-        val newValue = new LongSQLMetricValue(a.update.map(_.toString.toLong).getOrElse(0L))
+        val newValue = new LongSQLMetricValue(a.update.map(_.asInstanceOf[Long]).getOrElse(0L))
         a.copy(update = Some(newValue))
       },
       finishTask = true)

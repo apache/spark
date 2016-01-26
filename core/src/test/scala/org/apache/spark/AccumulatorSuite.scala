@@ -307,7 +307,7 @@ private[spark] object AccumulatorSuite {
     testBody
     val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
     val isSet = accums.exists { a =>
-      a.name == PEAK_EXECUTION_MEMORY && a.value.exists(_.toString.toLong > 0L)
+      a.name == PEAK_EXECUTION_MEMORY && a.value.exists(_.asInstanceOf[Long] > 0L)
     }
     if (!isSet) {
       throw new TestFailedException(s"peak execution memory accumulator not set in '$testName'", 0)

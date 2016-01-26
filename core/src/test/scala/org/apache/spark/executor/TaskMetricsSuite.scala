@@ -35,7 +35,15 @@ class TaskMetricsSuite extends SparkFunSuite {
     val tm1 = new TaskMetrics
     val tm2 = new TaskMetrics(internalAccums)
     assert(tm1.accumulatorUpdates().size === internalAccums.size)
+    assert(tm1.shuffleReadMetrics.isEmpty)
+    assert(tm1.shuffleWriteMetrics.isEmpty)
+    assert(tm1.inputMetrics.isEmpty)
+    assert(tm1.outputMetrics.isEmpty)
     assert(tm2.accumulatorUpdates().size === internalAccums.size)
+    assert(tm2.shuffleReadMetrics.isEmpty)
+    assert(tm2.shuffleWriteMetrics.isEmpty)
+    assert(tm2.inputMetrics.isEmpty)
+    assert(tm2.outputMetrics.isEmpty)
     // TaskMetrics constructor expects minimal set of initial accumulators
     intercept[IllegalArgumentException] { new TaskMetrics(Seq.empty[Accumulator[_]]) }
   }
@@ -409,53 +417,56 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(newUpdates.size === internalAccums.size + 4)
   }
 
-  test("existing values in accums") {
+  test("existing values in shuffle read accums") {
     // set shuffle read accum before passing it into TaskMetrics
-    val accums1 = InternalAccumulator.create()
-    val srAccum = accums1.find(_.name === Some(shuffleRead.FETCH_WAIT_TIME))
+    val accums = InternalAccumulator.create()
+    val srAccum = accums.find(_.name === Some(shuffleRead.FETCH_WAIT_TIME))
     assert(srAccum.isDefined)
     srAccum.get.asInstanceOf[Accumulator[Long]] += 10L
-    val tm1 = new TaskMetrics(accums1)
-    assert(tm1.shuffleReadMetrics.isDefined)
-    assert(tm1.shuffleWriteMetrics.isEmpty)
-    assert(tm1.inputMetrics.isEmpty)
-    assert(tm1.outputMetrics.isEmpty)
+    val tm = new TaskMetrics(accums)
+    assert(tm.shuffleReadMetrics.isDefined)
+    assert(tm.shuffleWriteMetrics.isEmpty)
+    assert(tm.inputMetrics.isEmpty)
+    assert(tm.outputMetrics.isEmpty)
+  }
+
+  test("existing values in shuffle write accums") {
     // set shuffle write accum before passing it into TaskMetrics
-    val accums2 = InternalAccumulator.create()
-    val swAccum = accums2.find(_.name === Some(shuffleWrite.RECORDS_WRITTEN))
+    val accums = InternalAccumulator.create()
+    val swAccum = accums.find(_.name === Some(shuffleWrite.RECORDS_WRITTEN))
     assert(swAccum.isDefined)
     swAccum.get.asInstanceOf[Accumulator[Long]] += 10L
-    val tm2 = new TaskMetrics(accums2)
-    assert(tm2.shuffleReadMetrics.isEmpty)
-    assert(tm2.shuffleWriteMetrics.isDefined)
-    assert(tm2.inputMetrics.isEmpty)
-    assert(tm2.outputMetrics.isEmpty)
+    val tm = new TaskMetrics(accums)
+    assert(tm.shuffleReadMetrics.isEmpty)
+    assert(tm.shuffleWriteMetrics.isDefined)
+    assert(tm.inputMetrics.isEmpty)
+    assert(tm.outputMetrics.isEmpty)
+  }
+
+  test("existing values in input accums") {
     // set input accum before passing it into TaskMetrics
-    val accums3 = InternalAccumulator.create()
-    val inAccum = accums3.find(_.name === Some(input.RECORDS_READ))
+    val accums = InternalAccumulator.create()
+    val inAccum = accums.find(_.name === Some(input.RECORDS_READ))
     assert(inAccum.isDefined)
     inAccum.get.asInstanceOf[Accumulator[Long]] += 10L
-    val tm3 = new TaskMetrics(accums3)
-    assert(tm3.shuffleReadMetrics.isEmpty)
-    assert(tm3.shuffleWriteMetrics.isEmpty)
-    assert(tm3.inputMetrics.isDefined)
-    assert(tm3.outputMetrics.isEmpty)
+    val tm = new TaskMetrics(accums)
+    assert(tm.shuffleReadMetrics.isEmpty)
+    assert(tm.shuffleWriteMetrics.isEmpty)
+    assert(tm.inputMetrics.isDefined)
+    assert(tm.outputMetrics.isEmpty)
+  }
+
+  test("existing values in output accums") {
     // set output accum before passing it into TaskMetrics
-    val accums4 = InternalAccumulator.create()
-    val outAccum = accums4.find(_.name === Some(output.RECORDS_WRITTEN))
+    val accums = InternalAccumulator.create()
+    val outAccum = accums.find(_.name === Some(output.RECORDS_WRITTEN))
     assert(outAccum.isDefined)
     outAccum.get.asInstanceOf[Accumulator[Long]] += 10L
-    val tm4 = new TaskMetrics(accums4)
+    val tm4 = new TaskMetrics(accums)
     assert(tm4.shuffleReadMetrics.isEmpty)
     assert(tm4.shuffleWriteMetrics.isEmpty)
     assert(tm4.inputMetrics.isEmpty)
     assert(tm4.outputMetrics.isDefined)
-    // do not modify any accums before creating TaskMetrics; nothing should be set
-    val tm5 = new TaskMetrics
-    assert(tm5.shuffleReadMetrics.isEmpty)
-    assert(tm5.shuffleWriteMetrics.isEmpty)
-    assert(tm5.inputMetrics.isEmpty)
-    assert(tm5.outputMetrics.isEmpty)
   }
 
   test("from accumulator updates") {

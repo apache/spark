@@ -122,7 +122,7 @@ case class ExceptionFailure(
     accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo])
   extends TaskFailedReason {
 
-  // For backward compatibility; this was replaced with `accumUpdates` in Spark 2.0.
+  @deprecated("use accumUpdates instead", "2.0.0")
   val metrics: Option[TaskMetrics] = {
     if (accumUpdates.nonEmpty) {
       Try(TaskMetrics.fromAccumulatorUpdates(accumUpdates)).toOption

@@ -61,7 +61,7 @@ class Accumulable[R, T] private (
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean,
-    val countFailedValues: Boolean)
+    private[spark] val countFailedValues: Boolean)
   extends Serializable {
 
   private[spark] def this(
