@@ -98,7 +98,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
       miniBatchFrac,
       initialWeightsWithIntercept)
 
-    assert(loss.last - loss.head < 0, "loss isn't decreasing.")
+    assert(loss.last - loss.head < 0, "loss is decreasing.")
 
     val lossDiff = loss.init.zip(loss.tail).map { case (lhs, rhs) => lhs - rhs }
     assert(lossDiff.count(_ > 0).toDouble / lossDiff.size > 0.8)
@@ -176,7 +176,16 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
       initialWeightsWithIntercept,
       convergenceTolerance)
 
+    val gradientDescent = new GradientDescent(gradient, updater)
+      .setStepSize(stepSize)
+      .setConvergenceTol(convergenceTolerance)
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      val optimizerResult = gradientDescent.optimizeWithStats(dataRDD, initialWeightsWithIntercept)
+
     assert(loss.length < numIterations, "convergenceTolerance failed to stop optimization early")
+    assert(optimizerResult.history.length < numIterations,
+                                        "convergenceTolerance failed to stop optimization early")
   }
 }
 

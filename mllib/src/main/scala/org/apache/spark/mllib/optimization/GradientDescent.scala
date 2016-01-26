@@ -125,7 +125,7 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    */
   @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = GradientDescent.runMiniBatchSGD(
+    val (weights, lossHistory) = GradientDescent.runMiniBatchSGD(
       data,
       gradient,
       updater,
@@ -138,6 +138,27 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
     weights
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Runs gradient descent on the given training data.
+   * @param data training data
+   * @param initialWeights initial weights
+   * @return solution vector
+   */
+  @DeveloperApi
+  def optimizeWithStats(data: RDD[(Double, Vector)], initialWeights: Vector): OptimizerResult = {
+    val (weights, lossHistory) = GradientDescent.runMiniBatchSGD(
+      data,
+      gradient,
+      updater,
+      stepSize,
+      numIterations,
+      regParam,
+      miniBatchFraction,
+      initialWeights,
+      convergenceTol)
+    OptimizerResult(weights, lossHistory, lossHistory.length)
+  }
 }
 
 /**

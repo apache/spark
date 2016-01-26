@@ -21,6 +21,7 @@ package org.apache.spark.examples.mllib;
 import java.util.Arrays;
 
 import scala.Tuple2;
+import scala.Tuple3;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.Function;
@@ -65,7 +66,7 @@ public class JavaLBFGSExample {
     double regParam = 0.1;
     Vector initialWeightsWithIntercept = Vectors.dense(new double[numFeatures + 1]);
 
-    Tuple2<Vector, double[]> result = LBFGS.runLBFGS(
+    Tuple3<Vector, double[], Integer> result = LBFGS.runLBFGS(
       training.rdd(),
       new LogisticGradient(),
       new SquaredL2Updater(),

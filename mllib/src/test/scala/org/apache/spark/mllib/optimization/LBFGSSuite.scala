@@ -58,7 +58,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val convergenceTol = 1e-12
     val numIterations = 10
 
-    val (_, loss) = LBFGS.runLBFGS(
+    val (_, loss, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       simpleUpdater,
@@ -102,7 +102,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val convergenceTol = 1e-12
     val numIterations = 10
 
-    val (weightLBFGS, lossLBFGS) = LBFGS.runLBFGS(
+    val (weightLBFGS, lossLBFGS, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -148,7 +148,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val numIterations = 8
     var convergenceTol = 0.0
 
-    val (_, lossLBFGS1) = LBFGS.runLBFGS(
+    val (_, lossLBFGS1, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -163,7 +163,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     assert(lossLBFGS1.length == 9)
 
     convergenceTol = 0.1
-    val (_, lossLBFGS2) = LBFGS.runLBFGS(
+    val (_, lossLBFGS2, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -178,7 +178,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     assert((lossLBFGS2(2) - lossLBFGS2(3)) / lossLBFGS2(2) < convergenceTol)
 
     convergenceTol = 0.01
-    val (_, lossLBFGS3) = LBFGS.runLBFGS(
+    val (_, lossLBFGS3, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -211,6 +211,8 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       .setRegParam(regParam)
 
     val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
+    val weightLBFGSWithStats = lbfgsOptimizer.optimizeWithStats(dataRDD,
+                               initialWeightsWithIntercept)
 
     val numGDIterations = 50
     val stepSize = 1.0
@@ -228,6 +230,10 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     // for class LBFGS and the optimize method, we only look at the weights
     assert(
       (weightLBFGS(0) ~= weightGD(0) relTol 0.02) && (weightLBFGS(1) ~= weightGD(1) relTol 0.02),
+      "The weight differences between LBFGS and GD should be within 2%.")
+    assert(
+      (weightLBFGSWithStats.weights(0) ~= weightGD(0) relTol 0.02) &&
+      (weightLBFGSWithStats.weights(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
   }
 }
