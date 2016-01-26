@@ -22,7 +22,7 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
@@ -192,7 +192,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(SqlParser.parseTableIdentifier(tableName))
+    insertInto(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
@@ -240,6 +240,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       n <- numBuckets
     } yield {
       require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
+
+      // partitionBy columns cannot be used in bucketBy
+      if (normalizedParCols.nonEmpty &&
+        normalizedBucketColNames.get.toSet.intersect(normalizedParCols.get.toSet).nonEmpty) {
+          throw new AnalysisException(
+            s"bucketBy columns '${bucketColumnNames.get.mkString(", ")}' should not be part of " +
+            s"partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
+      }
+
       BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
     }
   }
@@ -282,7 +291,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(SqlParser.parseTableIdentifier(tableName))
+    saveAsTable(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {

@@ -66,7 +66,8 @@ class Analyzer(
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
-      WindowsSubstitution),
+      WindowsSubstitution,
+      EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -84,7 +85,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       DistinctAggregationRewriter(conf) ::
       HiveTypeCoercion.typeCoercionRules ++
-      extendedResolutionRules: _*),
+      extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -110,7 +111,7 @@ class Analyzer(
         // Taking into account the reasonableness and the implementation complexity,
         // here use the CTE definition first, check table name only and ignore database name
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
-        case u: UnresolvedRelation =>
+        case u : UnresolvedRelation =>
           val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
             val withAlias = u.alias.map(Subquery(_, relation))
             withAlias.getOrElse(relation)
@@ -147,7 +148,7 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr transform {
+          expr transformUp {
             case u @ UnresolvedAlias(child, optionalAliasName) => child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
@@ -297,7 +298,7 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation): LogicalPlan = {
+    private def getTable(u: UnresolvedRelation): LogicalPlan = {
       try {
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
@@ -889,7 +890,7 @@ class Analyzer(
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
           // a WindowFunction).
-          case wf: WindowFunction =>
+          case wf : WindowFunction =>
             val newChildren = wf.children.map(extractExpr)
             wf.withNewChildren(newChildren)
 
@@ -1165,8 +1166,17 @@ class Analyzer(
  * scoping information for attributes and can be removed once analysis is complete.
  */
 object EliminateSubQueries extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case Subquery(_, child) => child
+  }
+}
+
+/**
+  * Removes [[Union]] operators from the plan if it just has one child.
+  */
+object EliminateUnions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Union(children) if children.size == 1 => children.head
   }
 }
 
@@ -1213,6 +1223,10 @@ object CleanupAliases extends Rule[LogicalPlan] {
         windowExprs.map(e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression])
       Window(projectList, cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
+
+    // Operators that operate on objects should only have expressions from encoders, which should
+    // never have extra aliases.
+    case o: ObjectOperator => o
 
     case other =>
       var stop = false

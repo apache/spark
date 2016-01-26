@@ -856,7 +856,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonWithSimpleMap.registerTempTable("jsonWithSimpleMap")
 
     checkAnswer(
-      sql("select map from jsonWithSimpleMap"),
+      sql("select `map` from jsonWithSimpleMap"),
       Row(Map("a" -> 1)) ::
       Row(Map("b" -> 2)) ::
       Row(Map("c" -> 3)) ::
@@ -865,7 +865,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
 
     checkAnswer(
-      sql("select map['c'] from jsonWithSimpleMap"),
+      sql("select `map`['c'] from jsonWithSimpleMap"),
       Row(null) ::
       Row(null) ::
       Row(3) ::
@@ -884,7 +884,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonWithComplexMap.registerTempTable("jsonWithComplexMap")
 
     checkAnswer(
-      sql("select map from jsonWithComplexMap"),
+      sql("select `map` from jsonWithComplexMap"),
       Row(Map("a" -> Row(Seq(1, 2, 3, null), null))) ::
       Row(Map("b" -> Row(null, 2))) ::
       Row(Map("c" -> Row(Seq(), 4))) ::
@@ -894,7 +894,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
 
     checkAnswer(
-      sql("select map['a'].field1, map['c'].field2 from jsonWithComplexMap"),
+      sql("select `map`['a'].field1, `map`['c'].field2 from jsonWithComplexMap"),
       Row(Seq(1, 2, 3, null), null) ::
       Row(null, null) ::
       Row(null, 4) ::
@@ -1223,6 +1223,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         sqlContext,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
+        bucketSpec = None,
         provider = classOf[DefaultSource].getCanonicalName,
         options = Map("path" -> path))
 
@@ -1230,6 +1231,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         sqlContext,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
+        bucketSpec = None,
         provider = classOf[DefaultSource].getCanonicalName,
         options = Map("path" -> path))
       assert(d1 === d2)
@@ -1238,7 +1240,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = InferSchema.infer(empty, "", JSONOptions())
+    val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map()))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1262,7 +1264,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = InferSchema.infer(emptyRecords, "", JSONOptions())
+    val emptySchema = InferSchema.infer(emptyRecords, "", new JSONOptions(Map()))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1462,6 +1464,34 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           )
         }
       }
+    }
+  }
+
+  test("SPARK-12872 Support to specify the option for compression codec") {
+    withTempDir { dir =>
+      val dir = Utils.createTempDir()
+      dir.delete()
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+
+      val jsonDF = sqlContext.read.json(path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      jsonDF.coalesce(1).write
+        .format("json")
+        .option("compression", "gZiP")
+        .save(jsonDir)
+
+      val compressedFiles = new File(jsonDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+
+      val jsonCopy = sqlContext.read
+        .format("json")
+        .load(jsonDir)
+
+      assert(jsonCopy.count == jsonDF.count)
+      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+      checkAnswer(jsonCopySome, jsonDFSome)
     }
   }
 

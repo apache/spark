@@ -30,10 +30,10 @@ from pyspark.mllib.linalg import _convert_to_vector
 __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel', 'DCT',
            'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'MinMaxScaler',
            'MinMaxScalerModel', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
-           'PolynomialExpansion', 'RegexTokenizer', 'RFormula', 'RFormulaModel', 'SQLTransformer',
-           'StandardScaler', 'StandardScalerModel', 'StopWordsRemover', 'StringIndexer',
-           'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'VectorSlicer',
-           'Word2Vec', 'Word2VecModel']
+           'PolynomialExpansion', 'QuantileDiscretizer', 'RegexTokenizer', 'RFormula',
+           'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
+           'StopWordsRemover', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
+           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel']
 
 
 @inherit_doc
@@ -606,6 +606,10 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
     >>> model = mmScaler.fit(df)
+    >>> model.originalMin
+    DenseVector([0.0])
+    >>> model.originalMax
+    DenseVector([2.0])
     >>> model.transform(df).show()
     +-----+------+
     |    a|scaled|
@@ -687,6 +691,22 @@ class MinMaxScalerModel(JavaModel):
 
     .. versionadded:: 1.6.0
     """
+
+    @property
+    @since("2.0.0")
+    def originalMin(self):
+        """
+        Min value for each original column during fitting.
+        """
+        return self._call_java("originalMin")
+
+    @property
+    @since("2.0.0")
+    def originalMax(self):
+        """
+        Max value for each original column during fitting.
+        """
+        return self._call_java("originalMax")
 
 
 @inherit_doc
@@ -972,6 +992,87 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+    categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
+    into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
+    covering all real values. This attempts to find numBuckets partitions based on a sample of data,
+    but it may find fewer depending on the data sample values.
+
+    >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> qds = QuantileDiscretizer(numBuckets=2,
+    ...     inputCol="values", outputCol="buckets")
+    >>> bucketizer = qds.fit(df)
+    >>> splits = bucketizer.getSplits()
+    >>> splits[0]
+    -inf
+    >>> print("%2.1f" % round(splits[1], 1))
+    0.4
+    >>> bucketed = bucketizer.transform(df).head()
+    >>> bucketed.buckets
+    0.0
+
+    .. versionadded:: 2.0.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    numBuckets = Param(Params._dummy(), "numBuckets",
+                       "Maximum number of buckets (quantiles, or " +
+                       "categories) into which data points are grouped. Must be >= 2. Default 2.")
+
+    @keyword_only
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None):
+        """
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None)
+        """
+        super(QuantileDiscretizer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
+                                            self.uid)
+        self.numBuckets = Param(self, "numBuckets",
+                                "Maximum number of buckets (quantiles, or " +
+                                "categories) into which data points are grouped. Must be >= 2.")
+        self._setDefault(numBuckets=2)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None):
+        """
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None)
+        Set the params for the QuantileDiscretizer
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setNumBuckets(self, value):
+        """
+        Sets the value of :py:attr:`numBuckets`.
+        """
+        self._paramMap[self.numBuckets] = value
+        return self
+
+    @since("2.0.0")
+    def getNumBuckets(self):
+        """
+        Gets the value of numBuckets or its default value.
+        """
+        return self.getOrDefault(self.numBuckets)
+
+    def _create_model(self, java_model):
+        """
+        Private method to convert the java_model to a Python model.
+        """
+        return Bucketizer(splits=list(java_model.getSplits()),
+                          inputCol=self.getInputCol(),
+                          outputCol=self.getOutputCol())
+
+
+@inherit_doc
 @ignore_unicode_prefix
 class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
@@ -984,18 +1085,18 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     length.
     It returns an array of strings that can be empty.
 
-    >>> df = sqlContext.createDataFrame([("a b  c",)], ["text"])
+    >>> df = sqlContext.createDataFrame([("A B  c",)], ["text"])
     >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
     >>> reTokenizer.transform(df).head()
-    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
     >>> # Change a parameter.
     >>> reTokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
     >>> # Temporarily modify a parameter.
     >>> reTokenizer.transform(df, {reTokenizer.outputCol: "words"}).head()
-    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
     >>> reTokenizer.transform(df).head()
-    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
     >>> # Must use keyword arguments to specify params.
     >>> reTokenizer.setParams("text")
     Traceback (most recent call last):
@@ -1009,26 +1110,34 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)")
     gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing")
+    toLowercase = Param(Params._dummy(), "toLowercase", "whether to convert all characters to " +
+                        "lowercase before tokenizing")
 
     @keyword_only
-    def __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None):
+    def __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None,
+                 outputCol=None, toLowercase=True):
         """
-        __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None)
+        __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, \
+                 outputCol=None, toLowercase=True)
         """
         super(RegexTokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
         self.minTokenLength = Param(self, "minTokenLength", "minimum token length (>= 0)")
         self.gaps = Param(self, "gaps", "whether regex splits on gaps (True) or matches tokens")
         self.pattern = Param(self, "pattern", "regex pattern (Java dialect) used for tokenizing")
-        self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+")
+        self.toLowercase = Param(self, "toLowercase", "whether to convert all characters to " +
+                                 "lowercase before tokenizing")
+        self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None):
+    def setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None,
+                  outputCol=None, toLowercase=True):
         """
-        setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None)
+        setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, \
+                  outputCol=None, toLowercase=True)
         Sets params for this RegexTokenizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -1078,6 +1187,21 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of pattern or its default value.
         """
         return self.getOrDefault(self.pattern)
+
+    @since("2.0.0")
+    def setToLowercase(self, value):
+        """
+        Sets the value of :py:attr:`toLowercase`.
+        """
+        self._paramMap[self.toLowercase] = value
+        return self
+
+    @since("2.0.0")
+    def getToLowercase(self):
+        """
+        Gets the value of toLowercase or its default value.
+        """
+        return self.getOrDefault(self.toLowercase)
 
 
 @inherit_doc
@@ -1945,6 +2069,8 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
     >>> model = pca.fit(df)
     >>> model.transform(df).collect()[0].pca_features
     DenseVector([1.648..., -4.013...])
+    >>> model.explainedVariance
+    DenseVector([0.794..., 0.205...])
 
     .. versionadded:: 1.5.0
     """
@@ -2000,6 +2126,24 @@ class PCAModel(JavaModel):
 
     .. versionadded:: 1.5.0
     """
+
+    @property
+    @since("2.0.0")
+    def pc(self):
+        """
+        Returns a principal components Matrix.
+        Each column is one principal component.
+        """
+        return self._call_java("pc")
+
+    @property
+    @since("2.0.0")
+    def explainedVariance(self):
+        """
+        Returns a vector of proportions of variance
+        explained by each principal component.
+        """
+        return self._call_java("explainedVariance")
 
 
 @inherit_doc

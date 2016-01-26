@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.SqlParser
+import org.apache.spark.sql.catalyst.{CatalystQl}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JSONRelation
@@ -109,6 +109,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
       partitionColumns = Array.empty[String],
+      bucketSpec = None,
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
@@ -203,7 +204,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-      JDBCPartition(part, i): Partition
+      JDBCPartition(part, i) : Partition
     }
     jdbc(url, table, parts, connectionProperties)
   }
@@ -262,7 +263,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * @since 1.6.0
    */
-  def json(paths: String*): DataFrame = format("json").load(paths: _*)
+  def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
    * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
@@ -337,7 +338,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     DataFrame(sqlContext,
-      sqlContext.catalog.lookupRelation(SqlParser.parseTableIdentifier(tableName)))
+      sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
@@ -355,7 +356,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths: _*)
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

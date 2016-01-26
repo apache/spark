@@ -113,6 +113,18 @@ hive_thriftserver = Module(
 )
 
 
+sketch = Module(
+    name="sketch",
+    dependencies=[],
+    source_file_regexes=[
+        "common/sketch/",
+    ],
+    sbt_test_goals=[
+        "sketch/test"
+    ]
+)
+
+
 graphx = Module(
     name="graphx",
     dependencies=[],
@@ -218,6 +230,18 @@ streaming_flume_sink = Module(
     ],
     sbt_test_goals=[
         "streaming-flume-sink/test",
+    ]
+)
+
+
+streaming_akka = Module(
+    name="streaming-akka",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/akka",
+    ],
+    sbt_test_goals=[
+        "streaming-akka/test",
     ]
 )
 

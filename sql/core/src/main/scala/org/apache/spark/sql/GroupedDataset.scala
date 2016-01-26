@@ -73,7 +73,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def keyAs[L: Encoder]: GroupedDataset[L, V] =
+  def keyAs[L : Encoder]: GroupedDataset[L, V] =
     new GroupedDataset(
       encoderFor[L],
       unresolvedVEncoder,
@@ -110,13 +110,11 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
       MapGroups(
         f,
-        resolvedKEncoder,
-        resolvedVEncoder,
         groupingAttributes,
         logicalPlan))
   }
@@ -158,7 +156,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def mapGroups[U: Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
+  def mapGroups[U : Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
     val func = (key: K, it: Iterator[V]) => Iterator(f(key, it))
     flatMapGroups(func)
   }
@@ -302,16 +300,14 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def cogroup[U, R: Encoder](
+  def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    implicit val uEncoder = other.unresolvedVEncoder
     new Dataset[R](
       sqlContext,
       CoGroup(
         f,
-        this.resolvedKEncoder,
-        this.resolvedVEncoder,
-        other.resolvedVEncoder,
         this.groupingAttributes,
         other.groupingAttributes,
         this.logicalPlan,

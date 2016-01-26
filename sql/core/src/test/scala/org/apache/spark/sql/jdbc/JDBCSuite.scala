@@ -46,7 +46,7 @@ class JDBCSuite extends SparkFunSuite
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
@@ -489,7 +489,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("Aggregated dialects") {
     val agg = new AggregatedDialect(List(new JdbcDialect {
-      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2:")
+      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
       override def getCatalystType(
           sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
@@ -514,6 +514,8 @@ class JDBCSuite extends SparkFunSuite
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
+    assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     val errMsg = intercept[IllegalArgumentException] {
       Postgres.getJDBCType(ByteType)
     }

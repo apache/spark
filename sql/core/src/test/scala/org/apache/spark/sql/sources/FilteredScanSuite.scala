@@ -317,7 +317,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
       val table = caseInsensitiveContext.table("oneToTenFiltered")
       val relation = table.queryExecution.logical.collectFirst {
-        case LogicalRelation(r, _) => r
+        case LogicalRelation(r, _, _) => r
       }.get
 
       assert(

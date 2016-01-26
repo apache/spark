@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
-import java.util.Properties
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -30,20 +29,19 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
-import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
-
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
@@ -204,7 +202,7 @@ class DataFrame private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def as[U: Encoder]: Dataset[U] = new Dataset[U](sqlContext, logicalPlan)
+  def as[U : Encoder]: Dataset[U] = new Dataset[U](sqlContext, logicalPlan)
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
@@ -227,7 +225,7 @@ class DataFrame private[sql](
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
       Column(oldAttribute).as(newName)
     }
-    select(newCols: _*)
+    select(newCols : _*)
   }
 
   /**
@@ -579,7 +577,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sortWithinPartitions(sortCol: String, sortCols: String*): DataFrame = {
-    sortWithinPartitions((sortCol +: sortCols).map(Column(_)): _*)
+    sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
   /**
@@ -608,7 +606,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): DataFrame = {
-    sort((sortCol +: sortCols).map(apply): _*)
+    sort((sortCol +: sortCols).map(apply) : _*)
   }
 
   /**
@@ -631,7 +629,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortCol: String, sortCols: String*): DataFrame = sort(sortCol, sortCols: _*)
+  def orderBy(sortCol: String, sortCols: String*): DataFrame = sort(sortCol, sortCols : _*)
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions.
@@ -640,7 +638,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs: _*)
+  def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs : _*)
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
@@ -720,7 +718,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)): _*)
+  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
@@ -737,7 +735,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
-      Column(SqlParser.parseExpression(expr))
+      Column(sqlContext.sqlParser.parseExpression(expr))
     }: _*)
   }
 
@@ -764,7 +762,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def filter(conditionExpr: String): DataFrame = {
-    filter(Column(SqlParser.parseExpression(conditionExpr)))
+    filter(Column(sqlContext.sqlParser.parseExpression(conditionExpr)))
   }
 
   /**
@@ -788,7 +786,7 @@ class DataFrame private[sql](
    * @since 1.5.0
    */
   def where(conditionExpr: String): DataFrame = {
-    filter(Column(SqlParser.parseExpression(conditionExpr)))
+    filter(Column(sqlContext.sqlParser.parseExpression(conditionExpr)))
   }
 
   /**
@@ -948,7 +946,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    groupBy().agg(aggExpr, aggExprs: _*)
+    groupBy().agg(aggExpr, aggExprs : _*)
   }
 
   /**
@@ -986,7 +984,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs: _*)
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
   /**
    * Returns a new [[DataFrame]] by taking the first `n` rows. The difference between this function
@@ -1005,7 +1003,9 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def unionAll(other: DataFrame): DataFrame = withPlan {
-    Union(logicalPlan, other.logicalPlan)
+    // This breaks caching, but it's usually ok because it addresses a very specific use case:
+    // using union to union many files or partitions.
+    CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /**
@@ -1118,7 +1118,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def explode[A <: Product: TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+  def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
     val elementTypes = schema.toAttributes.map {
@@ -1147,7 +1147,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
+  def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
@@ -1186,7 +1186,7 @@ class DataFrame private[sql](
           Column(field)
         }
       }
-      select(columns: _*)
+      select(columns : _*)
     } else {
       select(Column("*"), col.as(colName))
     }
@@ -1207,7 +1207,7 @@ class DataFrame private[sql](
           Column(field)
         }
       }
-      select(columns: _*)
+      select(columns : _*)
     } else {
       select(Column("*"), col.as(colName, metadata))
     }
@@ -1231,7 +1231,7 @@ class DataFrame private[sql](
           Column(col)
         }
       }
-      select(columns: _*)
+      select(columns : _*)
     } else {
       this
     }
@@ -1244,7 +1244,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(colName: String): DataFrame = {
-    drop(Seq(colName): _*)
+    drop(Seq(colName) : _*)
   }
 
   /**
@@ -1283,7 +1283,7 @@ class DataFrame private[sql](
     val colsAfterDrop = attrs.filter { attr =>
       attr != expression
     }.map(attr => Column(attr))
-    select(colsAfterDrop: _*)
+    select(colsAfterDrop : _*)
   }
 
   /**
@@ -1479,7 +1479,7 @@ class DataFrame private[sql](
    * @group action
    * @since 1.6.0
    */
-  def takeAsList(n: Int): java.util.List[Row] = java.util.Arrays.asList(take(n): _*)
+  def takeAsList(n: Int): java.util.List[Row] = java.util.Arrays.asList(take(n) : _*)
 
   /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
@@ -1505,7 +1505,7 @@ class DataFrame private[sql](
    */
   def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
     withNewExecutionId {
-      java.util.Arrays.asList(rdd.collect(): _*)
+      java.util.Arrays.asList(rdd.collect() : _*)
     }
   }
 
@@ -1728,7 +1728,7 @@ class DataFrame private[sql](
    */
   def inputFiles: Array[String] = {
     val files: Seq[String] = logicalPlan.collect {
-      case LogicalRelation(fsBasedRelation: FileRelation, _) =>
+      case LogicalRelation(fsBasedRelation: FileRelation, _, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles

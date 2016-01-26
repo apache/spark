@@ -17,6 +17,30 @@
 
 context("test functions in sparkR.R")
 
+test_that("Check masked functions", {
+  # Check that we are not masking any new function from base, stats, testthat unexpectedly
+  masked <- conflicts(detail = TRUE)$`package:SparkR`
+  expect_true("describe" %in% masked)  # only when with testthat..
+  func <- lapply(masked, function(x) { capture.output(showMethods(x))[[1]] })
+  funcSparkROrEmpty <- grepl("\\(package SparkR\\)$|^$", func)
+  maskedBySparkR <- masked[funcSparkROrEmpty]
+  namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
+                     "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
+                     "summary", "transform", "drop")
+  expect_equal(length(maskedBySparkR), length(namesOfMasked))
+  expect_equal(sort(maskedBySparkR), sort(namesOfMasked))
+  # above are those reported as masked when `library(SparkR)`
+  # note that many of these methods are still callable without base:: or stats:: prefix
+  # there should be a test for each of these, except followings, which are currently "broken"
+  funcHasAny <- unlist(lapply(masked, function(x) {
+                                        any(grepl("=\"ANY\"", capture.output(showMethods(x)[-1])))
+                                      }))
+  maskedCompletely <- masked[!funcHasAny]
+  namesOfMaskedCompletely <- c("cov", "filter", "sample")
+  expect_equal(length(maskedCompletely), length(namesOfMaskedCompletely))
+  expect_equal(sort(maskedCompletely), sort(namesOfMaskedCompletely))
+})
+
 test_that("repeatedly starting and stopping SparkR", {
   for (i in 1:4) {
     sc <- sparkR.init()

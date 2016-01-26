@@ -49,7 +49,7 @@ object ScalaReflection extends ScalaReflection {
    * Unlike `schemaFor`, this function doesn't do any massaging of types into the Spark SQL type
    * system.  As a result, ObjectType will be returned for things like boxed Integers
    */
-  def dataTypeFor[T: TypeTag]: DataType = dataTypeFor(localTypeOf[T])
+  def dataTypeFor[T : TypeTag]: DataType = dataTypeFor(localTypeOf[T])
 
   private def dataTypeFor(tpe: `Type`): DataType = ScalaReflectionLock.synchronized {
     tpe match {
@@ -116,7 +116,7 @@ object ScalaReflection extends ScalaReflection {
    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
    * calling resolve/bind with a new schema.
    */
-  def constructorFor[T: TypeTag]: Expression = {
+  def constructorFor[T : TypeTag]: Expression = {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
@@ -386,7 +386,7 @@ object ScalaReflection extends ScalaReflection {
    *  * the element type of [[Array]] or [[Seq]]: `array element class: "abc.xyz.MyClass"`
    *  * the field of [[Product]]: `field (class: "abc.xyz.MyClass", name: "myField")`
    */
-  def extractorsFor[T: TypeTag](inputObject: Expression): CreateNamedStruct = {
+  def extractorsFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
@@ -642,7 +642,10 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
+  def localTypeOf[T: TypeTag]: `Type` = {
+    val tag = implicitly[TypeTag[T]]
+    tag.in(mirror).tpe.normalize
+  }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
