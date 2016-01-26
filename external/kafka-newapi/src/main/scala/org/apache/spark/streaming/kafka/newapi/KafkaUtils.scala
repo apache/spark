@@ -23,6 +23,7 @@ import java.util.{ List => JList, Map => JMap, Set => JSet }
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
+
 import com.google.common.base.Charsets.UTF_8
 import kafka.common.TopicAndPartition
 import net.razorvine.pickle.{ IObjectPickler, Opcodes, Pickler }
@@ -30,7 +31,8 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SslConfigs
-import org.apache.spark.{ SSLOptions, SparkContext, SparkException }
+
+import org.apache.spark.{ SparkContext, SparkException, SSLOptions }
 import org.apache.spark.api.java.{ JavaPairRDD, JavaRDD, JavaSparkContext }
 import org.apache.spark.api.java.function.{ Function => JFunction }
 import org.apache.spark.api.python.SerDeUtil

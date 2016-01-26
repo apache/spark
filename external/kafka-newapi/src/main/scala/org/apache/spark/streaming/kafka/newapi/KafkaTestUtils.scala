@@ -22,10 +22,12 @@ import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
 import java.util.{Map => JMap, Properties}
 import java.util.concurrent.TimeoutException
+
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
+
 import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
@@ -35,6 +37,7 @@ import kafka.utils.ZkUtils
 import org.I0Itec.zkclient.ZkClient
 import org.apache.kafka.common.security.JaasUtils
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
+
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils

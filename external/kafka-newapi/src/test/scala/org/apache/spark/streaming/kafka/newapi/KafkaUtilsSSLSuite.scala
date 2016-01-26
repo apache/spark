@@ -21,6 +21,7 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.config.SslConfigs
 import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 class KafkaUtilsSSLSuite extends SparkFunSuite with BeforeAndAfterAll {

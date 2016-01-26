@@ -19,10 +19,13 @@ package org.apache.spark.streaming.kafka.newapi
 
 import java.util
 import java.util.Collections
+
 import scala.collection.JavaConverters._
 import scala.reflect._
+
 import org.apache.kafka.clients.consumer.{KafkaConsumer, OffsetAndMetadata, OffsetResetStrategy}
 import org.apache.kafka.common.{PartitionInfo, TopicPartition}
+
 import org.apache.spark.SparkException
 
 /**

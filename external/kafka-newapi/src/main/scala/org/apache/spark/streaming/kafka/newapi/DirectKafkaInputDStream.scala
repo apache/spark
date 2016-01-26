@@ -19,12 +19,14 @@ package org.apache.spark.streaming.kafka.newapi
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
+
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.Logging
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
-import KafkaCluster.LeaderOffset
+import org.apache.spark.streaming.kafka.newapi.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 

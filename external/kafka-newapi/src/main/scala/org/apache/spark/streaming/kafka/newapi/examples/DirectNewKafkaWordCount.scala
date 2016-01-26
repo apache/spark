@@ -19,6 +19,7 @@
 package org.apache.spark.streaming.kafka.newapi.examples
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
+
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.kafka.newapi._

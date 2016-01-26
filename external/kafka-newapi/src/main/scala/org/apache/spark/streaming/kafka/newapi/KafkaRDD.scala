@@ -22,13 +22,17 @@ import java.util.{Collections, Properties}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
-import KafkaCluster.LeaderOffset
+import org.apache.spark.streaming.kafka.newapi.KafkaCluster.LeaderOffset
 import org.apache.spark.util.NextIterator
+
+
 
 /**
  * A batch-oriented interface for consuming from Kafka.

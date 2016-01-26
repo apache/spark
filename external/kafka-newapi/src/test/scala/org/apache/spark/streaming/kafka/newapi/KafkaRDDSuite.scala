@@ -18,9 +18,11 @@
 package org.apache.spark.streaming.kafka.newapi
 
 import scala.util.Random
+
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark._
 
 class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
