@@ -109,14 +109,16 @@ object Pregel extends Logging {
    * @return the resulting graph at the end of the computation
    *
    */
-  def apply[VD: ClassTag, ED: ClassTag, A: ClassTag](
-      graph: Graph[VD, ED],
+  def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
+     (graph: Graph[VD, ED],
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Either)(
-      vprog: (VertexId, VD, A) => VD,
+      activeDirection: EdgeDirection = EdgeDirection.Either)
+     (vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      mergeMsg: (A, A) => A): Graph[VD, ED] = {
+      mergeMsg: (A, A) => A)
+    : Graph[VD, ED] =
+  {
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
     var messages = mapReduceTriplets(g, sendMsg, mergeMsg)
