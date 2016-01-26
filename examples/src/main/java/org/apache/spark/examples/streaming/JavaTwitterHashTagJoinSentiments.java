@@ -34,6 +34,7 @@ import scala.Tuple2;
 import twitter4j.Status;
 
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -70,8 +71,8 @@ public class JavaTwitterHashTagJoinSentiments {
 
     JavaDStream<String> words = stream.flatMap(new FlatMapFunction<Status, String>() {
       @Override
-      public Iterable<String> call(Status s) {
-        return Arrays.asList(s.getText().split(" "));
+      public Iterator<String> call(Status s) {
+        return Arrays.asList(s.getText().split(" ")).iterator();
       }
     });
 

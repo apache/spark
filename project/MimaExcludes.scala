@@ -61,6 +61,37 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
       ) ++
       Seq(
+        // SPARK-3369 Fix Iterable/Iterator in Java API
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.DoubleFlatMapFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.DoubleFlatMapFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction2.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction2.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.PairFlatMapFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.PairFlatMapFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.CoGroupFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.CoGroupFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.MapPartitionsFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.MapPartitionsFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.FlatMapGroupsFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.FlatMapGroupsFunction.call")
+      ) ++
+      Seq(
         // SPARK-4819 replace Guava Optional
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getCheckpointDir"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getSparkHome"),

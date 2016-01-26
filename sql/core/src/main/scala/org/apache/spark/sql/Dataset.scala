@@ -346,7 +346,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).iterator.asScala
+    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
     mapPartitions(func)(encoder)
   }
 
@@ -366,7 +366,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (T) => Iterable[U] = x => f.call(x).asScala
+    val func: (T) => Iterator[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
   }
 

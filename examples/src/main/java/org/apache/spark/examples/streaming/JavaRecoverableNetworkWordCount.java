@@ -21,11 +21,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import scala.Tuple2;
-import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 
 import org.apache.spark.Accumulator;
@@ -138,8 +138,8 @@ public final class JavaRecoverableNetworkWordCount {
     JavaReceiverInputDStream<String> lines = ssc.socketTextStream(ip, port);
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Lists.newArrayList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(

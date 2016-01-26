@@ -18,6 +18,7 @@
 package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -73,8 +74,8 @@ public class JavaStatefulNetworkWordCount {
 
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Arrays.asList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
 
