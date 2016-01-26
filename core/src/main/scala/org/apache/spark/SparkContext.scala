@@ -535,7 +535,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         Some(new ExecutorAllocationManager(this, listenerBus, _conf))
       } else {
         None
-
       }
     _executorAllocationManager.foreach(_.start())
 
