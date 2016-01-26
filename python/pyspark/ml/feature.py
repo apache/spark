@@ -2328,9 +2328,9 @@ class ChiSqSelectorModel(JavaModel):
     @since("2.0.0")
     def selectedFeatures(self):
         """
-        list of indices to select (filter). Must be ordered asc.
+        List of indices to select (filter). Must be ordered asc.
         """
-        return list(self._java_obj.selectedFeatures())
+        return self._call_java("selectedFeatures")
 
 
 if __name__ == "__main__":
