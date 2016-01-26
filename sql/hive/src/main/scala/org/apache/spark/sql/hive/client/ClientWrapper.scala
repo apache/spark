@@ -229,6 +229,10 @@ private[hive] class ClientWrapper(
     state.getCurrentDatabase
   }
 
+  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
+    state.setCurrentDatabase(databaseName)
+  }
+
   override def createDatabase(database: HiveDatabase): Unit = withHiveState {
     client.createDatabase(
       new Database(

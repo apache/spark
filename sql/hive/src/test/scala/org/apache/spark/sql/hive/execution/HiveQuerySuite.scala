@@ -1262,6 +1262,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   }
 
+  test("use database") {
+    val currentDatabase = sql("select current_database()").first().getString(0)
+    sql("USE test")
+    assert("test" == sql("select current_database()").first().getString(0))
+    sql(s"USE $currentDatabase")
+    assert(currentDatabase == sql("select current_database()").first().getString(0))
+  }
+
   test("lookup hive UDF in another thread") {
     val e = intercept[AnalysisException] {
       range(1).selectExpr("not_a_udf()")
