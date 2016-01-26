@@ -17,16 +17,36 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.Externalizable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
-class CountMinSketchImpl extends CountMinSketch {
+/*
+ * Binary format of a serialized CountMinSketchImpl, version 1 (all values written in big-endian
+ * order):
+ *
+ * - Version number, always 1 (32 bit)
+ * - Total count of added items (64 bit)
+ * - Depth (32 bit)
+ * - Width (32 bit)
+ * - Hash functions (depth * 64 bit)
+ * - Count table
+ *   - Row 0 (width * 64 bit)
+ *   - Row 1 (width * 64 bit)
+ *   - ...
+ *   - Row depth - 1 (width * 64 bit)
+ */
+class CountMinSketchImpl extends CountMinSketch implements Externalizable {
   public static final long PRIME_MODULUS = (1L << 31) - 1;
 
   private int depth;
@@ -36,6 +56,10 @@ class CountMinSketchImpl extends CountMinSketch {
   private long totalCount;
   private double eps;
   private double confidence;
+
+  public CountMinSketchImpl() {
+    // Empty constructor for serialization
+  }
 
   CountMinSketchImpl(int depth, int width, int seed) {
     this.depth = depth;
@@ -327,8 +351,10 @@ class CountMinSketchImpl extends CountMinSketch {
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
     DataInputStream dis = new DataInputStream(in);
 
-    // Ignores version number
-    dis.readInt();
+    int version = dis.readInt();
+    if (version != Version.V1.getVersionNumber()) {
+      throw new IOException("Unexpected Count-Min Sketch version number " + version);
+    }
 
     long totalCount = dis.readLong();
     int depth = dis.readInt();
@@ -347,5 +373,28 @@ class CountMinSketchImpl extends CountMinSketch {
     }
 
     return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
+  }
+
+  @Override
+  public void writeExternal(ObjectOutput out) throws IOException {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    this.writeTo(bos);
+
+    byte[] bytes = bos.toByteArray();
+    out.writeObject(bytes);
+  }
+
+  @Override
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+    byte[] bytes = (byte[]) in.readObject();
+
+    CountMinSketchImpl sketch = CountMinSketchImpl.readFrom(new ByteArrayInputStream(bytes));
+    this.depth = sketch.depth;
+    this.width = sketch.width;
+    this.eps = sketch.eps;
+    this.confidence = sketch.confidence;
+    this.totalCount = sketch.totalCount;
+    this.hashA = sketch.hashA;
+    this.table = sketch.table;
   }
 }
