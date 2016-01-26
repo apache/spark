@@ -85,7 +85,6 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     rank = Param(Params._dummy(), "rank", "rank of the factorization")
     numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks")
     numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks")
@@ -108,16 +107,6 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
-        self.rank = Param(self, "rank", "rank of the factorization")
-        self.numUserBlocks = Param(self, "numUserBlocks", "number of user blocks")
-        self.numItemBlocks = Param(self, "numItemBlocks", "number of item blocks")
-        self.implicitPrefs = Param(self, "implicitPrefs", "whether to use implicit preference")
-        self.alpha = Param(self, "alpha", "alpha for implicit preference")
-        self.userCol = Param(self, "userCol", "column name for user ids")
-        self.itemCol = Param(self, "itemCol", "column name for item ids")
-        self.ratingCol = Param(self, "ratingCol", "column name for ratings")
-        self.nonnegative = Param(self, "nonnegative",
-                                 "whether to use nonnegative constraint for least squares")
         self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                          implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                          ratingCol="rating", nonnegative=False, checkpointInterval=10)
