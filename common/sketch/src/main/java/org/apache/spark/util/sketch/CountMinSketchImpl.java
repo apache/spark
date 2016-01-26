@@ -47,7 +47,7 @@ import java.util.Random;
  *   - Row depth - 1 (width * 64 bit)
  */
 class CountMinSketchImpl extends CountMinSketch implements Externalizable {
-  public static final long PRIME_MODULUS = (1L << 31) - 1;
+  private static final long PRIME_MODULUS = (1L << 31) - 1;
 
   private int depth;
   private int width;
@@ -353,7 +353,7 @@ class CountMinSketchImpl extends CountMinSketch implements Externalizable {
 
     int version = dis.readInt();
     if (version != Version.V1.getVersionNumber()) {
-      throw new IOException("Unexpected Count-Min Sketch version number " + version);
+      throw new IOException("Unexpected Count-Min Sketch version number (" + version + ")");
     }
 
     long totalCount = dis.readLong();
@@ -382,13 +382,17 @@ class CountMinSketchImpl extends CountMinSketch implements Externalizable {
 
     byte[] bytes = bos.toByteArray();
     out.writeObject(bytes);
+    bos.close();
   }
 
   @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     byte[] bytes = (byte[]) in.readObject();
 
-    CountMinSketchImpl sketch = CountMinSketchImpl.readFrom(new ByteArrayInputStream(bytes));
+    ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
+    CountMinSketchImpl sketch = CountMinSketchImpl.readFrom(bis);
+    bis.close();
+
     this.depth = sketch.depth;
     this.width = sketch.width;
     this.eps = sketch.eps;

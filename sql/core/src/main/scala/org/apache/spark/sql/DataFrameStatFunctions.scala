@@ -313,14 +313,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Builds a Count-Min sketch over a specified column.
+   * Builds a Count-min Sketch over a specified column.
    *
    * @param colName name of the column over which the sketch is built
    * @param depth depth of the sketch
    * @param width width of the sketch
    * @param seed random seed
    * @return a [[CountMinSketch]] over column `colName`
-   * @see [[http://www.eecs.harvard.edu/~michaelm/CS222/countmin.pdf]]
    * @since 2.0.0
    */
   def countMinSketch(colName: String, depth: Int, width: Int, seed: Int): CountMinSketch = {
@@ -328,14 +327,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Builds a Count-Min sketch over a specified column.
+   * Builds a Count-min Sketch over a specified column.
    *
    * @param colName name of the column over which the sketch is built
    * @param eps relative error of the sketch
    * @param confidence confidence of the sketch
    * @param seed random seed
    * @return a [[CountMinSketch]] over column `colName`
-   * @see [[http://www.eecs.harvard.edu/~michaelm/CS222/countmin.pdf]]
    * @since 2.0.0
    */
   def countMinSketch(
@@ -344,14 +342,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Builds a Count-Min sketch over a specified column.
+   * Builds a Count-min Sketch over a specified column.
    *
    * @param col the column over which the sketch is built
    * @param depth depth of the sketch
    * @param width width of the sketch
    * @param seed random seed
    * @return a [[CountMinSketch]] over column `colName`
-   * @see [[http://www.eecs.harvard.edu/~michaelm/CS222/countmin.pdf]]
    * @since 2.0.0
    */
   def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
@@ -359,14 +356,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
-   * Builds a Count-Min sketch over a specified column.
+   * Builds a Count-min Sketch over a specified column.
    *
    * @param col the column over which the sketch is built
    * @param eps relative error of the sketch
    * @param confidence confidence of the sketch
    * @param seed random seed
    * @return a [[CountMinSketch]] over column `colName`
-   * @see [[http://www.eecs.harvard.edu/~michaelm/CS222/countmin.pdf]]
    * @since 2.0.0
    */
   def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
@@ -376,13 +372,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   private def countMinSketch(col: Column, zero: CountMinSketch): CountMinSketch = {
     val singleCol = df.select(col)
     val colType = singleCol.schema.head.dataType
+    val supportedTypes: Set[DataType] = Set(ByteType, ShortType, IntegerType, LongType, StringType)
 
-    require({
-      val supportedTypes: Set[DataType] =
-        Set(ByteType, ShortType, IntegerType, LongType, StringType)
-      supportedTypes.contains(colType)
-    }, s"Count-Min Sketch doesn't support data type $colType yet.")
-
+    require(
+      supportedTypes.contains(colType),
+      s"Count-min Sketch only supports string type and integral types, " +
+        s"and does not support type $colType."
+    )
 
     singleCol.rdd.aggregate(zero)(
       (sketch: CountMinSketch, row: Row) => {
