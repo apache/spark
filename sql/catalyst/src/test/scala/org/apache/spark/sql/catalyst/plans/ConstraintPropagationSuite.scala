@@ -29,7 +29,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     tr.analyze.resolveQuoted(columnName, caseInsensitiveResolution).get
 
-  test("propagating constraints in filter") {
+  test("propagating constraints in filter/project") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
     assert(tr.analyze.constraints.isEmpty)
     assert(tr.select('a.attr).analyze.constraints.isEmpty)
@@ -40,10 +40,26 @@ class ConstraintPropagationSuite extends SparkFunSuite {
   }
 
   test("propagating constraints in union") {
-    val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
-    val tr2 = LocalRelation('a.int, 'b.string, 'c.int)
-    assert(tr1.analyze.constraints.isEmpty && tr2.analyze.constraints.isEmpty)
-    assert(tr1.where('a.attr > 10).unionAll(tr2.where('a.attr > 10))
-      .analyze.constraints == Set(resolveColumn(tr1, "a") > 10))
+    val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('d.int, 'e.int, 'f.int)
+    val tr3 = LocalRelation('g.int, 'h.int, 'i.int)
+    assert(tr1.where('a.attr > 10).unionAll(tr2.where('e.attr > 10)
+      .unionAll(tr3.where('i.attr > 10))).analyze.constraints.isEmpty)
+    assert(tr1.where('a.attr > 10).unionAll(tr2.where('d.attr > 10)
+      .unionAll(tr3.where('g.attr > 10))).analyze.constraints == Set(resolveColumn(tr1, "a") > 10))
+  }
+
+  test("propagating constraints in intersect") {
+    val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a.int, 'b.int, 'c.int)
+    assert(tr1.where('a.attr > 10).intersect(tr2.where('b.attr < 100)).analyze.constraints ==
+      Set(resolveColumn(tr1, "a") > 10, resolveColumn(tr1, "b") < 100))
+  }
+
+  test("propagating constraints in except") {
+    val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a.int, 'b.int, 'c.int)
+    assert(tr1.where('a.attr > 10).except(tr2.where('b.attr < 100)).analyze.constraints ==
+      Set(resolveColumn(tr1, "a") > 10))
   }
 }

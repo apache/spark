@@ -97,27 +97,24 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  final override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.length == right.output.length &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 
-  override def output: Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
-      leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
-    }
+  override def extractConstraintsFromChild(child: QueryPlan[LogicalPlan]): Set[Expression] = {
+    child.constraints.filter(_.references.subsetOf(child.outputSet))
+  }
 
   protected def leftConstraints: Set[Expression] = extractConstraintsFromChild(left)
 
   protected def rightConstraints: Set[Expression] = {
     require(left.output.size == right.output.size)
     val attributeRewrites = AttributeMap(right.output.zip(left.output))
-    println(extractConstraintsFromChild(right), attributeRewrites)
     extractConstraintsFromChild(right).map(_ transform {
       case a: Attribute => attributeRewrites(a)
     })
   }
-
-  final override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }
 
 private[sql] object SetOperation {
@@ -176,6 +173,10 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     Statistics(sizeInBytes = sizeInBytes)
   }
 
+  override def extractConstraintsFromChild(child: QueryPlan[LogicalPlan]): Set[Expression] = {
+    child.constraints.filter(_.references.subsetOf(child.outputSet))
+  }
+
   def rewriteConstraints(
       planA: LogicalPlan,
       planB: LogicalPlan,
@@ -214,11 +215,35 @@ case class Join(
     }
   }
 
+  def extractNullabilityConstraintsFromJoinCondition(): Set[Expression] = {
+    var constraints = Set.empty[Expression]
+    if (condition.isDefined) {
+      splitConjunctivePredicates(condition.get).foreach {
+        case EqualTo(l, r) =>
+          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+        case GreaterThan(l, r) =>
+          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+        case GreaterThanOrEqual(l, r) =>
+          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+        case LessThan(l, r) =>
+          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+        case LessThanOrEqual(l, r) =>
+          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+      }
+    }
+    // Currently we only propagate constraints if the condition consists of equality
+    // and ranges. For all other cases, we return an empty set of constraints
+    constraints
+  }
+
   override def constraints: Set[Expression] = {
     joinType match {
       case Inner =>
+        extractConstraintsFromChild(left).union(extractConstraintsFromChild(right))
+          .union(extractNullabilityConstraintsFromJoinCondition())
       case LeftSemi =>
         extractConstraintsFromChild(left)
+          .union(extractNullabilityConstraintsFromJoinCondition())
       case LeftOuter =>
         extractConstraintsFromChild(left).union(extractConstraintsFromChild(right))
       case RightOuter =>
@@ -226,7 +251,7 @@ case class Join(
       case FullOuter =>
         extractConstraintsFromChild(left).union(extractConstraintsFromChild(right))
       case _ =>
-        extractConstraintsFromChild(left).union(extractConstraintsFromChild(right))
+        Set.empty
     }
   }
 
