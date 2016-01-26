@@ -53,7 +53,8 @@ def _gen_param_header(name, doc, defaultValueStr, expectedType):
     $name = Param(Params._dummy(), "$name", "$doc", $expectedType)
 
     def __init__(self):
-        super(Has$Name, self).__init__()'''
+        super(Has$Name, self).__init__()
+        self._copy_params()'''
 
     if defaultValueStr is not None:
         template += '''
@@ -172,7 +173,8 @@ if __name__ == "__main__":
     $dummyPlaceHolders
 
     def __init__(self):
-        super(DecisionTreeParams, self).__init__()'''
+        super(DecisionTreeParams, self).__init__()
+        self._copy_params()'''
     dtParamMethods = ""
     dummyPlaceholders = ""
     realParams = ""

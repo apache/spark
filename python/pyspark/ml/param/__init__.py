@@ -86,8 +86,6 @@ class Params(Identifiable):
         #: value returned by :py:func:`params`
         self._params = None
 
-        self._copy_params()
-
     def _copy_params(self):
         """
         Copy all params defined on the class to current object.
