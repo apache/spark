@@ -181,9 +181,7 @@ class MLReadable(object):
 
     @classmethod
     def _load_java_obj(cls):
-        """
-        Load the peer Java object.
-        """
+        """Load the peer Java object."""
         java_class = cls._java_loader_class()
         java_obj = _jvm()
         for name in java_class.split("."):

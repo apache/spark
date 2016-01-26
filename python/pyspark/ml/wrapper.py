@@ -175,8 +175,9 @@ class JavaModel(Model, JavaTransformer):
         if extra is None:
             extra = dict()
         that = super(JavaModel, self).copy(extra)
-        that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-        that._transfer_params_to_java()
+        if self._java_obj is not None:
+            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+            that._transfer_params_to_java()
         return that
 
     def _call_java(self, name, *args):
