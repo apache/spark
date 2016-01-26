@@ -246,7 +246,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
       case Token("TOK_DFS", Nil) =>
-        HiveNativeCommand(node.remainder)
+        HiveNativeCommand(node.source + " " + node.remainder)
 
       case Token("TOK_ADDFILE", Nil) =>
         AddFile(node.remainder)
