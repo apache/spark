@@ -107,15 +107,6 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
-        self.rank = ALS.rank._copy_new_parent(self)
-        self.numUserBlocks = ALS.numUserBlocks._copy_new_parent(self)
-        self.numItemBlocks = ALS.numItemBlocks._copy_new_parent(self)
-        self.implicitPrefs = ALS.implicitPrefs._copy_new_parent(self)
-        self.alpha = ALS.alpha._copy_new_parent(self)
-        self.userCol = ALS.userCol._copy_new_parent(self)
-        self.itemCol = ALS.itemCol._copy_new_parent(self)
-        self.ratingCol = ALS.ratingCol._copy_new_parent(self)
-        self.nonnegative = ALS.nonnegative._copy_new_parent(self)
         self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                          implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                          ratingCol="rating", nonnegative=False, checkpointInterval=10)

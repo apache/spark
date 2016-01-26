@@ -29,7 +29,6 @@ class HasMaxIter(Params):
 
     def __init__(self):
         super(HasMaxIter, self).__init__()
-        self._copy_params()
 
     def setMaxIter(self, value):
         """
@@ -54,7 +53,6 @@ class HasRegParam(Params):
 
     def __init__(self):
         super(HasRegParam, self).__init__()
-        self._copy_params()
 
     def setRegParam(self, value):
         """
@@ -79,7 +77,6 @@ class HasFeaturesCol(Params):
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
-        self._copy_params()
         self._setDefault(featuresCol='features')
 
     def setFeaturesCol(self, value):
@@ -105,7 +102,6 @@ class HasLabelCol(Params):
 
     def __init__(self):
         super(HasLabelCol, self).__init__()
-        self._copy_params()
         self._setDefault(labelCol='label')
 
     def setLabelCol(self, value):
@@ -131,7 +127,6 @@ class HasPredictionCol(Params):
 
     def __init__(self):
         super(HasPredictionCol, self).__init__()
-        self._copy_params()
         self._setDefault(predictionCol='prediction')
 
     def setPredictionCol(self, value):
@@ -157,7 +152,6 @@ class HasProbabilityCol(Params):
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
-        self._copy_params()
         self._setDefault(probabilityCol='probability')
 
     def setProbabilityCol(self, value):
@@ -183,7 +177,6 @@ class HasRawPredictionCol(Params):
 
     def __init__(self):
         super(HasRawPredictionCol, self).__init__()
-        self._copy_params()
         self._setDefault(rawPredictionCol='rawPrediction')
 
     def setRawPredictionCol(self, value):
@@ -209,7 +202,6 @@ class HasInputCol(Params):
 
     def __init__(self):
         super(HasInputCol, self).__init__()
-        self._copy_params()
 
     def setInputCol(self, value):
         """
@@ -234,7 +226,6 @@ class HasInputCols(Params):
 
     def __init__(self):
         super(HasInputCols, self).__init__()
-        self._copy_params()
 
     def setInputCols(self, value):
         """
@@ -259,7 +250,6 @@ class HasOutputCol(Params):
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
-        self._copy_params()
         self._setDefault(outputCol=self.uid + '__output')
 
     def setOutputCol(self, value):
@@ -285,7 +275,6 @@ class HasNumFeatures(Params):
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
-        self._copy_params()
 
     def setNumFeatures(self, value):
         """
@@ -310,7 +299,6 @@ class HasCheckpointInterval(Params):
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
-        self._copy_params()
 
     def setCheckpointInterval(self, value):
         """
@@ -335,7 +323,6 @@ class HasSeed(Params):
 
     def __init__(self):
         super(HasSeed, self).__init__()
-        self._copy_params()
         self._setDefault(seed=hash(type(self).__name__))
 
     def setSeed(self, value):
@@ -361,7 +348,6 @@ class HasTol(Params):
 
     def __init__(self):
         super(HasTol, self).__init__()
-        self._copy_params()
 
     def setTol(self, value):
         """
@@ -386,7 +372,6 @@ class HasStepSize(Params):
 
     def __init__(self):
         super(HasStepSize, self).__init__()
-        self._copy_params()
 
     def setStepSize(self, value):
         """
@@ -411,7 +396,6 @@ class HasHandleInvalid(Params):
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
-        self._copy_params()
 
     def setHandleInvalid(self, value):
         """
@@ -436,7 +420,6 @@ class HasElasticNetParam(Params):
 
     def __init__(self):
         super(HasElasticNetParam, self).__init__()
-        self._copy_params()
         self._setDefault(elasticNetParam=0.0)
 
     def setElasticNetParam(self, value):
@@ -462,7 +445,6 @@ class HasFitIntercept(Params):
 
     def __init__(self):
         super(HasFitIntercept, self).__init__()
-        self._copy_params()
         self._setDefault(fitIntercept=True)
 
     def setFitIntercept(self, value):
@@ -488,7 +470,6 @@ class HasStandardization(Params):
 
     def __init__(self):
         super(HasStandardization, self).__init__()
-        self._copy_params()
         self._setDefault(standardization=True)
 
     def setStandardization(self, value):
@@ -514,7 +495,6 @@ class HasThresholds(Params):
 
     def __init__(self):
         super(HasThresholds, self).__init__()
-        self._copy_params()
 
     def setThresholds(self, value):
         """
@@ -539,7 +519,6 @@ class HasWeightCol(Params):
 
     def __init__(self):
         super(HasWeightCol, self).__init__()
-        self._copy_params()
 
     def setWeightCol(self, value):
         """
@@ -564,7 +543,6 @@ class HasSolver(Params):
 
     def __init__(self):
         super(HasSolver, self).__init__()
-        self._copy_params()
         self._setDefault(solver='auto')
 
     def setSolver(self, value):
@@ -596,7 +574,6 @@ class DecisionTreeParams(Params):
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
-        self._copy_params()
     def setMaxDepth(self, value):
         """
         Sets the value of :py:attr:`maxDepth`.

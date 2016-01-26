@@ -66,7 +66,6 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(Binarizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
-        self.threshold = Binarizer.threshold._copy_new_parent(self)
         self._setDefault(threshold=0.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -138,12 +137,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
-        #: param for Splitting points for mapping continuous features into buckets. With n+1 splits,
-        #  there are n buckets. A bucket defined by splits x,y holds values in the range [x,y)
-        #  except the last bucket, which also includes y. The splits should be strictly increasing.
-        #  Values at -inf, inf must be explicitly provided to cover all Double values; otherwise,
-        #  values outside the splits specified will be treated as errors.
-        self.splits = Bucketizer.splits._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -223,9 +216,6 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
                                             self.uid)
-        self.minTF = CountVectorizer.minTF._copy_new_parent(self)
-        self.minDF = CountVectorizer.minDF._copy_new_parent(self)
-        self.vocabSize = CountVectorizer.vocabSize._copy_new_parent(self)
         self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1 << 18)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -344,7 +334,6 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(DCT, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.DCT", self.uid)
-        self.inverse = DCT.inverse._copy_new_parent(self)
         self._setDefault(inverse=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -407,7 +396,6 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
         super(ElementwiseProduct, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ElementwiseProduct",
                                             self.uid)
-        self.scalingVec = ElementwiseProduct.scalingVec._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -512,7 +500,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(IDF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
-        self.minDocFreq = IDF.minDocFreq._copy_new_parent(self)
         self._setDefault(minDocFreq=0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -602,8 +589,6 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(MinMaxScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
-        self.min = MinMaxScaler.min._copy_new_parent(self)
-        self.max = MinMaxScaler.max._copy_new_parent(self)
         self._setDefault(min=0.0, max=1.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -722,7 +707,6 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(NGram, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.NGram", self.uid)
-        self.n = NGram.n._copy_new_parent(self)
         self._setDefault(n=2)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -784,7 +768,6 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(Normalizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Normalizer", self.uid)
-        self.p = Normalizer.p._copy_new_parent(self)
         self._setDefault(p=2.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -862,7 +845,6 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self.dropLast = OneHotEncoder.dropLast._copy_new_parent(self)
         self._setDefault(dropLast=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -925,7 +907,6 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         super(PolynomialExpansion, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.PolynomialExpansion", self.uid)
-        self.degree = PolynomialExpansion.degree._copy_new_parent(self)
         self._setDefault(degree=2)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1005,10 +986,6 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(RegexTokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
-        self.minTokenLength = RegexTokenizer.minTokenLength._copy_new_parent(self)
-        self.gaps = RegexTokenizer.gaps._copy_new_parent(self)
-        self.pattern = RegexTokenizer.pattern._copy_new_parent(self)
-        self.toLowercase = RegexTokenizer.toLowercase._copy_new_parent(self)
         self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1113,7 +1090,6 @@ class SQLTransformer(JavaTransformer):
         """
         super(SQLTransformer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.SQLTransformer", self.uid)
-        self.statement = SQLTransformer.statement._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1175,8 +1151,6 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(StandardScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StandardScaler", self.uid)
-        self.withMean = StandardScaler.withMean._copy_new_parent(self)
-        self.withStd = StandardScaler.withStd._copy_new_parent(self)
         self._setDefault(withMean=False, withStd=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1344,7 +1318,6 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         super(IndexToString, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
-        self.labels = IndexToString.labels._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1398,8 +1371,6 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
-        self.stopWords = StopWordsRemover.stopWords._copy_new_parent(self)
-        self.caseSensitive = StopWordsRemover.caseSensitive._copy_new_parent(self)
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
         defaultStopWords = stopWordsObj.English()
         self._setDefault(stopWords=defaultStopWords)
@@ -1614,7 +1585,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        self.maxCategories = VectorIndexer.maxCategories._copy_new_parent(self)
         self._setDefault(maxCategories=20)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1717,8 +1687,6 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(VectorSlicer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
-        self.indices = VectorSlicer.indices._copy_new_parent(self)
-        self.names = VectorSlicer.names._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1815,9 +1783,6 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
-        self.vectorSize = Word2Vec.vectorSize._copy_new_parent(self)
-        self.numPartitions = Word2Vec.numPartitions._copy_new_parent(self)
-        self.minCount = Word2Vec.minCount._copy_new_parent(self)
         self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                          seed=None)
         kwargs = self.__init__._input_kwargs
@@ -1943,7 +1908,6 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(PCA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.PCA", self.uid)
-        self.k = PCA.k._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -2043,7 +2007,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        self.formula = RFormula.formula._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 

@@ -180,8 +180,6 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
-        self.isotonic = IsotonicRegression.isotonic._copy_new_parent(self)
-        self.featureIndex = IsotonicRegression.featureIndex._copy_new_parent(self)
         self._setDefault(isotonic=True, featureIndex=0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -260,8 +258,6 @@ class TreeEnsembleParams(DecisionTreeParams):
 
     def __init__(self):
         super(TreeEnsembleParams, self).__init__()
-        #: param for Fraction of the training data, in range (0, 1].
-        self.subsamplingRate = TreeEnsembleParams.subsamplingRate._copy_new_parent(self)
 
     @since("1.4.0")
     def setSubsamplingRate(self, value):
@@ -292,8 +288,6 @@ class TreeRegressorParams(Params):
 
     def __init__(self):
         super(TreeRegressorParams, self).__init__()
-        #: param for Criterion used for information gain calculation (case-insensitive).
-        self.impurity = TreeRegressorParams.impurity._copy_new_parent(self)
 
     @since("1.4.0")
     def setImpurity(self, value):
@@ -325,10 +319,6 @@ class RandomForestParams(TreeEnsembleParams):
 
     def __init__(self):
         super(RandomForestParams, self).__init__()
-        #: param for Number of trees to train (>= 1).
-        self.numTrees = RandomForestParams.numTrees._copy_new_parent(self)
-        #: param for The number of features to consider for splits at each tree node.
-        self.featureSubsetStrategy = RandomForestParams.featureSubsetStrategy._copy_new_parent(self)
 
     @since("1.4.0")
     def setNumTrees(self, value):
@@ -610,11 +600,6 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
-        #: param for Loss function which GBT tries to minimize (case-insensitive).
-        self.lossType = GBTRegressor.lossType._copy_new_parent(self)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                         checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -719,13 +704,6 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
-        #: Param for censor column name
-        self.censorCol = AFTSurvivalRegression.censorCol._copy_new_parent(self)
-        #: Param for quantile probabilities array
-        self.quantileProbabilities = \
-            AFTSurvivalRegression.quantileProbabilities._copy_new_parent(self)
-        #: Param for quantiles column name
-        self.quantilesCol = AFTSurvivalRegression.quantilesCol._copy_new_parent(self)
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
         kwargs = self.__init__._input_kwargs

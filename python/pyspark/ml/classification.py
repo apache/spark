@@ -91,8 +91,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        #: param for threshold in binary classification, in range [0, 1].
-        self.threshold = LogisticRegression.threshold._copy_new_parent(self)
         self._setDefault(maxIter=100, regParam=0.1, tol=1E-6, threshold=0.5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -236,8 +234,6 @@ class TreeClassifierParams(object):
 
     def __init__(self):
         super(TreeClassifierParams, self).__init__()
-        #: param for Criterion used for information gain calculation (case-insensitive).
-        self.impurity = TreeClassifierParams.impurity._copy_new_parent(self)
 
     @since("1.6.0")
     def setImpurity(self, value):
@@ -497,8 +493,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
-        #: param for Loss function which GBT tries to minimize (case-insensitive).
-        self.lossType = GBTClassifier.lossType._copy_new_parent(self)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          lossType="logistic", maxIter=20, stepSize=0.1)
@@ -605,10 +599,6 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid)
-        #: param for the smoothing parameter.
-        self.smoothing = NaiveBayes.smoothing._copy_new_parent(self)
-        #: param for the model type.
-        self.modelType = NaiveBayes.modelType._copy_new_parent(self)
         self._setDefault(smoothing=1.0, modelType="multinomial")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -739,8 +729,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self.layers = MultilayerPerceptronClassifier.layers._copy_new_parent(self)
-        self.blockSize = MultilayerPerceptronClassifier.blockSize._copy_new_parent(self)
         self._setDefault(maxIter=100, tol=1E-4, layers=[1, 1], blockSize=128)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)

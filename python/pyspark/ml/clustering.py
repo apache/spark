@@ -89,9 +89,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
-        self.k = KMeans.k._copy_new_parent(self)
-        self.initMode = KMeans.initMode._copy_new_parent(self)
-        self.initSteps = KMeans.initSteps._copy_new_parent(self)
         self._setDefault(k=2, initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
