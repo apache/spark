@@ -162,7 +162,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.externalBlockStoreFolderName"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockStore$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockManager"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockStore")
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockStore"),
+        // SPARK-12995 Remove deprecated APIs in graphx
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.lib.SVDPlusPlus.runSVDPlusPlus")
       ) ++ Seq(
         // SPARK-12149 Added new fields to ExecutorSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
