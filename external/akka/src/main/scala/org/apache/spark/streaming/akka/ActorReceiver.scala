@@ -98,7 +98,7 @@ abstract class ActorReceiver extends Actor {
    * @param name  the name of the actor
    */
   def startNewActorReceiver(props: Props, name: String) {
-    context.parent !(props, name)
+    context.parent ! (props, name)
   }
 
   /**
@@ -189,7 +189,7 @@ abstract class JavaActorReceiver extends UntypedActor {
    * @param name  the name of the actor
    */
   def startNewActorReceiver(props: Props, name: String) {
-    context.parent !(props, name)
+    context.parent ! (props, name)
   }
 
   /**
