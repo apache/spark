@@ -90,8 +90,13 @@ object SparkHadoopMapRedUtil extends Logging {
         performCommit()
       }
     } else {
-      // Some other attempt committed the output, so we do nothing and signal success
-      logInfo(s"No need to commit output of task because needsTaskCommit=false: $mrTaskAttemptID")
+      // Some other attempt committed the output, this generally means speculation, we need to mark
+      // this task as failure so accounting work correctly
+      val taskAttemptNumber = TaskContext.get().attemptNumber()
+      val message =
+        s"No need to commit output of task because needsTaskCommit=false: $mrTaskAttemptID"
+      logInfo(message)
+      throw new CommitDeniedException(message, jobId, splitId, taskAttemptNumber)
     }
   }
 }

@@ -1134,7 +1134,16 @@ class DAGScheduler(
     }
 
     if (!stageIdToStage.contains(task.stageId)) {
-      // Skip all the actions if the stage has been cancelled.
+      logInfo("skip normal actions as stage cancelled")
+      // Need to handle tasks coming in late (speculative and jobs killed)
+      // post a task end event so accounting for things manually tracking tasks work.
+      // This really should be something other then success since the other speculative task
+      // finished first.
+      if (event.reason == Success) {
+        val attemptId = task.stageAttemptId
+        listenerBus.post(SparkListenerTaskEnd(stageId, attemptId, taskType,
+          event.reason, event.taskInfo, event.taskMetrics))
+      }
       return
     }
 
