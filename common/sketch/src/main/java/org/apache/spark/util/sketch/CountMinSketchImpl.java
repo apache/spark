@@ -17,21 +17,19 @@
 
 package org.apache.spark.util.sketch;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.Externalizable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
-class CountMinSketchImpl extends CountMinSketch implements Externalizable {
+class CountMinSketchImpl extends CountMinSketch implements Serializable {
   private static final long PRIME_MODULUS = (1L << 31) - 1;
 
   private int depth;
@@ -42,8 +40,7 @@ class CountMinSketchImpl extends CountMinSketch implements Externalizable {
   private double eps;
   private double confidence;
 
-  public CountMinSketchImpl() {
-    // Empty constructor for serialization
+  private CountMinSketchImpl() {
   }
 
   CountMinSketchImpl(int depth, int width, int seed) {
@@ -62,16 +59,6 @@ class CountMinSketchImpl extends CountMinSketch implements Externalizable {
     this.width = (int) Math.ceil(2 / eps);
     this.depth = (int) Math.ceil(-Math.log(1 - confidence) / Math.log(2));
     initTablesWith(depth, width, seed);
-  }
-
-  CountMinSketchImpl(int depth, int width, long totalCount, long hashA[], long table[][]) {
-    this.depth = depth;
-    this.width = width;
-    this.eps = 2.0 / width;
-    this.confidence = 1 - 1 / Math.pow(2, depth);
-    this.hashA = hashA;
-    this.table = table;
-    this.totalCount = totalCount;
   }
 
   @Override
@@ -334,6 +321,12 @@ class CountMinSketchImpl extends CountMinSketch implements Externalizable {
   }
 
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
+    CountMinSketchImpl sketch = new CountMinSketchImpl();
+    sketch.readFrom0(in);
+    return sketch;
+  }
+
+  private void readFrom0(InputStream in) throws IOException {
     DataInputStream dis = new DataInputStream(in);
 
     int version = dis.readInt();
@@ -341,48 +334,30 @@ class CountMinSketchImpl extends CountMinSketch implements Externalizable {
       throw new IOException("Unexpected Count-Min Sketch version number (" + version + ")");
     }
 
-    long totalCount = dis.readLong();
-    int depth = dis.readInt();
-    int width = dis.readInt();
+    this.totalCount = dis.readLong();
+    this.depth = dis.readInt();
+    this.width = dis.readInt();
+    this.eps = 2.0 / width;
+    this.confidence = 1 - 1 / Math.pow(2, depth);
 
-    long hashA[] = new long[depth];
+    this.hashA = new long[depth];
     for (int i = 0; i < depth; ++i) {
-      hashA[i] = dis.readLong();
+      this.hashA[i] = dis.readLong();
     }
 
-    long table[][] = new long[depth][width];
+    this.table = new long[depth][width];
     for (int i = 0; i < depth; ++i) {
       for (int j = 0; j < width; ++j) {
-        table[i][j] = dis.readLong();
+        this.table[i][j] = dis.readLong();
       }
     }
-
-    return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
   }
 
-  @Override
-  public void writeExternal(ObjectOutput out) throws IOException {
-    try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
-      this.writeTo(bos);
-      byte[] bytes = bos.toByteArray();
-      out.writeObject(bytes);
-    }
+  private void writeObject(ObjectOutputStream out) throws IOException {
+    this.writeTo(out);
   }
 
-  @Override
-  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    byte[] bytes = (byte[]) in.readObject();
-
-    try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
-      CountMinSketchImpl sketch = CountMinSketchImpl.readFrom(bis);
-
-      this.depth = sketch.depth;
-      this.width = sketch.width;
-      this.eps = sketch.eps;
-      this.confidence = sketch.confidence;
-      this.totalCount = sketch.totalCount;
-      this.hashA = sketch.hashA;
-      this.table = sketch.table;
-    }
+  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+    this.readFrom0(in);
   }
 }
