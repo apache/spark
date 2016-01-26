@@ -50,13 +50,11 @@ def _gen_param_header(name, doc, defaultValueStr, expectedType):
     Mixin for param $name: $doc
     """
 
-    # a placeholder to make it appear in the generated doc
     $name = Param(Params._dummy(), "$name", "$doc", $expectedType)
 
     def __init__(self):
-        super(Has$Name, self).__init__()
-        #: param for $doc
-        self.$name = Param(self, "$name", "$doc", $expectedType)'''
+        super(Has$Name, self).__init__()'''
+
     if defaultValueStr is not None:
         template += '''
         self._setDefault($name=$defaultValueStr)'''
@@ -171,22 +169,17 @@ if __name__ == "__main__":
     Mixin for Decision Tree parameters.
     """
 
-    # a placeholder to make it appear in the generated doc
     $dummyPlaceHolders
 
     def __init__(self):
-        super(DecisionTreeParams, self).__init__()
-        $realParams'''
+        super(DecisionTreeParams, self).__init__()'''
     dtParamMethods = ""
     dummyPlaceholders = ""
-    realParams = ""
     paramTemplate = """$name = Param($owner, "$name", "$doc")"""
     for name, doc in decisionTreeParams:
         variable = paramTemplate.replace("$name", name).replace("$doc", doc)
         dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
-        realParams += "#: param for " + doc + "\n        "
-        realParams += "self." + variable.replace("$owner", "self") + "\n        "
         dtParamMethods += _gen_param_code(name, doc, None) + "\n"
-    code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders)
-                .replace("$realParams", realParams) + dtParamMethods)
+    code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders) + "\n" +
+                dtParamMethods)
     print("\n\n\n".join(code))

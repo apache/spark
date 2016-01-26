@@ -115,18 +115,11 @@ class CrossValidator(Estimator, HasSeed):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
-
-    # a placeholder to make it appear in the generated doc
     estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
-
-    # a placeholder to make it appear in the generated doc
     evaluator = Param(
         Params._dummy(), "evaluator",
         "evaluator used to select hyper-parameters that maximize the cross-validated metric")
-
-    # a placeholder to make it appear in the generated doc
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
 
     @keyword_only
@@ -137,17 +130,6 @@ class CrossValidator(Estimator, HasSeed):
                  seed=None)
         """
         super(CrossValidator, self).__init__()
-        #: param for estimator to be cross-validated
-        self.estimator = Param(self, "estimator", "estimator to be cross-validated")
-        #: param for estimator param maps
-        self.estimatorParamMaps = Param(self, "estimatorParamMaps", "estimator param maps")
-        #: param for the evaluator used to select hyper-parameters that
-        #: maximize the cross-validated metric
-        self.evaluator = Param(
-            self, "evaluator",
-            "evaluator used to select hyper-parameters that maximize the cross-validated metric")
-        #: param for number of folds for cross validation
-        self.numFolds = Param(self, "numFolds", "number of folds for cross validation")
         self._setDefault(numFolds=3)
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)

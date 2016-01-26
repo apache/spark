@@ -162,7 +162,6 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     DenseVector([0.0, 1.0])
     """
 
-    # a placeholder to make it appear in the generated doc
     isotonic = \
         Param(Params._dummy(), "isotonic",
               "whether the output sequence should be isotonic/increasing (true) or" +
@@ -181,14 +180,6 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
-        self.isotonic = \
-            Param(self, "isotonic",
-                  "whether the output sequence should be isotonic/increasing (true) or" +
-                  "antitonic/decreasing (false).")
-        self.featureIndex = \
-            Param(self, "featureIndex",
-                  "The index of the feature if featuresCol is a vector column, no effect " +
-                  "otherwise.")
         self._setDefault(isotonic=True, featureIndex=0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -262,15 +253,11 @@ class TreeEnsembleParams(DecisionTreeParams):
     Mixin for Decision Tree-based ensemble algorithms parameters.
     """
 
-    # a placeholder to make it appear in the generated doc
     subsamplingRate = Param(Params._dummy(), "subsamplingRate", "Fraction of the training data " +
                             "used for learning each decision tree, in range (0, 1].")
 
     def __init__(self):
         super(TreeEnsembleParams, self).__init__()
-        #: param for Fraction of the training data, in range (0, 1].
-        self.subsamplingRate = Param(self, "subsamplingRate", "Fraction of the training data " +
-                                     "used for learning each decision tree, in range (0, 1].")
 
     @since("1.4.0")
     def setSubsamplingRate(self, value):
@@ -294,7 +281,6 @@ class TreeRegressorParams(Params):
     """
 
     supportedImpurities = ["variance"]
-    # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
@@ -302,10 +288,6 @@ class TreeRegressorParams(Params):
 
     def __init__(self):
         super(TreeRegressorParams, self).__init__()
-        #: param for Criterion used for information gain calculation (case-insensitive).
-        self.impurity = Param(self, "impurity", "Criterion used for information " +
-                              "gain calculation (case-insensitive). Supported options: " +
-                              ", ".join(self.supportedImpurities))
 
     @since("1.4.0")
     def setImpurity(self, value):
@@ -329,7 +311,6 @@ class RandomForestParams(TreeEnsembleParams):
     """
 
     supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
-    # a placeholder to make it appear in the generated doc
     numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).")
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
@@ -338,13 +319,6 @@ class RandomForestParams(TreeEnsembleParams):
 
     def __init__(self):
         super(RandomForestParams, self).__init__()
-        #: param for Number of trees to train (>= 1).
-        self.numTrees = Param(self, "numTrees", "Number of trees to train (>= 1).")
-        #: param for The number of features to consider for splits at each tree node.
-        self.featureSubsetStrategy = \
-            Param(self, "featureSubsetStrategy",
-                  "The number of features to consider for splits at each tree node. Supported " +
-                  "options: " + ", ".join(self.supportedFeatureSubsetStrategies))
 
     @since("1.4.0")
     def setNumTrees(self, value):
@@ -609,7 +583,6 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     lossType = Param(Params._dummy(), "lossType",
                      "Loss function which GBT tries to minimize (case-insensitive). " +
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
@@ -627,10 +600,6 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
-        #: param for Loss function which GBT tries to minimize (case-insensitive).
-        self.lossType = Param(self, "lossType",
-                              "Loss function which GBT tries to minimize (case-insensitive). " +
-                              "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1)
@@ -713,7 +682,6 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     censorCol = Param(Params._dummy(), "censorCol",
                       "censor column name. The value of this column could be 0 or 1. " +
                       "If the value is 1, it means the event has occurred i.e. " +
@@ -739,20 +707,6 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
-        #: Param for censor column name
-        self.censorCol = Param(self,  "censorCol",
-                               "censor column name. The value of this column could be 0 or 1. " +
-                               "If the value is 1, it means the event has occurred i.e. " +
-                               "uncensored; otherwise censored.")
-        #: Param for quantile probabilities array
-        self.quantileProbabilities = \
-            Param(self, "quantileProbabilities",
-                  "quantile probabilities array. Values of the quantile probabilities array " +
-                  "should be in the range (0, 1) and the array should be non-empty.")
-        #: Param for quantiles column name
-        self.quantilesCol = Param(self, "quantilesCol",
-                                  "quantiles column name. This column will output quantiles of " +
-                                  "corresponding quantileProbabilities if it is set.")
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
         kwargs = self.__init__._input_kwargs

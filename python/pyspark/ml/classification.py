@@ -72,7 +72,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     .. versionadded:: 1.3.0
     """
 
-    # a placeholder to make it appear in the generated doc
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
                       " If threshold and thresholds are both set, they must match.")
@@ -92,10 +91,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        #: param for threshold in binary classification, in range [0, 1].
-        self.threshold = Param(self, "threshold",
-                               "Threshold in binary classification prediction, in range [0, 1]." +
-                               " If threshold and thresholds are both set, they must match.")
         self._setDefault(maxIter=100, regParam=0.1, tol=1E-6, threshold=0.5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -232,7 +227,6 @@ class TreeClassifierParams(object):
     """
     supportedImpurities = ["entropy", "gini"]
 
-    # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
@@ -240,10 +234,6 @@ class TreeClassifierParams(object):
 
     def __init__(self):
         super(TreeClassifierParams, self).__init__()
-        #: param for Criterion used for information gain calculation (case-insensitive).
-        self.impurity = Param(self, "impurity", "Criterion used for information " +
-                              "gain calculation (case-insensitive). Supported options: " +
-                              ", ".join(self.supportedImpurities))
 
     @since("1.6.0")
     def setImpurity(self, value):
@@ -485,7 +475,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     lossType = Param(Params._dummy(), "lossType",
                      "Loss function which GBT tries to minimize (case-insensitive). " +
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
@@ -504,10 +493,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
-        #: param for Loss function which GBT tries to minimize (case-insensitive).
-        self.lossType = Param(self, "lossType",
-                              "Loss function which GBT tries to minimize (case-insensitive). " +
-                              "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          lossType="logistic", maxIter=20, stepSize=0.1)
@@ -597,7 +582,6 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
                       "default is 1.0")
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
@@ -615,13 +599,6 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid)
-        #: param for the smoothing parameter.
-        self.smoothing = Param(self, "smoothing", "The smoothing parameter, should be >= 0, " +
-                               "default is 1.0")
-        #: param for the model type.
-        self.modelType = Param(self, "modelType", "The model type which is a string " +
-                               "(case-sensitive). Supported options: multinomial (default) " +
-                               "and bernoulli.")
         self._setDefault(smoothing=1.0, modelType="multinomial")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -734,7 +711,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
                    "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
                    "neurons and output layer of 10 neurons, default is [1, 1].")
@@ -753,14 +729,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self.layers = Param(self, "layers", "Sizes of layers from input layer to output layer " +
-                            "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with " +
-                            "100 neurons and output layer of 10 neurons, default is [1, 1].")
-        self.blockSize = Param(self, "blockSize", "Block size for stacking input data in " +
-                               "matrices. Data is stacked within partitions. If block size is " +
-                               "more than remaining data in a partition then it is adjusted to " +
-                               "the size of this data. Recommended size is between 10 and 1000, " +
-                               "default is 128.")
         self._setDefault(maxIter=100, tol=1E-4, layers=[1, 1], blockSize=128)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
