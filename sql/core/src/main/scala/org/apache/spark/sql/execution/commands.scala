@@ -413,13 +413,8 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.catalog.setCurrentDatabase(databaseName)
-    Seq(Row("OK"))
+    Seq.empty[Row]
   }
 
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("output", StringType, nullable = false) :: Nil)
-
-    schema.toAttributes
-  }
+  override val output: Seq[Attribute] = Seq.empty
 }
