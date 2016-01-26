@@ -150,7 +150,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   override def toString: String = usePrettyAttribute(expr).sql
 
   private def usePrettyAttribute(e: Expression): Expression = e.transform {
-    case a: Attribute => PrettyAttribute(a.name)
+    case a: Attribute => new PrettyAttribute(a)
   }
 
   override def equals(that: Any): Boolean = that match {

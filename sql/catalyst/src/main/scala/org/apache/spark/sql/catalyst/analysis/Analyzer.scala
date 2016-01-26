@@ -173,7 +173,7 @@ class Analyzer(
     }
 
     private def usePrettyAttribute(e: Expression): Expression = e transform {
-      case a: Attribute => PrettyAttribute(a.name)
+      case a: Attribute => new PrettyAttribute(a)
     }
 
     private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =
