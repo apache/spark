@@ -252,12 +252,18 @@ abstract class JavaActorReceiver extends UntypedActor {
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `AkkaUtils.createStream` and
  * [[org.apache.spark.streaming.akka.ActorReceiverSupervisor]].
+ *
+ * @param numberOfMsgs the number of messages received by the machine where the current receiver
+ *                     runs
+ * @param numberOfHiccups indicates how many messages extending akka.actor.PossiblyHarmful are
+ *                        received
+ * @param workerAddresses the addresses of the receiver workers
  */
 @DeveloperApi
-case class Statistics(numberOfMsgs: Int,
-  numberOfWorkers: Int,
-  numberOfHiccups: Int,
-  otherInfo: String)
+case class Statistics(
+    numberOfMsgs: Int,
+    numberOfHiccups: Int,
+    workerAddresses: String)
 
 /** Case class to receive data sent by child actors */
 private[akka] sealed trait ActorReceiverData
@@ -359,7 +365,7 @@ private[akka] class ActorReceiverSupervisor[T: ClassTag](
       case _: Statistics =>
         messageCount += 1
         val workers = context.children
-        sender ! Statistics(messageCount, workers.size, hiccups, workers.mkString("\n"))
+        sender ! Statistics(messageCount, hiccups, workers.mkString("\n"))
 
     }
   }
