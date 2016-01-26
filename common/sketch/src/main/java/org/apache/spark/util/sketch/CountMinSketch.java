@@ -55,10 +55,21 @@ import java.io.OutputStream;
  * This implementation is largely based on the {@code CountMinSketch} class from stream-lib.
  */
 abstract public class CountMinSketch {
-  /**
-   * Version number of the serialized binary format.
-   */
+
   public enum Version {
+    /**
+     * {@code CountMinSketch} binary format version 1 (all values written in big-endian order):
+     * - Version number, always 1 (32 bit)
+     * - Total count of added items (64 bit)
+     * - Depth (32 bit)
+     * - Width (32 bit)
+     * - Hash functions (depth * 64 bit)
+     * - Count table
+     *   - Row 0 (width * 64 bit)
+     *   - Row 1 (width * 64 bit)
+     *   - ...
+     *   - Row depth - 1 (width * 64 bit)
+     */
     V1(1);
 
     private final int versionNumber;
@@ -67,12 +78,10 @@ abstract public class CountMinSketch {
       this.versionNumber = versionNumber;
     }
 
-    public int getVersionNumber() {
+    int getVersionNumber() {
       return versionNumber;
     }
   }
-
-  public abstract Version version();
 
   /**
    * Returns the relative error (or {@code eps}) of this {@link CountMinSketch}.
@@ -128,13 +137,13 @@ abstract public class CountMinSketch {
 
   /**
    * Writes out this {@link CountMinSketch} to an output stream in binary format.
-   * It is the caller's responsibility to close the stream
+   * It is the caller's responsibility to close the stream.
    */
   public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
    * Reads in a {@link CountMinSketch} from an input stream.
-   * It is the caller's responsibility to close the stream
+   * It is the caller's responsibility to close the stream.
    */
   public static CountMinSketch readFrom(InputStream in) throws IOException {
     return CountMinSketchImpl.readFrom(in);

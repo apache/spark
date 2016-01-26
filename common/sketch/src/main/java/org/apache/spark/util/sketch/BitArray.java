@@ -17,6 +17,9 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 
 public final class BitArray {
@@ -24,6 +27,9 @@ public final class BitArray {
   private long bitCount;
 
   static int numWords(long numBits) {
+    if (numBits <= 0) {
+      throw new IllegalArgumentException("numBits must be positive, but got " + numBits);
+    }
     long numWords = (long) Math.ceil(numBits / 64.0);
     if (numWords > Integer.MAX_VALUE) {
       throw new IllegalArgumentException("Can't allocate enough space for " + numBits + " bits");
@@ -32,13 +38,14 @@ public final class BitArray {
   }
 
   BitArray(long numBits) {
-    if (numBits <= 0) {
-      throw new IllegalArgumentException("numBits must be positive");
-    }
-    this.data = new long[numWords(numBits)];
+    this(new long[numWords(numBits)]);
+  }
+
+  private BitArray(long[] data) {
+    this.data = data;
     long bitCount = 0;
-    for (long value : data) {
-      bitCount += Long.bitCount(value);
+    for (long word : data) {
+      bitCount += Long.bitCount(word);
     }
     this.bitCount = bitCount;
   }
@@ -78,13 +85,28 @@ public final class BitArray {
     this.bitCount = bitCount;
   }
 
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || !(o instanceof BitArray)) return false;
+  void writeTo(DataOutputStream out) throws IOException {
+    out.writeInt(data.length);
+    for (long datum : data) {
+      out.writeLong(datum);
+    }
+  }
 
-    BitArray bitArray = (BitArray) o;
-    return Arrays.equals(data, bitArray.data);
+  static BitArray readFrom(DataInputStream in) throws IOException {
+    int numWords = in.readInt();
+    long[] data = new long[numWords];
+    for (int i = 0; i < numWords; i++) {
+      data[i] = in.readLong();
+    }
+    return new BitArray(data);
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (this == other) return true;
+    if (other == null || !(other instanceof BitArray)) return false;
+    BitArray that = (BitArray) other;
+    return Arrays.equals(data, that.data);
   }
 
   @Override

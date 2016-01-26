@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.sketch;
 
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 
 public class BloomFilterImpl extends BloomFilter {
 
@@ -25,8 +25,32 @@ public class BloomFilterImpl extends BloomFilter {
   private final BitArray bits;
 
   BloomFilterImpl(int numHashFunctions, long numBits) {
+    this(new BitArray(numBits), numHashFunctions);
+  }
+
+  private BloomFilterImpl(BitArray bits, int numHashFunctions) {
+    this.bits = bits;
     this.numHashFunctions = numHashFunctions;
-    this.bits = new BitArray(numBits);
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (other == this) {
+      return true;
+    }
+
+    if (other == null || !(other instanceof BloomFilterImpl)) {
+      return false;
+    }
+
+    BloomFilterImpl that = (BloomFilterImpl) other;
+
+    return this.numHashFunctions == that.numHashFunctions && this.bits.equals(that.bits);
+  }
+
+  @Override
+  public int hashCode() {
+    return bits.hashCode() * 31 + numHashFunctions;
   }
 
   @Override
@@ -160,5 +184,25 @@ public class BloomFilterImpl extends BloomFilter {
 
     this.bits.putAll(that.bits);
     return this;
+  }
+
+  @Override
+  public void writeTo(OutputStream out) throws IOException {
+    DataOutputStream dos = new DataOutputStream(out);
+
+    dos.writeInt(Version.V1.getVersionNumber());
+    bits.writeTo(dos);
+    dos.writeInt(numHashFunctions);
+  }
+
+  public static BloomFilterImpl readFrom(InputStream in) throws IOException {
+    DataInputStream dis = new DataInputStream(in);
+
+    int version = dis.readInt();
+    if (version != Version.V1.getVersionNumber()) {
+      throw new IOException("Unexpected Bloom filter version number (" + version + ")");
+    }
+
+    return new BloomFilterImpl(BitArray.readFrom(dis), dis.readInt());
   }
 }
