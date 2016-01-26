@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -116,6 +117,19 @@ private[hive] case class CreateViewAsSelect(
     val logicalPlan = if (tableDesc.schema.isEmpty) {
       child
     } else {
+      if (childSchema.length != tableDesc.schema.length) {
+        throw new IllegalStateException(
+          s"""View definition schema is incompatible with the required one:
+             :
+             :${StructType.fromAttributes(childSchema).treeString}
+             :
+             :Required Hive schema:
+             :
+             :${tableDesc.schema.mkString("\n")}
+           """.stripMargin(':')
+        )
+      }
+
       val projectList = childSchema.zip(tableDesc.schema).map {
         case (attr, col) => Alias(attr, col.name)()
       }

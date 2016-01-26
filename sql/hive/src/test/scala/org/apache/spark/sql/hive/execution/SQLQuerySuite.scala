@@ -1448,7 +1448,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       withView("v") {
         sql("CREATE VIEW v AS SELECT * FROM src")
         withTempDatabase { db =>
-          checkAnswer(sql("SELECT * FROM v"), sql("SELECT * FROM default.src"))
+          activateDatabase(db) {
+            // Should look up table `src` in database `default`.
+            checkAnswer(sql("SELECT * FROM default.v"), sql("SELECT * FROM default.src"))
+
+            // The new `src` table shouldn't be scanned.
+            sql("CREATE TABLE src(key INT, value STRING)")
+            checkAnswer(sql("SELECT * FROM default.v"), sql("SELECT * FROM default.src"))
+          }
         }
       }
     }
