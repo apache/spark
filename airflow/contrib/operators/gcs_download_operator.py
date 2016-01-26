@@ -17,7 +17,7 @@ class GoogleCloudStorageDownloadOperator(BaseOperator):
         self,
         bucket,
         object,
-        file_fd,
+        filename,
         google_cloud_storage_conn_id='google_cloud_storage_default',
         *args,
         **kwargs):
@@ -27,10 +27,10 @@ class GoogleCloudStorageDownloadOperator(BaseOperator):
         super(GoogleCloudStorageDownloadOperator, self).__init__(*args, **kwargs)
         self.bucket = bucket
         self.object = object
-        self.file_fd = file_fd
+        self.filename = filename
         self.google_cloud_storage_conn_id = google_cloud_storage_conn_id
 
     def execute(self, context):
-        logging.info('Executing download: %s, %s, %s', self.bucket, self.object, self.file_fd.name)
+        logging.info('Executing download: %s, %s, %s', self.bucket, self.object, self.filename)
         hook = GoogleCloudStorageHook(google_cloud_storage_conn_id=self.google_cloud_storage_conn_id)
-        print(hook.download(self.bucket, self.object, self.file_fd))
+        print(hook.download(self.bucket, self.object, self.filename))

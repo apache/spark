@@ -54,7 +54,7 @@ class GoogleCloudStorageHook(BaseHook):
 
         return service
 
-    def download(self, bucket, object, file_fd=False):
+    def download(self, bucket, object, filename=False):
         """
         Get a file from Google Cloud Storage.
 
@@ -62,8 +62,8 @@ class GoogleCloudStorageHook(BaseHook):
         :type bucket: string
         :param object: The object to fetch.
         :type object: string
-        :param file_fd: If set, a local file descriptor where the file should be written to.
-        :type file_fd: file
+        :param filename: If set, a local file path where the file should be written to.
+        :type filename: string
         """
         service = self.get_conn()
         downloaded_file_bytes = service \
@@ -72,7 +72,8 @@ class GoogleCloudStorageHook(BaseHook):
             .execute()
 
         # Write the file to local file path, if requested.
-        if file_fd:
-            file_fd.write(downloaded_file_bytes)
+        if filename:
+            with open(filename, 'w') as file_fd:
+                file_fd.write(downloaded_file_bytes)
 
         return downloaded_file_bytes
