@@ -1525,6 +1525,9 @@ class RDD(object):
         """
         Return the key-value pairs in this RDD to the master as a dictionary.
 
+        Note that this method should only be used if the resulting data is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         >>> m = sc.parallelize([(1, 2), (3, 4)]).collectAsMap()
         >>> m[1]
         2
