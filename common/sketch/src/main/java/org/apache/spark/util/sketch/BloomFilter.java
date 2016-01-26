@@ -17,6 +17,10 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 /**
  * A Bloom filter is a space-efficient probabilistic data structure, that is used to test whether
  * an element is a member of a set. It returns false when the element is definitely not in the
@@ -39,6 +43,28 @@ package org.apache.spark.util.sketch;
  * The implementation is largely based on the {@code BloomFilter} class from guava.
  */
 public abstract class BloomFilter {
+
+  public enum Version {
+    /**
+     * {@code BloomFilter} binary format version 1 (all values written in big-endian order):
+     * - Version number, always 1 (32 bit)
+     * - Total number of words of the underlying bit array (32 bit)
+     * - The words/longs (numWords * 64 bit)
+     * - Number of hash functions (32 bit)
+     */
+    V1(1);
+
+    private final int versionNumber;
+
+    Version(int versionNumber) {
+      this.versionNumber = versionNumber;
+    }
+
+    int getVersionNumber() {
+      return versionNumber;
+    }
+  }
+
   /**
    * Returns the false positive probability, i.e. the probability that
    * {@linkplain #mightContain(Object)} will erroneously return {@code true} for an object that
@@ -83,7 +109,7 @@ public abstract class BloomFilter {
    * bloom filters are appropriately sized to avoid saturating them.
    *
    * @param other The bloom filter to combine this bloom filter with. It is not mutated.
-   * @throws IllegalArgumentException if {@code isCompatible(that) == false}
+   * @throws IncompatibleMergeException if {@code isCompatible(other) == false}
    */
   public abstract BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException;
 
@@ -92,6 +118,20 @@ public abstract class BloomFilter {
    * {@code false} if this is <i>definitely</i> not the case.
    */
   public abstract boolean mightContain(Object item);
+
+  /**
+   * Writes out this {@link BloomFilter} to an output stream in binary format.
+   * It is the caller's responsibility to close the stream.
+   */
+  public abstract void writeTo(OutputStream out) throws IOException;
+
+  /**
+   * Reads in a {@link BloomFilter} from an input stream.
+   * It is the caller's responsibility to close the stream.
+   */
+  public static BloomFilter readFrom(InputStream in) throws IOException {
+    return BloomFilterImpl.readFrom(in);
+  }
 
   /**
    * Computes the optimal k (number of hashes per element inserted in Bloom filter), given the

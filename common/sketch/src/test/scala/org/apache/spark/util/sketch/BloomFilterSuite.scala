@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.sketch
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -24,6 +26,20 @@ import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
   private final val EPSILON = 0.01
+
+  // Serializes and deserializes a given `BloomFilter`, then checks whether the deserialized
+  // version is equivalent to the original one.
+  private def checkSerDe(filter: BloomFilter): Unit = {
+    val out = new ByteArrayOutputStream()
+    filter.writeTo(out)
+    out.close()
+
+    val in = new ByteArrayInputStream(out.toByteArray)
+    val deserialized = BloomFilter.readFrom(in)
+    in.close()
+
+    assert(filter == deserialized)
+  }
 
   def testAccuracy[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     test(s"accuracy - $typeName") {
@@ -51,6 +67,8 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
       // Also check the actual fpp is not significantly higher than we expected.
       val actualFpp = errorCount.toDouble / (numItems - numInsertion)
       assert(actualFpp - fpp < EPSILON)
+
+      checkSerDe(filter)
     }
   }
 
@@ -76,6 +94,8 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
 
       items1.foreach(i => assert(filter1.mightContain(i)))
       items2.foreach(i => assert(filter1.mightContain(i)))
+
+      checkSerDe(filter1)
     }
   }
 
