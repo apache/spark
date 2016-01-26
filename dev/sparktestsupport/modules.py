@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
+from functools import total_ordering
 import itertools
 import re
 
 all_modules = []
 
 
+@total_ordering
 class Module(object):
     """
     A module is the basic abstraction in our test runner script. Each module consists of a set of
@@ -75,20 +77,56 @@ class Module(object):
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
 
+    def __repr__(self):
+        return "Module<%s>" % self.name
+
+    def __lt__(self, other):
+        return self.name < other.name
+
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __ne__(self, other):
+        return not (self.name == other.name)
+
+    def __hash__(self):
+        return hash(self.name)
+
+
+catalyst = Module(
+    name="catalyst",
+    dependencies=[],
+    source_file_regexes=[
+        "sql/catalyst/",
+    ],
+    sbt_test_goals=[
+        "catalyst/test",
+    ],
+)
+
 
 sql = Module(
     name="sql",
-    dependencies=[],
+    dependencies=[catalyst],
     source_file_regexes=[
-        "sql/(?!hive-thriftserver)",
+        "sql/core/",
+    ],
+    sbt_test_goals=[
+        "sql/test",
+    ],
+)
+
+hive = Module(
+    name="hive",
+    dependencies=[sql],
+    source_file_regexes=[
+        "sql/hive/",
         "bin/spark-sql",
     ],
     build_profile_flags=[
         "-Phive",
     ],
     sbt_test_goals=[
-        "catalyst/test",
-        "sql/test",
         "hive/test",
     ],
     test_tags=[
@@ -99,7 +137,7 @@ sql = Module(
 
 hive_thriftserver = Module(
     name="hive-thriftserver",
-    dependencies=[sql],
+    dependencies=[hive],
     source_file_regexes=[
         "sql/hive-thriftserver",
         "sbin/start-thriftserver.sh",
@@ -282,7 +320,7 @@ mllib = Module(
 
 examples = Module(
     name="examples",
-    dependencies=[graphx, mllib, streaming, sql],
+    dependencies=[graphx, mllib, streaming, hive],
     source_file_regexes=[
         "examples/",
     ],
@@ -314,7 +352,7 @@ pyspark_core = Module(
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, sql],
+    dependencies=[pyspark_core, hive],
     source_file_regexes=[
         "python/pyspark/sql"
     ],
@@ -404,7 +442,7 @@ pyspark_ml = Module(
 
 sparkr = Module(
     name="sparkr",
-    dependencies=[sql, mllib],
+    dependencies=[hive, mllib],
     source_file_regexes=[
         "R/",
     ],
