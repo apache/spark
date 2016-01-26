@@ -128,11 +128,13 @@ abstract public class CountMinSketch {
 
   /**
    * Writes out this {@link CountMinSketch} to an output stream in binary format.
+   * It is the caller's responsibility to close the stream
    */
   public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
    * Reads in a {@link CountMinSketch} from an input stream.
+   * It is the caller's responsibility to close the stream
    */
   public static CountMinSketch readFrom(InputStream in) throws IOException {
     return CountMinSketchImpl.readFrom(in);
