@@ -531,10 +531,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     _executorAllocationManager =
-      if (dynamicAllocationEnabled) {
+      if (dynamicAllocationEnabled && !isLocal) {
         Some(new ExecutorAllocationManager(this, listenerBus, _conf))
       } else {
         None
+
       }
     _executorAllocationManager.foreach(_.start())
 
