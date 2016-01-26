@@ -22,6 +22,8 @@ import java.util.Properties
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
+import org.json4s.JsonDSL._
 import org.scalatest.Assertions
 import org.scalatest.exceptions.TestFailedException
 
@@ -167,7 +169,7 @@ class JsonProtocolSuite extends SparkFunSuite {
    |  Backward compatibility tests  |
    * ============================== */
 
-  test("ExceptionFailure backward compatibility") {
+  test("ExceptionFailure backward compatibility: full stack trace") {
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null, None)
     val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
       .removeField({ _._1 == "Full Stack Trace" })
@@ -382,6 +384,49 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldInfo2 = JsonProtocol.accumulableInfoFromJson(oldJson2)
     assert(!oldInfo2.countFailedValues)
   }
+
+  test("ExceptionFailure backward compatibility: accumulator updates") {
+    // "Task Metrics" was replaced with "Accumulator Updates" in 2.0.0. For older event logs,
+    // we should still be able to fallback to constructing the accumulator updates from the
+    // "Task Metrics" field, if it exists.
+    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
+    val tmJson = JsonProtocol.taskMetricsToJson(tm)
+    val accumUpdates = tm.accumulatorUpdates()
+    val exception = new SparkException("sentimental")
+    val exceptionFailure = new ExceptionFailure(exception, accumUpdates)
+    val exceptionFailureJson = JsonProtocol.taskEndReasonToJson(exceptionFailure)
+    val tmFieldJson: JValue = "Task Metrics" -> tmJson
+    val oldExceptionFailureJson: JValue =
+      exceptionFailureJson.removeField { _._1 == "Accumulator Updates" }.merge(tmFieldJson)
+    val oldExceptionFailure =
+      JsonProtocol.taskEndReasonFromJson(oldExceptionFailureJson).asInstanceOf[ExceptionFailure]
+    assert(exceptionFailure.className === oldExceptionFailure.className)
+    assert(exceptionFailure.description === oldExceptionFailure.description)
+    assertSeqEquals[StackTraceElement](
+      exceptionFailure.stackTrace, oldExceptionFailure.stackTrace, assertStackTraceElementEquals)
+    assert(exceptionFailure.fullStackTrace === oldExceptionFailure.fullStackTrace)
+    assertSeqEquals[AccumulableInfo](
+      exceptionFailure.accumUpdates, oldExceptionFailure.accumUpdates, (x, y) => x == y)
+  }
+
+  test("AccumulableInfo value de/serialization") {
+    import InternalAccumulator._
+    val blocks = Seq[(BlockId, BlockStatus)](
+      (TestBlockId("meebo"), BlockStatus(StorageLevel.MEMORY_ONLY, 1L, 2L)),
+      (TestBlockId("feebo"), BlockStatus(StorageLevel.DISK_ONLY, 3L, 4L)))
+    val blocksJson = JArray(blocks.toList.map { case (id, status) =>
+      ("Block ID" -> id.toString) ~
+      ("Status" -> JsonProtocol.blockStatusToJson(status))
+    })
+    testAccumValue(Some(RESULT_SIZE), 3L, JInt(3))
+    testAccumValue(Some(shuffleRead.REMOTE_BLOCKS_FETCHED), 2, JInt(2))
+    testAccumValue(Some(input.READ_METHOD), "aka", JString("aka"))
+    testAccumValue(Some(UPDATED_BLOCK_STATUSES), blocks, blocksJson)
+    // For anything else, we just cast the value to a string
+    testAccumValue(Some("anything"), blocks, JString(blocks.toString))
+    testAccumValue(Some("anything"), 123, JString("123"))
+  }
+
 }
 
 
@@ -448,6 +493,14 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def testExecutorInfo(info: ExecutorInfo) {
     val newInfo = JsonProtocol.executorInfoFromJson(JsonProtocol.executorInfoToJson(info))
     assertEquals(info, newInfo)
+  }
+
+  private def testAccumValue(name: Option[String], value: Any, expectedJson: JValue): Unit = {
+    val json = JsonProtocol.accumValueToJson(name, value)
+    assert(json === expectedJson)
+    val newValue = JsonProtocol.accumValueFromJson(name, json)
+    val expectedValue = if (name.exists(_.startsWith(METRICS_PREFIX))) value else value.toString
+    assert(newValue === expectedValue)
   }
 
   /** -------------------------------- *

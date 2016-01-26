@@ -284,7 +284,7 @@ private[spark] object JsonProtocol {
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
-    val name = accumulableInfo.name.orNull
+    val name = accumulableInfo.name
     ("ID" -> accumulableInfo.id) ~
     ("Name" -> name) ~
     ("Update" -> accumulableInfo.update.map { v => accumValueToJson(name, v) }) ~
@@ -296,16 +296,16 @@ private[spark] object JsonProtocol {
   /**
    * Serialize the value of an accumulator to JSON.
    *
-   * For accmulators representing internal task metrics, this looks up the relevant
+   * For accumulators representing internal task metrics, this looks up the relevant
    * [[AccumulatorParam]] to serialize the value accordingly. For all other accumulators,
    * this will simply serialize the value as a string.
    *
-   * The behavior here must match that of [[accumValueFromJson]]. TODO: add some tests.
+   * The behavior here must match that of [[accumValueFromJson]]. Exposed for testing.
    */
-  private def accumValueToJson(name: String, value: Any): JValue = {
+  private[util] def accumValueToJson(name: Option[String], value: Any): JValue = {
     import AccumulatorParam._
-    if (name != null && name.startsWith(InternalAccumulator.METRICS_PREFIX)) {
-      (value, InternalAccumulator.getParam(name)) match {
+    if (name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))) {
+      (value, InternalAccumulator.getParam(name.get)) match {
         case (v: Int, IntAccumulatorParam) => JInt(v)
         case (v: Long, LongAccumulatorParam) => JInt(v)
         case (v: String, StringAccumulatorParam) => JString(v)
@@ -316,7 +316,7 @@ private[spark] object JsonProtocol {
           })
         case (v, p) =>
           throw new IllegalArgumentException(s"unexpected combination of accumulator value " +
-            s"type (${v.getClass.getName}) and param (${p.getClass.getName}) in '$name'")
+            s"type (${v.getClass.getName}) and param (${p.getClass.getName}) in '${name.get}'")
       }
     } else {
       // For all external accumulators, just use strings
@@ -724,8 +724,8 @@ private[spark] object JsonProtocol {
   def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
     val id = (json \ "ID").extract[Long]
     val name = (json \ "Name").extractOpt[String]
-    val update = Utils.jsonOption(json \ "Update").map { v => accumValueFromJson(name.orNull, v) }
-    val value = Utils.jsonOption(json \ "Value").map { v => accumValueFromJson(name.orNull, v) }
+    val update = Utils.jsonOption(json \ "Update").map { v => accumValueFromJson(name, v) }
+    val value = Utils.jsonOption(json \ "Value").map { v => accumValueFromJson(name, v) }
     val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
     val countFailedValues = (json \ "Count Failed Values").extractOpt[Boolean].getOrElse(false)
     new AccumulableInfo(id, name, update, value, internal, countFailedValues)
@@ -738,12 +738,12 @@ private[spark] object JsonProtocol {
    * [[AccumulatorParam]] to deserialize the value accordingly. For all other
    * accumulators, this will simply deserialize the value as a string.
    *
-   * The behavior here must match that of [[accumValueToJson]].
+   * The behavior here must match that of [[accumValueToJson]]. Exposed for testing.
    */
-  private def accumValueFromJson(name: String, value: JValue): Any = {
+  private[util] def accumValueFromJson(name: Option[String], value: JValue): Any = {
     import AccumulatorParam._
-    if (name != null && name.startsWith(InternalAccumulator.METRICS_PREFIX)) {
-      (value, InternalAccumulator.getParam(name)) match {
+    if (name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))) {
+      (value, InternalAccumulator.getParam(name.get)) match {
         case (JInt(v), IntAccumulatorParam) => v.toInt
         case (JInt(v), LongAccumulatorParam) => v.toLong
         case (JString(v), StringAccumulatorParam) => v
@@ -755,7 +755,7 @@ private[spark] object JsonProtocol {
           }
         case (v, p) =>
           throw new IllegalArgumentException(s"unexpected combination of accumulator " +
-            s"value in JSON ($v) and accumulator param (${p.getClass.getName}) in '$name'")
+            s"value in JSON ($v) and accumulator param (${p.getClass.getName}) in '${name.get}'")
        }
      } else {
        value.extract[String]
@@ -853,7 +853,6 @@ private[spark] object JsonProtocol {
         val stackTrace = stackTraceFromJson(json \ "Stack Trace")
         val fullStackTrace = (json \ "Full Stack Trace").extractOpt[String].orNull
         // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
-        // TODO: add a test
         val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
           .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
           .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulatorUpdates())
