@@ -86,7 +86,7 @@ class Params(Identifiable):
         #: value returned by :py:func:`params`
         self._params = None
 
-        print "setting up "+str(self)
+        # Copy the params from the class to the object
         self._copy_params()
 
     def _copy_params(self):
