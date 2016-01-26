@@ -35,8 +35,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver, HasWeightCol, MLWritable,
-                       EstimatorMLReadable):
+                       HasStandardization, HasSolver, HasWeightCol, MLWritable, MLReadable):
     """
     Linear regression.
 
@@ -129,7 +128,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, MLWritable, TransformerMLReadable):
+class LinearRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by LinearRegression.
 

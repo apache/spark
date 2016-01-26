@@ -139,12 +139,17 @@ class MLReader(object):
     """
 
     def __init__(self, instance):
+        self._instance = instance
         self._jread = instance._java_obj.read()
 
     @since("2.0.0")
     def load(self, path):
         """Loads the ML component from the input path."""
-        self._jread.load(path)
+        java_obj = self._jread.load(path)
+        self._instance._java_obj = java_obj
+        self._instance.uid = java_obj.uid()
+        self._instance._transfer_params_from_java(True)
+        return self._instance
 
     @since("2.0.0")
     def context(self, sqlContext):
@@ -174,45 +179,26 @@ class MLReadable(object):
         return ".".join([java_package, cls.__name__])
 
     @classmethod
-    def _load_java(cls, path):
+    def _load_java_obj(cls):
         """
-        Load a Java model from the given path.
+        Load the peer Java object.
         """
         java_class = cls._java_loader_class()
         java_obj = _jvm()
         for name in java_class.split("."):
             java_obj = getattr(java_obj, name)
-        return java_obj.load(path)
+        return java_obj
 
     @classmethod
     @since("2.0.0")
-    def read(self):
+    def read(cls):
         """Returns an MLReader instance for this class."""
-        return MLReader(self)
-
-
-@inherit_doc
-class TransformerMLReadable(MLReadable):
+        instance = cls()
+        instance._java_obj = cls._load_java_obj()
+        return MLReader(instance)
 
     @classmethod
     @since("2.0.0")
     def load(cls, path):
-        """Load a model from the given path."""
-        java_obj = cls._load_java(path)
-        new_instance = cls(java_obj)
-        new_instance._transfer_params_from_java()
-        return new_instance
-
-
-@inherit_doc
-class EstimatorMLReadable(MLReadable):
-
-    @classmethod
-    @since("2.0.0")
-    def load(cls, path):
-        """Load a model from the given path."""
-        java_obj = cls._load_java(path)
-        new_instance = cls()
-        new_instance._java_obj = java_obj
-        new_instance._transfer_params_from_java()
-        return new_instance
+        """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
+        return cls.read().load(path)

@@ -71,13 +71,16 @@ class JavaWrapper(Params):
                 pair = self._make_java_param_pair(param, paramMap[param])
                 self._java_obj.set(pair)
 
-    def _transfer_params_from_java(self):
+    def _transfer_params_from_java(self, withParent=False):
         """
         Transforms the embedded params from the companion Java object.
         """
         sc = SparkContext._active_spark_context
+        parent = self._java_obj.uid()
         for param in self.params:
             if self._java_obj.hasParam(param.name):
+                if withParent:
+                    param.parent = parent
                 java_param = self._java_obj.getParam(param.name)
                 value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                 self._paramMap[param] = value
@@ -148,15 +151,16 @@ class JavaModel(Model, JavaTransformer):
 
     __metaclass__ = ABCMeta
 
-    def __init__(self, java_model):
+    def __init__(self, java_model=None):
         """
         Initialize this instance with a Java model object.
         Subclasses should call this constructor, initialize params,
         and then call _transformer_params_from_java.
         """
         super(JavaModel, self).__init__()
-        self._java_obj = java_model
-        self.uid = java_model.uid()
+        if java_model is not None:
+            self._java_obj = java_model
+            self.uid = java_model.uid()
 
     def copy(self, extra=None):
         """
