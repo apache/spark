@@ -48,9 +48,9 @@ public abstract class BloomFilter {
     /**
      * {@code BloomFilter} binary format version 1 (all values written in big-endian order):
      * - Version number, always 1 (32 bit)
+     * - Number of hash functions (32 bit)
      * - Total number of words of the underlying bit array (32 bit)
      * - The words/longs (numWords * 64 bit)
-     * - Number of hash functions (32 bit)
      */
     V1(1);
 
@@ -94,6 +94,16 @@ public abstract class BloomFilter {
    *     it is called.
    */
   public abstract boolean put(Object item);
+
+  /**
+   * A specific version of {@link #put(Object)}, that can only be used to put byte array.
+   */
+  public abstract boolean putBinary(byte[] bytes);
+
+  /**
+   * A specific version of {@link #put(Object)}, that can only be used to put long.
+   */
+  public abstract boolean putLong(long l);
 
   /**
    * Determines whether a given bloom filter is compatible with this bloom filter. For two
