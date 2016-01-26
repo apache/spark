@@ -60,6 +60,8 @@ private object PostgresDialect extends JdbcDialect {
     case StringType => Some(JdbcType("TEXT", Types.CHAR))
     case BinaryType => Some(JdbcType("BYTEA", Types.BINARY))
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
+    case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
+    case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))

@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.mapreduce.TaskAttemptContext
+
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.{OutputWriter, OutputWriterFactory, HadoopFsRelationProvider, HadoopFsRelation}
+import org.apache.spark.sql.sources.{HadoopFsRelation, HadoopFsRelationProvider, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -43,9 +44,7 @@ private[sql] trait BucketedHadoopFsRelationProvider extends HadoopFsRelationProv
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation =
-    // TODO: throw exception here as we won't call this method during execution, after bucketed read
-    // support is finished.
-    createRelation(sqlContext, paths, dataSchema, partitionColumns, bucketSpec = None, parameters)
+    throw new UnsupportedOperationException("use the overload version with bucketSpec parameter")
 }
 
 private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFactory {
@@ -53,5 +52,26 @@ private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFact
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter =
-    throw new UnsupportedOperationException("use bucket version")
+    throw new UnsupportedOperationException("use the overload version with bucketSpec parameter")
+}
+
+private[sql] object BucketingUtils {
+  // The file name of bucketed data should have 3 parts:
+  //   1. some other information in the head of file name
+  //   2. bucket id part, some numbers, starts with "_"
+  //      * The other-information part may use `-` as separator and may have numbers at the end,
+  //        e.g. a normal parquet file without bucketing may have name:
+  //        part-r-00000-2dd664f9-d2c4-4ffe-878f-431234567891.gz.parquet, and we will mistakenly
+  //        treat `431234567891` as bucket id. So here we pick `_` as separator.
+  //   3. optional file extension part, in the tail of file name, starts with `.`
+  // An example of bucketed parquet file name with bucket id 3:
+  //   part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
+  private val bucketedFileName = """.*_(\d+)(?:\..*)?$""".r
+
+  def getBucketId(fileName: String): Option[Int] = fileName match {
+    case bucketedFileName(bucketId) => Some(bucketId.toInt)
+    case other => None
+  }
+
+  def bucketIdToString(id: Int): String = f"_$id%05d"
 }

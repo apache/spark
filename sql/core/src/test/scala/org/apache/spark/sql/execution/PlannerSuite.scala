@@ -51,18 +51,6 @@ class PlannerSuite extends SharedSQLContext {
       s"The plan of query $query does not have partial aggregations.")
   }
 
-  test("unions are collapsed") {
-    val planner = sqlContext.planner
-    import planner._
-    val query = testData.unionAll(testData).unionAll(testData).logicalPlan
-    val planned = BasicOperators(query).head
-    val logicalUnions = query collect { case u: logical.Union => u }
-    val physicalUnions = planned collect { case u: execution.Union => u }
-
-    assert(logicalUnions.size === 2)
-    assert(physicalUnions.size === 1)
-  }
-
   test("count is partially aggregated") {
     val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
@@ -94,7 +82,7 @@ class PlannerSuite extends SharedSQLContext {
           """
             |SELECT l.a, l.b
             |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
-          """.stripMargin).queryExecution.executedPlan
+          """.stripMargin).queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
         val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
@@ -147,7 +135,7 @@ class PlannerSuite extends SharedSQLContext {
 
         val a = testData.as("a")
         val b = sqlContext.table("tiny").as("b")
-        val planned = a.join(b, $"a.key" === $"b.key").queryExecution.executedPlan
+        val planned = a.join(b, $"a.key" === $"b.key").queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
         val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
@@ -168,7 +156,7 @@ class PlannerSuite extends SharedSQLContext {
       sqlContext.registerDataFrameAsTable(df, "testPushed")
 
       withTempTable("testPushed") {
-        val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
+        val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
         assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
       }
     }
