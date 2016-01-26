@@ -74,11 +74,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   private boolean containsVarLenFields;
 
   /**
-   * The number of bytes in the fixed length portion of the row.
-   */
-  private int fixedSizeBytes;
-
-  /**
    * For each request column, the reader to read this column.
    * columnsReaders[i] populated the UnsafeRow's attribute at i.
    */
@@ -266,19 +261,13 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     /**
      * Initialize rows and rowWriters. These objects are reused across all rows in the relation.
      */
-    int rowByteSize = UnsafeRow.calculateBitSetWidthInBytes(requestedSchema.getFieldCount());
-    rowByteSize += 8 * requestedSchema.getFieldCount();
-    fixedSizeBytes = rowByteSize;
-    rowByteSize += numVarLenFields * DEFAULT_VAR_LEN_SIZE;
     containsVarLenFields = numVarLenFields > 0;
     rowWriters = new UnsafeRowWriter[rows.length];
 
     for (int i = 0; i < rows.length; ++i) {
       rows[i] = new UnsafeRow(requestedSchema.getFieldCount());
-      rowWriters[i] = new UnsafeRowWriter();
-      BufferHolder holder = new BufferHolder(rowByteSize);
-      rowWriters[i].initialize(rows[i], holder, requestedSchema.getFieldCount());
-      rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, holder.buffer.length);
+      BufferHolder holder = new BufferHolder(rows[i], numVarLenFields * DEFAULT_VAR_LEN_SIZE);
+      rowWriters[i] = new UnsafeRowWriter(holder, requestedSchema.getFieldCount());
     }
   }
 
@@ -295,7 +284,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
     if (containsVarLenFields) {
       for (int i = 0; i < rowWriters.length; ++i) {
-        rowWriters[i].holder().resetTo(fixedSizeBytes);
+        rowWriters[i].holder().reset();
       }
     }
 
