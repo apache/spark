@@ -38,8 +38,8 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.config.ConfigEntry
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf._
 import org.apache.spark.sql.catalyst.{InternalRow, ParserInterface}
