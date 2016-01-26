@@ -181,19 +181,19 @@ class KMeans(object):
         :param k:
           Number of clusters to create.
         :param maxIterations:
-          Number of iterations.
+          Maximum number of iterations allowed.
           (default: 100)
         :param runs:
-          Number of runs of the algorithm to execute in parallel
-          (deprecated in 1.6.0).
+          Number of runs to execute in parallel. The best model according
+          to the cost function will be returned (deprecated in 1.6.0).
           (default: 1)
         :param initializationMode:
           The initialization algorithm. This can be either "random" or
           "k-means||".
           (default: "k-means||")
         :param seed:
-          Random seed for cluster initialization. Set as None to generate
-          seed based on system time.
+          Random seed value for cluster initialization. Set as None to
+          generate seed based on system time.
           (default: None)
         :param initializationSteps:
           Set the number of steps for the k-means|| initialization mode.
@@ -393,10 +393,11 @@ class GaussianMixture(object):
         :param k:
           Number of independent Gaussians in the mixture model.
         :param convergenceTol:
-          Threshold value to check the convergence criteria.
+          Maximum change in log-likelihood at which convergence is
+          considered to have occured.
           (default: 1e-3)
         :param maxIterations:
-          Number of iterations.
+          Maximum number of iterations allowed.
           (default: 100)
         :param seed:
           Random seed for initial Gaussian distribution. Set as None to
@@ -871,7 +872,7 @@ class LDA(object):
           centers.
           (default: 10)
         :param maxIterations:
-          Number of iterations.
+          Maximum number of iterations allowed.
           (default: 20)
         :param docConcentration:
           Concentration parameter (commonly named "alpha") for the prior
