@@ -23,7 +23,7 @@ package org.apache.spark.streaming
  * time and midnight, January 1, 1970 UTC. This is the same format as what is returned by
  * System.currentTimeMillis.
  */
-case class Time(private val millis: Long) {
+case class Time(val millis: Long) {
 
   def milliseconds: Long = millis
 

@@ -17,7 +17,10 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerEvent}
+import org.apache.spark.SparkConf
+import org.apache.spark.scheduler._
+import org.apache.spark.streaming.ui.{StreamingTab, StreamingJobProgressListener}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.ListenerBus
 
 /**
@@ -26,20 +29,12 @@ import org.apache.spark.util.ListenerBus
  * registers itself with Spark listener bus, so that it can receive WrappedStreamingListenerEvents,
  * unwrap them as StreamingListenerEvent and dispatch them to StreamingListeners.
  */
-private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
+private[streaming] abstract class StreamingListenerBus
   extends SparkListener with ListenerBus[StreamingListener, StreamingListenerEvent] {
-
-  /**
-   * Post a StreamingListenerEvent to the Spark listener bus asynchronously. This event will be
-   * dispatched to all StreamingListeners in the thread of the Spark listener bus.
-   */
-  def post(event: StreamingListenerEvent) {
-    sparkListenerBus.post(new WrappedStreamingListenerEvent(event))
-  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
-      case WrappedStreamingListenerEvent(e) =>
+      case e: StreamingListenerEvent =>
         postToAll(e)
       case _ =>
     }
@@ -49,6 +44,10 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
       listener: StreamingListener,
       event: StreamingListenerEvent): Unit = {
     event match {
+      case applicationStarted: StreamingListenerApplicationStart =>
+        listener.onStreamingApplicationStarted(applicationStarted)
+      case applicationEnd: StreamingListenerApplicationEnd =>
+        listener.onStreamingApplicationEnd(applicationEnd)
       case receiverStarted: StreamingListenerReceiverStarted =>
         listener.onReceiverStarted(receiverStarted)
       case receiverError: StreamingListenerReceiverError =>
@@ -68,6 +67,24 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
       case _ =>
     }
   }
+}
+
+/**
+ * A Streaming listener bus to forward events to StreamingListeners. This one will wrap received
+ * Streaming events as WrappedStreamingListenerEvent and send them to Spark listener bus. It also
+ * registers itself with Spark listener bus, so that it can receive WrappedStreamingListenerEvents,
+ * unwrap them as StreamingListenerEvent and dispatch them to StreamingListeners.
+ */
+private[streaming] class LiveStreamingListenerBus(sparkListenerBus: LiveListenerBus)
+  extends StreamingListenerBus {
+
+  /**
+   * Post a StreamingListenerEvent to the Spark listener bus asynchronously. This event will be
+   * dispatched to all StreamingListeners in the thread of the Spark listener bus.
+   */
+  def post(event: StreamingListenerEvent) {
+    sparkListenerBus.post(event)
+  }
 
   /**
    * Register this one with the Spark listener bus so that it can receive Streaming events and
@@ -84,16 +101,17 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
   def stop(): Unit = {
     sparkListenerBus.removeListener(this)
   }
+}
 
-  /**
-   * Wrapper for StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark
-   * listener bus.
-   */
-  private case class WrappedStreamingListenerEvent(streamingListenerEvent: StreamingListenerEvent)
-    extends SparkListenerEvent {
+private[streaming] class ReplayStreamingListenerBus extends StreamingListenerBus
 
-    // Do not log streaming events in event log as history server does not support streaming
-    // events (SPARK-12140). TODO Once SPARK-12140 is resolved we should set it to true.
-    protected[spark] override def logEvent: Boolean = false
+private[streaming] class StreamingHistoryListenerFactory extends SparkHistoryListenerFactory {
+  override def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener] = {
+    val listenerBus = new ReplayStreamingListenerBus()
+    val streamingListener = new StreamingJobProgressListener(conf)
+    listenerBus.addListener(streamingListener)
+    val streamingTab = new StreamingTab(streamingListener, sparkUI)
+    streamingTab.attach()
+    List(listenerBus)
   }
 }
