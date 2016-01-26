@@ -17,7 +17,14 @@
 package org.apache.spark.sql.execution.vectorized;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
+
+import org.apache.commons.lang.NotImplementedException;
 
 /**
  * This class represents a column of values and provides the main APIs to access the data
@@ -61,13 +68,8 @@ public abstract class ColumnVector {
   /**
    * Holder object to return an array. This object is intended to be reused. Callers should
    * copy the data out if it needs to be stored.
-   * TODO: consider adding all the get APIs that are 0 indexed. This would just be a convenience
-   * wrapper. Measure this for common usage patterns and see if there is an overhead.
-   *   int getInt(index) {
-   *     return data.getInt(index + offset);
-   *   }
    */
-  public static final class Array {
+  public static final class Array extends ArrayData {
     // The data for this array. This array contains elements from
     // data[offset] to data[offset + length).
     public final ColumnVector data;
@@ -85,26 +87,219 @@ public abstract class ColumnVector {
     protected Array(ColumnVector data) {
       this.data = data;
     }
+
+    @Override
+    public final int numElements() { return length; }
+
+    @Override
+    public ArrayData copy() {
+      throw new NotImplementedException();
+    }
+
+    // TODO: this is extremely expensive.
+    @Override
+    public Object[] array() {
+      DataType dt = data.dataType();
+      Object[] list = new Object[length];
+
+      if (dt instanceof ByteType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getByte(offset + i);
+          }
+        }
+      } else if (dt instanceof IntegerType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getInt(offset + i);
+          }
+        }
+      } else if (dt instanceof DoubleType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getDouble(offset + i);
+          }
+        }
+      } else if (dt instanceof LongType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getLong(offset + i);
+          }
+        }
+      } else if (dt instanceof StringType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = ColumnVectorUtils.toString(data.getByteArray(offset + i));
+          }
+        }
+      } else {
+        throw new NotImplementedException("Type " + dt);
+      }
+      return list;
+    }
+
+    @Override
+    public final boolean isNullAt(int ordinal) { return data.getIsNull(offset + ordinal); }
+
+    @Override
+    public final boolean getBoolean(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public byte getByte(int ordinal) { return data.getByte(offset + ordinal); }
+
+    @Override
+    public short getShort(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public int getInt(int ordinal) { return data.getInt(offset + ordinal); }
+
+    @Override
+    public long getLong(int ordinal) { return data.getLong(offset + ordinal); }
+
+    @Override
+    public float getFloat(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public double getDouble(int ordinal) { return data.getDouble(offset + ordinal); }
+
+    @Override
+    public Decimal getDecimal(int ordinal, int precision, int scale) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public UTF8String getUTF8String(int ordinal) {
+      Array child = data.getByteArray(offset + ordinal);
+      return UTF8String.fromBytes(child.byteArray, child.byteArrayOffset, child.length);
+    }
+
+    @Override
+    public byte[] getBinary(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public CalendarInterval getInterval(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public InternalRow getStruct(int ordinal, int numFields) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public ArrayData getArray(int ordinal) {
+      return data.getArray(offset + ordinal);
+    }
+
+    @Override
+    public MapData getMap(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public Object get(int ordinal, DataType dataType) {
+      throw new NotImplementedException();
+    }
   }
 
   /**
    * Holder object to return a struct. This object is intended to be reused.
    */
-  public static final class Struct {
+  public static final class Struct extends InternalRow {
     // The fields that make up this struct. For example, if the struct had 2 int fields, the access
     // to it would be:
     //   int f1 = fields[0].getInt[rowId]
     //   int f2 = fields[1].getInt[rowId]
     public final ColumnVector[] fields;
 
-    public boolean getIsNull(int fieldIdx) { return fields[fieldIdx].getIsNull(rowId); }
+    @Override
+    public boolean isNullAt(int fieldIdx) { return fields[fieldIdx].getIsNull(rowId); }
+
+    @Override
+    public boolean getBoolean(int ordinal) {
+      throw new NotImplementedException();
+    }
+
     public byte getByte(int fieldIdx) { return fields[fieldIdx].getByte(rowId); }
+
+    @Override
+    public short getShort(int ordinal) {
+      throw new NotImplementedException();
+    }
+
     public int getInt(int fieldIdx) { return fields[fieldIdx].getInt(rowId); }
     public long getLong(int fieldIdx) { return fields[fieldIdx].getLong(rowId); }
+
+    @Override
+    public float getFloat(int ordinal) {
+      throw new NotImplementedException();
+    }
+
     public double getDouble(int fieldIdx) { return fields[fieldIdx].getDouble(rowId); }
+
+    @Override
+    public Decimal getDecimal(int ordinal, int precision, int scale) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public UTF8String getUTF8String(int ordinal) {
+      Array a = getByteArray(ordinal);
+      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+    }
+
+    @Override
+    public byte[] getBinary(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public CalendarInterval getInterval(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public InternalRow getStruct(int ordinal, int numFields) {
+      return fields[ordinal].getStruct(rowId);
+    }
+
     public Array getArray(int fieldIdx) { return fields[fieldIdx].getArray(rowId); }
+
+    @Override
+    public MapData getMap(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public Object get(int ordinal, DataType dataType) {
+      throw new NotImplementedException();
+    }
+
     public Array getByteArray(int fieldIdx) { return fields[fieldIdx].getByteArray(rowId); }
     public Struct getStruct(int fieldIdx) { return fields[fieldIdx].getStruct(rowId); }
+
+    @Override
+    public final int numFields() {
+      return fields.length;
+    }
+
+    @Override
+    public InternalRow copy() {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public boolean anyNull() {
+      throw new NotImplementedException();
+    }
 
     protected int rowId;
 

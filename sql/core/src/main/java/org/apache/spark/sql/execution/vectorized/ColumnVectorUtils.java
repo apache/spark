@@ -16,23 +16,12 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
-import org.apache.spark.sql.catalyst.expressions.StringTranslate;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
-import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
-import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.types.UTF8String;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -66,93 +55,6 @@ public class ColumnVectorUtils {
     } else {
       throw new NotImplementedException();
     }
-  }
-
-  public static GenericMutableRow toRow(ColumnVector.Struct struct) {
-    GenericMutableRow row = new GenericMutableRow(struct.fields.length);
-
-    for (int i = 0; i < struct.fields.length; i++) {
-      if (struct.getIsNull(i)) {
-        row.setNullAt(i);
-      } else {
-        DataType dt = struct.fields[i].dataType();
-        if (dt instanceof ByteType) {
-          row.setByte(i, struct.getByte(i));
-        } else if (dt instanceof IntegerType) {
-          row.setInt(i, struct.getInt(i));
-        } else if (dt instanceof LongType) {
-          row.setLong(i, struct.getLong(i));
-        } else if (dt instanceof DoubleType) {
-          row.setDouble(i, struct.getDouble(i));
-        } else if (dt instanceof StringType) {
-          ColumnVector.Array a = struct.getByteArray(i);
-          row.update(i, UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length));
-        } else if (dt instanceof StructType) {
-          GenericMutableRow child = toRow(struct.getStruct(i));
-          row.update(i, child);
-        } else if (dt instanceof ArrayType) {
-          row.update(i, toGenericArray(struct.getArray(i)));
-        } else {
-          throw new RuntimeException("Not implemented. " + dt);
-        }
-      }
-    }
-
-    return row;
-  }
-
-  /**
-   * Converts an ColumnVector array into a GenericArrayData. This is very expensive to do.
-   */
-  public static GenericArrayData toGenericArray(ColumnVector.Array array) {
-    DataType dt = array.data.dataType();
-    List<Object> list = new ArrayList<Object>(array.length);
-    ColumnVector data = array.data;
-
-    if (dt instanceof ByteType) {
-      for (int i = 0; i < array.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
-          list.add(null);
-        } else {
-          list.add(data.getByte(array.offset + i));
-        }
-      }
-    } else if (dt instanceof IntegerType) {
-      for (int i = 0; i < array.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
-          list.add(null);
-        } else {
-          list.add(data.getInt(array.offset + i));
-        }
-      }
-    } else if (dt instanceof DoubleType) {
-      for (int i = 0; i < array.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
-          list.add(null);
-        } else {
-          list.add(data.getDouble(array.offset + i));
-        }
-      }
-    } else if (dt instanceof LongType) {
-      for (int i = 0; i < array.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
-          list.add(null);
-        } else {
-          list.add(data.getLong(array.offset + i));
-        }
-      }
-    } else if (dt instanceof StringType) {
-      for (int i = 0; i < array.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
-          list.add(null);
-        } else {
-          list.add(toString(data.getByteArray(array.offset + i)));
-        }
-      }
-    } else {
-      throw new NotImplementedException("Type " + dt);
-    }
-    return new GenericArrayData(list);
   }
 
   private static void appendValue(ColumnVector dst, DataType t, Object o) {

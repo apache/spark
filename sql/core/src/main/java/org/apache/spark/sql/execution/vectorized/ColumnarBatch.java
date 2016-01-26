@@ -21,18 +21,12 @@ import java.util.Iterator;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.util.ArrayData;
-import org.apache.spark.sql.catalyst.util.MapData;
-import org.apache.spark.sql.types.*;
-import org.apache.spark.unsafe.types.*;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -204,13 +198,12 @@ public final class ColumnarBatch {
 
     @Override
     public final InternalRow getStruct(int ordinal, int numFields) {
-      return ColumnVectorUtils.toRow(parent.column(ordinal).getStruct(rowId));
+      return parent.column(ordinal).getStruct(rowId);
     }
 
     @Override
     public final ArrayData getArray(int ordinal) {
-      ColumnVector.Array array = parent.column(ordinal).getArray(rowId);
-      return ColumnVectorUtils.toGenericArray(array);
+      return parent.column(ordinal).getArray(rowId);
     }
 
     @Override

@@ -395,6 +395,21 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(a3 === Array.empty[Int])
       assert(a4 === Array(3, 4, 5))
 
+      // Verify the ArrayData APIs
+      assert(column.getArray(0).length == 1)
+      assert(column.getArray(0).getInt(0) == 0)
+
+      assert(column.getArray(1).length == 2)
+      assert(column.getArray(1).getInt(0) == 1)
+      assert(column.getArray(1).getInt(1) == 2)
+
+      assert(column.getArray(2).length == 0)
+
+      assert(column.getArray(3).length == 3)
+      assert(column.getArray(3).getInt(0) == 3)
+      assert(column.getArray(3).getInt(1) == 4)
+      assert(column.getArray(3).getInt(2) == 5)
+
       // Add a longer array which requires resizing
       column.reset
       val array = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
@@ -576,8 +591,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
           case DoubleType => assert(doubleEquals(r1.getDouble(v._2), r2.getDouble(v._2)),
             "Seed = " + seed)
           case StringType =>
-            r1.getString(v._2)
-            r2.getString(v._2)
             assert(r1.getString(v._2) == r2.getString(v._2), "Seed = " + seed)
           case ArrayType(childType, n) =>
             val a1 = r1.getArray(v._2).array
@@ -632,7 +645,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
    */
   def testRandomRows(flatSchema: Boolean, numFields: Int) {
     val types = Array(ByteType, IntegerType, LongType, DoubleType, StringType)
-    val seed = System.currentTimeMillis()
+    val seed = System.nanoTime()
     val NUM_ROWS = 500
     val NUM_ITERS = 10
     val random = new Random(seed)
