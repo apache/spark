@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
 
@@ -41,7 +41,7 @@ class EncoderResolutionSuite extends PlanTest {
     encoder.validate(attributes)
     val deserializer = SimpleAnalyzer.ResolveReferences.resolveDeserializer(
       encoder.fromRowExpression, attributes)
-    val plan = Project(Alias(deserializer, "")() :: Nil, OneRowRelation)
+    val plan = Project(Alias(deserializer, "")() :: Nil, LocalRelation(attributes))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     SimplifyCasts(SimpleAnalyzer.execute(analyzedPlan)).expressions.head.children.head
   }

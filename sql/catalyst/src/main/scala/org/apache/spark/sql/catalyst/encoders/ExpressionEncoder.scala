@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribu
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -316,10 +316,8 @@ case class ExpressionEncoder[T](
       fromRowExpression, schema)
 
     // Make a fake plan to wrap the deserializer, so that we can go though the whole analyzer, check
-    // analysis, go through optimizer, etc.  Note that the deserializer is mostly resolved, we only
-    // need to do some polish work like up-cast resolution, type coercion, etc. and child doesn't
-    // matter here.
-    val plan = Project(Alias(deserializer, "")() :: Nil, OneRowRelation)
+    // analysis, go through optimizer, etc.
+    val plan = Project(Alias(deserializer, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     SimpleAnalyzer.checkAnalysis(analyzedPlan)
     copy(fromRowExpression = SimplifyCasts(analyzedPlan).expressions.head.children.head)
