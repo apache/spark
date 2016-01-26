@@ -448,8 +448,25 @@ private[spark] class MesosClusterScheduler(
     }
     desc.schedulerProperties
       .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
-      .foreach { case (key, value) => options ++= Seq("--conf", s"""$key="$value"""") }
+      .foreach { case (key, value) => options ++= Seq("--conf", s"$key=${shellEscape(value)}") }
     options
+  }
+
+  /**
+    * Escape args for Unix-like shells, unless already quoted by the user.
+    * Based on: http://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
+    * and http://www.grymoire.com/Unix/Quote.html
+    * @param value argument
+    * @return escaped argument
+    */
+  private[scheduler] def shellEscape(value: String): String = {
+    val WrappedInQuotes = """^(".+"|'.+')$""".r
+    val ShellSpecialChars = (""".*([ '<>&|\?\*;!#\\(\)"$`]).*""").r
+    value match {
+      case WrappedInQuotes(c) => value // The user quoted his args, don't touch it!
+      case ShellSpecialChars(c) => "\"" + value.replaceAll("""(["`\$])""", """\\$1""") + "\""
+      case _: String => value // Don't touch harmless strings
+    }
   }
 
   private class ResourceOffer(
