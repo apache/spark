@@ -19,13 +19,12 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
-import org.apache.spark.Logging
-
 import scala.collection.immutable
 import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
