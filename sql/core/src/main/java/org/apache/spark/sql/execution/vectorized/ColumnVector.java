@@ -342,14 +342,13 @@ public abstract class ColumnVector {
    * In all these cases, the return value is the rowId for the first appended element.
    */
   public final int appendNull() {
-    assert (!(dataType() instanceof StructType));
+    assert (!(dataType() instanceof StructType)); // Use appendStruct()
     reserve(elementsAppended + 1);
     putNull(elementsAppended);
     return elementsAppended++;
   }
 
   public final int appendNotNull() {
-    assert (!(dataType() instanceof StructType));
     reserve(elementsAppended + 1);
     putNotNull(elementsAppended);
     return elementsAppended++;

@@ -255,7 +255,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   //
   @Override
   public final void putArray(int rowId, int offset, int length) {
-    assert(offset >= 0 && offset + length <= elementsAppended);
+    assert(offset >= 0 && offset + length <= childColumns[0].capacity);
     Platform.putInt(null, lengthData + 4 * rowId, length);
     Platform.putInt(null, offsetData + 4 * rowId, offset);
   }
