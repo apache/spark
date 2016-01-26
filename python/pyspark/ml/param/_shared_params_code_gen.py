@@ -175,12 +175,11 @@ if __name__ == "__main__":
         super(DecisionTreeParams, self).__init__()'''
     dtParamMethods = ""
     dummyPlaceholders = ""
-    realParams = ""
     paramTemplate = """$name = Param($owner, "$name", "$doc")"""
     for name, doc in decisionTreeParams:
         variable = paramTemplate.replace("$name", name).replace("$doc", doc)
         dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
         dtParamMethods += _gen_param_code(name, doc, None) + "\n"
-    code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders) +
+    code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders) + "\n" +
                 dtParamMethods)
     print("\n\n\n".join(code))

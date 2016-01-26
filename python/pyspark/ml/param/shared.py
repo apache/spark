@@ -574,6 +574,7 @@ class DecisionTreeParams(Params):
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
+
     def setMaxDepth(self, value):
         """
         Sets the value of :py:attr:`maxDepth`.
