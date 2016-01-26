@@ -191,19 +191,19 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
-      iter
-    }
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
+        iter
+      }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
-      iter
-    }
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
+        iter
+      }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
-      iter
-    }
+        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
+        iter
+      }
     // Register asserts in job completion callback to avoid flakiness
     listener.registerJobCompletionCallback { _ =>
     // We ran 3 stages, and the accumulator values should be distinct
@@ -211,8 +211,8 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(stageInfos.size === 3)
       val (firstStageAccum, secondStageAccum, thirdStageAccum) =
         (findTestAccum(stageInfos(0).accumulables.values),
-          findTestAccum(stageInfos(1).accumulables.values),
-          findTestAccum(stageInfos(2).accumulables.values))
+        findTestAccum(stageInfos(1).accumulables.values),
+        findTestAccum(stageInfos(2).accumulables.values))
       assert(firstStageAccum.value.get.asInstanceOf[Long] === numPartitions)
       assert(secondStageAccum.value.get.asInstanceOf[Long] === numPartitions * 10)
       assert(thirdStageAccum.value.get.asInstanceOf[Long] === numPartitions * 2 * 100)
