@@ -377,28 +377,27 @@ class CountMinSketchImpl extends CountMinSketch implements Externalizable {
 
   @Override
   public void writeExternal(ObjectOutput out) throws IOException {
-    ByteArrayOutputStream bos = new ByteArrayOutputStream();
-    this.writeTo(bos);
-
-    byte[] bytes = bos.toByteArray();
-    out.writeObject(bytes);
-    bos.close();
+    try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+      this.writeTo(bos);
+      byte[] bytes = bos.toByteArray();
+      out.writeObject(bytes);
+    }
   }
 
   @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     byte[] bytes = (byte[]) in.readObject();
 
-    ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
-    CountMinSketchImpl sketch = CountMinSketchImpl.readFrom(bis);
-    bis.close();
+    try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+      CountMinSketchImpl sketch = CountMinSketchImpl.readFrom(bis);
 
-    this.depth = sketch.depth;
-    this.width = sketch.width;
-    this.eps = sketch.eps;
-    this.confidence = sketch.confidence;
-    this.totalCount = sketch.totalCount;
-    this.hashA = sketch.hashA;
-    this.table = sketch.table;
+      this.depth = sketch.depth;
+      this.width = sketch.width;
+      this.eps = sketch.eps;
+      this.confidence = sketch.confidence;
+      this.totalCount = sketch.totalCount;
+      this.hashA = sketch.hashA;
+      this.table = sketch.table;
+    }
   }
 }
