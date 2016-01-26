@@ -66,7 +66,8 @@ class Analyzer(
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
-      WindowsSubstitution),
+      WindowsSubstitution,
+      EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -297,7 +298,7 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation): LogicalPlan = {
+    private def getTable(u: UnresolvedRelation): LogicalPlan = {
       try {
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
@@ -1165,8 +1166,17 @@ class Analyzer(
  * scoping information for attributes and can be removed once analysis is complete.
  */
 object EliminateSubQueries extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case Subquery(_, child) => child
+  }
+}
+
+/**
+  * Removes [[Union]] operators from the plan if it just has one child.
+  */
+object EliminateUnions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Union(children) if children.size == 1 => children.head
   }
 }
 
