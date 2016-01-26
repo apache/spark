@@ -19,15 +19,6 @@ package org.apache.spark.util.sketch;
 
 import java.io.*;
 
-/*
- * Binary format of a serialized BloomFilterImpl, version 1 (all values written in big-endian
- * order):
- *
- * - Version number, always 1 (32 bit)
- * - Total number of words of the BitArray (32 bit)
- * - Long array inside the BitArray (numWords * 64 bit)
- * - Number of hash functions (32 bit)
- */
 public class BloomFilterImpl extends BloomFilter {
 
   private final int numHashFunctions;

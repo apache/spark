@@ -26,21 +26,6 @@ import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
-/*
- * Binary format of a serialized CountMinSketchImpl, version 1 (all values written in big-endian
- * order):
- *
- * - Version number, always 1 (32 bit)
- * - Total count of added items (64 bit)
- * - Depth (32 bit)
- * - Width (32 bit)
- * - Hash functions (depth * 64 bit)
- * - Count table
- *   - Row 0 (width * 64 bit)
- *   - Row 1 (width * 64 bit)
- *   - ...
- *   - Row depth - 1 (width * 64 bit)
- */
 class CountMinSketchImpl extends CountMinSketch {
   public static final long PRIME_MODULUS = (1L << 31) - 1;
 
