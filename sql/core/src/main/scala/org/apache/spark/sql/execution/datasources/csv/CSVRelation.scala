@@ -139,7 +139,7 @@ private[csv] class CSVRelation(
 
     val parsedRdd = tokenRdd(header, paths)
     if (params.inferSchemaFlag) {
-      CSVInferSchema(parsedRdd, header, params.nullValue)
+      CSVInferSchema.infer(parsedRdd, header, params.nullValue)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
