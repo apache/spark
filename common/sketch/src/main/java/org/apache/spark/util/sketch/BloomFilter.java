@@ -87,7 +87,7 @@ public abstract class BloomFilter {
    * bloom filters are appropriately sized to avoid saturating them.
    *
    * @param other The bloom filter to combine this bloom filter with. It is not mutated.
-   * @throws IncompatibleMergeException if {@code isCompatible(that) == false}
+   * @throws IncompatibleMergeException if {@code isCompatible(other) == false}
    */
   public abstract BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException;
 

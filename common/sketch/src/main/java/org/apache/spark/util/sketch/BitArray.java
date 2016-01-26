@@ -28,7 +28,7 @@ public final class BitArray {
 
   static int numWords(long numBits) {
     if (numBits <= 0) {
-      throw new IllegalArgumentException("numBits must be positive");
+      throw new IllegalArgumentException("numBits must be positive, but got " + numBits);
     }
     long numWords = (long) Math.ceil(numBits / 64.0);
     if (numWords > Integer.MAX_VALUE) {
@@ -44,8 +44,8 @@ public final class BitArray {
   private BitArray(long[] data) {
     this.data = data;
     long bitCount = 0;
-    for (long datum : data) {
-      bitCount += Long.bitCount(datum);
+    for (long word : data) {
+      bitCount += Long.bitCount(word);
     }
     this.bitCount = bitCount;
   }

@@ -209,7 +209,7 @@ public class BloomFilterImpl extends BloomFilter {
 
     int version = dis.readInt();
     if (version != Version.V1.getVersionNumber()) {
-      throw new IOException("Unexpected Bloom Filter version number (" + version + ")");
+      throw new IOException("Unexpected Bloom filter version number (" + version + ")");
     }
 
     return new BloomFilterImpl(BitArray.readFrom(dis), dis.readInt());
