@@ -21,7 +21,7 @@ import java.io.File
 import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -77,49 +77,62 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
 
     val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
     val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
-    val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
+    val range =
+      <span>
+        Showing {byteLength} Bytes: {startByte.toString} - {endByte.toString} of {logLength}
+      </span>
 
-    val backButton =
+    val moreButton =
       if (startByte > 0) {
         <a href={"?%s&logType=%s&offset=%s&byteLength=%s"
-          .format(params, logType, math.max(startByte - byteLength, 0), byteLength)}>
-          <button type="button" class="btn btn-default">
-            Previous {Utils.bytesToString(math.min(byteLength, startByte))}
+          .format(params, logType, math.max(startByte - defaultBytes, 0),
+            math.min(byteLength + defaultBytes, logLength))}>
+          <button type="button" class="logMoreBtn btn btn-default">
+            Load More...
           </button>
         </a>
       } else {
-        <button type="button" class="btn btn-default" disabled="disabled">
-          Previous 0 B
+        <button type="button" class="logMoreBtn btn btn-default" disabled="disabled">
+          Top of Log
         </button>
       }
 
-    val nextButton =
+    val newButton =
       if (endByte < logLength) {
-        <a href={"?%s&logType=%s&offset=%s&byteLength=%s".
-          format(params, logType, endByte, byteLength)}>
-          <button type="button" class="btn btn-default">
-            Next {Utils.bytesToString(math.min(byteLength, logLength - endByte))}
+        <a href={"?%s&logType=%s&byteLength=%s"
+          .format(params, logType, logLength - startByte)}>
+          <button type="button" class="logMoreBtn btn btn-default">
+            Load New...
           </button>
         </a>
       } else {
-        <button type="button" class="btn btn-default" disabled="disabled">
-          Next 0 B
-        </button>
+        Seq.empty
       }
+
+    val scrollPercent =
+      if (!offset.isEmpty) {
+        defaultBytes.toDouble / byteLength
+      } else {
+        1.0
+      }
+
+    val script =
+      <script>
+        {Unparsed {"""scrollLocation = $(".logContent")[0].scrollHeight * """}} {scrollPercent};
+        {Unparsed {"""window.onload = function() {$(".logContent").scrollTop(scrollLocation);}"""}}
+      </script>
 
     val content =
       <html>
         <body>
           {linkToMaster}
-          <div>
-            <div style="float:left; margin-right:10px">{backButton}</div>
-            <div style="float:left;">{range}</div>
-            <div style="float:right; margin-left:10px">{nextButton}</div>
-          </div>
-          <br />
-          <div style="height:500px; overflow:auto; padding:5px;">
+          {range}
+          <div class="logContent" style="height:80vh; overflow:auto; padding:5px;">
+            <div>{moreButton}</div>
             <pre>{logText}</pre>
+            <div>{newButton}</div>
           </div>
+          {script}
         </body>
       </html>
     UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
