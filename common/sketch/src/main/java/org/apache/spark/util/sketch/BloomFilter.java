@@ -47,10 +47,11 @@ public abstract class BloomFilter {
   public enum Version {
     /**
      * {@code BloomFilter} binary format version 1 (all values written in big-endian order):
-     * - Version number, always 1 (32 bit)
-     * - Total number of words of the underlying bit array (32 bit)
-     * - The words/longs (numWords * 64 bit)
-     * - Number of hash functions (32 bit)
+     *
+     *  - Version number, always 1 (32 bit)
+     *  - Total number of words of the underlying bit array (32 bit)
+     *  - The words/longs (numWords * 64 bit)
+     *  - Number of hash functions (32 bit)
      */
     V1(1);
 
