@@ -858,6 +858,7 @@ class LocalTaskJob(BaseJob):
     def on_kill(self):
         self.process.terminate()
 
+    """
     def heartbeat_callback(self):
         if datetime.now() - self.start_date < timedelta(seconds=300):
             return
@@ -876,3 +877,4 @@ class LocalTaskJob(BaseJob):
                 "{self.task_instance.state}. "
                 "Taking the poison pill. So long.".format(**locals()))
             self.process.terminate()
+    """
