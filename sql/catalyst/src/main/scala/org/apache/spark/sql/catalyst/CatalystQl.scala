@@ -31,9 +31,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
 /**
- * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
+ * This class translates SQL to Catalyst [[LogicalPlan]]s or [[Expression]]s.
  */
-private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends ParserDialect {
+private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends ParserInterface {
   object Token {
     def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
       CurrentOrigin.setPosition(node.line, node.positionInLine)
@@ -402,8 +402,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             overwrite)
       }
 
-      // If there are multiple INSERTS just UNION them together into on query.
-      val query = queries.reduceLeft(Union)
+      // If there are multiple INSERTS just UNION them together into one query.
+      val query = if (queries.length == 1) queries.head else Union(queries)
 
       // return With plan if there is CTE
       cteRelations.map(With(query, _)).getOrElse(query)
@@ -623,6 +623,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val CASE = "(?i)CASE".r
 
   val INTEGRAL = "[+-]?\\d+".r
+  val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
 
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
@@ -785,8 +786,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case ast if ast.tokenType == SparkSqlParser.BigintLiteral =>
       Literal.create(ast.text.substring(0, ast.text.length() - 1).toLong, LongType)
 
-    case ast if ast.tokenType == SparkSqlParser.DecimalLiteral =>
-      Literal(Decimal(ast.text.substring(0, ast.text.length() - 2)))
+    case ast if ast.tokenType == SparkSqlParser.DoubleLiteral =>
+      Literal(ast.text.toDouble)
 
     case ast if ast.tokenType == SparkSqlParser.Number =>
       val text = ast.text
@@ -799,7 +800,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               Literal(v.longValue())
             case v => Literal(v.underlying())
           }
+        case DECIMAL(_*) =>
+          Literal(BigDecimal(text).underlying())
         case _ =>
+          // Convert a scientifically notated decimal into a double.
           Literal(text.toDouble)
       }
     case ast if ast.tokenType == SparkSqlParser.StringLiteral =>

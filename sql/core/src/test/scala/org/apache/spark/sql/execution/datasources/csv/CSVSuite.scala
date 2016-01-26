@@ -122,7 +122,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(exception.getMessage.contains("1-9588-osi"))
   }
 
-  ignore("test different encoding") {
+  test("test different encoding") {
     // scalastyle:off
     sqlContext.sql(
       s"""
@@ -133,6 +133,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     //scalstyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
+  }
+
+  test("test aliases sep and encoding for delimiter and charset") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("header", "true")
+      .option("encoding", "iso-8859-1")
+      .option("sep", "þ")
+      .load(testFile(carsFile8859))
+
+    verifyCars(cars, withHeader = true)
   }
 
   test("DDL test with tab separated file") {
@@ -338,4 +350,29 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
+  test("save csv with compression codec option") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(testFile(carsFile))
+
+      cars.coalesce(1).write
+        .format("csv")
+        .option("header", "true")
+        .option("compression", "gZiP")
+        .save(csvDir)
+
+      val compressedFiles = new File(csvDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+
+      val carsCopy = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(csvDir)
+
+      verifyCars(carsCopy, withHeader = true)
+    }
+  }
 }

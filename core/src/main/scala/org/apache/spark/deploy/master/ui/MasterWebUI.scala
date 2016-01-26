@@ -32,8 +32,8 @@ class MasterWebUI(
     val master: Master,
     requestedPort: Int,
     customMasterPage: Option[MasterPage] = None)
-  extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging
-  with UIRoot {
+  extends WebUI(master.securityMgr, master.securityMgr.getSSLOptions("standalone"),
+    requestedPort, master.conf, name = "MasterUI") with Logging with UIRoot {
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
