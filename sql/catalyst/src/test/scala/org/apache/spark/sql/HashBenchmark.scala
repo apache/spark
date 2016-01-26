@@ -70,6 +70,13 @@ object HashBenchmark {
 
   def main(args: Array[String]): Unit = {
     val simple = new StructType().add("i", IntegerType)
+    /*
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Hash For simple:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------------
+    interpreted version                       41.23           203.44         1.00 X
+    codegen version                           82.63           101.52         0.50 X
+     */
     test("simple", simple, 1024)
 
     val normal = new StructType()
@@ -87,18 +94,39 @@ object HashBenchmark {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
+    /*
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Hash For normal:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------------
+    interpreted version                     4102.27             0.26         1.00 X
+    codegen version                         1049.29             1.00         3.91 X
+     */
     test("normal", normal, 128)
 
     val arrayOfInt = ArrayType(IntegerType)
     val array = new StructType()
       .add("array", arrayOfInt)
       .add("arrayOfArray", ArrayType(arrayOfInt))
+    /*
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Hash For array:                    Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------------
+    interpreted version                     9610.97             0.05         1.00 X
+    codegen version                        15688.23             0.03         0.61 X
+     */
     test("array", array, 64)
 
     val mapOfInt = MapType(IntegerType, IntegerType)
     val map = new StructType()
       .add("map", mapOfInt)
       .add("mapOfMap", MapType(IntegerType, mapOfInt))
+    /*
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Hash For map:                      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------------
+    interpreted version                    67008.33             0.01         1.00 X
+    codegen version                         9253.44             0.06         7.24 X
+     */
     test("map", map, 64)
   }
 }
