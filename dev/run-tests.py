@@ -104,6 +104,8 @@ def determine_modules_to_test(changed_modules):
 
     >>> [x.name for x in determine_modules_to_test([modules.root])]
     ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.build])]
+    ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
