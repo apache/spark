@@ -1120,37 +1120,37 @@ class DAGScheduler(
    */
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
-    val taskId = task.partitionId
+    val taskId = event.taskInfo.id
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
     outputCommitCoordinator.taskCompleted(
       stageId,
-      taskId,
+      task.partitionId,
       event.taskInfo.attemptNumber, // this is a task attempt number
       event.reason)
 
     // Reconstruct task metrics. Note: this may be null if the task has failed.
     val taskMetrics: TaskMetrics =
-    if (event.accumUpdates.nonEmpty) {
-      try {
-        TaskMetrics.fromAccumulatorUpdates(event.accumUpdates)
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
-          null
+      if (event.accumUpdates.nonEmpty) {
+        try {
+          TaskMetrics.fromAccumulatorUpdates(event.accumUpdates)
+        } catch {
+          case NonFatal(e) =>
+            logError(s"Error when attempting to reconstruct metrics for task $taskId", e)
+            null
+        }
+      } else {
+        null
       }
-    } else {
-      null
-    }
-
-    listenerBus.post(SparkListenerTaskEnd(
-      stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
       return
     }
+
+    listenerBus.post(SparkListenerTaskEnd(
+      stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 
     val stage = stageIdToStage(task.stageId)
     event.reason match {

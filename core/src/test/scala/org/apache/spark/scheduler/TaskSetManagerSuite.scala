@@ -185,10 +185,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(3)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
-    val accumUpdatesByTask: Array[Seq[AccumulableInfo]] =
-      taskSet.tasks.map { _.initialAccumulators.map { a =>
+    val accumUpdatesByTask: Array[Seq[AccumulableInfo]] = taskSet.tasks.map { task =>
+      task.initialAccumulators.map { a =>
         new AccumulableInfo(a.id, a.name, Some(0L), None, a.isInternal, a.countFailedValues)
-      }}
+      }
+    }
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
