@@ -37,8 +37,10 @@ import org.apache.spark.streaming.kafka.newapi._
  *   <pollTimeout> is time, in milliseconds, spent waiting in Kafka consumer poll
  *                 if data is not available
  * Example:
- *    $ bin/run-example streaming.kafka.newapi.examples.DirectNewKafkaWordCount broker1-host:port,broker2-host:port \
- *    topic1,topic2 my-consumer-group latest batch-interval pollTimeout
+ *    $ bin/run-example streaming.kafka.newapi.examples.DirectNewKafkaWordCount \
+ *    broker1-host:port,broker2-host:port topic1,topic2 my-consumer-group latest batch-interval \
+ *    pollTimeout
+ *
  */
 object DirectNewKafkaWordCount {
   def main(args: Array[String]) {
