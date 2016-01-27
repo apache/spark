@@ -134,6 +134,7 @@ class DAGSchedulerSuite
     val successfulStages = new HashSet[Int]
     val failedStages = new ArrayBuffer[Int]
     val stageByOrderOfExecution = new ArrayBuffer[Int]
+    var endedTasks = new HashSet[Long]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
       submittedStageInfos += stageSubmitted.stageInfo
@@ -147,6 +148,10 @@ class DAGSchedulerSuite
       } else {
         failedStages += stageInfo.stageId
       }
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+      endedTasks += taskEnd.taskInfo.taskId
     }
   }
 
@@ -194,6 +199,7 @@ class DAGSchedulerSuite
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
+    sparkListener.endedTasks.clear()
     failure = null
     sc.addSparkListener(sparkListener)
     taskSets.clear()
@@ -985,6 +991,46 @@ class DAGSchedulerSuite
 
     // The FetchFailed from the original reduce stage should be ignored.
     assert(countSubmittedMapStageAttempts() === 2)
+  }
+
+  test("late task events posted") {
+    val baseRdd = new MyRDD(sc, 4, Nil)
+    val finalRdd = new MyRDD(sc, 4, List(new OneToOneDependency(baseRdd)))
+    submit(finalRdd, Array(0,1,2,3))
+
+    // complete two tasks
+    runEvent(CompletionEvent(
+          taskSets(0).tasks(0), Success, 42, null, createFakeTaskInfoWithId(0), null))
+    runEvent(CompletionEvent(
+          taskSets(0).tasks(1), Success, 42, null, createFakeTaskInfoWithId(1), null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    // verify stage exists
+    assert(scheduler.stageIdToStage.contains(0)) 
+    assert(sparkListener.endedTasks.size == 2)
+
+    // finish other 2 tasks
+    runEvent(CompletionEvent(
+          taskSets(0).tasks(2), Success, 42, null, createFakeTaskInfoWithId(2), null))
+    runEvent(CompletionEvent(
+          taskSets(0).tasks(3), Success, 42, null, createFakeTaskInfoWithId(3), null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.endedTasks.size == 4)
+
+    // verify the stage is done
+    assert(!scheduler.stageIdToStage.contains(0)) 
+
+    // stage should be complete finish one other Successful task to simulate what can happen
+    // with a speculative task and make sure the event is sent out
+    runEvent(CompletionEvent(
+          taskSets(0).tasks(3), Success, 42, null, createFakeTaskInfoWithId(5), null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.endedTasks.size == 5)
+
+    // make sure non successful tasks also send out event
+    runEvent(CompletionEvent(
+          taskSets(0).tasks(3), UnknownReason, 42, null, createFakeTaskInfoWithId(6), null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.endedTasks.size == 6)
   }
 
   test("ignore late map task completions") {
@@ -1958,6 +2004,12 @@ class DAGSchedulerSuite
   // OutputCommitCoordinator requires the task info itself to not be null.
   private def createFakeTaskInfo(): TaskInfo = {
     val info = new TaskInfo(0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
+    info.finishTime = 1  // to prevent spurious errors in JobProgressListener
+    info
+  }
+
+  private def createFakeTaskInfoWithId(taskId: Long): TaskInfo = {
+    val info = new TaskInfo(taskId, 0, 0, 0L, "", "", TaskLocality.ANY, false)
     info.finishTime = 1  // to prevent spurious errors in JobProgressListener
     info
   }
