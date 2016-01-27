@@ -2177,7 +2177,9 @@
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
-              <include>com.fasterxml.jackson.core</include>
+              <include>com.fasterxml.jackson.core:jackson-databind</include>
+              <include>com.fasterxml.jackson.core:jackson-annotations</include>
+              <include>com.fasterxml.jackson.core:jackson-core</include>
             </includes>
           </artifactSet>
           <relocations>
