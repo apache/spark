@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
@@ -322,6 +324,9 @@ private class SaveInfoListener extends SparkListener {
   private val completedStageInfos: ArrayBuffer[StageInfo] = new ArrayBuffer[StageInfo]
   private val completedTaskInfos: ArrayBuffer[TaskInfo] = new ArrayBuffer[TaskInfo]
   private var jobCompletionCallback: (Int => Unit) = null // parameter is job ID
+
+  // Accesses must be synchronized to ensure failures in `jobCompletionCallback` are propagated
+  @GuardedBy("this")
   private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
@@ -333,11 +338,11 @@ private class SaveInfoListener extends SparkListener {
   }
 
   /** Throw a stored exception, if any. */
-  def maybeThrowException(): Unit = {
+  def maybeThrowException(): Unit = synchronized {
     if (exception != null) { throw exception }
   }
 
-  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = synchronized {
     if (jobCompletionCallback != null) {
       try {
         jobCompletionCallback(jobEnd.jobId)
