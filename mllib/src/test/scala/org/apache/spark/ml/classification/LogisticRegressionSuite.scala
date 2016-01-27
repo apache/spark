@@ -617,9 +617,9 @@ class LogisticRegressionSuite
       .setMaxIter(1000)
       .setTol(1e-9)
 
-    val binaryDatasetWithUniqueColumn = sqlContext.read.
-      format("libsvm").
-      load("../data/mllib/sample_libsvm_data_with_unique_column.txt")
+    val binaryDatasetWithUniqueColumn = sqlContext.read
+      .format("libsvm")
+      .load("../data/mllib/sample_libsvm_data_with_unique_column.txt")
 
     val model1 = trainer1.fit(binaryDatasetWithUniqueColumn)
 
