@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
+import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
@@ -137,6 +137,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       val block: ByteBuffer = getLocal.orElse(getRemote).getOrElse(
         throw new SparkException(s"Failed to get $pieceId of $broadcastId"))
       blocks(pid) = block
+      // On the driver broadcast variables may be loaded when computing rdd.partitions(), which
+      // takes place outside of the context of a task, so we need to use an option here:
+      Option(TaskContext.get()).foreach { taskContext =>
+        taskContext.addTaskCompletionListener(_ => SparkEnv.get.blockManager.unpin(pieceId))
+      }
     }
     blocks
   }
@@ -167,6 +172,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       setConf(SparkEnv.get.conf)
       SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
         case Some(x) =>
+          // On the driver broadcast variables may be loaded when computing rdd.partitions(), which
+          // takes place outside of the context of a task, so we need to use an option here:
+          Option(TaskContext.get()).foreach { taskContext =>
+            taskContext.addTaskCompletionListener(_ => SparkEnv.get.blockManager.unpin(broadcastId))
+          }
           x.asInstanceOf[T]
 
         case None =>

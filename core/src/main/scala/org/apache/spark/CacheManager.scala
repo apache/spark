@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.util.CompletionIterator
 
 /**
  * Spark class responsible for passing RDDs partition contents to the BlockManager and making
@@ -46,7 +47,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
         existingMetrics.incBytesRead(blockResult.bytes)
 
-        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        val iter = CompletionIterator[T, Iterator[T]](
+          blockResult.data.asInstanceOf[Iterator[T]],
+          blockManager.unpin(key))
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsRead(1)
@@ -58,7 +61,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         // If another thread already holds the lock, wait for it to finish return its results
         val storedValues = acquireLockForPartition[T](key)
         if (storedValues.isDefined) {
-          return new InterruptibleIterator[T](context, storedValues.get)
+          val iter = CompletionIterator[T, Iterator[T]](storedValues.get, blockManager.unpin(key))
+          return new InterruptibleIterator[T](context, iter)
         }
 
         // Otherwise, we have to load the partition ourselves
@@ -136,7 +140,10 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        */
       blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
       blockManager.get(key) match {
-        case Some(v) => v.data.asInstanceOf[Iterator[T]]
+        case Some(v) =>
+          CompletionIterator[T, Iterator[T]](
+            v.data.asInstanceOf[Iterator[T]],
+            blockManager.unpin(key))
         case None =>
           logInfo(s"Failure to store $key")
           throw new BlockException(key, s"Block manager failed to return cached value for $key!")
