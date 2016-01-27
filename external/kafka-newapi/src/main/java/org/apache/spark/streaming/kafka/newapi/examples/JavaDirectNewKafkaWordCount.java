@@ -17,25 +17,28 @@
 
 package org.apache.spark.streaming.kafka.newapi.examples;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.regex.Pattern;
+
+import scala.Tuple2;
+
 import com.google.common.collect.Lists;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.spark.SparkConf;
+
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.streaming.Durations;
+import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.kafka.newapi.KafkaUtils;
-import scala.Tuple2;
-
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.regex.Pattern;
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
@@ -101,8 +104,8 @@ public final class JavaDirectNewKafkaWordCount {
     });
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Lists.newArrayList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Lists.newArrayList(SPACE.split(x)).iterator();
       }
     });
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
