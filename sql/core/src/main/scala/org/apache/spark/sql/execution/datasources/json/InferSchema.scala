@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.databind.{MappingJsonFactory, DeserializationFeature, ObjectMapper}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
@@ -134,8 +135,12 @@ private[json] object InferSchema {
             val v = parser.getDecimalValue
             DecimalType(v.precision(), v.scale())
           case FLOAT | DOUBLE =>
-            // TODO(davies): Should we use decimal if possible?
-            DoubleType
+            if (configOptions.floatAsBigDecimal) {
+              val v = parser.getDecimalValue
+              DecimalType(v.precision(), v.scale())
+            } else {
+              DoubleType
+            }
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType
