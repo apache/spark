@@ -17,6 +17,9 @@
 
 package org.apache.spark
 
+import java.util.NoSuchElementException
+
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
@@ -57,6 +60,21 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val maxInt = Integer.MAX_VALUE.toLong
     d.foreach{x => longAcc += maxInt + x}
     longAcc.value should be (210L + maxInt * 20)
+  }
+
+  test ("map accumulation"){
+    sc = new SparkContext("local", "test")
+    val acc = new Accumulator(
+      Map.empty[String, Long], AccumulatorParam.MapAccumulatorParam)
+
+    val d = sc.parallelize(1 to 10)
+    d.foreach{x => acc += Map(x.toString -> x.toLong)}
+    var i = 1
+    while(i< 10) {
+     acc.value(i.toString) shouldBe i
+     i += 1
+    }
+     intercept[NoSuchElementException] { acc.value("100") }
   }
 
   test ("value not assignable from tasks") {
