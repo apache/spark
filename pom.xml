@@ -2195,6 +2195,9 @@
             <relocation>
               <pattern>com.fasterxml.jackson.core</pattern>
               <shadedPattern>org.spark-project.jackson</shadedPattern>
+              <includes>
+                <include>com.fasterxml.jackson.core.**</include>
+              </includes>
             </relocation>
           </relocations>
         </configuration>
