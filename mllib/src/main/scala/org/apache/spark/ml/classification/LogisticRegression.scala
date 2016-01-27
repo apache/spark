@@ -329,9 +329,9 @@ class LogisticRegression @Since("1.2.0") (
                 regParamL1
               } else {
                 // If `standardization` is false, we still standardize the data
-                // to improve the rate of convergence; as a result, we have to
-                // perform this reverse standardization by penalizing each component
-                // differently to get effectively the same objective function when
+                // to improve the rate of convergence unless the standard deviation is zero;
+                // as a result, we have to perform this reverse standardization by penalizing
+                // each component differently to get effectively the same objective function when
                 // the training dataset is not standardized.
                 if (featuresStd(index) != 0.0) regParamL1 / featuresStd(index) else regParamL1
               }
