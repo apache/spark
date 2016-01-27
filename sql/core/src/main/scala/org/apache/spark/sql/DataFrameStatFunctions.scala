@@ -449,6 +449,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
     val seqOp: (BloomFilter, InternalRow) => BloomFilter = if (colType == StringType) {
       (filter, row) =>
+        // For string type, we can get bytes of our `UTF8String` directly, and call the `putBinary`
+        // instead of `putString` to avoid unnecessary conversion.
         filter.putBinary(row.getUTF8String(0).getBytes)
         filter
     } else {

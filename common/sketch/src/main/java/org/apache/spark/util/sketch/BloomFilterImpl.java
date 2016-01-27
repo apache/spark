@@ -65,41 +65,20 @@ public class BloomFilterImpl extends BloomFilter implements Serializable {
     return bits.bitSize();
   }
 
-  private byte[] getBytesFromUTF8String(Object s) {
-    try {
-      return ((String) s).getBytes("utf-8");
-    } catch (UnsupportedEncodingException e) {
-      throw new RuntimeException("Only support utf-8 string", e);
-    }
-  }
-
-  private long integralToLong(Object i) {
-    long longValue;
-
-    if (i instanceof Long) {
-      longValue = (Long) i;
-    } else if (i instanceof Integer) {
-      longValue = ((Integer) i).longValue();
-    } else if (i instanceof Short) {
-      longValue = ((Short) i).longValue();
-    } else if (i instanceof Byte) {
-      longValue = ((Byte) i).longValue();
-    } else {
-      throw new IllegalArgumentException(
-        "Support for " + i.getClass().getName() + " not implemented"
-      );
-    }
-
-    return longValue;
-  }
-
   @Override
   public boolean put(Object item) {
     if (item instanceof String) {
-      return putBinary(getBytesFromUTF8String(item));
+      return putString((String) item);
+    } else if (item instanceof byte[]) {
+      return putBinary((byte[]) item);
     } else {
-      return putLong(integralToLong(item));
+      return putLong(Utils.integralToLong(item));
     }
+  }
+
+  @Override
+  public boolean putString(String str) {
+    return putBinary(Utils.getBytesFromUTF8String(str));
   }
 
   @Override
@@ -120,7 +99,13 @@ public class BloomFilterImpl extends BloomFilter implements Serializable {
     return bitsChanged;
   }
 
-  private boolean mightContainBinary(byte[] bytes) {
+  @Override
+  public boolean mightContainString(String str) {
+    return mightContainBinary(Utils.getBytesFromUTF8String(str));
+  }
+
+  @Override
+  public boolean mightContainBinary(byte[] bytes) {
     int h1 = Murmur3_x86_32.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, 0);
     int h2 = Murmur3_x86_32.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, h1);
 
@@ -161,7 +146,8 @@ public class BloomFilterImpl extends BloomFilter implements Serializable {
     return bitsChanged;
   }
 
-  private boolean mightContainLong(long l) {
+  @Override
+  public boolean mightContainLong(long l) {
     int h1 = Murmur3_x86_32.hashLong(l, 0);
     int h2 = Murmur3_x86_32.hashLong(l, h1);
 
@@ -182,9 +168,11 @@ public class BloomFilterImpl extends BloomFilter implements Serializable {
   @Override
   public boolean mightContain(Object item) {
     if (item instanceof String) {
-      return mightContainBinary(getBytesFromUTF8String(item));
+      return mightContainString((String) item);
+    } else if (item instanceof byte[]) {
+      return mightContainBinary((byte[]) item);
     } else {
-      return mightContainLong(integralToLong(item));
+      return mightContainLong(Utils.integralToLong(item));
     }
   }
 
