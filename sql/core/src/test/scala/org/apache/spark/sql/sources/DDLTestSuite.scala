@@ -113,4 +113,23 @@ class DDLTestSuite extends DataSourceTest with SharedSQLContext {
     assert(attributes.map(_.name) === Seq("col_name", "data_type", "comment"))
     assert(attributes.map(_.dataType).toSet === Set(StringType))
   }
+
+  test("SPARK-7012 Create table statement should support NOT NULL modifier for columns") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql(
+      s"""
+         |CREATE TEMPORARY TABLE tempTableDDL
+         |( tCol1 INT NOT NULL,
+         |  tCol2 STRING
+         |)
+         |USING parquet
+         |OPTIONS (
+         |  path '$path'
+         |)
+       """.stripMargin
+      )
+      caseInsensitiveContext.dropTempTable("tempTableDDL")
+    }
+  }
 }

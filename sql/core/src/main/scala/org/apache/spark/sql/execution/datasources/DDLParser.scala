@@ -66,6 +66,7 @@ class DDLParser(fallback: => ParserInterface)
   protected val AS = Keyword("AS")
   protected val COMMENT = Keyword("COMMENT")
   protected val REFRESH = Keyword("REFRESH")
+  protected val NULL = Keyword("NULL")
 
   protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable | refreshTable
 
@@ -181,13 +182,15 @@ class DDLParser(fallback: => ParserInterface)
     optionName ~ stringLit ^^ { case k ~ v => (k, v) }
 
   protected lazy val column: Parser[StructField] =
-    ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
-      val meta = cm match {
-        case Some(comment) =>
-          new MetadataBuilder().putString(COMMENT.str.toLowerCase, comment).build()
-        case None => Metadata.empty
-      }
+    ident ~ dataType ~ (NOT ~ NULL).? ~ (COMMENT ~> stringLit).?  ^^ {
+      case columnName ~ typ ~ notNull ~ cm =>
+        val meta = cm match {
+          case Some(comment) =>
+            new MetadataBuilder().putString(COMMENT.str.toLowerCase, comment).build()
+          case None => Metadata.empty
+        }
 
-      StructField(columnName, typ, nullable = true, meta)
+        val isNullable = notNull.isEmpty
+        StructField(columnName, typ, nullable = isNullable, meta)
     }
 }
