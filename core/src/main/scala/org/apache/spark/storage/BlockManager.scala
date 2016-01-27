@@ -647,7 +647,11 @@ private[spark] class BlockManager(
     pinCounts.unpin(blockId)
   }
 
-  def releaseAllPinsForTask(taskAttemptId: Long): Unit = {
+  /**
+   * Release all pins for the given task.
+   * @return the total number of pins released.
+   */
+  def releaseAllPinsForTask(taskAttemptId: Long): Int = {
     pinCounts.releaseAllPinsForTask(taskAttemptId)
   }
 

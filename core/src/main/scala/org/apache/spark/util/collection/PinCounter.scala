@@ -95,11 +95,14 @@ private[spark] class PinCounter[T] {
    * Release all pins held by the given task, clearing that task's pin bookkeeping
    * structures and updating the global pin counts. This method should be called at the
    * end of a task (either by a task completion handler or in `TaskRunner.run()`).
+   *
+   * @return the number of pins released
    */
-  def releaseAllPinsForTask(taskAttemptId: TaskAttemptId): Unit = {
-    val PinCounts = pinsByTask.get(taskAttemptId)
+  def releaseAllPinsForTask(taskAttemptId: TaskAttemptId): Int = {
+    val pinCounts = pinsByTask.get(taskAttemptId)
     pinsByTask.invalidate(taskAttemptId)
-    PinCounts.entrySet().iterator().asScala.foreach { entry =>
+    val totalPinCountForTask = pinCounts.size()
+    pinCounts.entrySet().iterator().asScala.foreach { entry =>
       val obj = entry.getElement
       val taskRefCount = entry.getCount
       val newRefCount = allPins.remove(obj, taskRefCount) - taskRefCount
@@ -108,6 +111,7 @@ private[spark] class PinCounter[T] {
           s"Task $taskAttemptId released object $obj more times than it was retained")
       }
     }
+    totalPinCountForTask
   }
 
   /**
