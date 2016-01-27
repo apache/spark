@@ -991,7 +991,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   test("late task events posted") {
     val baseRdd = new MyRDD(sc, 4, Nil)
     val finalRdd = new MyRDD(sc, 4, List(new OneToOneDependency(baseRdd)))
-    submit(finalRdd, Array(0,1,2,3))
+    submit(finalRdd, Array(0, 1, 2, 3))
 
     // complete two tasks
     runEvent(makeCompletionEvent(
@@ -1002,7 +1002,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(1)))
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     // verify stage exists
-    assert(scheduler.stageIdToStage.contains(0)) 
+    assert(scheduler.stageIdToStage.contains(0))
     assert(sparkListener.endedTasks.size == 2)
 
     // finish other 2 tasks
@@ -1016,7 +1016,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(sparkListener.endedTasks.size == 4)
 
     // verify the stage is done
-    assert(!scheduler.stageIdToStage.contains(0)) 
+    assert(!scheduler.stageIdToStage.contains(0))
 
     // stage should be complete finish one other Successful task to simulate what can happen
     // with a speculative task and make sure the event is sent out
