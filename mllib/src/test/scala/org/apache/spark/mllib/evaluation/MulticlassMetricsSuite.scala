@@ -46,7 +46,7 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val recall1 = 3.0 / (3 + 1)
     val recall2 = 1.0 / (1 + 0)
     val specificity0 = 4.0 / (4 + 1)
-    val specificity1 = 5.0 / (5 + 1)
+    val specificity1 = 4.0 / (4 + 1)
     val specificity2 = 7.0 / (7 + 1)
     val f1measure0 = 2 * precision0 * recall0 / (precision0 + recall0)
     val f1measure1 = 2 * precision1 * recall1 / (precision1 + recall1)
