@@ -1270,37 +1270,4 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
   }
-
-  // This test case only verifies that `DataFrame.countMinSketch()` methods do return
-  // `CountMinSketch`es that meed required specs.  Test cases for `CountMinSketch` can be found in
-  // `CountMinSketchSuite` in project spark-sketch.
-  test("countMinSketch") {
-    val df = sqlContext.range(1000)
-
-    val sketch1 = df.stat.countMinSketch("id", depth = 10, width = 20, seed = 42)
-    assert(sketch1.totalCount() === 1000)
-    assert(sketch1.depth() === 10)
-    assert(sketch1.width() === 20)
-
-    val sketch2 = df.stat.countMinSketch($"id", depth = 10, width = 20, seed = 42)
-    assert(sketch2.totalCount() === 1000)
-    assert(sketch2.depth() === 10)
-    assert(sketch2.width() === 20)
-
-    val sketch3 = df.stat.countMinSketch("id", eps = 0.001, confidence = 0.99, seed = 42)
-    assert(sketch3.totalCount() === 1000)
-    assert(sketch3.relativeError() === 0.001)
-    assert(sketch3.confidence() === 0.99 +- 5e-3)
-
-    val sketch4 = df.stat.countMinSketch($"id", eps = 0.001, confidence = 0.99, seed = 42)
-    assert(sketch4.totalCount() === 1000)
-    assert(sketch4.relativeError() === 0.001 +- 1e04)
-    assert(sketch4.confidence() === 0.99 +- 5e-3)
-
-    intercept[IllegalArgumentException] {
-      df.select('id cast DoubleType as 'id)
-        .stat
-        .countMinSketch('id, depth = 10, width = 20, seed = 42)
-    }
-  }
 }
