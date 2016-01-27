@@ -149,6 +149,8 @@ class Pipeline(Estimator):
     .. versionadded:: 1.3.0
     """
 
+    stages = Param(Params._dummy(), "stages", "pipeline stages")
+
     @keyword_only
     def __init__(self, stages=None):
         """
@@ -157,8 +159,6 @@ class Pipeline(Estimator):
         if stages is None:
             stages = []
         super(Pipeline, self).__init__()
-        #: Param for pipeline stages.
-        self.stages = Param(self, "stages", "pipeline stages")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
