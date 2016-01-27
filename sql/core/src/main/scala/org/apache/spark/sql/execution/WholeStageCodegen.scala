@@ -22,8 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.Utils
 
@@ -134,8 +135,14 @@ trait CodegenSupport extends SparkPlan {
 case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def supportCodegen: Boolean = true
+  override def doPrepare(): Unit = {
+    child.prepare()
+  }
+
+  override def supportCodegen: Boolean = false
 
   override def upstream(): RDD[InternalRow] = {
     child.execute()
@@ -195,7 +202,15 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
 case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
   extends SparkPlan with CodegenSupport {
 
+  override def supportCodegen: Boolean = false
+
   override def output: Seq[Attribute] = plan.output
+  override def outputPartitioning: Partitioning = plan.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
+
+  override def doPrepare(): Unit = {
+    plan.prepare()
+  }
 
   override def doExecute(): RDD[InternalRow] = {
     val ctx = new CodegenContext
