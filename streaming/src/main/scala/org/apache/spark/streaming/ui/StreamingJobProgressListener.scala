@@ -38,6 +38,7 @@ private[streaming] class StreamingJobProgressListener(conf: SparkConf)
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
+  private val inputStreams = new HashMap[Int, (String, Boolean)]
 
   // Because onJobStart and onBatchXXX messages are processed in different threads,
   // we may not be able to get the corresponding BatchUIData when receiving onJobStart. So here we
@@ -65,10 +66,26 @@ private[streaming] class StreamingJobProgressListener(conf: SparkConf)
 
 
   @volatile var batchDuration = 0L
+  @volatile var applicationStartTime = 0L
+  @volatile var applicationEndTime = 0L
 
   override def onStreamingApplicationStarted(
       streamingListenerApplicationStart: StreamingListenerApplicationStart): Unit = {
     batchDuration = streamingListenerApplicationStart.batchDuration
+    applicationStartTime = streamingListenerApplicationStart.startTime
+  }
+
+  override def onStreamingApplicationEnd(
+      streamingListenerApplicationEnd: StreamingListenerApplicationEnd): Unit = {
+    applicationEndTime = streamingListenerApplicationEnd.endTime
+  }
+
+  override def onInputStreamRegistered(
+      streamingListenerInputStreamRegistered: StreamingListenerInputStreamRegistered
+    ): Unit = synchronized {
+    inputStreams.put(streamingListenerInputStreamRegistered.streamId,
+      (streamingListenerInputStreamRegistered.name,
+        streamingListenerInputStreamRegistered.isReceiverBased))
   }
 
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
@@ -200,14 +217,14 @@ private[streaming] class StreamingJobProgressListener(conf: SparkConf)
   }
 
   def streamName(streamId: Int): Option[String] = synchronized {
-    receiverInfos.get(streamId).map(_.name)
+    inputStreams.get(streamId).map(_._1)
   }
 
   /**
    * Return all InputDStream Ids
    */
   def streamIds: Seq[Int] = synchronized {
-    receiverInfos.keySet.toSeq
+    inputStreams.keySet.toSeq
   }
 
   /**

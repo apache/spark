@@ -145,7 +145,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   import StreamingPage._
 
   private val listener = parent.listener
-  private val startTime = System.currentTimeMillis()
+  private lazy val startTime = listener.applicationStartTime
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -173,7 +173,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Generate basic information of the streaming program */
   private def generateBasicInfo(): Seq[Node] = {
-    val timeSinceStart = System.currentTimeMillis() - startTime
+    val timeSinceStart = if (listener.applicationEndTime <= 0L) {
+      System.currentTimeMillis() - startTime
+    } else {
+      listener.applicationEndTime - startTime
+    }
+
     <div>Running batches of
       <strong>
         {SparkUIUtils.formatDurationVerbose(listener.batchDuration)}

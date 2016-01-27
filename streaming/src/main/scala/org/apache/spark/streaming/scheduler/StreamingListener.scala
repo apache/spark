@@ -60,6 +60,10 @@ case class StreamingListenerOutputOperationCompleted(outputOperationInfo: Output
   extends StreamingListenerEvent
 
 @DeveloperApi
+case class StreamingListenerInputStreamRegistered(
+    streamId: Int, name: String, isReceiverBased: Boolean) extends StreamingListenerEvent
+
+@DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
 
@@ -86,6 +90,10 @@ trait StreamingListener {
   /** Called when a streaming application has been stopped */
   def onStreamingApplicationEnd(
       streamingListenerApplicationEnd: StreamingListenerApplicationEnd) { }
+
+  /** Called when an InputDStream has been registered */
+  def onInputStreamRegistered(
+      streamingListenerInputStreamRegistered: StreamingListenerInputStreamRegistered) { }
 
   /** Called when a receiver has been started */
   def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }

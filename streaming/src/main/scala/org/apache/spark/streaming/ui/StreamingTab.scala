@@ -33,7 +33,6 @@ private[spark] class StreamingTab(val listener: StreamingJobProgressListener, va
   attachPage(new BatchPage(this))
 
   def attach() {
-    logInfo(s"Attach the streaming UI")
     sparkUI.attachTab(this)
     sparkUI.addStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
   }

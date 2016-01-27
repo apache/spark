@@ -27,6 +27,7 @@ import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -77,6 +78,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     } ssc.addStreamingListener(rateController)
 
     listenerBus.start()
+
+    ssc.graph.getInputStreams().foreach { inputStream =>
+      listenerBus.post(StreamingListenerInputStreamRegistered(
+        inputStream.id, inputStream.name, inputStream.isInstanceOf[ReceiverInputDStream[_]]))
+    }
+
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
     receiverTracker.start()
