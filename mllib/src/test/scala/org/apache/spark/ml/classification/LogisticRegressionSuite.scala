@@ -608,8 +608,7 @@ class LogisticRegressionSuite
   }
 
 
-  test("binary logistic regression without intercept with L2 regularizationon " +
-    "data with unique column without intercept") {
+  test("an extra large example for review only") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0)
       .setRegParam(1)
@@ -633,6 +632,47 @@ class LogisticRegressionSuite
     assert(model1.intercept ~== interceptR1 absTol 1E-3)
     assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
   }
+
+  test("binary logistic regression without intercept with L2 regularizationon " +
+    "data with unique column without intercept") {
+    val trainer = (new LogisticRegression).setFitIntercept(false)
+      .setElasticNetParam(0.0)
+      .setRegParam(1)
+      .setStandardization(false)
+      .setMaxIter(1000)
+      .setTol(1e-9)
+
+    val binaryDatasetWithUniqueColumn = sqlContext.createDataFrame(
+      sc.parallelize(
+        Array(
+          LabeledPoint(label = 1.0, features = Vectors.dense(1, 1)),
+          LabeledPoint(label = 0.0, features = Vectors.dense(0, 1))
+        )
+      )
+    )
+
+    val model = trainer.fit(binaryDatasetWithUniqueColumn)
+
+    val interceptR = 0.0
+    val coefficientsR = Vectors.dense(0.22478867, -0.02241016)
+
+    assert(model.intercept ~== interceptR absTol 1E-3)
+    assert(model.coefficients ~= coefficientsR relTol 1E-2)
+
+    /*
+        Use the following scikit-learn Python code to get a reference result:
+
+        import numpy as np
+        from sklearn.datasets import load_svmlight_file
+        from sklearn.linear_model import LogisticRegression
+        x_train = np.array([[1, 1], [0, 1]])
+        y_train = np.array([1, 0])
+        model = LogisticRegression(tol=1e-9, C=0.5, max_iter=1000, fit_intercept=False).fit(x_train, y_train)
+        print model.coef_
+
+     */
+  }
+
 
   test("binary logistic regression with intercept with ElasticNet regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
