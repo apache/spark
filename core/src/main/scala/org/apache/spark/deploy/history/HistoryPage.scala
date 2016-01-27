@@ -43,7 +43,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             </ul>
             {
             if (allAppsSize > 0) {
-              <div id="history-summary"></div>
+              <div id="history-summary" class="span12"></div>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
             } else {
@@ -57,7 +57,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             }
             }
 
-            <a href={makePageLink(1, !requestedIncomplete)}>
+            <a href={makePageLink(!requestedIncomplete)}>
               {
               if (requestedIncomplete) {
                 "Back to completed applications"
@@ -73,10 +73,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     UIUtils.basicSparkPage(content, "History Server")
   }
 
-  private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
-    UIUtils.prependBaseUri("/?" + Array(
-      "page=" + linkPage,
-      "showIncomplete=" + showIncomplete
-      ).mkString("&"))
+  private def makePageLink(showIncomplete: Boolean): String = {
+    UIUtils.prependBaseUri("/?" + "showIncomplete=" + showIncomplete)
   }
 }
