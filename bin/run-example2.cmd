@@ -1,5 +1,4 @@
 @echo off
-pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -21,7 +20,10 @@ rem
 set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=..\
+set FWDIR=%~dp0..\
+
+rem Export this as SPARK_HOME
+set SPARK_HOME=%FWDIR%
 
 call %SPARK_HOME%\bin\load-spark-env.cmd
 
@@ -34,12 +36,12 @@ if not "x%1"=="x" goto arg_given
   goto exit
 :arg_given
 
-set EXAMPLES_DIR=%SPARK_HOME%examples
+set EXAMPLES_DIR=%FWDIR%examples
 
 rem Figure out the JAR file that our examples were packaged into.
 set SPARK_EXAMPLES_JAR=
-if exist "%SPARK_HOME%RELEASE" (
-  for %%d in ("%SPARK_HOME%lib\spark-examples*.jar") do (
+if exist "%FWDIR%RELEASE" (
+  for %%d in ("%FWDIR%lib\spark-examples*.jar") do (
     set SPARK_EXAMPLES_JAR=%%d
   )
 ) else (
@@ -78,10 +80,9 @@ if "%~1" neq "" (
 )
 if defined ARGS set ARGS=%ARGS:~1%
 
-call "%SPARK_HOME%bin\spark-submit.cmd" ^
+call "%FWDIR%bin\spark-submit.cmd" ^
   --master %EXAMPLE_MASTER% ^
   --class %EXAMPLE_CLASS% ^
   "%SPARK_EXAMPLES_JAR%" %ARGS%
 
 :exit
-popd

@@ -1,5 +1,5 @@
 @echo off
-pushd %~dp0
+
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
 rem contributor license agreements.  See the NOTICE file distributed with
@@ -17,5 +17,5 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-cmd /V /E /C spark-class.cmd org.apache.hive.beeline.BeeLine %*
-popd
+set SPARK_HOME=%~dp0..
+cmd /V /E /C %SPARK_HOME%\bin\spark-class.cmd org.apache.hive.beeline.BeeLine %*

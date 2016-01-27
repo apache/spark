@@ -1,5 +1,4 @@
 @echo off
-pushd %~dp0
 
 rem
 rem Licensed to the Apache Software Foundation (ASF) under one or more
@@ -18,6 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
+set SPARK_HOME=%~dp0..
 set _SPARK_CMD_USAGE=Usage: .\bin\spark-shell.cmd [options]
 
 rem SPARK-4161: scala does not assume use of the java classpath,
@@ -32,5 +32,4 @@ if "x%SPARK_SUBMIT_OPTS%"=="x" (
 set SPARK_SUBMIT_OPTS="%SPARK_SUBMIT_OPTS% -Dscala.usejavacp=true"
 
 :run_shell
-spark-submit2.cmd --class org.apache.spark.repl.Main --name "Spark shell" %*
-popd
+%SPARK_HOME%\bin\spark-submit2.cmd --class org.apache.spark.repl.Main --name "Spark shell" %*
