@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.collection.BitSet
 
 /**
  * ::DeveloperApi::
@@ -701,6 +702,7 @@ abstract class HadoopFsRelation private[sql](
   final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
+      bucketSet: Option[BitSet],
       inputPaths: Array[String],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val inputStatuses = inputPaths.flatMap { input =>
@@ -722,9 +724,16 @@ abstract class HadoopFsRelation private[sql](
       // id from file name. Then read these files into a RDD(use one-partition empty RDD for empty
       // bucket), and coalesce it to one partition. Finally union all bucket RDDs to one result.
       val perBucketRows = (0 until maybeBucketSpec.get.numBuckets).map { bucketId =>
-        groupedBucketFiles.get(bucketId).map { inputStatuses =>
-          buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
-        }.getOrElse(sqlContext.emptyResult)
+        // If the current bucketId is not set in the bucket bitSet, skip scanning it.
+        if (bucketSet.nonEmpty && !bucketSet.get.get(bucketId)){
+          sqlContext.emptyResult
+        } else {
+          // When all the buckets need a scan (i.e., bucketSet is equal to None)
+          // or when the current bucket need a scan (i.e., the bit of bucketId is set to true)
+          groupedBucketFiles.get(bucketId).map { inputStatuses =>
+            buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
+          }.getOrElse(sqlContext.emptyResult)
+        }
       }
 
       new UnionRDD(sqlContext.sparkContext, perBucketRows)

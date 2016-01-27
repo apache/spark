@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.apache.spark.sql.{Column, DataFrame, DataFrameWriter, QueryTest, SQLConf}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.Exchange
@@ -33,8 +33,9 @@ import org.apache.spark.util.Utils
 class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
+  private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+
   test("read bucketed data") {
-    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
     withTable("bucketed_table") {
       df.write
         .format("parquet")
@@ -56,6 +57,77 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
         assert(checkBucketId.collect().reduce(_ && _))
       }
+    }
+  }
+
+  test("read partitioning bucketed tables with bucket pruning filters") {
+    withTable("bucketed_table") {
+      df.write
+        .format("parquet")
+        .partitionBy("i")
+        .bucketBy(8, "j")
+        .saveAsTable("bucketed_table")
+      for (j <- 0 until 13) {
+        // EqualTo
+        checkAnswer(
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j" === j).sort("i", "j", "k"),
+          df.select("i", "j", "k").filter($"j" === j).sort("i", "j", "k"))
+        // EqualNullSafe
+        checkAnswer(
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j" <=> j).sort("i", "j", "k"),
+          df.select("i", "j", "k").filter($"j" <=> j).sort("i", "j", "k"))
+        // In
+        checkAnswer(
+          hiveContext.table("bucketed_table")
+            .select("i", "j").filter($"j".isin(j, j + 1, j + 2, j + 3)).sort("i", "j"),
+          df.select("i", "j").filter($"j".isin(j, j + 1, j + 2, j + 3)).sort("i", "j"))
+      }
+      // InSet
+      checkAnswer(
+        hiveContext.table("bucketed_table")
+          .select("i", "j", "k").filter($"j".isin(1, 2, -1, -2, -3, -4, -5, -6, -7, -8, -9))
+          .sort("i", "j", "k"),
+        df.select("i", "j", "k").filter($"j".isin(1, 2, -1, -2, -3, -4, -5, -6, -7, -8, -9))
+          .sort("i", "j", "k"))
+    }
+  }
+
+  test("read non-partitioning bucketed tables with bucket pruning filters") {
+    withTable("bucketed_table") {
+      df.write
+        .format("parquet")
+        .bucketBy(8, "j")
+        .saveAsTable("bucketed_table")
+
+      for (j <- 0 until 13) {
+        checkAnswer(
+          hiveContext.table("bucketed_table").select("i", "j", "k").filter($"j" === j).sort("i"),
+          df.select("i", "j", "k").filter($"j" === j).sort("i"))
+      }
+    }
+  }
+
+  test("read partitioning bucketed tables having null in bucketing key") {
+    withTable("bucketed_table") {
+      nullStrings.write
+        .format("parquet")
+        .partitionBy("n")
+        .bucketBy(8, "s")
+        .saveAsTable("bucketed_table")
+
+      // isNull
+      checkAnswer(
+        hiveContext.table("bucketed_table")
+          .select("n", "s").filter($"s".isNull).sort("n", "s"),
+        Row(3, null) :: Nil)
+
+      // <=> null
+      checkAnswer(
+        hiveContext.table("bucketed_table")
+          .select("n", "s").filter($"s" <=> null).sort("n", "s"),
+        Row(3, null) :: Nil)
     }
   }
 
