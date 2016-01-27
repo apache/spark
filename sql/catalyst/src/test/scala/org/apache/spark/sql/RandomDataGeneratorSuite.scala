@@ -97,10 +97,13 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
 
   test("check size of generated map") {
     val mapType = MapType(IntegerType, IntegerType)
-    val generator = RandomDataGenerator.forType(mapType, nullable = false, rand = new Random(1)).get
-    val maps = Seq.fill(1000)(generator().asInstanceOf[Map[Int, Int]])
-    val expectedTotalElements = 1000 / 2 * RandomDataGenerator.MAX_MAP_SIZE
-    val deviation = math.abs(maps.map(_.size).sum - expectedTotalElements)
-    assert(deviation.toDouble / expectedTotalElements < 1e-2)
+    for (seed <- 1 to 1000) {
+      val generator = RandomDataGenerator.forType(
+        mapType, nullable = false, rand = new Random(seed)).get
+      val maps = Seq.fill(100)(generator().asInstanceOf[Map[Int, Int]])
+      val expectedTotalElements = 100 / 2 * RandomDataGenerator.MAX_MAP_SIZE
+      val deviation = math.abs(maps.map(_.size).sum - expectedTotalElements)
+      assert(deviation.toDouble / expectedTotalElements < 2e-1)
+    }
   }
 }
