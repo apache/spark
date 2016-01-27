@@ -220,7 +220,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     rdd.count()
   }
 
-  // TODO: these two tests are incorrect; they don't actually trigger stage retries.
+  // TODO: these two tests are incorrect; they don't actually trigger stage retries (SPARK-13053).
   ignore("internal accumulators in fully resubmitted stages") {
     testInternalAccumulatorsWithFailedTasks((i: Int) => true) // fail all tasks
   }
@@ -259,7 +259,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
 
   /**
    * Test whether internal accumulators are merged properly if some tasks fail.
-   * TODO: make this actually retry the stage.
+   * TODO: make this actually retry the stage (SPARK-13053).
    */
   private def testInternalAccumulatorsWithFailedTasks(failCondition: (Int => Boolean)): Unit = {
     val listener = new SaveInfoListener
