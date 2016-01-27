@@ -165,8 +165,8 @@ space into words.
 // Split each line into words
 JavaDStream<String> words = lines.flatMap(
   new FlatMapFunction<String, String>() {
-    @Override public Iterable<String> call(String x) {
-      return Arrays.asList(x.split(" "));
+    @Override public Iterator<String> call(String x) {
+      return Arrays.asList(x.split(" ")).iterator();
     }
   });
 {% endhighlight %}
