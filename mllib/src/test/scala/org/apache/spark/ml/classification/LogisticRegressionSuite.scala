@@ -667,7 +667,8 @@ class LogisticRegressionSuite
         from sklearn.linear_model import LogisticRegression
         x_train = np.array([[1, 1], [0, 1]])
         y_train = np.array([1, 0])
-        model = LogisticRegression(tol=1e-9, C=0.5, max_iter=1000, fit_intercept=False).fit(x_train, y_train)
+        model = LogisticRegression(tol=1e-9, C=0.5, max_iter=1000, fit_intercept=False) \
+            .fit(x_train, y_train)
         print model.coef_
 
      */
