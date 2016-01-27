@@ -376,15 +376,15 @@ class LogisticRegression @Since("1.2.0") (
              it follows the distribution of the labels.
 
              {{{
-             P(0) = 1 / (1 + \exp(b)), and
-             P(1) = \exp(b) / (1 + \exp(b))
+               P(0) = 1 / (1 + \exp(b)), and
+               P(1) = \exp(b) / (1 + \exp(b))
              }}}, hence
              {{{
-             b = \log{P(1) / P(0)} = \log{count_1 / count_0}
+               b = \log{P(1) / P(0)} = \log{count_1 / count_0}
              }}}
            */
-          initialCoefficientsWithIntercept.toArray(numFeatures)
-            = math.log(histogram(1) / histogram(0))
+          initialCoefficientsWithIntercept.toArray(numFeatures) = math.log(
+            histogram(1) / histogram(0))
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
