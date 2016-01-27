@@ -109,19 +109,17 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
 
       new Thread(Utils.getFormattedClassName(this) + "-mesos-driver") {
         setDaemon(true)
-
         override def run() {
-          mesosDriver = newDriver
           try {
+            mesosDriver = newDriver
             val ret = mesosDriver.run()
             logInfo("driver.run() returned with code " + ret)
             if (ret != null && ret.equals(Status.DRIVER_ABORTED)) {
-              System.exit(1)
+              logError("Error starting driver, DRIVER_ABORTED")
             }
           } catch {
             case e: Exception => {
               logError("driver.run() failed", e)
-              System.exit(1)
             }
           }
         }
@@ -141,6 +139,10 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   protected def markRegistered(): Unit = {
+    registerLatch.countDown()
+  }
+
+  protected def markErr(): Unit = {
     registerLatch.countDown()
   }
 

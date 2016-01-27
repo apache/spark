@@ -573,6 +573,7 @@ private[spark] class MesosClusterScheduler(
   override def slaveLost(driver: SchedulerDriver, slaveId: SlaveID): Unit = {}
   override def error(driver: SchedulerDriver, error: String): Unit = {
     logError("Error received: " + error)
+    markErr()
   }
 
   /**

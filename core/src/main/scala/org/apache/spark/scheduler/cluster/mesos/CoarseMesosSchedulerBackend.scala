@@ -360,6 +360,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def error(d: SchedulerDriver, message: String) {
     logError(s"Mesos error: $message")
+    markErr()
     scheduler.error(message)
   }
 
