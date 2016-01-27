@@ -210,17 +210,17 @@ class SQLContext(object):
 
         >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
         >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString("test")=u'4')]
+        [Row(PythonUDF#stringLengthString(test)=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt("test")=4)]
+        [Row(PythonUDF#stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt("test")=4)]
+        [Row(PythonUDF#stringLengthInt(test)=4)]
         """
         udf = UserDefinedFunction(f, returnType, name)
         self._ssql_ctx.udf().registerPython(name, udf._judf)
