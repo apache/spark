@@ -167,8 +167,8 @@ intervalLiteral
       ((intervalConstant KW_HOUR)=> hour=intervalConstant KW_HOUR)?
       ((intervalConstant KW_MINUTE)=> minute=intervalConstant KW_MINUTE)?
       ((intervalConstant KW_SECOND)=> second=intervalConstant KW_SECOND)?
-      (millisecond=intervalConstant KW_MILLISECOND)?
-      (microsecond=intervalConstant KW_MICROSECOND)?
+      ((intervalConstant KW_MILLISECOND)=> millisecond=intervalConstant KW_MILLISECOND)?
+      ((intervalConstant KW_MICROSECOND)=> microsecond=intervalConstant KW_MICROSECOND)?
       -> ^(TOK_INTERVAL
           ^(TOK_INTERVAL_YEAR_LITERAL $year?)
           ^(TOK_INTERVAL_MONTH_LITERAL $month?)
@@ -505,10 +505,8 @@ identifier
 functionIdentifier
 @init { gParent.pushMsg("function identifier", state); }
 @after { gParent.popMsg(state); }
-    : db=identifier DOT fn=identifier
-    -> Identifier[$db.text + "." + $fn.text]
-    |
-    identifier
+    :
+    identifier (DOT identifier)? -> identifier+
     ;
 
 principalIdentifier
@@ -553,6 +551,8 @@ nonReserved
     | KW_SNAPSHOT
     | KW_AUTOCOMMIT
     | KW_ANTI
+    | KW_WEEK | KW_MILLISECOND | KW_MICROSECOND
+    | KW_CLEAR | KW_LAZY | KW_CACHE | KW_UNCACHE | KW_DFS
 ;
 
 //The following SQL2011 reserved keywords are used as cast function name only, but not as identifiers.

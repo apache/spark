@@ -204,7 +204,7 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val sqlParser: ParserInterface = new SparkSQLParser(new SparkQl(conf))
+  protected[sql] val sqlParser: ParserInterface = new SparkQl(conf)
 
   @transient
   protected[sql] val ddlParser: DDLParser = new DDLParser(sqlParser)

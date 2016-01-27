@@ -210,6 +210,28 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
+    case Token("TOK_SHOWFUNCTIONS", args) =>
+      // Skip LIKE.
+      val pattern = args match {
+        case like :: nodes if like.text.toUpperCase == "LIKE" => nodes
+        case nodes => nodes
+      }
+
+      // Extract Database and Function name
+      pattern match {
+        case Nil =>
+          ShowFunctions(None, None)
+        case Token(name, Nil) :: Nil =>
+          ShowFunctions(None, Some(unquoteString(name)))
+        case Token(db, Nil) :: Token(name, Nil) :: Nil =>
+          ShowFunctions(Some(unquoteString(db)), Some(unquoteString(name)))
+        case _ =>
+          noParseRule("SHOW FUNCTIONS", node)
+      }
+
+    case Token("TOK_DESCFUNCTION", Token(functionName, Nil) :: isExtended) =>
+      DescribeFunction(functionName, isExtended.nonEmpty)
+
     case Token("TOK_QUERY", queryArgs @ Token("TOK_CTE" | "TOK_FROM" | "TOK_INSERT", _) :: _) =>
       val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
         queryArgs match {

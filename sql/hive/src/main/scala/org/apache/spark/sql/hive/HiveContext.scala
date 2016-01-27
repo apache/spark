@@ -316,7 +316,9 @@ class HiveContext private[hive](
   }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
-    super.parseSql(substitutor.substitute(hiveconf, sql))
+    executionHive.withHiveState {
+      super.parseSql(substitutor.substitute(hiveconf, sql))
+    }
   }
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
@@ -546,9 +548,7 @@ class HiveContext private[hive](
   }
 
   @transient
-  protected[sql] override val sqlParser: ParserInterface = {
-    new SparkSQLParser(new ExtendedHiveQlParser(this))
-  }
+  protected[sql] override val sqlParser: ParserInterface = new HiveQl(conf)
 
   @transient
   private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
