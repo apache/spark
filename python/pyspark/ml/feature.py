@@ -33,7 +33,8 @@ __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel',
            'PolynomialExpansion', 'QuantileDiscretizer', 'RegexTokenizer', 'RFormula',
            'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
            'StopWordsRemover', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
-           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel']
+           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel',
+           'ChiSqSelector', 'ChiSqSelectorModel']
 
 
 @inherit_doc
@@ -56,7 +57,6 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     threshold = Param(Params._dummy(), "threshold",
                       "threshold in binary classification prediction, in range [0, 1]")
 
@@ -67,8 +67,6 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(Binarizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
-        self.threshold = Param(self, "threshold",
-                               "threshold in binary classification prediction, in range [0, 1]")
         self._setDefault(threshold=0.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -124,7 +122,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.3.0
     """
 
-    # a placeholder to make it appear in the generated doc
     splits = \
         Param(Params._dummy(), "splits",
               "Split points for mapping continuous features into buckets. With n+1 splits, " +
@@ -141,19 +138,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
-        #: param for Splitting points for mapping continuous features into buckets. With n+1 splits,
-        #  there are n buckets. A bucket defined by splits x,y holds values in the range [x,y)
-        #  except the last bucket, which also includes y. The splits should be strictly increasing.
-        #  Values at -inf, inf must be explicitly provided to cover all Double values; otherwise,
-        #  values outside the splits specified will be treated as errors.
-        self.splits = \
-            Param(self, "splits",
-                  "Split points for mapping continuous features into buckets. With n+1 splits, " +
-                  "there are n buckets. A bucket defined by splits x,y holds values in the " +
-                  "range [x,y) except the last bucket, which also includes y. The splits " +
-                  "should be strictly increasing. Values at -inf, inf must be explicitly " +
-                  "provided to cover all Double values; otherwise, values outside the splits " +
-                  "specified will be treated as errors.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -209,7 +193,6 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     minTF = Param(
         Params._dummy(), "minTF", "Filter to ignore rare words in" +
         " a document. For each document, terms with frequency/count less than the given" +
@@ -234,22 +217,6 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
                                             self.uid)
-        self.minTF = Param(
-            self, "minTF", "Filter to ignore rare words in" +
-            " a document. For each document, terms with frequency/count less than the given" +
-            " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
-            " times the term must appear in the document); if this is a double in [0,1), then " +
-            "this specifies a fraction (out of the document's token count). Note that the " +
-            "parameter is only used in transform of CountVectorizerModel and does not affect" +
-            "fitting. Default 1.0")
-        self.minDF = Param(
-            self, "minDF", "Specifies the minimum number of" +
-            " different documents a term must appear in to be included in the vocabulary." +
-            " If this is an integer >= 1, this specifies the number of documents the term must" +
-            " appear in; if this is a double in [0,1), then this specifies the fraction of " +
-            "documents. Default 1.0")
-        self.vocabSize = Param(
-            self, "vocabSize", "max size of the vocabulary. Default 1 << 18.")
         self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1 << 18)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -358,7 +325,6 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     inverse = Param(Params._dummy(), "inverse", "Set transformer to perform inverse DCT, " +
                     "default False.")
 
@@ -369,8 +335,6 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(DCT, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.DCT", self.uid)
-        self.inverse = Param(self, "inverse", "Set transformer to perform inverse DCT, " +
-                             "default False.")
         self._setDefault(inverse=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -422,7 +386,6 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     scalingVec = Param(Params._dummy(), "scalingVec", "vector for hadamard product, " +
                        "it must be MLlib Vector type.")
 
@@ -434,8 +397,6 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
         super(ElementwiseProduct, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ElementwiseProduct",
                                             self.uid)
-        self.scalingVec = Param(self, "scalingVec", "vector for hadamard product, " +
-                                "it must be MLlib Vector type.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -530,7 +491,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     minDocFreq = Param(Params._dummy(), "minDocFreq",
                        "minimum of documents in which a term should appear for filtering")
 
@@ -541,8 +501,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(IDF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
-        self.minDocFreq = Param(self, "minDocFreq",
-                                "minimum of documents in which a term should appear for filtering")
         self._setDefault(minDocFreq=0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -622,7 +580,6 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     min = Param(Params._dummy(), "min", "Lower bound of the output feature range")
     max = Param(Params._dummy(), "max", "Upper bound of the output feature range")
 
@@ -633,8 +590,6 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(MinMaxScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
-        self.min = Param(self, "min", "Lower bound of the output feature range")
-        self.max = Param(self, "max", "Upper bound of the output feature range")
         self._setDefault(min=0.0, max=1.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -744,7 +699,6 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     n = Param(Params._dummy(), "n", "number of elements per n-gram (>=1)")
 
     @keyword_only
@@ -754,7 +708,6 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(NGram, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.NGram", self.uid)
-        self.n = Param(self, "n", "number of elements per n-gram (>=1)")
         self._setDefault(n=2)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -807,7 +760,6 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     p = Param(Params._dummy(), "p", "the p norm value.")
 
     @keyword_only
@@ -817,7 +769,6 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(Normalizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Normalizer", self.uid)
-        self.p = Param(self, "p", "the p norm value.")
         self._setDefault(p=2.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -886,7 +837,6 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category")
 
     @keyword_only
@@ -896,7 +846,6 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self.dropLast = Param(self, "dropLast", "whether to drop the last category")
         self._setDefault(dropLast=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -949,7 +898,6 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     degree = Param(Params._dummy(), "degree", "the polynomial degree to expand (>= 1)")
 
     @keyword_only
@@ -960,7 +908,6 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         super(PolynomialExpansion, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.PolynomialExpansion", self.uid)
-        self.degree = Param(self, "degree", "the polynomial degree to expand (>= 1)")
         self._setDefault(degree=2)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1106,7 +1053,6 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)")
     gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing")
@@ -1122,11 +1068,6 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(RegexTokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
-        self.minTokenLength = Param(self, "minTokenLength", "minimum token length (>= 0)")
-        self.gaps = Param(self, "gaps", "whether regex splits on gaps (True) or matches tokens")
-        self.pattern = Param(self, "pattern", "regex pattern (Java dialect) used for tokenizing")
-        self.toLowercase = Param(self, "toLowercase", "whether to convert all characters to " +
-                                 "lowercase before tokenizing")
         self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1222,7 +1163,6 @@ class SQLTransformer(JavaTransformer):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     statement = Param(Params._dummy(), "statement", "SQL statement")
 
     @keyword_only
@@ -1232,7 +1172,6 @@ class SQLTransformer(JavaTransformer):
         """
         super(SQLTransformer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.SQLTransformer", self.uid)
-        self.statement = Param(self, "statement", "SQL statement")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1284,7 +1223,6 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     withMean = Param(Params._dummy(), "withMean", "Center data with mean")
     withStd = Param(Params._dummy(), "withStd", "Scale to unit standard deviation")
 
@@ -1295,8 +1233,6 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(StandardScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StandardScaler", self.uid)
-        self.withMean = Param(self, "withMean", "Center data with mean")
-        self.withStd = Param(self, "withStd", "Scale to unit standard deviation")
         self._setDefault(withMean=False, withStd=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1387,7 +1323,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels())
+    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels)
     >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
@@ -1429,13 +1365,14 @@ class StringIndexerModel(JavaModel):
 
     .. versionadded:: 1.4.0
     """
+
     @property
     @since("1.5.0")
     def labels(self):
         """
         Ordered list of labels, corresponding to indices to be assigned.
         """
-        return self._java_obj.labels
+        return self._call_java("labels")
 
 
 @inherit_doc
@@ -1452,7 +1389,6 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make the labels show up in generated doc
     labels = Param(Params._dummy(), "labels",
                    "Optional array of labels specifying index-string mapping." +
                    " If not provided or if empty, then metadata from inputCol is used instead.")
@@ -1465,9 +1401,6 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         super(IndexToString, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
-        self.labels = Param(self, "labels",
-                            "Optional array of labels specifying index-string mapping. If not" +
-                            " provided or if empty, then metadata from inputCol is used instead.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1506,7 +1439,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
 
     .. versionadded:: 1.6.0
     """
-    # a placeholder to make the stopwords show up in generated doc
+
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out")
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words")
@@ -1521,9 +1454,6 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
-        self.stopWords = Param(self, "stopWords", "The words to be filtered out")
-        self.caseSensitive = Param(self, "caseSensitive", "whether to do a case " +
-                                   "sensitive comparison over the stop words")
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
         defaultStopWords = stopWordsObj.English()
         self._setDefault(stopWords=defaultStopWords)
@@ -1726,7 +1656,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     maxCategories = Param(Params._dummy(), "maxCategories",
                           "Threshold for the number of values a categorical feature can take " +
                           "(>= 2). If a feature is found to have > maxCategories values, then " +
@@ -1739,10 +1668,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        self.maxCategories = Param(self, "maxCategories",
-                                   "Threshold for the number of values a categorical feature " +
-                                   "can take (>= 2). If a feature is found to have " +
-                                   "> maxCategories values, then it is declared continuous.")
         self._setDefault(maxCategories=20)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1831,7 +1756,6 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
 
-    # a placeholder to make it appear in the generated doc
     indices = Param(Params._dummy(), "indices", "An array of indices to select features from " +
                     "a vector column. There can be no overlap with names.")
     names = Param(Params._dummy(), "names", "An array of feature names to select features from " +
@@ -1846,12 +1770,6 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(VectorSlicer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
-        self.indices = Param(self, "indices", "An array of indices to select features from " +
-                             "a vector column. There can be no overlap with names.")
-        self.names = Param(self, "names", "An array of feature names to select features from " +
-                           "a vector column. These names must be specified by ML " +
-                           "org.apache.spark.ml.attribute.Attribute. There can be no overlap " +
-                           "with indices.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1931,7 +1849,6 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     vectorSize = Param(Params._dummy(), "vectorSize",
                        "the dimension of codes after transforming from words")
     numPartitions = Param(Params._dummy(), "numPartitions",
@@ -1949,13 +1866,6 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
-        self.vectorSize = Param(self, "vectorSize",
-                                "the dimension of codes after transforming from words")
-        self.numPartitions = Param(self, "numPartitions",
-                                   "number of partitions for sentences of words")
-        self.minCount = Param(self, "minCount",
-                              "the minimum number of times a token must appear to be included " +
-                              "in the word2vec model's vocabulary")
         self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                          seed=None)
         kwargs = self.__init__._input_kwargs
@@ -2074,7 +1984,6 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     k = Param(Params._dummy(), "k", "the number of principal components")
 
     @keyword_only
@@ -2084,7 +1993,6 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
         """
         super(PCA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.PCA", self.uid)
-        self.k = Param(self, "k", "the number of principal components")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -2184,7 +2092,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     formula = Param(Params._dummy(), "formula", "R model formula")
 
     @keyword_only
@@ -2194,7 +2101,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        self.formula = Param(self, "formula", "R model formula")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -2235,6 +2141,101 @@ class RFormulaModel(JavaModel):
 
     .. versionadded:: 1.5.0
     """
+
+
+@inherit_doc
+class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
+    """
+    .. note:: Experimental
+
+    Chi-Squared feature selection, which selects categorical features to use for predicting a
+    categorical label.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame(
+    ...    [(Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
+    ...     (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
+    ...     (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0)],
+    ...    ["features", "label"])
+    >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
+    >>> model = selector.fit(df)
+    >>> model.transform(df).head().selectedFeatures
+    DenseVector([1.0])
+    >>> model.selectedFeatures
+    [3]
+
+    .. versionadded:: 2.0.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    numTopFeatures = \
+        Param(Params._dummy(), "numTopFeatures",
+              "Number of features that selector will select, ordered by statistics value " +
+              "descending. If the number of features is < numTopFeatures, then this will select " +
+              "all features.")
+
+    @keyword_only
+    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label"):
+        """
+        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label")
+        """
+        super(ChiSqSelector, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
+        self.numTopFeatures = \
+            Param(self, "numTopFeatures",
+                  "Number of features that selector will select, ordered by statistics value " +
+                  "descending. If the number of features is < numTopFeatures, then this will " +
+                  "select all features.")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                  labelCol="labels"):
+        """
+        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,\
+                  labelCol="labels")
+        Sets params for this ChiSqSelector.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setNumTopFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numTopFeatures`.
+        """
+        self._paramMap[self.numTopFeatures] = value
+        return self
+
+    @since("2.0.0")
+    def getNumTopFeatures(self):
+        """
+        Gets the value of numTopFeatures or its default value.
+        """
+        return self.getOrDefault(self.numTopFeatures)
+
+    def _create_model(self, java_model):
+        return ChiSqSelectorModel(java_model)
+
+
+class ChiSqSelectorModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by ChiSqSelector.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def selectedFeatures(self):
+        """
+        List of indices to select (filter). Must be ordered asc.
+        """
+        return self._call_java("selectedFeatures")
 
 
 if __name__ == "__main__":

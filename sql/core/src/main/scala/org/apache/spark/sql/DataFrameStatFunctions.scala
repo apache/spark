@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.types.{IntegralType, StringType}
-import org.apache.spark.util.sketch.BloomFilter
+import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
  * :: Experimental ::
@@ -314,12 +314,90 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param colName name of the column over which the sketch is built
+   * @param depth depth of the sketch
+   * @param width width of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(colName: String, depth: Int, width: Int, seed: Int): CountMinSketch = {
+    countMinSketch(Column(colName), depth, width, seed)
+  }
+
+  /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param colName name of the column over which the sketch is built
+   * @param eps relative error of the sketch
+   * @param confidence confidence of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(
+      colName: String, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
+    countMinSketch(Column(colName), eps, confidence, seed)
+  }
+
+  /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param col the column over which the sketch is built
+   * @param depth depth of the sketch
+   * @param width width of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
+    countMinSketch(col, CountMinSketch.create(depth, width, seed))
+  }
+
+  /**
+   * Builds a Count-min Sketch over a specified column.
+   *
+   * @param col the column over which the sketch is built
+   * @param eps relative error of the sketch
+   * @param confidence confidence of the sketch
+   * @param seed random seed
+   * @return a [[CountMinSketch]] over column `colName`
+   * @since 2.0.0
+   */
+  def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
+    countMinSketch(col, CountMinSketch.create(eps, confidence, seed))
+  }
+
+  private def countMinSketch(col: Column, zero: CountMinSketch): CountMinSketch = {
+    val singleCol = df.select(col)
+    val colType = singleCol.schema.head.dataType
+
+    require(
+      colType == StringType || colType.isInstanceOf[IntegralType],
+      s"Count-min Sketch only supports string type and integral types, " +
+        s"and does not support type $colType."
+    )
+
+    singleCol.rdd.aggregate(zero)(
+      (sketch: CountMinSketch, row: Row) => {
+        sketch.add(row.get(0))
+        sketch
+      },
+
+      (sketch1: CountMinSketch, sketch2: CountMinSketch) => {
+        sketch1.mergeInPlace(sketch2)
+      }
+    )
+  }
+
+  /**
    * Builds a Bloom filter over a specified column.
    *
    * @param colName name of the column over which the filter is built
    * @param expectedNumItems expected number of items which will be put into the filter.
    * @param fpp expected false positive probability of the filter.
-   *
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
@@ -332,7 +410,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col the column over which the filter is built
    * @param expectedNumItems expected number of items which will be put into the filter.
    * @param fpp expected false positive probability of the filter.
-   *
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
@@ -345,7 +422,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param colName name of the column over which the filter is built
    * @param expectedNumItems expected number of items which will be put into the filter.
    * @param numBits expected number of bits of the filter.
-   *
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
@@ -358,7 +434,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param col the column over which the filter is built
    * @param expectedNumItems expected number of items which will be put into the filter.
    * @param numBits expected number of bits of the filter.
-   *
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
