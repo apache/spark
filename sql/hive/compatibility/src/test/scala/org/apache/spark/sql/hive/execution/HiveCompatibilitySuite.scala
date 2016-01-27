@@ -323,7 +323,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Feature removed in HIVE-11145
     "alter_partition_protect_mode",
     "drop_partitions_ignore_protection",
-    "protectmode"
+    "protectmode",
+
+    // The Hive show functions command only shows Hive's function, whereas Spark contains many more.
+    "show_functions"
   )
 
   /**
@@ -825,7 +828,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "show_create_table_serde",
     "show_create_table_view",
     "show_describe_func_quotes",
-    "show_functions",
     "show_partitions",
     "show_tblproperties",
     "skewjoinopt13",
