@@ -334,6 +334,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
 object StructType extends AbstractDataType {
 
+  private[sql] val metadataKeyForOptionalField = "_OPTIONAL_"
+
   override private[sql] def defaultConcreteType: DataType = new StructType
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
@@ -401,7 +403,7 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               }
               .orElse {
-                optionalMeta.putBoolean("optional", true)
+                optionalMeta.putBoolean(metadataKeyForOptionalField, true)
                 Some(leftField.copy(metadata = optionalMeta.build()))
               }
               .foreach(newFields += _)
@@ -411,7 +413,7 @@ object StructType extends AbstractDataType {
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach { f =>
-            optionalMeta.putBoolean("optional", true)
+            optionalMeta.putBoolean(metadataKeyForOptionalField, true)
             newFields += f.copy(metadata = optionalMeta.build())
           }
 

@@ -207,10 +207,17 @@ private[sql] object ParquetFilters {
      */
   }
 
+  /**
+   * SPARK-11955: The optional fields will have metadata StructType.metadataKeyForOptionalField.
+   * These fields only exist in one side of merged schemas. Due to that, we can't push down filters
+   * using such fields, otherwise Parquet library will throw exception. Here we filter out such
+   * fields.
+   */
   private def getFieldMap(dataType: DataType): Array[(String, DataType)] = dataType match {
     case StructType(fields) =>
       fields.filter { f =>
-        !f.metadata.contains("optional") || !f.metadata.getBoolean("optional")
+        !f.metadata.contains(StructType.metadataKeyForOptionalField) ||
+          !f.metadata.getBoolean(StructType.metadataKeyForOptionalField)
       }.map(f => f.name -> f.dataType) ++ fields.flatMap { f => getFieldMap(f.dataType) }
     case _ => Array.empty[(String, DataType)]
   }

@@ -383,22 +383,18 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         val df = sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a")
         checkAnswer(
           df,
-          (1 to 1).map(i => Row(i, i.toString, null)))
+          Row(1, "1", null))
 
         // The fields "a" and "c" only exist in one Parquet file.
-        df.schema.fields.foreach { f =>
-          if (f.name == "a" || f.name == "c") {
-            assert(f.metadata.contains("optional"))
-          }
-        }
+        assert(df.schema("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+        assert(df.schema("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
 
         val pathThree = s"${dir.getCanonicalPath}/table3"
         df.write.parquet(pathThree)
 
         // We will remove the temporary metadata when writing Parquet file.
-        sqlContext.read.parquet(pathThree).schema.fields.foreach { f =>
-          assert(!f.metadata.contains("optional"))
-        }
+        val schema = sqlContext.read.parquet(pathThree).schema
+        assert(schema.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
 
         val pathFour = s"${dir.getCanonicalPath}/table4"
         val dfStruct = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
@@ -411,25 +407,20 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "s.c = 1" filter gets pushed down, this query will throw an exception which
         // Parquet emits.
         val dfStruct3 = sqlContext.read.parquet(pathFour, pathFive).filter("s.c = 1")
-          .selectExpr("s.c", "s.a")
-        checkAnswer(
-          dfStruct3,
-          (1 to 1).map(i => Row(i, null)))
+          .selectExpr("s")
+        checkAnswer(dfStruct3, Row(Row(null, 1)))
 
         // The fields "s.a" and "s.c" only exist in one Parquet file.
-        dfStruct3.schema.fields.foreach { f =>
-          if (f.name == "s.a" || f.name == "s.c") {
-            assert(f.metadata.contains("optional"))
-          }
-        }
+        val field = dfStruct3.schema("s").dataType.asInstanceOf[StructType]
+        assert(field("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+        assert(field("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
 
         val pathSix = s"${dir.getCanonicalPath}/table6"
         dfStruct3.write.parquet(pathSix)
 
         // We will remove the temporary metadata when writing Parquet file.
-        sqlContext.read.parquet(pathSix).schema.fields.foreach { f =>
-          assert(!f.metadata.contains("optional"))
-        }
+        val forPathSix = sqlContext.read.parquet(pathSix).schema
+        assert(forPathSix.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
       }
     }
   }
