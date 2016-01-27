@@ -182,7 +182,11 @@ private[netty] class NettyRpcEnv(
     val remoteAddr = message.receiver.address
     if (remoteAddr == address) {
       // Message to a local RPC endpoint.
-      dispatcher.postOneWayMessage(message)
+      try {
+        dispatcher.postOneWayMessage(message)
+      } catch {
+        case e: RpcEnvStoppedException => logWarning(e.getMessage)
+      }
     } else {
       // Message to a remote RPC endpoint.
       postToOutbox(message.receiver, OneWayOutboxMessage(serialize(message)))

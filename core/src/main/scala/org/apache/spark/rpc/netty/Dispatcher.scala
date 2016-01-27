@@ -106,7 +106,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-      postMessage(name, message, (e) => logWarning(s"Message $message dropped.", e))
+      postMessage(name, message, (e) => logWarning(s"Message $message dropped. ${e.getMessage}"))
     }
   }
 
@@ -156,7 +156,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     if (shouldCallOnStop) {
       // We don't need to call `onStop` in the `synchronized` block
       val error = if (stopped) {
-          new IllegalStateException("RpcEnv already stopped.")
+          new RpcEnvStoppedException()
         } else {
           new SparkException(s"Could not find $endpointName or it has been stopped.")
         }
