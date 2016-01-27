@@ -21,9 +21,6 @@ import java.io.File
 import java.security.NoSuchAlgorithmException
 import javax.net.ssl.SSLContext
 
-import scala.collection.JavaConverters._
-
-import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
 /**
@@ -31,8 +28,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory
  * generate specific objects to configure SSL for different communication protocols.
  *
  * SSLOptions is intended to provide the maximum common set of SSL settings, which are supported
- * by the protocol, which it can generate the configuration for. Since Akka doesn't support client
- * authentication with SSL, SSLOptions cannot support it either.
+ * by the protocol, which it can generate the configuration for.
  *
  * @param enabled             enables or disables SSL; if it is set to false, the rest of the
  *                            settings are disregarded
@@ -83,43 +79,6 @@ private[spark] case class SSLOptions(
       }
 
       Some(sslContextFactory)
-    } else {
-      None
-    }
-  }
-
-  /**
-   * Creates an Akka configuration object which contains all the SSL settings represented by this
-   * object. It can be used then to compose the ultimate Akka configuration.
-   */
-  def createAkkaConfig: Option[Config] = {
-    if (enabled) {
-      if (keyStoreType.isDefined) {
-        logWarning("Akka configuration does not support key store type.");
-      }
-      if (trustStoreType.isDefined) {
-        logWarning("Akka configuration does not support trust store type.");
-      }
-
-      Some(ConfigFactory.empty()
-        .withValue("akka.remote.netty.tcp.security.key-store",
-          ConfigValueFactory.fromAnyRef(keyStore.map(_.getAbsolutePath).getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.key-store-password",
-          ConfigValueFactory.fromAnyRef(keyStorePassword.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.trust-store",
-          ConfigValueFactory.fromAnyRef(trustStore.map(_.getAbsolutePath).getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.trust-store-password",
-          ConfigValueFactory.fromAnyRef(trustStorePassword.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.key-password",
-          ConfigValueFactory.fromAnyRef(keyPassword.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.random-number-generator",
-          ConfigValueFactory.fromAnyRef(""))
-        .withValue("akka.remote.netty.tcp.security.protocol",
-          ConfigValueFactory.fromAnyRef(protocol.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.enabled-algorithms",
-          ConfigValueFactory.fromIterable(supportedAlgorithms.asJava))
-        .withValue("akka.remote.netty.tcp.enable-ssl",
-          ConfigValueFactory.fromAnyRef(true)))
     } else {
       None
     }
