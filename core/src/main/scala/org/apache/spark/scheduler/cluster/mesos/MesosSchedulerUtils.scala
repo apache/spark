@@ -131,15 +131,15 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  /**
-   * Signal that the scheduler has registered with Mesos.
-   */
-  protected def getResource(res: JList[Resource], name: String): Double = {
+  def getResource(res: JList[Resource], name: String): Double = {
     // A resource can have multiple values in the offer since it can either be from
     // a specific role or wildcard.
     res.asScala.filter(_.getName == name).map(_.getScalar.getValue).sum
   }
 
+  /**
+    * Signal that the scheduler has registered with Mesos.
+    */
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
