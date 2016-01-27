@@ -246,4 +246,26 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
         .countMinSketch('id, depth = 10, width = 20, seed = 42)
     }
   }
+
+  // This test only verifies some basic requirements, more correctness tests can be found in
+  // `BloomFilterSuite` in project spark-sketch.
+  test("Bloom filter") {
+    val df = sqlContext.range(1000)
+
+    val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
+    assert(filter1.expectedFpp() - 0.03 < 1e-3)
+    assert(0.until(1000).forall(filter1.mightContain))
+
+    val filter2 = df.stat.bloomFilter($"id" * 3, 1000, 0.03)
+    assert(filter2.expectedFpp() - 0.03 < 1e-3)
+    assert(0.until(1000).forall(i => filter2.mightContain(i * 3)))
+
+    val filter3 = df.stat.bloomFilter("id", 1000, 64 * 5)
+    assert(filter3.bitSize() == 64 * 5)
+    assert(0.until(1000).forall(filter3.mightContain))
+
+    val filter4 = df.stat.bloomFilter($"id" * 3, 1000, 64 * 5)
+    assert(filter4.bitSize() == 64 * 5)
+    assert(0.until(1000).forall(i => filter4.mightContain(i * 3)))
+  }
 }

@@ -40,8 +40,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   private double eps;
   private double confidence;
 
-  private CountMinSketchImpl() {
-  }
+  private CountMinSketchImpl() {}
 
   CountMinSketchImpl(int depth, int width, int seed) {
     this.depth = depth;
@@ -143,23 +142,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     if (item instanceof String) {
       addString((String) item, count);
     } else {
-      long longValue;
-
-      if (item instanceof Long) {
-        longValue = (Long) item;
-      } else if (item instanceof Integer) {
-        longValue = ((Integer) item).longValue();
-      } else if (item instanceof Short) {
-        longValue = ((Short) item).longValue();
-      } else if (item instanceof Byte) {
-        longValue = ((Byte) item).longValue();
-      } else {
-        throw new IllegalArgumentException(
-          "Support for " + item.getClass().getName() + " not implemented"
-        );
-      }
-
-      addLong(longValue, count);
+      addLong(Utils.integralToLong(item), count);
     }
   }
 
@@ -201,13 +184,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   }
 
   private static int[] getHashBuckets(String key, int hashCount, int max) {
-    byte[] b;
-    try {
-      b = key.getBytes("UTF-8");
-    } catch (UnsupportedEncodingException e) {
-      throw new RuntimeException(e);
-    }
-    return getHashBuckets(b, hashCount, max);
+    return getHashBuckets(Utils.getBytesFromUTF8String(key), hashCount, max);
   }
 
   private static int[] getHashBuckets(byte[] b, int hashCount, int max) {
@@ -225,23 +202,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     if (item instanceof String) {
       return estimateCountForStringItem((String) item);
     } else {
-      long longValue;
-
-      if (item instanceof Long) {
-        longValue = (Long) item;
-      } else if (item instanceof Integer) {
-        longValue = ((Integer) item).longValue();
-      } else if (item instanceof Short) {
-        longValue = ((Short) item).longValue();
-      } else if (item instanceof Byte) {
-        longValue = ((Byte) item).longValue();
-      } else {
-        throw new IllegalArgumentException(
-            "Support for " + item.getClass().getName() + " not implemented"
-        );
-      }
-
-      return estimateCountForLongItem(longValue);
+      return estimateCountForLongItem(Utils.integralToLong(item));
     }
   }
 

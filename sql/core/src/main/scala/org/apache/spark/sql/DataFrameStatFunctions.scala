@@ -22,9 +22,10 @@ import java.{lang => jl, util => ju}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
-import org.apache.spark.sql.types._
-import org.apache.spark.util.sketch.CountMinSketch
+import org.apache.spark.sql.types.{IntegralType, StringType}
+import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
  * :: Experimental ::
@@ -389,5 +390,76 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
         sketch1.mergeInPlace(sketch2)
       }
     )
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param colName name of the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param fpp expected false positive probability of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
+    buildBloomFilter(Column(colName), BloomFilter.create(expectedNumItems, fpp))
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param col the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param fpp expected false positive probability of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
+    buildBloomFilter(col, BloomFilter.create(expectedNumItems, fpp))
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param colName name of the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param numBits expected number of bits of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
+    buildBloomFilter(Column(colName), BloomFilter.create(expectedNumItems, numBits))
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param col the column over which the filter is built
+   * @param expectedNumItems expected number of items which will be put into the filter.
+   * @param numBits expected number of bits of the filter.
+   * @since 2.0.0
+   */
+  def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
+    buildBloomFilter(col, BloomFilter.create(expectedNumItems, numBits))
+  }
+
+  private def buildBloomFilter(col: Column, zero: BloomFilter): BloomFilter = {
+    val singleCol = df.select(col)
+    val colType = singleCol.schema.head.dataType
+
+    require(colType == StringType || colType.isInstanceOf[IntegralType],
+      s"Bloom filter only supports string type and integral types, but got $colType.")
+
+    val seqOp: (BloomFilter, InternalRow) => BloomFilter = if (colType == StringType) {
+      (filter, row) =>
+        // For string type, we can get bytes of our `UTF8String` directly, and call the `putBinary`
+        // instead of `putString` to avoid unnecessary conversion.
+        filter.putBinary(row.getUTF8String(0).getBytes)
+        filter
+    } else {
+      (filter, row) =>
+        // TODO: specialize it.
+        filter.putLong(row.get(0, colType).asInstanceOf[Number].longValue())
+        filter
+    }
+
+    singleCol.queryExecution.toRdd.aggregate(zero)(seqOp, _ mergeInPlace _)
   }
 }

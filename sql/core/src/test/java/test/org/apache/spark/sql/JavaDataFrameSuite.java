@@ -40,6 +40,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.util.sketch.CountMinSketch;
 import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
+import org.apache.spark.util.sketch.BloomFilter;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -300,6 +301,7 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(30000.0, actual[1].getDouble(2), 0.01);
   }
 
+  @Test
   public void testGenericLoad() {
     DataFrame df1 = context.read().format("text").load(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
@@ -346,5 +348,34 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(sketch4.totalCount(), 1000);
     Assert.assertEquals(sketch4.relativeError(), 0.001, 1e-4);
     Assert.assertEquals(sketch4.confidence(), 0.99, 5e-3);
+  }
+
+  @Test
+  public void testBloomFilter() {
+    DataFrame df = context.range(1000);
+
+    BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
+    assert (filter1.expectedFpp() - 0.03 < 1e-3);
+    for (int i = 0; i < 1000; i++) {
+      assert (filter1.mightContain(i));
+    }
+
+    BloomFilter filter2 = df.stat().bloomFilter(col("id").multiply(3), 1000, 0.03);
+    assert (filter2.expectedFpp() - 0.03 < 1e-3);
+    for (int i = 0; i < 1000; i++) {
+      assert (filter2.mightContain(i * 3));
+    }
+
+    BloomFilter filter3 = df.stat().bloomFilter("id", 1000, 64 * 5);
+    assert (filter3.bitSize() == 64 * 5);
+    for (int i = 0; i < 1000; i++) {
+      assert (filter3.mightContain(i));
+    }
+
+    BloomFilter filter4 = df.stat().bloomFilter(col("id").multiply(3), 1000, 64 * 5);
+    assert (filter4.bitSize() == 64 * 5);
+    for (int i = 0; i < 1000; i++) {
+      assert (filter4.mightContain(i * 3));
+    }
   }
 }
