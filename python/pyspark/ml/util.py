@@ -74,11 +74,11 @@ class Identifiable(object):
 
 
 @inherit_doc
-class MLWriter(object):
+class JavaMLWriter(object):
     """
     .. note:: Experimental
 
-    Utility class that can save ML instances.
+    Utility class that can save ML instances through their Scala implementation.
 
     .. versionadded:: 2.0.0
     """
@@ -87,18 +87,15 @@ class MLWriter(object):
         instance._transfer_params_to_java()
         self._jwrite = instance._java_obj.write()
 
-    @since("2.0.0")
     def save(self, path):
-        """Saves the ML instances to the input path."""
+        """Save the ML instance to the input path."""
         self._jwrite.save(path)
 
-    @since("2.0.0")
     def overwrite(self):
         """Overwrites if the output path already exists."""
         self._jwrite.overwrite()
         return self
 
-    @since("2.0.0")
     def context(self, sqlContext):
         """Sets the SQL context to use for saving."""
         self._jwrite.context(sqlContext._ssql_ctx)
@@ -110,18 +107,15 @@ class MLWritable(object):
     """
     .. note:: Experimental
 
-    Mixin for ML instances that provide MLWriter through their Scala
-    implementation.
+    Mixin for ML instances that provide JavaMLWriter.
 
     .. versionadded:: 2.0.0
     """
 
-    @since("2.0.0")
     def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return MLWriter(self)
+        """Returns an JavaMLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
-    @since("2.0.0")
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         if not isinstance(path, basestring):
@@ -130,11 +124,11 @@ class MLWritable(object):
 
 
 @inherit_doc
-class MLReader(object):
+class JavaMLReader(object):
     """
     .. note:: Experimental
 
-    Utility class that can load ML instances.
+    Utility class that can load ML instances through their Scala implementation.
 
     .. versionadded:: 2.0.0
     """
@@ -144,16 +138,14 @@ class MLReader(object):
         self._instance._java_obj = self._load_java_obj(self._instance)
         self._jread = self._instance._java_obj.read()
 
-    @since("2.0.0")
     def load(self, path):
-        """Loads the ML component from the input path."""
+        """Load the ML instance from the input path."""
         java_obj = self._jread.load(path)
         self._instance._java_obj = java_obj
         self._instance.uid = java_obj.uid()
         self._instance._transfer_params_from_java(True)
         return self._instance
 
-    @since("2.0.0")
     def context(self, sqlContext):
         """Sets the SQL context to use for loading."""
         self._jread.context(sqlContext._ssql_ctx)
@@ -162,7 +154,7 @@ class MLReader(object):
     @classmethod
     def _java_loader_class(cls, instance):
         """
-        Returns the full class name of the Java loader. The default
+        Returns the full class name of the Java ML instance. The default
         implementation replaces "pyspark" by "org.apache.spark" in
         the Python full class name.
         """
@@ -171,7 +163,7 @@ class MLReader(object):
 
     @classmethod
     def _load_java_obj(cls, instance):
-        """Load the peer Java object."""
+        """Load the peer Java object of the ML instance."""
         java_class = cls._java_loader_class(instance)
         java_obj = _jvm()
         for name in java_class.split("."):
@@ -184,19 +176,19 @@ class MLReadable(object):
     """
     .. note:: Experimental
 
-    Mixin for objects that provide MLReader using its Scala implementation.
+    Mixin for instances that provide JavaMLReader.
 
     .. versionadded:: 2.0.0
     """
 
     @classmethod
-    @since("2.0.0")
     def read(cls):
-        """Returns an MLReader instance for this class."""
-        return MLReader(cls())
+        """Returns an JavaMLReader instance for this class."""
+        return JavaMLReader(cls())
 
     @classmethod
-    @since("2.0.0")
     def load(cls, path):
         """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         return cls.read().load(path)

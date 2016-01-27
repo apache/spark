@@ -73,19 +73,14 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> lr_path = path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LinearRegression.load(lr_path)
-    >>> lr2.getOrDefault(lr2.getParam("maxIter"))
+    >>> lr2.getMaxIter()
     5
-    >>> model2 = lr2.fit(df)
-    >>> abs(model.coefficients[0] - model2.coefficients[0]) < 0.001
-    True
-    >>> abs(model.intercept - model2.intercept) < 0.001
-    True
     >>> model_path = path + "/lr_model"
     >>> model.save(model_path)
-    >>> model3 = LinearRegressionModel.load(model_path)
-    >>> model.coefficients[0] == model3.coefficients[0]
+    >>> model2 = LinearRegressionModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
     True
-    >>> model.intercept == model3.intercept
+    >>> model.intercept == model2.intercept
     True
     >>> from shutil import rmtree
     >>> try:

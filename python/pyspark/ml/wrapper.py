@@ -156,6 +156,9 @@ class JavaModel(Model, JavaTransformer):
         Initialize this instance with a Java model object.
         Subclasses should call this constructor, initialize params,
         and then call _transformer_params_from_java.
+        This instance can be instantiated without specifying java_model,
+        it will be assigned after that, but this scenario only used by
+        :py:class:`JavaMLReader` to load models.
         """
         super(JavaModel, self).__init__()
         if java_model is not None:
