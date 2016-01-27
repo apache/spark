@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
@@ -244,9 +245,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
     SparkEnv.set(ssc.env)
 
-    // Enable "spark.checkpoint.recursive" to make sure that all RDDs marked with the checkpoint
-    // flag are all checkpointed to avoid the stack overflow issue. See SPARK-6847
-    ssc.sparkContext.setLocalProperty("spark.checkpoint.recursive", "true")
+    // Enable "spark.checkpoint.checkpointAllMarked" to make sure that all RDDs marked with the
+    // checkpoint flag are all checkpointed to avoid the stack overflow issue. See SPARK-6847
+    ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED, "true")
     Try {
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       graph.generateJobs(time) // generate jobs using allocated block

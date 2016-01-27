@@ -1535,9 +1535,9 @@ abstract class RDD[T: ClassTag](
 
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
-  // Whether recursively checkpoint all RDDs that are marked with the checkpoint flag.
-  private val recursiveCheckpoint =
-    Option(sc.getLocalProperty("spark.checkpoint.recursive")).map(_.toBoolean).getOrElse(false)
+  // Whether checkpoint all RDDs that are marked with the checkpoint flag.
+  private val checkpointAllMarked =
+    Option(sc.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED)).map(_.toBoolean).getOrElse(false)
 
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
@@ -1582,7 +1582,7 @@ abstract class RDD[T: ClassTag](
       if (!doCheckpointCalled) {
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
-          if (recursiveCheckpoint) {
+          if (checkpointAllMarked) {
             // Checkpoint dependencies first because dependencies will be set to
             // ReliableCheckpointRDD after checkpointing.
             dependencies.foreach(_.rdd.doCheckpoint())
@@ -1705,6 +1705,8 @@ abstract class RDD[T: ClassTag](
  * key-value-pair RDDs, and enabling extra functionalities such as [[PairRDDFunctions.reduceByKey]].
  */
 object RDD {
+
+  private[spark] val CHECKPOINT_ALL_MARKED = "spark.checkpoint.checkpointAllMarked"
 
   // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
