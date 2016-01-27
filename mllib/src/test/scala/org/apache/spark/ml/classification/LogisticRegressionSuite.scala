@@ -634,7 +634,20 @@ class LogisticRegressionSuite
   }
 
   test("binary logistic regression without intercept with L2 regularizationon " +
-    "data with unique column without intercept") {
+    "data with a constant column without intercept") {
+    /*
+        Use the following scikit-learn Python code to get a reference result:
+
+        import numpy as np
+        from sklearn.datasets import load_svmlight_file
+        from sklearn.linear_model import LogisticRegression
+        x_train = np.array([[1, 1], [0, 1]])
+        y_train = np.array([1, 0])
+        model = LogisticRegression(tol=1e-9, C=0.5, max_iter=1000, fit_intercept=False) \
+            .fit(x_train, y_train)
+        print model.coef_
+   */
+
     val trainer = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0)
       .setRegParam(1)
@@ -658,20 +671,6 @@ class LogisticRegressionSuite
 
     assert(model.intercept ~== interceptR absTol 1E-3)
     assert(model.coefficients ~= coefficientsR relTol 1E-2)
-
-    /*
-        Use the following scikit-learn Python code to get a reference result:
-
-        import numpy as np
-        from sklearn.datasets import load_svmlight_file
-        from sklearn.linear_model import LogisticRegression
-        x_train = np.array([[1, 1], [0, 1]])
-        y_train = np.array([1, 0])
-        model = LogisticRegression(tol=1e-9, C=0.5, max_iter=1000, fit_intercept=False) \
-            .fit(x_train, y_train)
-        print model.coef_
-
-     */
   }
 
 
