@@ -512,6 +512,21 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     assert(rdd.isCheckpointedAndMaterialized === true)
     assert(rdd.partitions.size === 0)
   }
+
+  runTest("recursive RDD checkpoint") { reliableCheckpoint: Boolean =>
+    sc.setLocalProperty("spark.checkpoint.recursive", "true")
+    try {
+      val rdd1 = sc.parallelize(1 to 10)
+      checkpoint(rdd1, reliableCheckpoint)
+      val rdd2 = rdd1.map(_ + 1)
+      checkpoint(rdd2, reliableCheckpoint)
+      rdd2.count()
+      assert(rdd1.isCheckpointed === true)
+      assert(rdd2.isCheckpointed === true)
+    } finally {
+      sc.setLocalProperty("spark.checkpoint.recursive", null)
+    }
+  }
 }
 
 /** RDD partition that has large serialized size. */

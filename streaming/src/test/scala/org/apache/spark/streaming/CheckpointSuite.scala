@@ -821,6 +821,33 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     checkpointWriter.stop()
   }
 
+  test("SPARK-6847: stack overflow when updateStateByKey is followed by a checkpointed dstream") {
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val batchCounter = new BatchCounter(ssc)
+    ssc.checkpoint(checkpointDir)
+    val inputDStream = new CheckpointInputDStream(ssc)
+    val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+      Some(values.sum + state.getOrElse(0))
+    }
+    @volatile var recursiveCheckpoint = false
+    @volatile var rddsBothCheckpointed = false
+    inputDStream.map(i => (i, i)).
+      updateStateByKey[Int](updateFunc).checkpoint(batchDuration).
+      map(i => i).checkpoint(batchDuration).
+      foreachRDD { rdd =>
+        recursiveCheckpoint =
+          Option(rdd.sparkContext.getLocalProperty("spark.checkpoint.recursive")).
+            map(_.toBoolean).getOrElse(false)
+        val stateRDD = rdd.firstParent
+        rdd.count()
+        rddsBothCheckpointed = stateRDD.isCheckpointed && rdd.isCheckpointed
+      }
+    ssc.start()
+    batchCounter.waitUntilBatchesCompleted(1, 10000)
+    assert(recursiveCheckpoint === true)
+    assert(rddsBothCheckpointed === true)
+  }
+
   /**
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.

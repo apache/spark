@@ -1535,6 +1535,10 @@ abstract class RDD[T: ClassTag](
 
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
+  // Whether recursively checkpoint all RDDs that are marked with the checkpoint flag.
+  private val recursiveCheckpoint =
+    Option(sc.getLocalProperty("spark.checkpoint.recursive")).map(_.toBoolean).getOrElse(false)
+
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
@@ -1578,6 +1582,11 @@ abstract class RDD[T: ClassTag](
       if (!doCheckpointCalled) {
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
+          if (recursiveCheckpoint) {
+            // Checkpoint dependencies first because dependencies will be set to
+            // ReliableCheckpointRDD after checkpointing.
+            dependencies.foreach(_.rdd.doCheckpoint())
+          }
           checkpointData.get.checkpoint()
         } else {
           dependencies.foreach(_.rdd.doCheckpoint())

@@ -243,6 +243,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Example: BlockRDDs are created in this thread, and it needs to access BlockManager
     // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
     SparkEnv.set(ssc.env)
+
+    // Enable "spark.checkpoint.recursive" to make sure that all RDDs marked with the checkpoint
+    // flag are all checkpointed to avoid the stack overflow issue. See SPARK-6847
+    ssc.sparkContext.setLocalProperty("spark.checkpoint.recursive", "true")
     Try {
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       graph.generateJobs(time) // generate jobs using allocated block
