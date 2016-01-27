@@ -127,10 +127,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes certain operations to both sides of a Union, Intersect or Except operator.
-=======
  * Pushes certain operations to both sides of a Union or Except operator.
->>>>>>> IntersectBySemiJoinMerged
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
@@ -1050,6 +1047,8 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2
  *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
  * }}}
+ *
+ * This rule is only applicable to INTERSECT DISTINCT. Do not use it for INTERSECT ALL.
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
