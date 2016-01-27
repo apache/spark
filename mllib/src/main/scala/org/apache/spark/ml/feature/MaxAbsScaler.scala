@@ -18,12 +18,13 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.param.{ParamMap, Params}
-import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.param.{ParamMap, Params}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -69,11 +70,11 @@ class MaxAbsScaler(override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
     val summary = Statistics.colStats(input)
-    val maxAbs = summary.min.toArray.zip(summary.max.toArray).map { case (min, max) => 
+    val maxAbs = summary.min.toArray.zip(summary.max.toArray).map { case (min, max) =>
       val absMin = math.abs(min)
       val absMax = math.abs(max)
       if(absMax > absMin) absMax else absMin
-    }    
+    }
 
     copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs)).setParent(this))
   }
@@ -112,8 +113,10 @@ class MaxAbsScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
+    // TODO: this looks hack, we may have to handle sparse and dense vectors separately.
+    val maxAbsUnzero = Vectors.dense(maxAbs.toArray.map(i => if (i == 0) 1 else i))
     val reScale = udf { (vector: Vector) =>
-      val brz = vector.toBreeze / maxAbs.toBreeze
+      val brz = vector.toBreeze / maxAbsUnzero.toBreeze
       Vectors.fromBreeze(brz)
     }
     dataset.withColumn($(outputCol), reScale(col($(inputCol))))
