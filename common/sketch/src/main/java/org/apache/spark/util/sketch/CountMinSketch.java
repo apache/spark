@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -54,6 +55,34 @@ import java.io.OutputStream;
  * This implementation is largely based on the {@code CountMinSketch} class from stream-lib.
  */
 abstract public class CountMinSketch {
+
+  public enum Version {
+    /**
+     * {@code CountMinSketch} binary format version 1 (all values written in big-endian order):
+     * - Version number, always 1 (32 bit)
+     * - Total count of added items (64 bit)
+     * - Depth (32 bit)
+     * - Width (32 bit)
+     * - Hash functions (depth * 64 bit)
+     * - Count table
+     *   - Row 0 (width * 64 bit)
+     *   - Row 1 (width * 64 bit)
+     *   - ...
+     *   - Row depth - 1 (width * 64 bit)
+     */
+    V1(1);
+
+    private final int versionNumber;
+
+    Version(int versionNumber) {
+      this.versionNumber = versionNumber;
+    }
+
+    int getVersionNumber() {
+      return versionNumber;
+    }
+  }
+
   /**
    * Returns the relative error (or {@code eps}) of this {@link CountMinSketch}.
    */
@@ -99,19 +128,25 @@ abstract public class CountMinSketch {
    *
    * Note that only Count-Min sketches with the same {@code depth}, {@code width}, and random seed
    * can be merged.
+   *
+   * @exception IncompatibleMergeException if the {@code other} {@link CountMinSketch} has
+   *            incompatible depth, width, relative-error, confidence, or random seed.
    */
-  public abstract CountMinSketch mergeInPlace(CountMinSketch other);
+  public abstract CountMinSketch mergeInPlace(CountMinSketch other)
+      throws IncompatibleMergeException;
 
   /**
    * Writes out this {@link CountMinSketch} to an output stream in binary format.
+   * It is the caller's responsibility to close the stream.
    */
-  public abstract void writeTo(OutputStream out);
+  public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
    * Reads in a {@link CountMinSketch} from an input stream.
+   * It is the caller's responsibility to close the stream.
    */
-  public static CountMinSketch readFrom(InputStream in) {
-    throw new UnsupportedOperationException("Not implemented yet");
+  public static CountMinSketch readFrom(InputStream in) throws IOException {
+    return CountMinSketchImpl.readFrom(in);
   }
 
   /**
