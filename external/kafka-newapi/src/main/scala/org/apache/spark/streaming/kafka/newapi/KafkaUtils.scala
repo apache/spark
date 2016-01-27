@@ -44,9 +44,8 @@ import org.apache.spark.streaming.dstream.{ DStream, InputDStream }
 object KafkaUtils {
 
   def addSSLOptions(
-    kafkaParams: Map[String, String],
-    sc: SparkContext): Map[String, String] = {
-
+      kafkaParams: Map[String, String],
+      sc: SparkContext): Map[String, String] = {
     val sparkConf = sc.getConf
     val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", None)
     val kafkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.kafka", Some(defaultSSLOptions))
@@ -68,8 +67,8 @@ object KafkaUtils {
 
   /** Make sure offsets are available in kafka, or throw an exception */
   private def checkOffsets(
-    kafkaParams: Map[String, String],
-    offsetRanges: Array[OffsetRange]): Array[OffsetRange] = {
+      kafkaParams: Map[String, String],
+      offsetRanges: Array[OffsetRange]): Array[OffsetRange] = {
     val kc = new KafkaCluster(kafkaParams)
     try {
       val topics = offsetRanges.map(_.topicPartition).toSet
@@ -109,9 +108,9 @@ object KafkaUtils {
    * @return RDD of (Kafka message key, Kafka message value)
    */
   def createRDD[K: ClassTag, V: ClassTag](
-    sc: SparkContext,
-    kafkaParams: Map[String, String],
-    offsetRanges: Array[OffsetRange]): RDD[(K, V)] = sc.withScope {
+      sc: SparkContext,
+      kafkaParams: Map[String, String],
+      offsetRanges: Array[OffsetRange]): RDD[(K, V)] = sc.withScope {
     val messageHandler = (cr: ConsumerRecord[K, V]) => (cr.key, cr.value)
     new KafkaRDD[K, V, (K, V)](
       sc,
@@ -140,10 +139,10 @@ object KafkaUtils {
    * @return RDD of R
    */
   def createRDD[K: ClassTag, V: ClassTag, R: ClassTag](
-    sc: SparkContext,
-    kafkaParams: Map[String, String],
-    offsetRanges: Array[OffsetRange],
-    messageHandler: ConsumerRecord[K, V] => R): RDD[R] = sc.withScope {
+      sc: SparkContext,
+      kafkaParams: Map[String, String],
+      offsetRanges: Array[OffsetRange],
+      messageHandler: ConsumerRecord[K, V] => R): RDD[R] = sc.withScope {
     val kc = new KafkaCluster[K, V](addSSLOptions(kafkaParams, sc))
     val cleanedHandler = sc.clean(messageHandler)
     new KafkaRDD[K, V, R](sc,
@@ -168,11 +167,11 @@ object KafkaUtils {
    * @return RDD of (Kafka message key, Kafka message value)
    */
   def createRDD[K, V](
-    jsc: JavaSparkContext,
-    keyClass: Class[K],
-    valueClass: Class[V],
-    kafkaParams: JMap[String, String],
-    offsetRanges: Array[OffsetRange]): JavaPairRDD[K, V] = jsc.sc.withScope {
+      jsc: JavaSparkContext,
+      keyClass: Class[K],
+      valueClass: Class[V],
+      kafkaParams: JMap[String, String],
+      offsetRanges: Array[OffsetRange]): JavaPairRDD[K, V] = jsc.sc.withScope {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(createRDD[K, V](
@@ -197,13 +196,13 @@ object KafkaUtils {
    * @return RDD of R
    */
   def createRDD[K, V, R](
-    jsc: JavaSparkContext,
-    keyClass: Class[K],
-    valueClass: Class[V],
-    recordClass: Class[R],
-    kafkaParams: JMap[String, String],
-    offsetRanges: Array[OffsetRange],
-    messageHandler: JFunction[ConsumerRecord[K, V], R]): JavaRDD[R] = jsc.sc.withScope {
+      jsc: JavaSparkContext,
+      keyClass: Class[K],
+      valueClass: Class[V],
+      recordClass: Class[R],
+      kafkaParams: JMap[String, String],
+      offsetRanges: Array[OffsetRange],
+      messageHandler: JFunction[ConsumerRecord[K, V], R]): JavaRDD[R] = jsc.sc.withScope {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
@@ -245,10 +244,10 @@ object KafkaUtils {
    * @return DStream of R
    */
   def createDirectStream[K: ClassTag, V: ClassTag, R: ClassTag](
-    ssc: StreamingContext,
-    kafkaParams: Map[String, String],
-    fromOffsets: Map[TopicPartition, Long],
-    messageHandler: ConsumerRecord[K, V] => R): InputDStream[R] = {
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      fromOffsets: Map[TopicPartition, Long],
+      messageHandler: ConsumerRecord[K, V] => R): InputDStream[R] = {
     val cleanedHandler = ssc.sc.clean(messageHandler)
     new DirectKafkaInputDStream[K, V, R](
       ssc, addSSLOptions(kafkaParams, ssc.sparkContext), fromOffsets, messageHandler)
@@ -288,9 +287,9 @@ object KafkaUtils {
    * @return DStream of (Kafka message key, Kafka message value)
    */
   def createDirectStream[K: ClassTag, V: ClassTag](
-    ssc: StreamingContext,
-    kafkaParams: Map[String, String],
-    topics: Set[String]): InputDStream[(K, V)] = {
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      topics: Set[String]): InputDStream[(K, V)] = {
     val messageHandler = (cr: ConsumerRecord[K, V]) => (cr.key, cr.value)
     val fromOffsets = getFromOffsets(kafkaParams, topics)
 
@@ -390,11 +389,11 @@ object KafkaUtils {
    * @return DStream of (Kafka message key, Kafka message value)
    */
   def createDirectStream[K, V](
-    jssc: JavaStreamingContext,
-    keyClass: Class[K],
-    valueClass: Class[V],
-    kafkaParams: JMap[String, String],
-    topics: JSet[String]): JavaPairInputDStream[K, V] = {
+      jssc: JavaStreamingContext,
+      keyClass: Class[K],
+      valueClass: Class[V],
+      kafkaParams: JMap[String, String],
+      topics: JSet[String]): JavaPairInputDStream[K, V] = {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     createDirectStream[K, V](
@@ -403,18 +402,15 @@ object KafkaUtils {
       Set(topics.asScala.toSeq: _*))
   }
 
-  def createOffsetRange(
-    topic: String,
-    partition: JInt,
-    fromOffset: JLong,
-    untilOffset: JLong): OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
+  def createOffsetRange(topic: String, partition: JInt, fromOffset: JLong, untilOffset: JLong):
+    OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
 
   def createTopicAndPartition(topic: String, partition: JInt): TopicAndPartition =
     TopicAndPartition(topic, partition)
 
   private[kafka] def getFromOffsets(
-    kafkaParams: Map[String, String],
-    topics: Set[String]): Map[TopicPartition, Long] = {
+      kafkaParams: Map[String, String],
+      topics: Set[String]): Map[TopicPartition, Long] = {
     val kc = new KafkaCluster(kafkaParams)
     try {
       val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
@@ -443,18 +439,18 @@ private[kafka] class KafkaUtilsPythonHelper {
   import KafkaUtilsPythonHelper._
 
   def createRDDWithoutMessageHandler(
-    jsc: JavaSparkContext,
-    kafkaParams: JMap[String, String],
-    offsetRanges: JList[OffsetRange]): JavaRDD[(Array[Byte], Array[Byte])] = {
+      jsc: JavaSparkContext,
+      kafkaParams: JMap[String, String],
+      offsetRanges: JList[OffsetRange]): JavaRDD[(Array[Byte], Array[Byte])] = {
     val messageHandler =
       (cr: ConsumerRecord[Array[Byte], Array[Byte]]) => (cr.key, cr.value)
     new JavaRDD(createRDD(jsc, kafkaParams, offsetRanges, messageHandler))
   }
 
   def createRDDWithMessageHandler(
-    jsc: JavaSparkContext,
-    kafkaParams: JMap[String, String],
-    offsetRanges: JList[OffsetRange]): JavaRDD[Array[Byte]] = {
+      jsc: JavaSparkContext,
+      kafkaParams: JMap[String, String],
+      offsetRanges: JList[OffsetRange]): JavaRDD[Array[Byte]] = {
     val messageHandler = (cr: ConsumerRecord[Array[Byte], Array[Byte]]) =>
       new PythonConsumerRecord(
         cr.topic, cr.partition, cr.offset, cr.key(), cr.value())
@@ -464,10 +460,10 @@ private[kafka] class KafkaUtilsPythonHelper {
   }
 
   private def createRDD[V: ClassTag](
-    jsc: JavaSparkContext,
-    kafkaParams: JMap[String, String],
-    offsetRanges: JList[OffsetRange],
-    messageHandler: ConsumerRecord[Array[Byte], Array[Byte]] => V): RDD[V] = {
+      jsc: JavaSparkContext,
+      kafkaParams: JMap[String, String],
+      offsetRanges: JList[OffsetRange],
+      messageHandler: ConsumerRecord[Array[Byte], Array[Byte]] => V): RDD[V] = {
     kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "ByteArrayDeserializer")
     kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "ByteArrayDeserializer")
     KafkaUtils.createRDD[Array[Byte], Array[Byte], V](
@@ -488,10 +484,10 @@ private[kafka] class KafkaUtilsPythonHelper {
   }
 
   def createDirectStreamWithMessageHandler(
-    jssc: JavaStreamingContext,
-    kafkaParams: JMap[String, String],
-    topics: JSet[String],
-    fromOffsets: JMap[TopicPartition, JLong]): JavaDStream[Array[Byte]] = {
+      jssc: JavaStreamingContext,
+      kafkaParams: JMap[String, String],
+      topics: JSet[String],
+      fromOffsets: JMap[TopicPartition, JLong]): JavaDStream[Array[Byte]] = {
     val messageHandler = (cr: ConsumerRecord[Array[Byte], Array[Byte]]) =>
       new PythonConsumerRecord(cr.topic, cr.partition, cr.offset, cr.key(), cr.value())
     val stream = createDirectStream(jssc, kafkaParams, topics, fromOffsets, messageHandler).
@@ -500,12 +496,11 @@ private[kafka] class KafkaUtilsPythonHelper {
   }
 
   private def createDirectStream[V: ClassTag](
-    jssc: JavaStreamingContext,
-    kafkaParams: JMap[String, String],
-    topics: JSet[String],
-    fromOffsets: JMap[TopicPartition, JLong],
-    messageHandler: ConsumerRecord[Array[Byte], Array[Byte]] => V): DStream[V] = {
-
+      jssc: JavaStreamingContext,
+      kafkaParams: JMap[String, String],
+      topics: JSet[String],
+      fromOffsets: JMap[TopicPartition, JLong],
+      messageHandler: ConsumerRecord[Array[Byte], Array[Byte]] => V): DStream[V] = {
     val currentFromOffsets = if (!fromOffsets.isEmpty) {
       val topicsFromOffsets = fromOffsets.keySet().asScala.map(_.topic)
       if (topicsFromOffsets != topics.asScala.toSet) {
@@ -530,11 +525,8 @@ private[kafka] class KafkaUtilsPythonHelper {
       messageHandler)
   }
 
-  def createOffsetRange(
-    topic: String,
-    partition: JInt,
-    fromOffset: JLong,
-    untilOffset: JLong): OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
+  def createOffsetRange(topic: String, partition: JInt, fromOffset: JLong, untilOffset: JLong):
+    OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
 
   def createTopicAndPartition(topic: String, partition: JInt): TopicPartition =
     new TopicPartition(topic, partition)
