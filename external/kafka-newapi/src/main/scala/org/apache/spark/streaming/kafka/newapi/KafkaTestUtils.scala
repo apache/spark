@@ -34,9 +34,9 @@ import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.ZkUtils
-import org.I0Itec.zkclient.ZkClient
 import org.apache.kafka.common.security.JaasUtils
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
+import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time

@@ -143,6 +143,6 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
   private def getCommitOffset(groupId: String, topic: String, partition: Int): Option[Long] = {
     val topicDirs = new ZKGroupTopicDirs(groupId, topic)
     val zkPath = s"${topicDirs.consumerOffsetDir}/$partition"
-    ZkUtils.readDataMaybeNull(kafkaTestUtils.zookeeperClient, zkPath)._1.map(_.toLong)
+    kafkaTestUtils.zookeeperUtils.readDataMaybeNull(zkPath)._1.map(_.toLong)
   }
 }

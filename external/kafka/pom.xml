@@ -51,7 +51,7 @@
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka_${scala.binary.version}</artifactId>
-      <version>0.8.2.1</version>
+      <version>${kafka.version}</version>
       <exclusions>
         <exclusion>
           <groupId>com.sun.jmx</groupId>
