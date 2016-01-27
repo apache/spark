@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, SQLBuilder}
 import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
-import org.apache.spark.sql.types.StructType
 
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
@@ -117,19 +116,6 @@ private[hive] case class CreateViewAsSelect(
     val logicalPlan = if (tableDesc.schema.isEmpty) {
       child
     } else {
-      if (childSchema.length != tableDesc.schema.length) {
-        throw new IllegalStateException(
-          s"""View definition schema is incompatible with the required one:
-             :
-             :${StructType.fromAttributes(childSchema).treeString}
-             :
-             :Required Hive schema:
-             :
-             :${tableDesc.schema.mkString("\n")}
-           """.stripMargin(':')
-        )
-      }
-
       val projectList = childSchema.zip(tableDesc.schema).map {
         case (attr, col) => Alias(attr, col.name)()
       }
