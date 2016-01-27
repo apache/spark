@@ -105,6 +105,17 @@ public final class Platform {
     _UNSAFE.freeMemory(address);
   }
 
+  public static long reallocateMemory(long address, long oldSize, long newSize) {
+    long newMemory = _UNSAFE.allocateMemory(newSize);
+    copyMemory(null, address, null, newMemory, oldSize);
+    freeMemory(address);
+    return newMemory;
+  }
+
+  public static void setMemory(long address, byte value, long size) {
+    _UNSAFE.setMemory(address, size, value);
+  }
+
   public static void copyMemory(
     Object src, long srcOffset, Object dst, long dstOffset, long length) {
     // Check if dstOffset is before or after srcOffset to determine if we should copy

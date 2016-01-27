@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -122,7 +123,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         val dataGenerator = RandomDataGenerator.forType(
           dataType = dataType,
           nullable = true,
-          seed = Some(System.nanoTime())
+          new Random(System.nanoTime())
         ).getOrElse {
           fail(s"Failed to create data generator for schema $dataType")
         }
