@@ -22,7 +22,7 @@ ___  ___ |  / _  /   _  __/ _  / / /_/ /_ |/ |/ /
 
 BASE_LOG_URL = '/admin/airflow/log'
 AIRFLOW_HOME = os.path.expanduser(configuration.get('core', 'AIRFLOW_HOME'))
-SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
+SQL_ALCHEMY_CONN = configuration.get_with_fallback('core', 'SQL_ALCHEMY_CONN')
 LOGGING_LEVEL = logging.INFO
 DAGS_FOLDER = os.path.expanduser(configuration.get('core', 'DAGS_FOLDER'))
 

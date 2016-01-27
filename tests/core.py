@@ -24,6 +24,7 @@ from airflow.settings import Session
 from airflow.utils import LoggingMixin, round_time
 from lxml import html
 from airflow.utils import AirflowException
+from airflow.configuration import AirflowConfigException
 
 NUM_EXAMPLE_DAGS = 8
 DEV_NULL = '/dev/null'
@@ -400,6 +401,115 @@ class CoreTest(unittest.TestCase):
         # making sure replacement actually happened
         assert "{AIRFLOW_HOME}" not in cfg
         assert "{FERNET_KEY}" not in cfg
+
+    def test_config_works_without_original_but_has_fallback(self):
+
+        # initial assumption
+        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
+        self.assertFalse(
+            configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
+        )
+
+        SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+            'core', 'SQL_ALCHEMY_CONN'
+        )
+
+        # testing condition
+        configuration.set("core", "SQL_ALCHEMY_CONN_CMD",
+                          "printf sqlite:///random_string/unittests.db"
+                          )
+        self.assertTrue(configuration.has_option(
+            "core",
+            "SQL_ALCHEMY_CONN_CMD"
+        )
+        )
+        configuration.remove_option("core", "SQL_ALCHEMY_CONN")
+
+        FALLBACK_SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+            "core",
+            "SQL_ALCHEMY_CONN"
+        )
+
+        self.assertEqual(
+            FALLBACK_SQL_ALCHEMY_CONN,
+            "sqlite:///random_string/unittests.db"
+        )
+
+        # restore the conf back to the original state
+        configuration.set("core", "SQL_ALCHEMY_CONN", SQL_ALCHEMY_CONN)
+        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
+
+        configuration.remove_option("core", "SQL_ALCHEMY_CONN_CMD")
+        self.assertFalse(configuration.has_option(
+            "core",
+            "SQL_ALCHEMY_CONN_CMD"
+        )
+        )
+
+        NEW_SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+            "core",
+            "SQL_ALCHEMY_CONN"
+        )
+
+        self.assertEqual(NEW_SQL_ALCHEMY_CONN, SQL_ALCHEMY_CONN)
+
+    def test_config_use_original_when_original_and_fallback_are_present(self):
+        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
+        self.assertFalse(configuration.has_option(
+            "core",
+            "SQL_ALCHEMY_CONN_CMD"
+        )
+        )
+
+        SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
+
+        configuration.set(
+            "core",
+            "SQL_ALCHEMY_CONN_CMD",
+            "printf sqlite:///random_string/unittests.db"
+        )
+
+        self.assertTrue(configuration.has_option(
+            "core", "SQL_ALCHEMY_CONN_CMD"))
+
+        FALLBACK_SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+            "core",
+            "SQL_ALCHEMY_CONN"
+        )
+
+        self.assertEqual(FALLBACK_SQL_ALCHEMY_CONN, SQL_ALCHEMY_CONN)
+
+        # restore the conf back to the original state
+        configuration.remove_option("core", "SQL_ALCHEMY_CONN_CMD")
+        self.assertFalse(configuration.has_option(
+            "core",
+            "SQL_ALCHEMY_CONN_CMD"
+        )
+        )
+
+    def test_config_throw_error_when_original_and_fallback_is_absent(self):
+        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
+        self.assertFalse(configuration.has_option(
+            "core", "SQL_ALCHEMY_CONN_CMD"))
+
+        SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+            "core",
+            "SQL_ALCHEMY_CONN"
+        )
+        configuration.remove_option("core", "SQL_ALCHEMY_CONN")
+
+        with self.assertRaises(AirflowConfigException) as cm:
+            configuration.get_with_fallback("core", "SQL_ALCHEMY_CONN")
+
+        exception = str(cm.exception)
+        self.assertEqual(
+            exception,
+            'section/key [core/sql_alchemy_conn_cmd] not found in config'
+        )
+
+        # restore the conf back to the original state
+        configuration.set("core", "SQL_ALCHEMY_CONN", SQL_ALCHEMY_CONN)
+        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
 
     def test_class_with_logger_should_have_logger_with_correct_name(self):
 

@@ -46,7 +46,7 @@ from airflow.utils import (
 
 Base = declarative_base()
 ID_LEN = 250
-SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
+SQL_ALCHEMY_CONN = configuration.get_with_fallback('core', 'SQL_ALCHEMY_CONN')
 DAGS_FOLDER = os.path.expanduser(configuration.get('core', 'DAGS_FOLDER'))
 XCOM_RETURN_KEY = 'return_value'
 

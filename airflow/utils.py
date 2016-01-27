@@ -290,7 +290,7 @@ def upgradedb():
     config = Config(os.path.join(package_dir, 'alembic.ini'))
     config.set_main_option('script_location', directory)
     config.set_main_option('sqlalchemy.url',
-                           configuration.get('core', 'SQL_ALCHEMY_CONN'))
+                           configuration.get_with_fallback('core', 'SQL_ALCHEMY_CONN'))
     command.upgrade(config, 'heads')
 
 

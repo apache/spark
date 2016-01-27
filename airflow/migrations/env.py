@@ -40,7 +40,7 @@ def run_migrations_offline():
     script output.
 
     """
-    url = configuration.get('core', 'SQL_ALCHEMY_CONN')
+    url = configuration.get_with_fallback('core', 'SQL_ALCHEMY_CONN')
     context.configure(
         url=url, target_metadata=target_metadata, literal_binds=True,
         compare_type=COMPARE_TYPE)
