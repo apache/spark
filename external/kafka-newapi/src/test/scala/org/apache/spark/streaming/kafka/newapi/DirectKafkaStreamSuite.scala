@@ -37,6 +37,7 @@ import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerBatchCompleted, StreamingListenerBatchStarted, StreamingListenerBatchSubmitted}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.Utils
+import org.apache.spark.streaming.kafka.KafkaTestUtils
 
 class DirectKafkaStreamSuite
   extends SparkFunSuite

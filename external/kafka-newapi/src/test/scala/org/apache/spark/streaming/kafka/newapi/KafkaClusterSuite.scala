@@ -24,6 +24,7 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.streaming.kafka.KafkaTestUtils
 
 class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
   private val topic = "new_kcsuitetopic" + Random.nextInt(10000)

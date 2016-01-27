@@ -24,6 +24,7 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
+import org.apache.spark.streaming.kafka.KafkaTestUtils
 
 class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
