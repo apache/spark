@@ -1256,8 +1256,12 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
+    val output = queryExecution.analyzed.output
+    val unquotedCols = colNames.map (
+      f => f.stripPrefix("`").stripSuffix("`")
+    )
     val remainingCols =
-      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
+      output.filter(f => unquotedCols.forall(n => !resolver(f.name, n))).map(f => Column(f))
     if (remainingCols.size == this.schema.size) {
       this
     } else {
@@ -1276,7 +1280,9 @@ class DataFrame private[sql](
   def drop(col: Column): DataFrame = {
     val expression = col match {
       case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(u.name, sqlContext.analyzer.resolver).getOrElse(u)
+        val unquotedName = u.name.stripPrefix("`").stripSuffix("`")
+        queryExecution.analyzed.resolveQuoted(s"`${unquotedName}`",
+          sqlContext.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
