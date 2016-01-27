@@ -349,19 +349,41 @@ object functions extends LegacyFunctions {
   }
 
   /**
-   * Aggregate function: returns the first value in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def first(e: Column): Column = withAggregateFunction { new First(e.expr) }
+    * Aggregate function: returns the first value in a group. The function does not consider null
+    * values when the ignoreNulls flag is set to true.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def first(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
+    new First(e.expr, Literal(ignoreNulls))
+  }
 
   /**
-   * Aggregate function: returns the first value of a column in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
+    * Aggregate function: returns the first value of a column in a group. The function does not
+    * consider null values when the ignoreNulls flag is set to true.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def first(columnName: String, ignoreNulls: Boolean): Column = {
+    first(Column(columnName), ignoreNulls)
+  }
+
+  /**
+    * Aggregate function: returns the first value in a group.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def first(e: Column): Column = first(e, ignoreNulls = false)
+
+  /**
+    * Aggregate function: returns the first value of a column in a group.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
   def first(columnName: String): Column = first(Column(columnName))
 
   /**
@@ -381,20 +403,42 @@ object functions extends LegacyFunctions {
   def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
   /**
-   * Aggregate function: returns the last value in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def last(e: Column): Column = withAggregateFunction { new Last(e.expr) }
+    * Aggregate function: returns the last value in a group. The function does not
+    * consider null values when the ignoreNulls flag is set to true.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
+    new Last(e.expr, Literal(ignoreNulls))
+  }
 
   /**
-   * Aggregate function: returns the last value of the column in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def last(columnName: String): Column = last(Column(columnName))
+    * Aggregate function: returns the last value of the column in a group. The function does not
+    * consider null values when the ignoreNulls flag is set to true.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def last(columnName: String, ignoreNulls: Boolean): Column = {
+    last(Column(columnName), ignoreNulls)
+  }
+
+  /**
+    * Aggregate function: returns the last value in a group.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def last(e: Column): Column = last(e, ignoreNulls = false)
+
+  /**
+    * Aggregate function: returns the last value of the column in a group.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
