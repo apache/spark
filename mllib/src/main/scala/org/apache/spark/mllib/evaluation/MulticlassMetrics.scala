@@ -148,12 +148,6 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   lazy val precision: Double = tpByClass.values.sum.toDouble / labelCount
   
   /**
-   * Returns specificity
-   */
-  @Since("1.6.0")
-  lazy val specificity: Double = 1 - (fpByClass.values.sum.toDouble / (labelCount - labelCountByClass))
-
-  /**
    * Returns recall
    * (equals to precision for multiclass classifier
    * because sum of all false positives is equal to sum
@@ -204,7 +198,6 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   /**
    * Returns weighted averaged specificity
    */
-  @Since("1.6.0")
   lazy val weightedSpecificity: Double = labelCountByClass.map { case (category, count) =>
     specificity(category) * count.toDouble / labelCount
   }.sum
