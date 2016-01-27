@@ -35,9 +35,10 @@ import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
-import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.util.sketch.CountMinSketch;
+import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDataFrameSuite {
@@ -320,5 +321,30 @@ public class JavaDataFrameSuite {
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
       Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
     Assert.assertEquals(5L, df2.count());
+  }
+
+  @Test
+  public void testCountMinSketch() {
+    DataFrame df = context.range(1000);
+
+    CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
+    Assert.assertEquals(sketch1.totalCount(), 1000);
+    Assert.assertEquals(sketch1.depth(), 10);
+    Assert.assertEquals(sketch1.width(), 20);
+
+    CountMinSketch sketch2 = df.stat().countMinSketch(col("id"), 10, 20, 42);
+    Assert.assertEquals(sketch2.totalCount(), 1000);
+    Assert.assertEquals(sketch2.depth(), 10);
+    Assert.assertEquals(sketch2.width(), 20);
+
+    CountMinSketch sketch3 = df.stat().countMinSketch("id", 0.001, 0.99, 42);
+    Assert.assertEquals(sketch3.totalCount(), 1000);
+    Assert.assertEquals(sketch3.relativeError(), 0.001, 1e-4);
+    Assert.assertEquals(sketch3.confidence(), 0.99, 5e-3);
+
+    CountMinSketch sketch4 = df.stat().countMinSketch(col("id"), 0.001, 0.99, 42);
+    Assert.assertEquals(sketch4.totalCount(), 1000);
+    Assert.assertEquals(sketch4.relativeError(), 0.001, 1e-4);
+    Assert.assertEquals(sketch4.confidence(), 0.99, 5e-3);
   }
 }
