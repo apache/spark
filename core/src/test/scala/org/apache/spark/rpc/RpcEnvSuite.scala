@@ -18,9 +18,9 @@
 package org.apache.spark.rpc
 
 import java.io.{File, NotSerializableException}
-import java.util.UUID
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.{TimeUnit, CountDownLatch, TimeoutException}
+import java.util.UUID
+import java.util.concurrent.{CountDownLatch, TimeoutException, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.Await
@@ -626,9 +626,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       val e = intercept[Exception] {
         Await.result(f, 1 seconds)
       }
-      assert(e.isInstanceOf[TimeoutException] || // For Akka
-        e.isInstanceOf[NotSerializableException] // For Netty
-      )
+      assert(e.isInstanceOf[NotSerializableException])
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()

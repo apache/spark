@@ -18,8 +18,8 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.stat.test.{StreamingTest, StreamingTestResult, StudentTTest,
-  WelchTTest, BinarySample}
+import org.apache.spark.mllib.stat.test.{BinarySample, StreamingTest, StreamingTestResult,
+  StudentTTest, WelchTTest}
 import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.StatCounter
@@ -27,7 +27,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
 
-  override def maxWaitTimeMillis : Int = 30000
+  override def maxWaitTimeMillis: Int = 30000
 
   test("accuracy for null hypothesis using welch t-test") {
     // set parameters

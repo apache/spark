@@ -375,13 +375,6 @@ The following functions are masked by the SparkR package:
     <td><code>sample</code> in <code>package:base</code></td>
     <td><code>base::sample(x, size, replace = FALSE, prob = NULL)</code></td>
   </tr>
-  <tr>
-    <td><code>table</code> in <code>package:base</code></td>
-    <td><code><pre>base::table(...,
-            exclude = if (useNA == "no") c(NA, NaN),
-            useNA = c("no", "ifany", "always"),
-            dnn = list.names(...), deparse.level = 1)</pre></code></td>
-  </tr>
 </table>
 
 Since part of SparkR is modeled on the `dplyr` package, certain functions in SparkR share the same names with those in `dplyr`. Depending on the load order of the two packages, some functions from the package loaded first are masked by those in the package loaded after. In such case, prefix such calls with the package name, for instance, `SparkR::cume_dist(x)` or `dplyr::cume_dist(x)`.
@@ -394,3 +387,7 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 ## Upgrading From SparkR 1.5.x to 1.6
 
  - Before Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.
+
+## Upgrading From SparkR 1.6.x to 2.0
+
+ - The method `table` has been removed and replaced by `tableToDF`.

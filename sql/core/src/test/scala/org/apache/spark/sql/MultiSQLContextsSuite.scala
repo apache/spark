@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark._
 import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark._
 
 class MultiSQLContextsSuite extends SparkFunSuite with BeforeAndAfterAll {
 

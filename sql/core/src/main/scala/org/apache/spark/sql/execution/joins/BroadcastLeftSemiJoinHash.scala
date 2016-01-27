@@ -66,8 +66,7 @@ case class BroadcastLeftSemiJoinHash(
         val hashedRelation = broadcastedRelation.value
         hashedRelation match {
           case unsafe: UnsafeHashedRelation =>
-            TaskContext.get().internalMetricsToAccumulators(
-              InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+            TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
           case _ =>
         }
         hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)

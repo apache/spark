@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -151,6 +151,7 @@ case class CreateMetastoreDataSource(
       tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
+      bucketSpec = None,
       provider,
       optionsWithPath,
       isExternal)
@@ -164,6 +165,7 @@ case class CreateMetastoreDataSourceAsSelect(
     tableIdent: TableIdentifier,
     provider: String,
     partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
@@ -211,10 +213,15 @@ case class CreateMetastoreDataSourceAsSelect(
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val resolved = ResolvedDataSource(
-            sqlContext, Some(query.schema.asNullable), partitionColumns, provider, optionsWithPath)
+            sqlContext,
+            Some(query.schema.asNullable),
+            partitionColumns,
+            bucketSpec,
+            provider,
+            optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
           EliminateSubQueries(sqlContext.catalog.lookupRelation(tableIdent)) match {
-            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _) =>
+            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               if (l.relation != createdRelation.relation) {
                 val errorDescription =
                   s"Cannot append to table $tableName because the resolved relation does not " +
@@ -254,8 +261,14 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     // Create the relation based on the data of df.
-    val resolved =
-      ResolvedDataSource(sqlContext, provider, partitionColumns, mode, optionsWithPath, df)
+    val resolved = ResolvedDataSource(
+      sqlContext,
+      provider,
+      partitionColumns,
+      bucketSpec,
+      mode,
+      optionsWithPath,
+      df)
 
     if (createMetastoreTable) {
       // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -265,6 +278,7 @@ case class CreateMetastoreDataSourceAsSelect(
         tableIdent,
         Some(resolved.relation.schema),
         partitionColumns,
+        bucketSpec,
         provider,
         optionsWithPath,
         isExternal)

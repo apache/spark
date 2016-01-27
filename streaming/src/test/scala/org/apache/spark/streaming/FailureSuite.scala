@@ -21,7 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkFunSuite, Logging}
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 /**

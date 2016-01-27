@@ -37,6 +37,7 @@ else:
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
+from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
@@ -90,6 +91,27 @@ class MockEstimator(Estimator, HasFake):
 
 class MockModel(MockTransformer, Model, HasFake):
     pass
+
+
+class ParamTypeConversionTests(PySparkTestCase):
+    """
+    Test that param type conversion happens.
+    """
+
+    def test_int_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.sc.parallelize([
+            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0))]).toDF()
+        lr = LogisticRegression(elasticNetParam=0)
+        lr.fit(df)
+        lr.setElasticNetParam(0)
+        lr.fit(df)
+
+    def test_invalid_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
+        lr = LogisticRegression(elasticNetParam=0)
+        self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
 
 
 class PipelineTests(PySparkTestCase):
@@ -162,6 +184,18 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
 
 
 class ParamTests(PySparkTestCase):
+
+    def test_copy_new_parent(self):
+        testParams = TestParams()
+        # Copying an instantiated param should fail
+        with self.assertRaises(ValueError):
+            testParams.maxIter._copy_new_parent(testParams)
+        # Copying a dummy param should succeed
+        TestParams.maxIter._copy_new_parent(testParams)
+        maxIter = testParams.maxIter
+        self.assertEqual(maxIter.name, "maxIter")
+        self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
+        self.assertTrue(maxIter.parent == testParams.uid)
 
     def test_param(self):
         testParams = TestParams()
@@ -372,6 +406,7 @@ class CrossValidatorTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.ml.tests import *
     if xmlrunner:
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
     else:
