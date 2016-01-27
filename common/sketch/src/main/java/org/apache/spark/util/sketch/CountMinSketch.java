@@ -59,16 +59,22 @@ abstract public class CountMinSketch {
   public enum Version {
     /**
      * {@code CountMinSketch} binary format version 1 (all values written in big-endian order):
-     * - Version number, always 1 (32 bit)
-     * - Total count of added items (64 bit)
-     * - Depth (32 bit)
-     * - Width (32 bit)
-     * - Hash functions (depth * 64 bit)
-     * - Count table
-     *   - Row 0 (width * 64 bit)
-     *   - Row 1 (width * 64 bit)
-     *   - ...
-     *   - Row depth - 1 (width * 64 bit)
+     * <ul>
+     *   <li>Version number, always 1 (32 bit)</li>
+     *   <li>Total count of added items (64 bit)</li>
+     *   <li>Depth (32 bit)</li>
+     *   <li>Width (32 bit)</li>
+     *   <li>Hash functions (depth * 64 bit)</li>
+     *   <li>
+     *     Count table
+     *     <ul>
+     *       <li>Row 0 (width * 64 bit)</li>
+     *       <li>Row 1 (width * 64 bit)</li>
+     *       <li>...</li>
+     *       <li>Row {@code depth - 1} (width * 64 bit)</li>
+     *     </ul>
+     *   </li>
+     * </ul>
      */
     V1(1);
 

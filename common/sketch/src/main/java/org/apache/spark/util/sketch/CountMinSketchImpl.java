@@ -21,13 +21,16 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
-class CountMinSketchImpl extends CountMinSketch {
-  public static final long PRIME_MODULUS = (1L << 31) - 1;
+class CountMinSketchImpl extends CountMinSketch implements Serializable {
+  private static final long PRIME_MODULUS = (1L << 31) - 1;
 
   private int depth;
   private int width;
@@ -36,6 +39,9 @@ class CountMinSketchImpl extends CountMinSketch {
   private long totalCount;
   private double eps;
   private double confidence;
+
+  private CountMinSketchImpl() {
+  }
 
   CountMinSketchImpl(int depth, int width, int seed) {
     this.depth = depth;
@@ -53,16 +59,6 @@ class CountMinSketchImpl extends CountMinSketch {
     this.width = (int) Math.ceil(2 / eps);
     this.depth = (int) Math.ceil(-Math.log(1 - confidence) / Math.log(2));
     initTablesWith(depth, width, seed);
-  }
-
-  CountMinSketchImpl(int depth, int width, long totalCount, long hashA[], long table[][]) {
-    this.depth = depth;
-    this.width = width;
-    this.eps = 2.0 / width;
-    this.confidence = 1 - 1 / Math.pow(2, depth);
-    this.hashA = hashA;
-    this.table = table;
-    this.totalCount = totalCount;
   }
 
   @Override
@@ -325,27 +321,43 @@ class CountMinSketchImpl extends CountMinSketch {
   }
 
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
+    CountMinSketchImpl sketch = new CountMinSketchImpl();
+    sketch.readFrom0(in);
+    return sketch;
+  }
+
+  private void readFrom0(InputStream in) throws IOException {
     DataInputStream dis = new DataInputStream(in);
 
-    // Ignores version number
-    dis.readInt();
-
-    long totalCount = dis.readLong();
-    int depth = dis.readInt();
-    int width = dis.readInt();
-
-    long hashA[] = new long[depth];
-    for (int i = 0; i < depth; ++i) {
-      hashA[i] = dis.readLong();
+    int version = dis.readInt();
+    if (version != Version.V1.getVersionNumber()) {
+      throw new IOException("Unexpected Count-Min Sketch version number (" + version + ")");
     }
 
-    long table[][] = new long[depth][width];
+    this.totalCount = dis.readLong();
+    this.depth = dis.readInt();
+    this.width = dis.readInt();
+    this.eps = 2.0 / width;
+    this.confidence = 1 - 1 / Math.pow(2, depth);
+
+    this.hashA = new long[depth];
+    for (int i = 0; i < depth; ++i) {
+      this.hashA[i] = dis.readLong();
+    }
+
+    this.table = new long[depth][width];
     for (int i = 0; i < depth; ++i) {
       for (int j = 0; j < width; ++j) {
-        table[i][j] = dis.readLong();
+        this.table[i][j] = dis.readLong();
       }
     }
+  }
 
-    return new CountMinSketchImpl(depth, width, totalCount, hashA, table);
+  private void writeObject(ObjectOutputStream out) throws IOException {
+    this.writeTo(out);
+  }
+
+  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+    this.readFrom0(in);
   }
 }
