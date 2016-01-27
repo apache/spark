@@ -50,7 +50,7 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
 
   // Needed for Java tests
   def this() {
-    this(InternalAccumulator.create())
+    this(InternalAccumulator.createAll())
   }
 
   /**
