@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.metric
 
-import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
+import org.apache.spark.{Accumulable, AccumulableParam, Accumulators, SparkContext}
 import org.apache.spark.util.Utils
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String, val param: SQLMetricParam[R, T])
-  extends Accumulable[R, T](param.zero, param, Some(name), true) {
+  extends Accumulable[R, T](param.zero, param, Some(name), internal = true) {
 
   def reset(): Unit = {
     this.value = param.zero
@@ -131,6 +131,8 @@ private[sql] object SQLMetrics {
       name: String,
       param: LongSQLMetricParam): LongSQLMetric = {
     val acc = new LongSQLMetric(name, param)
+    // This is an internal accumulator so we need to register it explicitly.
+    Accumulators.register(acc)
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }

@@ -140,7 +140,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         .filter(_._2.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
 
       assert(peakMemoryAccumulator.size == 1)
-      peakMemoryAccumulator.head._2.value.toLong
+      peakMemoryAccumulator.head._2.value.get.asInstanceOf[Long]
     }
 
     assert(sparkListener.getCompletedStageInfos.length == 2)

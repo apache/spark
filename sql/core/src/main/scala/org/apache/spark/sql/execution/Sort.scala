@@ -79,17 +79,17 @@ case class Sort(
         sorter.setTestSpillFrequency(testSpillFrequency)
       }
 
+      val metrics = TaskContext.get().taskMetrics()
       // Remember spill data size of this task before execute this operator so that we can
       // figure out how many bytes we spilled for this operator.
-      val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
+      val spillSizeBefore = metrics.memoryBytesSpilled
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
       dataSize += sorter.getPeakMemoryUsage
-      spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
+      spillSize += metrics.memoryBytesSpilled - spillSizeBefore
+      metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
 
-      TaskContext.get().internalMetricsToAccumulators(
-        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
       sortedIterator
     }
   }
