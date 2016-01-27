@@ -86,6 +86,12 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
   }
 
+  private val executorMetrics: ExecutorMetrics = new ExecutorMetrics
+  executorMetrics.setHostname(Utils.localHostName)
+  if (env.rpcEnv.address != null) {
+    executorMetrics.setPort(Some(env.rpcEnv.address.port))
+  }
+
   // Whether to load classes in user jars before those in Spark jars
   private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
 
@@ -431,7 +437,7 @@ private[spark] class Executor(
           metrics.updateAccumulators()
 
           if (isLocal) {
-            // JobProgressListener will hold an reference of it during
+            // JobProgressListener will hold a reference of it during
             // onExecutorMetricsUpdate(), then JobProgressListener can not see
             // the changes of metrics any more, so make a deep copy of it
             val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
@@ -444,7 +450,19 @@ private[spark] class Executor(
       }
     }
 
-    val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+    env.blockTransferService.getMemMetrics(this.executorMetrics)
+    val executorMetrics = if (isLocal) {
+      // JobProgressListener might hold a reference of it during onExecutorMetricsUpdate()
+      // in future, if then JobProgressListener cannot see the changes of metrics any
+      // more, so make a deep copy of it here for future change.
+      Utils.deserialize[ExecutorMetrics](Utils.serialize(this.executorMetrics))
+    } else {
+      this.executorMetrics
+    }
+
+    val message = Heartbeat(
+      executorId, executorMetrics, tasksMetrics.toArray, env.blockManager.blockManagerId)
+
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
           message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
