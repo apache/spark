@@ -607,6 +607,33 @@ class LogisticRegressionSuite
     assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
   }
 
+
+  test("binary logistic regression without intercept with L2 regularizationon " +
+    "data with unique column without intercept") {
+    val trainer1 = (new LogisticRegression).setFitIntercept(false)
+      .setElasticNetParam(0.0)
+      .setRegParam(1)
+      .setStandardization(false)
+      .setMaxIter(1000)
+      .setTol(1e-9)
+
+    val binaryDatasetWithUniqueColumn = sqlContext.read.
+      format("libsvm").
+      load("../data/mllib/sample_libsvm_data_with_unique_column.txt")
+
+    val model1 = trainer1.fit(binaryDatasetWithUniqueColumn)
+
+    val interceptR1 = 0.0
+    val coefficientsR1 = Vectors.dense(0.0301002746509743, 0.0906099616129797, 0.0954855492088332,
+      0.0243782420594917, 0.0174024017667667, -0.0006549273929309,
+      0.0637250665085166, -0.0589532651377124, 0.1383368129434264,
+      0.0665749825701113, 0.0799386779781182, 0.1198682685242071,
+      0.1802933312643371, -0.0124797701753129)
+
+    assert(model1.intercept ~== interceptR1 absTol 1E-3)
+    assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
+  }
+
   test("binary logistic regression with intercept with ElasticNet regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
