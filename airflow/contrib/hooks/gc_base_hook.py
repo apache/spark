@@ -3,11 +3,26 @@ import logging
 
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import AirflowException
-from apiclient.discovery import build
 from oauth2client.client import SignedJwtAssertionCredentials, GoogleCredentials
 
 class GoogleCloudBaseHook(BaseHook):
+    """
+    A base hook for Google cloud-related hooks. Google cloud has a shared REST
+    API client that is built in the same way no matter which service you use.
+    This class helps construct and authorize the credentials needed to then
+    call apiclient.discovery.build() to actually discover and build a client
+    for a Google cloud service.
+
+    The class also contains some miscellaneous helper functions.
+    """
+
     def __init__(self, scope, conn_id):
+        """
+        :param scope: The scope of the hook.
+        :type scope: string
+        :param conn_id: The connection ID to use when fetching connection info.
+        :type conn_id: string
+        """
         self.scope = scope
         self.conn_id = conn_id
 
