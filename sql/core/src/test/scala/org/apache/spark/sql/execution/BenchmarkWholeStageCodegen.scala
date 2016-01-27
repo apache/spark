@@ -27,10 +27,11 @@ import org.apache.spark.util.Benchmark
   *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
+  lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
+  lazy val sc = SparkContext.getOrCreate(conf)
+  lazy val sqlContext = SQLContext.getOrCreate(sc)
+
   def testWholeStage(values: Int): Unit = {
-    val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
-    val sc = SparkContext.getOrCreate(conf)
-    val sqlContext = SQLContext.getOrCreate(sc)
 
     val benchmark = new Benchmark("Single Int Column Scan", values)
 
@@ -54,7 +55,42 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  ignore("benchmark") {
-    testWholeStage(1024 * 1024 * 200)
+  def testStddev(values: Int): Unit = {
+
+    val benchmark = new Benchmark("stddev", values)
+
+    benchmark.addCase("stddev w/o codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("stddev w codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    /**
+    Using ImperativeAggregate:
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      stddev:                Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------
+      stddev w/o codegen         10157.82            10.32         1.00 X
+      stddev w codegen           10528.03             9.96         0.96 X
+
+      Using DeclarativeAggregate:
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      stddev:                Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------
+      stddev w/o codegen          4128.44            25.40         1.00 X
+      stddev w codegen            1400.25            74.88         2.95 X
+      */
+    benchmark.run()
+  }
+
+  test("benchmark") {
+    // testWholeStage(200 << 20)
+    testStddev(100 << 20)
   }
 }
