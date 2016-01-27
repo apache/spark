@@ -155,8 +155,21 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Drops view `viewName` after calling `f`.
+   */
+  protected def withView(viewNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      viewNames.foreach { name =>
+        sqlContext.sql(s"DROP VIEW IF EXISTS $name")
+      }
+    }
+  }
+
+  /**
    * Creates a temporary database and switches current database to it before executing `f`.  This
    * database is dropped after `f` returns.
+   *
+   * Note that this method doesn't switch current database before executing `f`.
    */
   protected def withTempDatabase(f: String => Unit): Unit = {
     val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
