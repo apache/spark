@@ -156,7 +156,9 @@ object Metadata {
               throw new RuntimeException(s"Do not support array of type ${other.getClass}.")
           }
         }
-      case other =>
+      case (key, JNull) =>
+        builder.putNull(key)
+      case (key, other) =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
     builder.build()
@@ -228,6 +230,9 @@ class MetadataBuilder {
     map ++= metadata.map
     this
   }
+
+  /** Puts a null. */
+  def putNull(key: String): this.type = put(key, null)
 
   /** Puts a Long. */
   def putLong(key: String, value: Long): this.type = put(key, value)
