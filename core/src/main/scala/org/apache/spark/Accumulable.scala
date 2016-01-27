@@ -57,7 +57,7 @@ import org.apache.spark.util.Utils
  */
 class Accumulable[R, T] private (
     val id: Long,
-    @transient initialValue: R,
+    @transient private val initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean,

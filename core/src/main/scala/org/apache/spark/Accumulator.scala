@@ -60,19 +60,19 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * @tparam T result type
  */
 class Accumulator[T] private[spark] (
-    @transient private[spark] val initialValue: T,
+    @transient private val initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String],
     internal: Boolean,
-    override val countFailedValues: Boolean = false)
+    private[spark] override val countFailedValues: Boolean = false)
   extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
-    this(initialValue, param, name, false)
+    this(initialValue, param, name, false /* internal */)
   }
 
   def this(initialValue: T, param: AccumulatorParam[T]) = {
-    this(initialValue, param, None, false)
+    this(initialValue, param, None, false /* internal */)
   }
 }
 
