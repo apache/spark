@@ -141,7 +141,8 @@ class MLReader(object):
 
     def __init__(self, instance):
         self._instance = instance
-        self._jread = instance._java_obj.read()
+        self._instance._java_obj = self._load_java_obj(self._instance)
+        self._jread = self._instance._java_obj.read()
 
     @since("2.0.0")
     def load(self, path):
@@ -158,6 +159,25 @@ class MLReader(object):
         self._jread.context(sqlContext._ssql_ctx)
         return self
 
+    @classmethod
+    def _java_loader_class(cls, instance):
+        """
+        Returns the full class name of the Java loader. The default
+        implementation replaces "pyspark" by "org.apache.spark" in
+        the Python full class name.
+        """
+        java_package = instance.__module__.replace("pyspark", "org.apache.spark")
+        return ".".join([java_package, instance.__class__.__name__])
+
+    @classmethod
+    def _load_java_obj(cls, instance):
+        """Load the peer Java object."""
+        java_class = cls._java_loader_class(instance)
+        java_obj = _jvm()
+        for name in java_class.split("."):
+            java_obj = getattr(java_obj, name)
+        return java_obj
+
 
 @inherit_doc
 class MLReadable(object):
@@ -170,31 +190,10 @@ class MLReadable(object):
     """
 
     @classmethod
-    def _java_loader_class(cls):
-        """
-        Returns the full class name of the Java loader. The default
-        implementation replaces "pyspark" by "org.apache.spark" in
-        the Python full class name.
-        """
-        java_package = cls.__module__.replace("pyspark", "org.apache.spark")
-        return ".".join([java_package, cls.__name__])
-
-    @classmethod
-    def _load_java_obj(cls):
-        """Load the peer Java object."""
-        java_class = cls._java_loader_class()
-        java_obj = _jvm()
-        for name in java_class.split("."):
-            java_obj = getattr(java_obj, name)
-        return java_obj
-
-    @classmethod
     @since("2.0.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        instance = cls()
-        instance._java_obj = cls._load_java_obj()
-        return MLReader(instance)
+        return MLReader(cls())
 
     @classmethod
     @since("2.0.0")
