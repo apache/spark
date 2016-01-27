@@ -40,6 +40,15 @@ class Param(object):
         self.doc = str(doc)
         self.expectedType = expectedType
 
+    def _copy_new_parent(self, parent):
+        """Copy the current param to a new parent, must be a dummy param."""
+        if self.parent == "undefined":
+            param = copy.copy(self)
+            param.parent = parent.uid
+            return param
+        else:
+            raise ValueError("Cannot copy from non-dummy parent %s." % parent)
+
     def __str__(self):
         return str(self.parent) + "__" + self.name
 
@@ -76,6 +85,19 @@ class Params(Identifiable):
 
         #: value returned by :py:func:`params`
         self._params = None
+
+        # Copy the params from the class to the object
+        self._copy_params()
+
+    def _copy_params(self):
+        """
+        Copy all params defined on the class to current object.
+        """
+        cls = type(self)
+        src_name_attrs = [(x, getattr(cls, x)) for x in dir(cls)]
+        src_params = list(filter(lambda nameAttr: isinstance(nameAttr[1], Param), src_name_attrs))
+        for name, param in src_params:
+            setattr(self, name, param._copy_new_parent(self))
 
     @property
     @since("1.3.0")
