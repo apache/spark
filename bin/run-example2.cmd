@@ -20,7 +20,7 @@ rem
 set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
-set FWDIR=%~dp0..\
+set FWDIR="%~dp0..\"
 
 rem Export this as SPARK_HOME
 set SPARK_HOME=%FWDIR%
@@ -36,7 +36,7 @@ if not "x%1"=="x" goto arg_given
   goto exit
 :arg_given
 
-set EXAMPLES_DIR=%FWDIR%examples
+set EXAMPLES_DIR="%FWDIR%examples"
 
 rem Figure out the JAR file that our examples were packaged into.
 set SPARK_EXAMPLES_JAR=

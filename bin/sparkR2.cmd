@@ -18,9 +18,9 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
-set SPARK_HOME=%~dp0..
+set SPARK_HOME="%~dp0.."
 
-call %SPARK_HOME%\bin\load-spark-env.cmd
+call "%SPARK_HOME%\bin\load-spark-env.cmd"
 
 
-call %SPARK_HOME%\bin\spark-submit2.cmd sparkr-shell-main %*
+call "%SPARK_HOME%\bin\spark-submit2.cmd" sparkr-shell-main %*
