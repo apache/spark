@@ -112,6 +112,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
+   *
+   * The partitions in this array must satisfy the following property:
+   *   `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
    */
   protected def getPartitions: Array[Partition]
 
@@ -237,6 +240,10 @@ abstract class RDD[T: ClassTag](
     checkpointRDD.map(_.partitions).getOrElse {
       if (partitions_ == null) {
         partitions_ = getPartitions
+        partitions_.zipWithIndex.foreach { case (partition, index) =>
+          require(partition.index == index,
+            s"partitions($index).partition == ${partition.index}, but it should equal $index")
+        }
       }
       partitions_
     }
