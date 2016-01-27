@@ -172,6 +172,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
 
 class BisectingKMeansModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by BisectingKMeans.
 
     .. versionadded:: 2.0.0
@@ -226,7 +228,6 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. versionadded:: 2.0.0
     """
 
-    # a placeholder to make it appear in the generated doc
     k = Param(Params._dummy(), "k", "number of clusters to create")
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
                                     "the minimum number of points (if >= 1.0) " +
@@ -242,10 +243,6 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         super(BisectingKMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.BisectingKMeans",
                                             self.uid)
-        self.k = Param(self, "k", "number of clusters to create")
-        self.minDivisibleClusterSize = Param(self, "minDivisibleClusterSize",
-                                             "the minimum number of points (if >= 1.0) " +
-                                             "or the minimum proportion")
         self._setDefault(maxIter=20, k=4, minDivisibleClusterSize=1.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
