@@ -316,7 +316,9 @@ class HiveContext private[hive](
   }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
-    super.parseSql(substitutor.substitute(hiveconf, sql))
+    executionHive.withHiveState {
+      super.parseSql(substitutor.substitute(hiveconf, sql))
+    }
   }
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =

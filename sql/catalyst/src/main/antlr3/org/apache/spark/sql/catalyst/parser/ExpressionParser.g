@@ -505,10 +505,8 @@ identifier
 functionIdentifier
 @init { gParent.pushMsg("function identifier", state); }
 @after { gParent.popMsg(state); }
-    : db=identifier DOT fn=identifier
-    -> Identifier[$db.text + "." + $fn.text]
-    |
-    identifier
+    :
+    identifier (DOT identifier)? -> identifier+
     ;
 
 principalIdentifier

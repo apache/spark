@@ -2520,7 +2520,7 @@ cacheStatement
 
 cacheTableStatement
   :
-  KW_CACHE (lazy=KW_LAZY)? KW_TABLE identifier (KW_AS selectStatement[true])? -> ^(TOK_CACHETABLE identifier $lazy? selectStatement?)
+  KW_CACHE (lazy=KW_LAZY)? KW_TABLE identifier (KW_AS selectStatementWithCTE)? -> ^(TOK_CACHETABLE identifier $lazy? selectStatementWithCTE?)
   ;
 
 uncacheTableStatement

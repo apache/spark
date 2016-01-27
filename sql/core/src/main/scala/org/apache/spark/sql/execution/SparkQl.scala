@@ -20,6 +20,7 @@ import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
   /** Check if a command should not be explained. */
@@ -104,19 +105,6 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           case _ => noParseRule("SHOW TABLES", node)
         }
         ShowTablesCommand(databaseName)
-
-      case Token("TOK_SHOWFUNCTIONS", args) =>
-        args match {
-          case Nil =>
-            ShowFunctions(None, None)
-          case Token(pattern, Nil) :: Nil =>
-            // Spark SQL does not support a db for show functions currently.
-            ShowFunctions(None, Some(unquoteString(pattern)))
-          case _ => noParseRule("SHOW FUNCTIONS", node)
-        }
-
-      case Token("TOK_DESCFUNCTION", Token(functionName, Nil) :: isExtended) =>
-        DescribeFunction(functionName, isExtended.nonEmpty)
 
       case _ =>
         super.nodeToPlan(node)
