@@ -36,7 +36,6 @@ import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.ZkUtils
 import org.apache.kafka.common.security.JaasUtils
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
-import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
@@ -58,7 +57,6 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   private var zookeeper: EmbeddedZookeeper = _
 
-  private var zkClient: ZkClient = _
   private var zkUtils: ZkUtils = _
 
   // Kafka broker related configurations
@@ -86,9 +84,9 @@ private[kafka] class KafkaTestUtils extends Logging {
     s"$brokerHost:$brokerPort"
   }
 
-  def zookeeperClient: ZkClient = {
+  def zookeeperUtils: ZkUtils = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
-    Option(zkClient).getOrElse(
+    Option(zkUtils).getOrElse(
       throw new IllegalStateException("Zookeeper client is not yet initialized"))
   }
 
@@ -98,7 +96,7 @@ private[kafka] class KafkaTestUtils extends Logging {
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
-    zkClient = ZkUtils.createZkClient(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout)
+    val zkClient = ZkUtils.createZkClient(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout)
     zkUtils = ZkUtils(zkClient, JaasUtils.isZkSecurityEnabled())
     zkReady = true
   }
@@ -141,11 +139,6 @@ private[kafka] class KafkaTestUtils extends Logging {
     }
 
     brokerConf.logDirs.foreach { f => Utils.deleteRecursively(new File(f)) }
-
-    if (zkClient != null) {
-      zkClient.close()
-      zkClient = null
-    }
 
     if (zkUtils != null) {
       zkUtils.close()
