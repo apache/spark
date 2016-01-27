@@ -19,17 +19,19 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftExistenceJoin, LeftSemi}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
-trait HashSemiJoin {
+trait HashExistenceJoin {
   self: SparkPlan =>
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
   val left: SparkPlan
   val right: SparkPlan
   val condition: Option[Expression]
+  val ej: LeftExistenceJoin
 
   override def output: Seq[Attribute] = left.output
 
@@ -39,8 +41,19 @@ trait HashSemiJoin {
   protected def rightKeyGenerator: Projection =
     UnsafeProjection.create(rightKeys, right.output)
 
-  @transient private lazy val boundCondition =
-    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+  @transient private lazy val boundCondition = ej match {
+    case LeftSemi =>
+      newPredicate (condition.getOrElse (Literal (true) ), left.output ++ right.output)
+    case _ => throw new UnsupportedOperationException(s"for join type $ej")
+  }
+
+  @transient private lazy val boundNegativeCondition = ej match {
+    case LeftAnti if condition.isDefined =>
+      newPredicate(Not(condition.get), left.output ++ right.output)
+    case LeftAnti if condition.isEmpty =>
+      newPredicate(Literal(false), left.output ++ right.output)
+    case _ => throw new UnsupportedOperationException(s"for join type $ej")
+  }
 
   protected def buildKeyHashSet(
       buildIter: Iterator[InternalRow], numBuildRows: LongSQLMetric): java.util.Set[InternalRow] = {
@@ -92,6 +105,41 @@ trait HashSemiJoin {
       val r = !key.anyNull && rowBuffer != null && rowBuffer.exists {
         (row: InternalRow) => boundCondition(joinedRow(current, row))
       }
+      if (r) numOutputRows += 1
+      r
+    }
+  }
+
+  protected def hashAntiJoin(
+      streamIter: Iterator[InternalRow],
+      numStreamRows: LongSQLMetric,
+      hashSet: java.util.Set[InternalRow],
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
+    streamIter.filter(current => {
+      numStreamRows += 1
+      val key = joinKeys(current)
+      val r = !key.anyNull && !hashSet.contains(key)
+      if (r) numOutputRows += 1
+      r
+    })
+  }
+
+  protected def hashAntiJoin(
+      streamIter: Iterator[InternalRow],
+      numStreamRows: LongSQLMetric,
+      hashedRelation: HashedRelation,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
+    val joinedRow = new JoinedRow
+
+    streamIter.filter { current =>
+      numStreamRows += 1
+      val key = joinKeys(current)
+      lazy val rowBuffer = hashedRelation.get(key)
+      val r = !key.anyNull && (rowBuffer == null || rowBuffer.forall {
+        (row: InternalRow) => boundNegativeCondition(joinedRow(current, row))
+      })
       if (r) numOutputRows += 1
       r
     }

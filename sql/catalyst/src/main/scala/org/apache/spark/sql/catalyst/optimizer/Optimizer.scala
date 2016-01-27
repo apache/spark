@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -292,12 +292,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
       Project(projectList, Join(pruneJoinChild(left), pruneJoinChild(right), joinType, condition))
 
     // Eliminate unneeded attributes from right side of a LeftSemiJoin.
-    case Join(left, right, LeftSemi, condition) =>
+    case Join(left, right, jt: LeftExistenceJoin, condition) =>
       // Collect the list of all references required to evaluate the condition.
       val allReferences: AttributeSet =
         condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
 
-      Join(left, prunedChild(right, allReferences), LeftSemi, condition)
+      Join(left, prunedChild(right, allReferences), jt, condition)
 
     // Push down project through limit, so that we may have chance to push it further.
     case Project(projectList, Limit(exp, child)) =>
@@ -908,7 +908,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           (leftFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
-        case _ @ (LeftOuter | LeftSemi) =>
+        case (_ @ LeftOuter | _: LeftExistenceJoin) =>
           // push down the left side only `where` condition
           val newLeft = leftFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -944,14 +944,14 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (rightJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, RightOuter, newJoinCond)
-        case LeftOuter =>
+        case (_ @ LeftOuter | _: LeftExistenceJoin) =>
           // push down the right side only join filter for right sub query
           val newLeft = left
           val newRight = rightJoinConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
-          Join(newLeft, newRight, LeftOuter, newJoinCond)
+          Join(newLeft, newRight, joinType, newJoinCond)
         case FullOuter => f
       }
   }

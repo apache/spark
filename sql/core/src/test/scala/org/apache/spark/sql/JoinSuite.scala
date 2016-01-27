@@ -40,17 +40,37 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(planned.size === 1)
   }
 
+  def assertJoin(df: DataFrame, c: Class[_]): Any = {
+    val physical = df.queryExecution.sparkPlan
+    val operators = physical.collect {
+      case j: LeftExistenceJoinHash => j
+      case j: BroadcastHashJoin => j
+      case j: BroadcastHashOuterJoin => j
+      case j: LeftExistenceJoinBNL => j
+      case j: CartesianProduct => j
+      case j: BroadcastNestedLoopJoin => j
+      case j: BroadcastLeftExistenceJoinHash => j
+      case j: SortMergeJoin => j
+      case j: SortMergeOuterJoin => j
+    }
+
+    assert(operators.size === 1)
+    if (operators(0).getClass() != c) {
+      fail(s"$df expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
+    }
+  }
+
   def assertJoin(sqlString: String, c: Class[_]): Any = {
     val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
-      case j: LeftSemiJoinHash => j
+      case j: LeftExistenceJoinHash => j
       case j: BroadcastHashJoin => j
       case j: BroadcastHashOuterJoin => j
-      case j: LeftSemiJoinBNL => j
+      case j: LeftExistenceJoinBNL => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
-      case j: BroadcastLeftSemiJoinHash => j
+      case j: BroadcastLeftExistenceJoinHash => j
       case j: SortMergeJoin => j
       case j: SortMergeOuterJoin => j
     }
@@ -65,8 +85,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     sqlContext.cacheManager.clearCache()
 
     Seq(
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+        classOf[LeftExistenceJoinHash]),
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftExistenceJoinBNL]),
       ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
       ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
       ("SELECT * FROM testData LEFT JOIN testData2", classOf[CartesianProduct]),
@@ -423,7 +444,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[BroadcastLeftSemiJoinHash])
+          classOf[BroadcastLeftExistenceJoinHash])
       ).foreach {
         case (query, joinClass) => assertJoin(query, joinClass)
       }
@@ -431,7 +452,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash])
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[LeftExistenceJoinHash])
       ).foreach {
         case (query, joinClass) => assertJoin(query, joinClass)
       }
@@ -457,9 +479,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[LeftSemiJoinHash]),
+          classOf[LeftExistenceJoinHash]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2",
-          classOf[LeftSemiJoinBNL]),
+          classOf[LeftExistenceJoinBNL]),
         ("SELECT * FROM testData JOIN testData2",
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2",
@@ -537,5 +559,33 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(2, 2) ::
         Row(3, 1) ::
         Row(3, 2) :: Nil)
+  }
+
+  test("left anti join") {
+    sqlContext.cacheManager.clearCache()
+    sql("CACHE TABLE testData2")
+
+    // val df = sql("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a")
+    val left = UnresolvedRelation(TableIdentifier("testData"), None)
+    val right = UnresolvedRelation(TableIdentifier("testData2"), None)
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
+      val df = left.join(right, $"testData2.a" === $"testData.key", "leftanti")
+      assertJoin(df, classOf[BroadcastLeftExistenceJoinHash])
+      checkAnswer(df, (4 to 100).map(i => Row(i, i.toString)))
+    }
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = left.join(right, $"testData2.a" === $"testData.key", "leftanti")
+      assertJoin(df, classOf[LeftExistenceJoinHash])
+      checkAnswer(df, (4 to 100).map(i => Row(i, i.toString)))
+    }
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = left.join(right, $"testData2.a" < $"testData.key", "leftanti")
+      assertJoin(df, classOf[LeftExistenceJoinBNL])
+      checkAnswer(df, Row(1, "1") :: Nil)
+    }
+    sql("UNCACHE TABLE testData2")
   }
 }

@@ -272,29 +272,29 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("BroadcastLeftSemiJoinHash metrics") {
+  test("BroadcastLeftExistenceJoinHash metrics") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
     // ... -> BroadcastLeftSemiJoinHash(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastLeftSemiJoinHash", Map(
+      0L -> ("BroadcastLeftExistenceJoinHash", Map(
         "number of left rows" -> 2L,
         "number of right rows" -> 4L,
         "number of output rows" -> 2L)))
     )
   }
 
-  test("LeftSemiJoinHash metrics") {
+  test("LeftExistenceJoinHash metrics") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
       // Assume the execution plan is
-      // ... -> LeftSemiJoinHash(nodeId = 0)
+      // ... -> LeftExistenceJoinHash(nodeId = 0)
       val df = df1.join(df2, $"key" === $"key2", "leftsemi")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> ("LeftSemiJoinHash", Map(
+        0L -> ("LeftExistenceJoinHash", Map(
           "number of left rows" -> 2L,
           "number of right rows" -> 4L,
           "number of output rows" -> 2L)))
@@ -309,7 +309,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // ... -> LeftSemiJoinBNL(nodeId = 0)
     val df = df1.join(df2, $"key" < $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> ("LeftSemiJoinBNL", Map(
+      0L -> ("LeftExistenceJoinBNL", Map(
         "number of left rows" -> 2L,
         "number of right rows" -> 4L,
         "number of output rows" -> 2L)))
