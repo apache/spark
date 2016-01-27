@@ -3,56 +3,43 @@ import logging
 import pandas
 import time
 
-from airflow.hooks.base_hook import BaseHook
+from airflow.contrib.hooks.gc_base_hook import GoogleCloudBaseHook
 from apiclient.discovery import build
-from oauth2client.client import SignedJwtAssertionCredentials
 from pandas.io.gbq import GbqConnector, _parse_data as gbq_parse_data
 from pandas.tools.merge import concat
 
 logging.getLogger("bigquery").setLevel(logging.INFO)
 
-BQ_SCOPE = 'https://www.googleapis.com/auth/bigquery'
-
-class BigQueryHook(BaseHook):
+class BigQueryHook(GoogleCloudBaseHook):
     """
-    Interact with BigQuery. Connections must be defined with an extras JSON field containing:
+    Interact with BigQuery. Connections must be defined with an extras JSON 
+    field containing:
 
     {
         "project": "<google project ID>",
         "service_account": "<google service account email>",
         "key_path": "<p12 key path>"
     }
+
+    If you have used ``gcloud auth`` to authenticate on the machine that's 
+    running Airflow, you can exclude the service_account and key_path 
+    parameters.
     """
     conn_name_attr = 'bigquery_conn_id'
 
-    def __init__(self, bigquery_conn_id='bigquery_default'):
-        self.bigquery_conn_id = bigquery_conn_id
+    def __init__(self, scope='https://www.googleapis.com/auth/bigquery', bigquery_conn_id='bigquery_default'):
+        """
+        :param scope: The scope of the hook.
+        :type scope: string
+        """
+        super(BigQueryHook, self).__init__(scope, bigquery_conn_id)
 
     def get_conn(self):
         """
         Returns a BigQuery service object.
         """
-        connection_info = self.get_connection(self.bigquery_conn_id)
-        connection_extras = connection_info.extra_dejson
-        service_account = connection_extras['service_account']
-        key_path = connection_extras['key_path']
-
-        with file(key_path, 'rb') as key_file:
-            key = key_file.read()
-
-        credentials = SignedJwtAssertionCredentials(
-            service_account,
-            key,
-            scope=BQ_SCOPE)
-            # TODO Support domain delegation, which will allow us to set a sub-account to execute as. We can then
-            # pass DAG owner emails into the connection_info, and use it here.
-            # sub='some@email.com')
-
-        http = httplib2.Http()
-        http_authorized = credentials.authorize(http)
-        service = build('bigquery', 'v2', http=http_authorized)
-
-        return service
+        http_authorized = self._authorize()
+        return build('bigquery', 'v2', http=http_authorized)
 
     def get_pandas_df(self, bql, parameters=None):
         """
@@ -63,8 +50,7 @@ class BigQueryHook(BaseHook):
         :type bql: string
         """
         service = self.get_conn()
-        connection_info = self.get_connection(self.bigquery_conn_id)
-        connection_extras = connection_info.extra_dejson
+        connection_extras = self._extras_dejson()
         project = connection_extras['project']
         connector = BigQueryPandasConnector(project, service)
         schema, pages = connector.run_query(bql, verbose=False)
@@ -95,8 +81,7 @@ class BigQueryHook(BaseHook):
         :param write_disposition: What to do if the table already exists in 
             BigQuery.
         """
-        connection_info = self.get_connection(self.bigquery_conn_id)
-        connection_extras = connection_info.extra_dejson
+        connection_extras = self._extras_dejson()
         project = connection_extras['project']
         configuration = {
             'query': {
@@ -145,8 +130,7 @@ class BigQueryHook(BaseHook):
         assert '.' in source_dataset_table, \
             'Expected source_dataset_table in the format of <dataset>.<table>. Got: {}'.format(source_dataset_table)
 
-        connection_info = self.get_connection(self.bigquery_conn_id)
-        connection_extras = connection_info.extra_dejson
+        connection_extras = self._extras_dejson()
         project = connection_extras['project']
         source_dataset, source_table = source_dataset_table.split('.', 1)
         configuration = {
@@ -179,8 +163,7 @@ class BigQueryHook(BaseHook):
         https://cloud.google.com/bigquery/docs/reference/v2/jobs for details.
         """
         service = self.get_conn()
-        connection_info = self.get_connection(self.bigquery_conn_id)
-        connection_extras = connection_info.extra_dejson
+        connection_extras = self._extras_dejson()
         project = connection_extras['project']
         jobs = service.jobs()
         job_data = {

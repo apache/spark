@@ -1,21 +1,27 @@
 import httplib2
 import logging
 
+from airflow.contrib.hooks.gc_base_hook import GoogleCloudBaseHook
 from airflow.hooks.base_hook import BaseHook
 from apiclient.discovery import build
 from oauth2client.client import SignedJwtAssertionCredentials
 
 logging.getLogger("google_cloud_storage").setLevel(logging.INFO)
 
-class GoogleCloudStorageHook(BaseHook):
+class GoogleCloudStorageHook(GoogleCloudBaseHook):
     """
-    Interact with Google Cloud Storage. Connections must be defined with an extras JSON field containing:
+    Interact with Google Cloud Storage. Connections must be defined with an 
+    extras JSON field containing:
 
     {
         "project": "<google project ID>",
         "service_account": "<google service account email>",
         "key_path": "<p12 key path>"
     }
+
+    If you have used ``gcloud auth`` to authenticate on the machine that's 
+    running Airflow, you can exclude the service_account and key_path 
+    parameters.
     """
     conn_name_attr = 'google_cloud_storage_conn_id'
 
@@ -25,34 +31,14 @@ class GoogleCloudStorageHook(BaseHook):
             https://cloud.google.com/storage/docs/authentication?hl=en#oauth-scopes
         :type scope: string
         """
-        self.scope = scope
-        self.google_cloud_storage_conn_id = google_cloud_storage_conn_id
+        super(GoogleCloudStorageHook, self).__init__(scope, google_cloud_storage_conn_id)
 
     def get_conn(self):
         """
         Returns a Google Cloud Storage service object.
         """
-        connection_info = self.get_connection(self.google_cloud_storage_conn_id)
-        connection_extras = connection_info.extra_dejson
-        service_account = connection_extras['service_account']
-        key_path = connection_extras['key_path']
-
-        with file(key_path, 'rb') as key_file:
-            key = key_file.read()
-
-        credentials = SignedJwtAssertionCredentials(
-            service_account,
-            key,
-            scope=self.scope)
-            # TODO Support domain delegation, which will allow us to set a sub-account to execute as. We can then
-            # pass DAG owner emails into the connection_info, and use it here.
-            # sub='some@email.com')
-
-        http = httplib2.Http()
-        http_authorized = credentials.authorize(http)
-        service = build('storage', 'v1', http=http_authorized)
-
-        return service
+        http_authorized = self._authorize()
+        return build('storage', 'v1', http=http_authorized)
 
     def download(self, bucket, object, filename=False):
         """
