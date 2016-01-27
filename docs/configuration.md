@@ -1643,6 +1643,8 @@ to use on each machine and maximum memory.
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
 compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 
+Note: When running Spark on YARN in `cluster` mode, environment variables need to be set using the `spark.yarn.appMasterEnv.[EnvironmentVariableName]` property in your `conf/spark-defaults.conf` file.  Environment variables that are set in `spark-env.sh` will not be reflected in the YARN Application Master process in `cluster` mode.  See the [YARN-related Spark Properties](running-on-yarn.html#spark-properties) for more information.
+
 # Configuring Logging
 
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
