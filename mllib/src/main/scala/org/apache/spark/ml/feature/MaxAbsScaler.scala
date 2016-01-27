@@ -50,15 +50,15 @@ private[feature] trait MaxAbsScalerParams extends Params with HasInputCol with H
 
 /**
  * :: Experimental ::
- * Rescale each feature individually such that the maximal absolute value of each feature in
- * the training set will be 1.0. It does not shift/center the data, and thus does not destroy
+ * Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
+ * absolute value in each feature. It does not shift/center the data, and thus does not destroy
  * any sparsity.
  */
 @Experimental
 class MaxAbsScaler(override val uid: String)
   extends Estimator[MaxAbsScalerModel] with MaxAbsScalerParams with DefaultParamsWritable {
 
-  def this() = this(Identifiable.randomUID("minMaxScal"))
+  def this() = this(Identifiable.randomUID("maxAbsScal"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -132,14 +132,14 @@ class MaxAbsScalerModel private[ml] (
   }
 
   @Since("1.6.0")
-  override def write: MLWriter = new MinMaxScalerModelWriter(this)
+  override def write: MLWriter = new MaxAbsScalerModelWriter(this)
 }
 
 @Since("1.6.0")
 object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
 
   private[MaxAbsScalerModel]
-  class MinMaxScalerModelWriter(instance: MaxAbsScalerModel) extends MLWriter {
+  class MaxAbsScalerModelWriter(instance: MaxAbsScalerModel) extends MLWriter {
 
     private case class Data(maxAbs: Vector)
 
@@ -151,7 +151,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
     }
   }
 
-  private class MinMaxScalerModelReader extends MLReader[MaxAbsScalerModel] {
+  private class MaxAbsScalerModelReader extends MLReader[MaxAbsScalerModel] {
 
     private val className = classOf[MaxAbsScalerModel].getName
 
@@ -168,7 +168,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
   }
 
   @Since("1.6.0")
-  override def read: MLReader[MaxAbsScalerModel] = new MinMaxScalerModelReader
+  override def read: MLReader[MaxAbsScalerModel] = new MaxAbsScalerModelReader
 
   @Since("1.6.0")
   override def load(path: String): MaxAbsScalerModel = super.load(path)
