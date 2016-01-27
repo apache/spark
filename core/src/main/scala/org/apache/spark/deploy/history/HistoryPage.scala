@@ -25,26 +25,13 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
-  private val pageSize = 20
-  private val plusOrMinus = 2
-
   def render(request: HttpServletRequest): Seq[Node] = {
-    val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
-    val requestedFirst = (requestedPage - 1) * pageSize
     val requestedIncomplete =
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
     val allApps = parent.getApplicationList()
       .filter(_.attempts.head.completed != requestedIncomplete)
     val allAppsSize = allApps.size
-
-    val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0
-    val actualPage = (actualFirst / pageSize) + 1
-    val last = Math.min(actualFirst + pageSize, allAppsSize) - 1
-    val pageCount = allAppsSize / pageSize + (if (allAppsSize % pageSize > 0) 1 else 0)
-
-    val secondPageFromLeft = 2
-    val secondPageFromRight = pageCount - 1
 
     val providerConfig = parent.getProviderConfig()
     val content =
@@ -56,16 +43,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             </ul>
             {
             if (allAppsSize > 0) {
-              val leftSideIndices =
-                rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _, requestedIncomplete)
-              val rightSideIndices =
-                rangeIndices(actualPage + 1 to actualPage + plusOrMinus, _ < pageCount,
-                  requestedIncomplete)
-
-              <h4>
-                Showing {actualFirst + 1}-{last + 1} of {allAppsSize}
-                {if (requestedIncomplete) "(Incomplete applications)"}
-              </h4> ++
               <div id="history-summary"></div>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
@@ -80,7 +57,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             }
             }
 
-            <a href={makePageLink(actualPage, !requestedIncomplete)}>
+            <a href={makePageLink(1, !requestedIncomplete)}>
               {
               if (requestedIncomplete) {
                 "Back to completed applications"
@@ -94,14 +71,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
       </div>
     UIUtils.basicSparkPage(content, "History Server")
-  }
-
-  private def rangeIndices(
-      range: Seq[Int],
-      condition: Int => Boolean,
-      showIncomplete: Boolean): Seq[Node] = {
-    range.filter(condition).map(nextPage =>
-      <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {

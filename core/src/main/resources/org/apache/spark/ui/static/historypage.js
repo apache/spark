@@ -41,6 +41,13 @@ function formatDate(date) {
   return date.split(".")[0].replace("T", " ");
 }
 
+function getParameterByName(name, searchString) {
+  name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+  var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+  results = regex.exec(searchString);
+  return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
 jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     "title-numeric-pre": function ( a ) {
         var x = a.match(/title="*(-?[0-9\.]+)/)[1];
@@ -69,8 +76,9 @@ $(document).ready(function() {
     });
 
     historySummary = $("#history-summary");
-    searchString = JSON.stringify(historySummary["context"]["location"]["search"]);
-    requestedIncomplete = searchString.indexOf("true") >= 0 ? true : false;
+    searchString = historySummary["context"]["location"]["search"];
+    requestedIncomplete = getParameterByName("showIncomplete", searchString);
+    requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
     $.getJSON("/api/v1/applications", function(response,status,jqXHR) {
       var array = [];
