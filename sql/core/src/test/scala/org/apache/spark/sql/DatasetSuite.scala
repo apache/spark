@@ -17,19 +17,22 @@
 
 package org.apache.spark.sql
 
-import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
+case class OtherTuple(_1: String, _2: Int)
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("toDS") {
-    val data = Seq(("a", 1) , ("b", 2), ("c", 3))
+    val data = Seq(("a", 1), ("b", 2), ("c", 3))
     checkAnswer(
       data.toDS(),
       data: _*)
@@ -40,6 +43,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.mapPartitions(_ => Iterator(1)),
       1, 1, 1)
+  }
+
+
+  test("SPARK-12404: Datatype Helper Serializablity") {
+    val ds = sparkContext.parallelize((
+          new Timestamp(0),
+          new Date(0),
+          java.math.BigDecimal.valueOf(1),
+          scala.math.BigDecimal(1)) :: Nil).toDS()
+
+    ds.collect()
   }
 
   test("collect, first, and take should use encoders for serialization") {
@@ -75,7 +89,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("as case class / collect") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDF("a", "b").as[ClassData]
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b").as[ClassData]
     checkAnswer(
       ds,
       ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
@@ -93,10 +107,20 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("map") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.map(v => (v._1, v._2 + 1)),
       ("a", 2), ("b", 3), ("c", 4))
+  }
+
+  test("map with type change") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+
+    checkAnswer(
+      ds.map(identity[(String, Int)])
+        .as[OtherTuple]
+        .map(identity[OtherTuple]),
+      OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
   }
 
   test("map and group by with class data") {
@@ -112,14 +136,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(expr("_2 + 1").as[Int]),
       2, 3, 4)
   }
 
   test("select 2") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(
         expr("_1").as[String],
@@ -128,7 +152,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select 2, primitive and tuple") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(
         expr("_1").as[String],
@@ -137,7 +161,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select 2, primitive and class") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.select(
         expr("_1").as[String],
@@ -146,7 +170,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select 2, primitive and class, fields reordered") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDecoding(
       ds.select(
         expr("_1").as[String],
@@ -155,28 +179,28 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("filter") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkAnswer(
       ds.filter(_._1 == "b"),
       ("b", 2))
   }
 
   test("foreach") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.accumulator(0)
     ds.foreach(v => acc += v._2)
     assert(acc.value == 6)
   }
 
   test("foreachPartition") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.accumulator(0)
     ds.foreachPartition(_.foreach(v => acc += v._2))
     assert(acc.value == 6)
   }
 
   test("reduce") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
   }
 
@@ -426,12 +450,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.toString == "[_1: int, _2: int]")
   }
 
+  test("showString: Kryo encoder") {
+    implicit val kryoEncoder = Encoders.kryo[KryoData]
+    val ds = Seq(KryoData(1), KryoData(2)).toDS()
+
+    val expectedAnswer = """+-----------+
+                           ||      value|
+                           |+-----------+
+                           ||KryoData(1)|
+                           ||KryoData(2)|
+                           |+-----------+
+                           |""".stripMargin
+    assert(ds.showString(10) === expectedAnswer)
+  }
+
   test("Kryo encoder") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
 
-    assert(ds.groupBy(p => p).count().collect().toSeq ==
-      Seq((KryoData(1), 1L), (KryoData(2), 1L)))
+    assert(ds.groupBy(p => p).count().collect().toSet ==
+      Set((KryoData(1), 1L), (KryoData(2), 1L)))
   }
 
   test("Kryo encoder self join") {
@@ -481,11 +519,62 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(2 -> 2.toByte, 3 -> 3.toByte).toDF("a", "b").as[ClassData]
     assert(ds.collect().toSeq == Seq(ClassData("2", 2), ClassData("3", 3)))
   }
+
+  test("verify mismatching field names fail with a good error") {
+    val ds = Seq(ClassData("a", 1)).toDS()
+    val e = intercept[AnalysisException] {
+      ds.as[ClassData2].collect()
+    }
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
+  }
+
+  test("runtime nullability check") {
+    val schema = StructType(Seq(
+      StructField("f", StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", IntegerType, nullable = false)
+      )), nullable = true)
+    ))
+
+    def buildDataset(rows: Row*): Dataset[NestedStruct] = {
+      val rowRDD = sqlContext.sparkContext.parallelize(rows)
+      sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct]
+    }
+
+    checkAnswer(
+      buildDataset(Row(Row("hello", 1))),
+      NestedStruct(ClassData("hello", 1))
+    )
+
+    // Shouldn't throw runtime exception when parent object (`ClassData`) is null
+    assert(buildDataset(Row(null)).collect() === Array(NestedStruct(null)))
+
+    val message = intercept[RuntimeException] {
+      buildDataset(Row(Row("hello", null))).collect()
+    }.getMessage
+
+    assert(message.contains(
+      "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
+    ))
+  }
+
+  test("SPARK-12478: top level null field") {
+    val ds0 = Seq(NestedStruct(null)).toDS()
+    checkAnswer(ds0, NestedStruct(null))
+    checkAnswer(ds0.toDF(), Row(null))
+
+    val ds1 = Seq(DeepNestedStruct(NestedStruct(null))).toDS()
+    checkAnswer(ds1, DeepNestedStruct(NestedStruct(null)))
+    checkAnswer(ds1.toDF(), Row(Row(null)))
+  }
 }
 
-
 case class ClassData(a: String, b: Int)
+case class ClassData2(c: String, d: Int)
 case class ClassNullableData(a: String, b: Integer)
+
+case class NestedStruct(f: ClassData)
+case class DeepNestedStruct(f: NestedStruct)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

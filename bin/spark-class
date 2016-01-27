@@ -71,6 +71,12 @@ fi
 
 export _SPARK_ASSEMBLY="$SPARK_ASSEMBLY_JAR"
 
+# For tests
+if [[ -n "$SPARK_TESTING" ]]; then
+  unset YARN_CONF_DIR
+  unset HADOOP_CONF_DIR
+fi
+
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
 # an array that will be used to exec the final command.

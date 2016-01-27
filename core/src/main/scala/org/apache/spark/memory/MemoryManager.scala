@@ -19,10 +19,8 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable
-
-import org.apache.spark.{SparkConf, Logging}
-import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.storage.{BlockId, MemoryStore}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
 
@@ -50,7 +48,7 @@ private[spark] abstract class MemoryManager(
 
   storageMemoryPool.incrementPoolSize(storageMemory)
   onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)
-  offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
+  offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeap.size", 0))
 
   /**
    * Total available memory for storage, in bytes. This amount can vary over time, depending on
@@ -67,19 +65,11 @@ private[spark] abstract class MemoryManager(
     storageMemoryPool.setMemoryStore(store)
   }
 
-  // TODO: avoid passing evicted blocks around to simplify method signatures (SPARK-10985)
-
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return whether all N bytes were successfully granted.
    */
-  def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
-  }
+  def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
@@ -87,14 +77,10 @@ private[spark] abstract class MemoryManager(
    * This extra method allows subclasses to differentiate behavior between acquiring storage
    * memory and acquiring unroll memory. For instance, the memory management model in Spark
    * 1.5 and before places a limit on the amount of space that can be freed from unrolling.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+  def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean
 
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the
@@ -109,12 +95,7 @@ private[spark] abstract class MemoryManager(
   def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      memoryMode: MemoryMode): Long = synchronized {
-    memoryMode match {
-      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
-      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
-    }
-  }
+      memoryMode: MemoryMode): Long
 
   /**
    * Release numBytes of execution memory belonging to the given task.
@@ -189,7 +170,13 @@ private[spark] abstract class MemoryManager(
    * sun.misc.Unsafe.
    */
   final val tungstenMemoryMode: MemoryMode = {
-    if (conf.getBoolean("spark.unsafe.offHeap", false)) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
+    if (conf.getBoolean("spark.memory.offHeap.enabled", false)) {
+      require(conf.getSizeAsBytes("spark.memory.offHeap.size", 0) > 0,
+        "spark.memory.offHeap.size must be > 0 when spark.memory.offHeap.enabled == true")
+      MemoryMode.OFF_HEAP
+    } else {
+      MemoryMode.ON_HEAP
+    }
   }
 
   /**

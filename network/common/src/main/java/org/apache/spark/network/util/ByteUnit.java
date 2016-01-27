@@ -33,8 +33,8 @@ public enum ByteUnit {
   public long convertFrom(long d, ByteUnit u) {
     return u.convertTo(d, this);
   }
-  
-  // Convert the provided number (d) interpreted as this unit type to unit type (u). 
+
+  // Convert the provided number (d) interpreted as this unit type to unit type (u).
   public long convertTo(long d, ByteUnit u) {
     if (multiplier > u.multiplier) {
       long ratio = multiplier / u.multiplier;
@@ -44,7 +44,7 @@ public enum ByteUnit {
       }
       return d * ratio;
     } else {
-      // Perform operations in this order to avoid potential overflow 
+      // Perform operations in this order to avoid potential overflow
       // when computing d * multiplier
       return d / (u.multiplier / multiplier);
     }
@@ -54,14 +54,14 @@ public enum ByteUnit {
     if (d < 0) {
       throw new IllegalArgumentException("Negative size value. Size must be positive: " + d);
     }
-    return d * multiplier; 
+    return d * multiplier;
   }
-  
+
   public long toKiB(long d) { return convertTo(d, KiB); }
   public long toMiB(long d) { return convertTo(d, MiB); }
   public long toGiB(long d) { return convertTo(d, GiB); }
   public long toTiB(long d) { return convertTo(d, TiB); }
   public long toPiB(long d) { return convertTo(d, PiB); }
-  
+
   private final long multiplier;
 }

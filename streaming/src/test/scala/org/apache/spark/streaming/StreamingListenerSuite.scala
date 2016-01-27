@@ -18,19 +18,20 @@
 package org.apache.spark.streaming
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer, SynchronizedMap}
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
+import org.mockito.Mockito.{mock, reset, verifyNoMoreInteractions}
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.Logging
 import org.apache.spark.SparkException
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
-
-import org.scalatest.Matchers
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.time.SpanSugar._
-import org.apache.spark.Logging
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
@@ -214,6 +215,27 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     assert(failureReasons.contains(1))
     assert(failureReasons(0).contains("This is a failed job"))
     assert(failureReasons(1).contains("This is another failed job"))
+  }
+
+  test("StreamingListener receives no events after stopping StreamingListenerBus") {
+    val streamingListener = mock(classOf[StreamingListener])
+
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc.addStreamingListener(streamingListener)
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count)
+    ssc.start()
+    ssc.stop()
+
+    // Because "streamingListener" has already received some events, let's clear that.
+    reset(streamingListener)
+
+    // Post a Streaming event after stopping StreamingContext
+    val receiverInfoStopped = ReceiverInfo(0, "test", false, "localhost", "0")
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(receiverInfoStopped))
+    ssc.sparkContext.listenerBus.waitUntilEmpty(1000)
+    // The StreamingListener should not receive any event
+    verifyNoMoreInteractions(streamingListener)
   }
 
   private def startStreamingContextAndCallStop(_ssc: StreamingContext): Unit = {

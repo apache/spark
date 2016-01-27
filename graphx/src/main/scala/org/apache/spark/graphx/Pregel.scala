@@ -18,8 +18,8 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
-import org.apache.spark.Logging
 
+import org.apache.spark.Logging
 
 /**
  * Implements a Pregel-like bulk-synchronous message-passing API.
@@ -151,7 +151,7 @@ object Pregel extends Logging {
       // count the iteration
       i += 1
     }
-
+    messages.unpersist(blocking = false)
     g
   } // end of apply
 

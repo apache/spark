@@ -19,14 +19,23 @@ package org.apache.spark.sql.hive
 
 import scala.language.implicitConversions
 
+import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand}
+import org.apache.spark.sql.hive.execution.{AddFile, AddJar, HiveNativeCommand}
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
  */
-private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
+private[hive] class ExtendedHiveQlParser(sqlContext: HiveContext) extends AbstractSparkSQLParser {
+
+  val parser = new HiveQl(sqlContext.conf)
+
+  override def parseExpression(sql: String): Expression = parser.parseExpression(sql)
+
+  override def parseTableIdentifier(sql: String): TableIdentifier =
+    parser.parseTableIdentifier(sql)
+
   // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
   // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val ADD = Keyword("ADD")
@@ -38,7 +47,10 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
 
   protected lazy val hiveQl: Parser[LogicalPlan] =
     restInput ^^ {
-      case statement => HiveQl.createPlan(statement.trim)
+      case statement =>
+        sqlContext.executionHive.withHiveState {
+          parser.parsePlan(statement.trim)
+        }
     }
 
   protected lazy val dfs: Parser[LogicalPlan] =

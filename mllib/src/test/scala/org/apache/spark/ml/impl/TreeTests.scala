@@ -25,8 +25,7 @@ import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericA
 import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, DataFrame}
-
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
@@ -42,7 +41,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
-    val sqlContext = new SQLContext(data.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(data.sparkContext)
     import sqlContext.implicits._
     val df = data.toDF()
     val numFeatures = data.first().features.size

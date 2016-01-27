@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 case class SortMergeJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
+    condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
 
@@ -53,10 +54,6 @@ case class SortMergeJoin(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
-  override def outputsUnsafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = false
-
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
     // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
     keys.map(SortOrder(_, Ascending))
@@ -68,6 +65,13 @@ case class SortMergeJoin(
     val numOutputRows = longMetric("numOutputRows")
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+      val boundCondition: (InternalRow) => Boolean = {
+        condition.map { cond =>
+          newPredicate(cond, left.output ++ right.output)
+        }.getOrElse {
+          (r: InternalRow) => true
+        }
+      }
       new RowIterator {
         // The projection used to extract keys from input rows of the left child.
         private[this] val leftKeyGenerator = UnsafeProjection.create(leftKeys, left.output)
@@ -93,26 +97,34 @@ case class SortMergeJoin(
         private[this] val resultProjection: (InternalRow) => InternalRow =
           UnsafeProjection.create(schema)
 
+        if (smjScanner.findNextInnerJoinRows()) {
+          currentRightMatches = smjScanner.getBufferedMatches
+          currentLeftRow = smjScanner.getStreamedRow
+          currentMatchIdx = 0
+        }
+
         override def advanceNext(): Boolean = {
-          if (currentMatchIdx == -1 || currentMatchIdx == currentRightMatches.length) {
-            if (smjScanner.findNextInnerJoinRows()) {
-              currentRightMatches = smjScanner.getBufferedMatches
-              currentLeftRow = smjScanner.getStreamedRow
-              currentMatchIdx = 0
-            } else {
-              currentRightMatches = null
-              currentLeftRow = null
-              currentMatchIdx = -1
+          while (currentMatchIdx >= 0) {
+            if (currentMatchIdx == currentRightMatches.length) {
+              if (smjScanner.findNextInnerJoinRows()) {
+                currentRightMatches = smjScanner.getBufferedMatches
+                currentLeftRow = smjScanner.getStreamedRow
+                currentMatchIdx = 0
+              } else {
+                currentRightMatches = null
+                currentLeftRow = null
+                currentMatchIdx = -1
+                return false
+              }
             }
-          }
-          if (currentLeftRow != null) {
             joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
             currentMatchIdx += 1
-            numOutputRows += 1
-            true
-          } else {
-            false
+            if (boundCondition(joinRow)) {
+              numOutputRows += 1
+              return true
+            }
           }
+          false
         }
 
         override def getRow: InternalRow = resultProjection(joinRow)
