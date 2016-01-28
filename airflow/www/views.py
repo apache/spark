@@ -748,7 +748,7 @@ class Airflow(BaseView):
             host = ti.hostname
             log_loaded = False
 
-            if socket.gethostname() == host:
+            if socket.gethostname() == ' bla': #host:
                 try:
                     f = open(loc)
                     log += "".join(f.readlines())
@@ -791,7 +791,9 @@ class Airflow(BaseView):
 
             session.commit()
             session.close()
-        log = log.decode('utf-8') if PY2 else log
+
+        if PY2 and not isinstance(log, unicode):
+            log = log.decode('utf-8')
 
         title = "Log"
 
