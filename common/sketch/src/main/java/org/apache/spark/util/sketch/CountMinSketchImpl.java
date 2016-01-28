@@ -25,7 +25,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -146,7 +145,41 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     }
   }
 
-  private void addString(String item, long count) {
+  @Override
+  public void addString(String item) {
+    addString(item, 1);
+  }
+
+  @Override
+  public void addString(String item, long count) {
+    addBinary(Utils.getBytesFromUTF8String(item), count);
+  }
+
+  @Override
+  public void addLong(long item) {
+    addLong(item, 1);
+  }
+
+  @Override
+  public void addLong(long item, long count) {
+    if (count < 0) {
+      throw new IllegalArgumentException("Negative increments not implemented");
+    }
+
+    for (int i = 0; i < depth; ++i) {
+      table[i][hash(item, i)] += count;
+    }
+
+    totalCount += count;
+  }
+
+  @Override
+  public void addBinary(byte[] item) {
+    addBinary(item, 1);
+  }
+
+  @Override
+  public void addBinary(byte[] item, long count) {
     if (count < 0) {
       throw new IllegalArgumentException("Negative increments not implemented");
     }
@@ -155,18 +188,6 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
 
     for (int i = 0; i < depth; ++i) {
       table[i][buckets[i]] += count;
-    }
-
-    totalCount += count;
-  }
-
-  private void addLong(long item, long count) {
-    if (count < 0) {
-      throw new IllegalArgumentException("Negative increments not implemented");
-    }
-
-    for (int i = 0; i < depth; ++i) {
-      table[i][hash(item, i)] += count;
     }
 
     totalCount += count;

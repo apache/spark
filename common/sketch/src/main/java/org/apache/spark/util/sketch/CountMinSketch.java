@@ -124,6 +124,18 @@ abstract public class CountMinSketch {
    */
   public abstract void add(Object item, long count);
 
+  public abstract void addLong(long item);
+
+  public abstract void addLong(long item, long count);
+
+  public abstract void addString(String item);
+
+  public abstract void addString(String item, long count);
+
+  public abstract void addBinary(byte[] item);
+
+  public abstract void addBinary(byte[] item, long count);
+
   /**
    * Returns the estimated frequency of {@code item}.
    */
