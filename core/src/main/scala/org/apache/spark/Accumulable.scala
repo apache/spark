@@ -223,11 +223,13 @@ class Accumulable[R, T] private[spark] (
       countFailedValues, identity, false) with Serializable {
 
   private[spark] def this(
-      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean, countFailedValues: Boolean) = {
+      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean,
+      countFailedValues: Boolean) = {
     this(initialValue, param, None, internal, countFailedValues)
   }
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String], internal: Boolean) =
+  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String],
+      internal: Boolean) =
     this(initialValue, param, name, internal, false /* countFailed */)
 
   def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
