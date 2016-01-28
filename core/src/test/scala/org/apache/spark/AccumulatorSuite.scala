@@ -321,16 +321,24 @@ private[spark] object AccumulatorSuite {
  * A simple listener that keeps track of the TaskInfos and StageInfos of all completed jobs.
  */
 private class SaveInfoListener extends SparkListener {
-  private val completedStageInfos: ArrayBuffer[StageInfo] = new ArrayBuffer[StageInfo]
-  private val completedTaskInfos: ArrayBuffer[TaskInfo] = new ArrayBuffer[TaskInfo]
-  private var jobCompletionCallback: (Int => Unit) = null // parameter is job ID
+  type StageId = Int
+  type StageAttemptId = Int
+
+  private val completedStageInfos = new ArrayBuffer[StageInfo]
+  private val completedTaskInfos =
+    new mutable.HashMap[(StageId, StageAttemptId), ArrayBuffer[TaskInfo]]
+
+  // Callback to call when a job completes. Parameter is job ID.
+  private var jobCompletionCallback: (Int => Unit) = null
 
   // Accesses must be synchronized to ensure failures in `jobCompletionCallback` are propagated
   @GuardedBy("this")
   private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
-  def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.toArray.toSeq
+  def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
+  def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
+    completedTaskInfos.get((stageId, stageAttemptId)).getOrElse(Seq.empty[TaskInfo])
 
   /** Register a callback to be called on job end. */
   def registerJobCompletionCallback(callback: (Int => Unit)): Unit = {
@@ -359,7 +367,8 @@ private class SaveInfoListener extends SparkListener {
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-    completedTaskInfos += taskEnd.taskInfo
+    completedTaskInfos.getOrElseUpdate(
+      (taskEnd.stageId, taskEnd.stageAttemptId), new ArrayBuffer[TaskInfo]) += taskEnd.taskInfo
   }
 }
 
