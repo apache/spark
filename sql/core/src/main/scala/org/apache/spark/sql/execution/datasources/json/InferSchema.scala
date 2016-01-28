@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import com.fasterxml.jackson.core._
-import com.fasterxml.jackson.databind.{MappingJsonFactory, DeserializationFeature, ObjectMapper}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
