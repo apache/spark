@@ -324,7 +324,8 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    * not the aggregated value across multiple tasks.
    */
   def accumulatorUpdates(): Seq[AccumulableInfo] = accums.map { a =>
-    new AccumulableInfo(a.id, a.name, Some(a.localValue), None, a.isInternal, a.countFailedValues, a.consistent)
+    new AccumulableInfo(a.id, a.name, Some(a.localValue), None, a.isInternal, a.countFailedValues,
+      a.consistent)
   }
 
   // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.
