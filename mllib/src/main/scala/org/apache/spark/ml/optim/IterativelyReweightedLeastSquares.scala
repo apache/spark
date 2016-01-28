@@ -45,6 +45,10 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * @param regParam L2 regularization parameter used by WLS.
  * @param maxIter maximum number of iterations.
  * @param tol the convergence tolerance.
+ *
+ * @see [[http://www.jstor.org/stable/2345503 P. J. Green, Iteratively Reweighted Least Squares
+ *     for Maximum Likelihood Estimation, and some Robust and Resistant Alternatives,
+ *     Journal of the Royal Statistical Society. Series B, 1984.]]
  */
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,
@@ -59,34 +63,38 @@ private[ml] class IterativelyReweightedLeastSquares(
     var converged = false
     var iter = 0
 
-    var offsetsAndWeights: RDD[(Double, Double)] = null
     var model: WeightedLeastSquaresModel = initialModel
-    var oldModel: WeightedLeastSquaresModel = initialModel
+    var oldModel: WeightedLeastSquaresModel = null
 
     while (iter < maxIter && !converged) {
 
       oldModel = model
 
       // Update offsets and weights using reweightFunc
-      offsetsAndWeights = instances.map { instance => reweightFunc(instance, oldModel) }
+      val newInstances = instances.map { instance =>
+        val (newOffset, newWeight) = reweightFunc(instance, oldModel)
+        Instance(newOffset, newWeight, instance.features)
+      }
 
       // Estimate new model
-      val newInstances = instances.zip(offsetsAndWeights).map {
-        case (instance, (offset, weight)) => Instance(offset, weight, instance.features)
-      }
-      model = new WeightedLeastSquares(fitIntercept, regParam, false, false).fit(newInstances)
+      model = new WeightedLeastSquares(fitIntercept, regParam, standardizeFeatures = false,
+        standardizeLabel = false).fit(newInstances)
 
-      val oldParameters = Array.concat(Array(oldModel.intercept), oldModel.coefficients.toArray)
-      val parameters = Array.concat(Array(model.intercept), model.coefficients.toArray)
-      val deltaArray = oldParameters.zip(parameters).map { case (x: Double, y: Double) =>
-        math.abs(x - y)
+      // Check convergence
+      val oldCoefficients = oldModel.coefficients
+      val coefficients = model.coefficients
+      BLAS.axpy(-1.0, coefficients, oldCoefficients)
+      val maxTolOfCoefficients = oldCoefficients.toArray.reduce { (x, y) =>
+        math.max(math.abs(x), math.abs(y))
       }
-      if (!deltaArray.exists(_ > tol)) {
+      val maxTol = math.max(maxTolOfCoefficients, math.abs(oldModel.intercept - model.intercept))
+
+      if (maxTol < tol) {
         converged = true
         logInfo(s"IRLS converged in $iter iterations.")
       }
 
-      logInfo(s"Iteration $iter : relative tolerance = ${deltaArray.max}")
+      logInfo(s"Iteration $iter : relative tolerance = $maxTol")
       iter = iter + 1
 
       if (iter == maxIter) {
