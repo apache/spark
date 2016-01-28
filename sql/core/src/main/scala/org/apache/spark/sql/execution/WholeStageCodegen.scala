@@ -49,7 +49,7 @@ trait CodegenSupport extends SparkPlan {
   def upstream(): RDD[InternalRow]
 
   /**
-    * Returns an input RDD of InternalRow and Java source code to process them.
+    * Returns Java source code to process the rows from upstream.
     */
   def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent

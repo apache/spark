@@ -231,16 +231,16 @@ case class TungstenAggregate(
     val updates = updateExpr.zipWithIndex.map { case (e, i) =>
       val ev = BindReferences.bindReference[Expression](e, inputAttrs).gen(ctx)
       s"""
-       ${ev.code}
-       ${bufVars(i).isNull} = ${ev.isNull};
-       ${bufVars(i).value} = ${ev.value};
-       """
+       | ${ev.code}
+       | ${bufVars(i).isNull} = ${ev.isNull};
+       | ${bufVars(i).value} = ${ev.value};
+       """.stripMargin
     }
 
     s"""
-     // do aggregate and update aggregation buffer
-     ${updates.mkString("")}
-     """
+     | // do aggregate and update aggregation buffer
+     | ${updates.mkString("")}
+     """.stripMargin
   }
 
   val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -254,6 +254,9 @@ case class TungstenAggregate(
   // The name for HashMap
   var hashMapTerm: String = _
 
+  /**
+    * This is called by generated Java class, should be public.
+    */
   def createHashMap(): UnsafeFixedWidthAggregationMap = {
     // create initialized aggregate buffer
     val initExpr = declFunctions.flatMap(f => f.initialValues)
@@ -271,6 +274,9 @@ case class TungstenAggregate(
     )
   }
 
+  /**
+    * This is called by generated Java class, should be public.
+    */
   def createUnsafeJoiner(): UnsafeRowJoiner = {
     GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
   }
@@ -401,29 +407,7 @@ case class TungstenAggregate(
     val evals = boundExpr.map(_.gen(ctx))
     val updates = evals.zipWithIndex.map { case (ev, i) =>
       val dt = updateExpr(i).dataType
-      if (updateExpr(i).nullable) {
-        if (dt.isInstanceOf[DecimalType]) {
-          s"""
-           if (!${ev.isNull}) {
-             ${ctx.setColumn(buffer, dt, i, ev.value)};
-           } else {
-             ${ctx.setColumn(buffer, dt, i, "null")};
-           }
-         """
-        } else {
-          s"""
-           if (!${ev.isNull}) {
-             ${ctx.setColumn(buffer, dt, i, ev.value)};
-           } else {
-             $buffer.setNullAt($i);
-           }
-         """
-        }
-      } else {
-        s"""
-         ${ctx.setColumn(buffer, dt, i, ev.value)};
-         """
-      }
+      ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
     }
 
     s"""
