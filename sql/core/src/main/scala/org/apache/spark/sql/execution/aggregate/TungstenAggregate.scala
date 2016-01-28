@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -179,18 +179,19 @@ case class TungstenAggregate(
     val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
     ctx.currentVars = bufVars ++ input
     // TODO: support subexpression elimination
-    val codes = boundExpr.zipWithIndex.map { case (e, i) =>
-      val ev = e.gen(ctx)
+    val aggVals = boundExpr.map(_.gen(ctx))
+    val updates = aggVals.zipWithIndex.map { case (ev, i) =>
       s"""
-         | ${ev.code}
          | ${bufVars(i).isNull} = ${ev.isNull};
          | ${bufVars(i).value} = ${ev.value};
        """.stripMargin
     }
-
     s"""
-       | // do aggregate and update aggregation buffer
-       | ${codes.mkString("")}
+       | // do aggregate
+       | ${aggVals.map(_.code).mkString("\n")}
+       |
+       | // update aggregation buffer
+       | ${updates.mkString("")}
      """.stripMargin
   }
 

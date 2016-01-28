@@ -17,38 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.DoubleType
 
-case class Kurtosis(child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends CentralMomentAgg(child) {
-
-  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def prettyName: String = "kurtosis"
+case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
   override protected val momentOrder = 4
 
-  // NOTE: this is the formula for excess kurtosis, which is default for R and SciPy
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
-    require(moments.length == momentOrder + 1,
-      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
-    val m2 = moments(2)
-    val m4 = moments(4)
-
-    if (n == 0.0) {
-      null
-    } else if (m2 == 0.0) {
-      Double.NaN
-    } else {
-      n * m4 / (m2 * m2) - 3.0
-    }
+  override val evaluateExpression: Expression = {
+    If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
+      If(EqualTo(m2, Literal(0.0)), Literal(Double.NaN),
+        count * m4 / (m2 * m2) - Literal(3.0)))
   }
+
+  override def prettyName: String = "kurtosis"
 }

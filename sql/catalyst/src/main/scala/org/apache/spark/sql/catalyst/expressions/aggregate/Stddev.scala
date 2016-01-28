@@ -54,19 +54,11 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     val newAvg = avg + deltaN
     val newMk = mk + delta * (delta - deltaN)
 
-    if (child.nullable) {
-      Seq(
-        /* count = */ If(IsNull(child), count, newCount),
-        /* avg = */ If(IsNull(child), avg, newAvg),
-        /* mk = */ If(IsNull(child), mk, newMk)
-      )
-    } else {
-      Seq(
-        /* count = */ newCount,
-        /* avg = */ newAvg,
-        /* mk = */ newMk
-      )
-    }
+    Seq(
+      /* count = */ If(IsNull(child), count, newCount),
+      /* avg = */ If(IsNull(child), avg, newAvg),
+      /* mk = */ If(IsNull(child), mk, newMk)
+    )
   }
 
   override val mergeExpressions: Seq[Expression] = {

@@ -69,28 +69,43 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
     }
 
+    benchmark.addCase("kurtosis w/o codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).groupBy().agg("id" -> "kurtosis").collect()
+    }
+
+    benchmark.addCase("kurtosis w codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).groupBy().agg("id" -> "kurtosis").collect()
+    }
+
+
     /**
     Using ImperativeAggregate:
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      stddev:                Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-      -------------------------------------------------------------------
-      stddev w/o codegen         10157.82            10.32         1.00 X
-      stddev w codegen           10528.03             9.96         0.96 X
+      stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      stddev w/o codegen                      2019.04            10.39         1.00 X
+      stddev w codegen                        2097.29            10.00         0.96 X
+      kurtosis w/o codegen                    2108.99             9.94         0.96 X
+      kurtosis w codegen                      2090.69            10.03         0.97 X
 
       Using DeclarativeAggregate:
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
       -------------------------------------------------------------------------------
-      stddev w/o codegen                      4237.69            24.74         1.00 X
-      stddev w codegen                        2089.44            50.18         2.03 X
+      stddev w/o codegen                      1499.08            13.99         1.00 X
+      stddev w codegen                         360.40            58.19         4.16 X
+      kurtosis w/o codegen                    2941.94             7.13         0.51 X
+      kurtosis w codegen                       432.04            48.54         3.47 X
       */
     benchmark.run()
   }
 
   test("benchmark") {
     // testWholeStage(200 << 20)
-    // testStddev(100 << 20)
+    // testStddev(20 << 20)
   }
 }

@@ -453,3 +453,21 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 }
+
+/**
+  * An expression that will print the value of child to stderr (used for debugging codegen).
+  */
+case class Echo(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+
+  protected override def nullSafeEval(input: Any): Any = input
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+         | System.err.println($c);
+         | ${ev.value} = $c;
+       """.stripMargin)
+  }
+}

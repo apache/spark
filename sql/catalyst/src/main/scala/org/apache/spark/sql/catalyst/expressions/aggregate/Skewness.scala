@@ -17,37 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.DoubleType
 
-case class Skewness(child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends CentralMomentAgg(child) {
-
-  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
+case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
   override def prettyName: String = "skewness"
 
   override protected val momentOrder = 3
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
-    require(moments.length == momentOrder + 1,
-      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
-    val m2 = moments(2)
-    val m3 = moments(3)
-
-    if (n == 0.0) {
-      null
-    } else if (m2 == 0.0) {
-      Double.NaN
-    } else {
-      math.sqrt(n) * m3 / math.sqrt(m2 * m2 * m2)
-    }
+  override val evaluateExpression: Expression = {
+    If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
+      If(EqualTo(m2, Literal(0.0)), Literal(Double.NaN),
+        Sqrt(count) * m3 / Sqrt(m2 * m2 * m2)))
   }
 }

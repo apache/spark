@@ -312,7 +312,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val sparkSkewness = testData2.agg(skewness('a))
     checkAggregatesWithTol(sparkSkewness, Row(0.0), absTol)
 
-    val sparkKurtosis = testData2.agg(kurtosis('a))
+    val sparkKurtosis = testData2.repartition(1).agg(kurtosis('a))
     checkAggregatesWithTol(sparkKurtosis, Row(-1.5), absTol)
   }
 
