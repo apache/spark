@@ -156,6 +156,10 @@ class Params(Identifiable):
         """
         Tests whether this instance contains a param with a given
         (string) name.
+
+        Note: this method is changed in Spark 2.0+ to return `False`
+              instead of raising `AttributeError` when the instance
+              does not have a parameter with `paramName`.
         """
         if isinstance(paramName, str):
             p = getattr(self, paramName, None)

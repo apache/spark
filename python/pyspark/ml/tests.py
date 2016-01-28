@@ -192,6 +192,11 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
         self.assertTrue(maxIter.parent == testParams.uid)
 
+    def test_hasparam(self):
+        testParams = TestParams()
+        self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
+        self.assertFalse(testParams.hasParam("notAParameter"))
+
     def test_params(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
