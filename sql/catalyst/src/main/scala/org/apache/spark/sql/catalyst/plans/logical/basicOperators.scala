@@ -171,14 +171,16 @@ case class Join(
 
   def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
+  lazy val partlyResolved: Boolean = {
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      selfJoinResolved &&
+      condition.forall(_.dataType == BooleanType)
+  }
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = joinType match {
     case NaturalJoin(_) => false
-    case _ =>
-      childrenResolved &&
-        expressions.forall(_.resolved) &&
-        selfJoinResolved &&
-        condition.forall(_.dataType == BooleanType)
+    case _ => partlyResolved
   }
 }
 
