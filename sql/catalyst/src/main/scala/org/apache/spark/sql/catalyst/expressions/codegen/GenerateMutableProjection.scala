@@ -93,7 +93,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
             // Can't call setNullAt on DecimalType, because we need to keep the offset
             s"""
               if (this.isNull_$i) {
-                ${ctx.setColumn("mutableRow", e.dataType, i, null)};
+                ${ctx.setColumn("mutableRow", e.dataType, i, "null")};
               } else {
                 ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
               }
