@@ -64,7 +64,7 @@ object TaskContext {
    * An empty task context that does not represent an actual task.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty)
+    new TaskContextImpl(0, 0, 0, 0, null, null)
   }
 
 }
@@ -138,7 +138,6 @@ abstract class TaskContext extends Serializable {
    */
   def taskAttemptId(): Long
 
-  /** ::DeveloperApi:: */
   @DeveloperApi
   def taskMetrics(): TaskMetrics
 
@@ -160,25 +159,4 @@ abstract class TaskContext extends Serializable {
    * deserializing in executors.
    */
   private[spark] def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit
-
-  /**
-   * Return the local values of internal accumulators that belong to this task. The key of the Map
-   * is the accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectInternalAccumulators(): Map[Long, Any]
-
-  /**
-   * Return the local values of accumulators that belong to this task. The key of the Map is the
-   * accumulator id and the value of the Map is the latest accumulator local value.
-   * If a partition has only been partially processed we don't want to include its updates to
-   * consistent accumulators since consistent accumulators work on a full partitions.
-   * @param includeConsistent if we should include consistent accumulators.
-   */
-  private[spark] def collectAccumulators(includeConsistent: Boolean): Map[Long, Any]
-
-  /**
-   * Accumulators for tracking internal metrics indexed by the name.
-   */
-  private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
-
 }

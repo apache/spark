@@ -35,12 +35,23 @@ import org.apache.spark.util.Utils
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
  *
+ * All accumulators created on the driver to be used on the executors must be registered with
+ * [[Accumulators]]. This is already done automatically for accumulators created by the user.
+ * Internal accumulators must be explicitly registered by the caller.
+ *
+ * Operations are not thread-safe.
+ *
+ * @param id ID of this accumulator; for internal use only.
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
  * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
  *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
  *                 thread safe so that they can be reported correctly.
+ * @param countFailedValues whether to accumulate values from failed tasks. This is set to true
+ *                          for system and time metrics like serialization time or bytes spilled,
+ *                          and false for things with absolute values like number of input rows.
+ *                          This should be used for internal metrics only.
  * @param process function on the accumulated data to the result (defaults to identity).
  * @param consistent if the current accumulator has [[ConsistentAccumulator]] behaviour.
  * @tparam R the full accumulated data
@@ -48,21 +59,26 @@ import org.apache.spark.util.Utils
  * @tparam T partial data that can be added in
  */
 class GenericAccumulable[RR, R, T] private[spark] (
+    val id: Long,
     initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean,
+    private[spark] val countFailedValues: Boolean,
     @transient process: R => RR,
-    consistent: Boolean)
+    private[spark] val consistent: Boolean)
   extends Serializable {
 
-  val id: Long = Accumulators.newId
-
-  @volatile @transient private var value_ : R = initialValue // Current value on master
-  val zero = param.zero(initialValue)  // Zero value to be passed to workers
+  @volatile @transient private var value_ : R = initialValue // Current value on driver
+  val zero = param.zero(initialValue) // Zero value to be passed to executors
   private var deserialized = false
 
-  Accumulators.register(this)
+  // In many places we create internal accumulators without access to the active context cleaner,
+  // so if we register them here then we may never unregister these accumulators. To avoid memory
+  // leaks, we require the caller to explicitly register internal accumulators elsewhere.
+  if (!internal) {
+    Accumulators.register(this)
+  }
 
   /**
    * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
@@ -76,6 +92,18 @@ class GenericAccumulable[RR, R, T] private[spark] (
    * Consistent accumulators will only be added to when a full partition is processed.
    */
   private[spark] def isConsistent: Boolean = consistent
+
+  /**
+   * Return a copy of this [[Accumulable]].
+   *
+   * The copy will have the same ID as the original and will not be registered with
+   * [[Accumulators]] again. This method exists so that the caller can avoid passing the
+   * same mutable instance around.
+   */
+  private[spark] def copy(): GenericAccumulable[RR, R, T] = {
+    new GenericAccumulable[RR, R, T](id, initialValue, param, name, internal, countFailedValues,
+      process, consistent)
+  }
 
   /**
    * Add more data to this accumulator / accumulable
@@ -106,7 +134,7 @@ class GenericAccumulable[RR, R, T] private[spark] (
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
-   * Access the accumulator's current value; only allowed on master.
+   * Access the accumulator's current value; only allowed on driver.
    */
   def value: RR = {
     if (!deserialized) {
@@ -128,7 +156,7 @@ class GenericAccumulable[RR, R, T] private[spark] (
   def localValue: R = value_
 
   /**
-   * Set the accumulator's value; only allowed on master.
+   * Set the accumulator's value; only allowed on driver.
    */
   def value_= (newValue: R) {
     if (!deserialized) {
@@ -139,22 +167,24 @@ class GenericAccumulable[RR, R, T] private[spark] (
   }
 
   /**
-   * Set the accumulator's value; only allowed on master
+   * Set the accumulator's value. For internal use only.
    */
-  def setValue(newValue: R) {
-    this.value = newValue
-  }
+  def setValue(newValue: R): Unit = { value_ = newValue }
+
+  /**
+   * Set the accumulator's value. For internal use only.
+   */
+  private[spark] def setValueAny(newValue: Any): Unit = { setValue(newValue.asInstanceOf[R]) }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     value_ = zero
     deserialized = true
+
     // Automatically register the accumulator when it is deserialized with the task closure.
-    //
-    // Note internal accumulators sent with task are deserialized before the TaskContext is created
-    // and are registered in the TaskContext constructor. Other internal accumulators, such SQL
-    // metrics, still need to register here.
+    // This is for external accumulators and internal ones that do not represent task level
+    // metrics, e.g. internal SQL metrics, which are per-operator.
     val taskContext = TaskContext.get()
     if (taskContext != null) {
       taskContext.registerAccumulator(this)
@@ -187,20 +217,25 @@ class Accumulable[R, T] private[spark] (
     initialValue: R,
     param: AccumulableParam[R, T],
     name: Option[String],
-    internal: Boolean)
-    extends GenericAccumulable[R, R, T](initialValue, param, name, internal, identity, false)
-    with Serializable {
+    internal: Boolean,
+    countFailedValues: Boolean)
+  extends GenericAccumulable[R, R, T](Accumulators.newId(), initialValue, param, name, internal,
+      countFailedValues, identity, false) with Serializable {
 
   private[spark] def this(
-      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
-    this(initialValue, param, None, internal)
+      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean, countFailedValues: Boolean) = {
+    this(initialValue, param, None, internal, countFailedValues)
   }
 
+  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String], internal: Boolean) =
+    this(initialValue, param, name, internal, false /* countFailed */)
+
   def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
-    this(initialValue, param, name, false)
+    this(initialValue, param, name, false /* internal */)
 
   def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
     this(initialValue, param, None)
+
 }
 
 /**

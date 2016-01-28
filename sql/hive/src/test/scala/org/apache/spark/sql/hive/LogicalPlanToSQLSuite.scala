@@ -147,7 +147,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // TODO Enable this
   // Query plans transformed by DistinctAggregationRewriter are not recognized yet
-  ignore("distinct and non-distinct aggregation") {
+  ignore("multi-distinct columns") {
     checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM t2 GROUP BY a")
   }
 

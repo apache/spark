@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
-import org.apache.spark.rpc.RpcAddress
+import org.apache.spark.rpc.{RpcAddress, RpcEnvStoppedException}
 
 private[netty] sealed trait OutboxMessage {
 
@@ -43,7 +43,10 @@ private[netty] case class OneWayOutboxMessage(content: ByteBuffer) extends Outbo
   }
 
   override def onFailure(e: Throwable): Unit = {
-    logWarning(s"Failed to send one-way RPC.", e)
+    e match {
+      case e1: RpcEnvStoppedException => logWarning(e1.getMessage)
+      case e1: Throwable => logWarning(s"Failed to send one-way RPC.", e1)
+    }
   }
 
 }

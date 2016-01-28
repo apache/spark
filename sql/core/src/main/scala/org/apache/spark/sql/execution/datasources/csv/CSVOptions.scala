@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
 
 private[sql] class CSVOptions(
-    @transient parameters: Map[String, String])
+    @transient private val parameters: Map[String, String])
   extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {

@@ -66,7 +66,8 @@ class ConsistentAccumulator[T] private[spark] (
     name: Option[String],
     internal: Boolean)
   extends GenericAccumulable[T, UpdateTracking[T], (UpdateInfo, T)](
-  initialValue, param, name, internal, {x => x.value}, true) {
+    Accumulators.newId(), initialValue, param, name, internal, countFailedValues = false,
+    process = {x => x.value}, consistent = true) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(new UpdateTracking(initialValue),
