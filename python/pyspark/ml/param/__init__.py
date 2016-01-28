@@ -152,17 +152,16 @@ class Params(Identifiable):
         return self.isSet(param) or self.hasDefault(param)
 
     @since("1.4.0")
-    def hasParam(self, param):
+    def hasParam(self, paramName):
         """
-        Tests whether this instance contains a param.
+        Tests whether this instance contains a param with a given
+        (string) name.
         """
-        if isinstance(param, Param):
-            return hasattr(self, param.name)
-        elif isinstance(param, str):
-            p = getattr(self, param, None)
+        if isinstance(paramName, str):
+            p = getattr(self, paramName, None)
             return p is not None and isinstance(p, Param)
         else:
-            raise TypeError("hasParam(): param must be a string or Param type")
+            raise TypeError("hasParam(): paramName must be a string")
 
     @since("1.4.0")
     def getOrDefault(self, param):
