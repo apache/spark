@@ -206,7 +206,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {killLink}
       </td>
       <td>
-        <a href={app.curAppUIUrl}>{app.desc.name}</a>
+        {
+          if (app.isFinished) {
+            app.desc.name
+          } else {
+            <a href={app.desc.appUiUrl}>{app.desc.name}</a>
+          }
+        }
       </td>
       <td>
         {app.coresGranted}
