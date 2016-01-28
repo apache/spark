@@ -309,7 +309,6 @@ private[spark] class Executor(
           } else {
             Seq.empty[AccumulableInfo]
           }
-          println("updates are "+accumulatorUpdates)
 
           val serializedTaskEndReason = {
             try {
