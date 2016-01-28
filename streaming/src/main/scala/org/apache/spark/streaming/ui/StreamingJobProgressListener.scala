@@ -63,7 +63,6 @@ private[streaming] class StreamingJobProgressListener(conf: SparkConf)
       }
     }
 
-
   @volatile var batchDuration = 0L
   @volatile var applicationStartTime = 0L
   @volatile var applicationEndTime = 0L
