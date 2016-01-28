@@ -19,14 +19,14 @@ package org.apache.spark.api.r
 
 import java.util.{Map => JMap}
 
+import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-
-import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
