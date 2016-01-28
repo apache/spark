@@ -113,7 +113,6 @@ object SamplePushDown extends Rule[LogicalPlan] {
 }
 
 /**
-<<<<<<< HEAD
  * Removes cases where we are unnecessarily going between the object and serialized (InternalRow)
  * representation of data item.  For example back to back map operations.
  */
