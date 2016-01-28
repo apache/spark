@@ -161,7 +161,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       iter
     }
     // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { _ =>
+    listener.registerJobCompletionCallback { () =>
       val stageInfos = listener.getCompletedStageInfos
       val taskInfos = listener.getCompletedTaskInfos
       assert(stageInfos.size === 1)
@@ -180,6 +180,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
     }
     rdd.count()
+    listener.awaitNextJobCompletion()
   }
 
   test("internal accumulators in multiple stages") {
@@ -206,7 +207,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
         iter
       }
     // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { _ =>
+    listener.registerJobCompletionCallback { () =>
     // We ran 3 stages, and the accumulator values should be distinct
       val stageInfos = listener.getCompletedStageInfos
       assert(stageInfos.size === 3)
@@ -254,7 +255,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     }
 
     // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { _ =>
+    listener.registerJobCompletionCallback { () =>
       val stageInfos = listener.getCompletedStageInfos
       assert(stageInfos.size === 4) // 1 shuffle map stage + 1 result stage, both are retried
       val mapStageId = stageInfos.head.stageId
@@ -280,7 +281,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(stageAccum1stAttempt.id != stageAccum2ndAttempt.id)
     }
     rdd.count()
-    listener.maybeThrowException()
+    listener.awaitNextJobCompletion()
   }
 
   test("internal accumulators are registered for cleanups") {

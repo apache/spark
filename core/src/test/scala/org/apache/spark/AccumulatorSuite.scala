@@ -329,10 +329,9 @@ private class SaveInfoListener extends SparkListener {
     new mutable.HashMap[(StageId, StageAttemptId), ArrayBuffer[TaskInfo]]
 
   // Callback to call when a job completes. Parameter is job ID.
-  private var jobCompletionCallback: (Int => Unit) = null
-
-  // Accesses must be synchronized to ensure failures in `jobCompletionCallback` are propagated
   @GuardedBy("this")
+  private var jobCompletionCallback: () => Unit = null
+  private var calledJobCompletionCallback: Boolean = false
   private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
@@ -340,24 +339,42 @@ private class SaveInfoListener extends SparkListener {
   def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
     completedTaskInfos.get((stageId, stageAttemptId)).getOrElse(Seq.empty[TaskInfo])
 
-  /** Register a callback to be called on job end. */
-  def registerJobCompletionCallback(callback: (Int => Unit)): Unit = {
-    jobCompletionCallback = callback
+  /**
+   * If `jobCompletionCallback` is set, block until the next call has finished.
+   * If the callback failed with an exception, throw it.
+   */
+  def awaitNextJobCompletion(): Unit = synchronized {
+    if (jobCompletionCallback != null) {
+      while (!calledJobCompletionCallback) {
+        wait()
+      }
+      calledJobCompletionCallback = false
+      if (exception != null) {
+        exception = null
+        throw exception
+      }
+    }
   }
 
-  /** Throw a stored exception, if any. */
-  def maybeThrowException(): Unit = synchronized {
-    if (exception != null) { throw exception }
+  /**
+   * Register a callback to be called on job end.
+   * A call to this should be followed by [[awaitNextJobCompletion]].
+   */
+  def registerJobCompletionCallback(callback: () => Unit): Unit = {
+    jobCompletionCallback = callback
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = synchronized {
     if (jobCompletionCallback != null) {
       try {
-        jobCompletionCallback(jobEnd.jobId)
+        jobCompletionCallback()
       } catch {
         // Store any exception thrown here so we can throw them later in the main thread.
         // Otherwise, if `jobCompletionCallback` threw something it wouldn't fail the test.
         case NonFatal(e) => exception = e
+      } finally {
+        calledJobCompletionCallback = true
+        notify()
       }
     }
   }
