@@ -21,8 +21,6 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import com.spotify.docker.client._
-import com.spotify.docker.client.DockerClient._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest

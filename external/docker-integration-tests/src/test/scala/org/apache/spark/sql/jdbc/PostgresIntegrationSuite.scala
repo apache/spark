@@ -20,7 +20,6 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 import java.util.Properties
 
-import com.spotify.docker.client.DockerClient
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType}
