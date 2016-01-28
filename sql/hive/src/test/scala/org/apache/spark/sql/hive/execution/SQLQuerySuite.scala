@@ -1463,4 +1463,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
       """.stripMargin), Row("value1", "12", BigDecimal("3.14"), "hello"))
   }
+
+  test("SPARK-13056: Null in map value causes NPE") {
+    Seq((1, "abc=somestring,cba")).toDF("key", "value").registerTempTable("mapsrc")
+    sql("""CREATE TABLE maptest AS SELECT str_to_map(value, ",", "=") as col1 FROM mapsrc""")
+    checkAnswer(sql("SELECT col1['abc'] FROM maptest"), Row("somestring"))
+    checkAnswer(sql("SELECT col1['cba'] FROM maptest"), Row(null))
+  }
 }

@@ -278,7 +278,7 @@ case class GetMapValue(child: Expression, key: Expression)
       }
     }
 
-    if (!found) {
+    if (!found || map.valueArray().isNullAt(i)) {
       null
     } else {
       map.valueArray().get(i, dataType)
@@ -307,7 +307,7 @@ case class GetMapValue(child: Expression, key: Expression)
           }
         }
 
-        if ($found) {
+        if ($found && !$eval1.valueArray().isNullAt($index)) {
           ${ev.value} = ${ctx.getValue(eval1 + ".valueArray()", dataType, index)};
         } else {
           ${ev.isNull} = true;
