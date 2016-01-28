@@ -748,7 +748,7 @@ class Airflow(BaseView):
             host = ti.hostname
             log_loaded = False
 
-            if socket.gethostname() == ' bla': #host:
+            if socket.gethostname() == host:
                 try:
                     f = open(loc)
                     log += "".join(f.readlines())
