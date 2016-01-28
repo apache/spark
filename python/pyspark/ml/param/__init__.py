@@ -317,7 +317,7 @@ class Params(Identifiable):
 
     def _resetUid(self, newUid):
         """
-        Changes the uid of this instance.  This updates both
+        Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.
         This is used by persistence (loading).
         :param newUid: new uid to use
