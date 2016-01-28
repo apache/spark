@@ -34,6 +34,13 @@
     <sbt.project.name>docker-integration-tests</sbt.project.name>
   </properties>
 
+  <repositories>
+    <repository>
+      <id>db2</id>
+      <url>https://app.camunda.com/nexus/content/repositories/public/</url>
+    </repository>
+  </repositories>
+
   <dependencies>
     <dependency>
       <groupId>com.spotify</groupId>
@@ -198,9 +205,9 @@
           http://www-01.ibm.com/support/docview.wss?uid=swg21363866
      -->
     <dependency>
-      <groupId>com.ibm.db2</groupId>
+      <groupId>com.ibm.db2.jcc</groupId>
       <artifactId>db2jcc4</artifactId>
-      <version>10.5</version>
+      <version>10.5.0.5</version>
       <type>jar</type>
     </dependency>
   </dependencies>
