@@ -97,10 +97,12 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     }
     sqlContext.listenerManager.register(listener)
 
-    val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
-    df.collect()
-    df.collect()
-    Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
+    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+      val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
+      df.collect()
+      df.collect()
+      Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
+    }
 
     assert(metrics.length == 3)
     assert(metrics(0) == 1)
@@ -140,7 +142,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         .filter(_._2.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
 
       assert(peakMemoryAccumulator.size == 1)
-      peakMemoryAccumulator.head._2.value.toLong
+      peakMemoryAccumulator.head._2.value.get.asInstanceOf[Long]
     }
 
     assert(sparkListener.getCompletedStageInfos.length == 2)
