@@ -1169,7 +1169,7 @@ class Analyzer(
   object ResolveNaturalJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Should not skip unresolved nodes because natural join is always unresolved.
-      case j @ Join(left, right, NaturalJoin(joinType), condition) =>
+      case j @ Join(left, right, NaturalJoin(joinType), condition) if j.partlyResolved =>
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
         val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
         val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
