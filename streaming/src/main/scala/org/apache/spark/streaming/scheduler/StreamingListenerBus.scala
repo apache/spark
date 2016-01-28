@@ -19,7 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler._
-import org.apache.spark.streaming.ui.{StreamingTab, StreamingJobProgressListener}
+import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.ListenerBus
 

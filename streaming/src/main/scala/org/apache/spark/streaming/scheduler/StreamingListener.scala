@@ -17,11 +17,10 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.scheduler.SparkListenerEvent
-
 import scala.collection.mutable.Queue
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.Distribution
 
 /**

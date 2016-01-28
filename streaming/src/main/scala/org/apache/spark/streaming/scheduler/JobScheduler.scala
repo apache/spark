@@ -25,10 +25,9 @@ import scala.util.Failure
 import org.apache.spark.Logging
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-
+import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 private[scheduler] sealed trait JobSchedulerEvent
 private[scheduler] case class JobStarted(job: Job, startTime: Long) extends JobSchedulerEvent

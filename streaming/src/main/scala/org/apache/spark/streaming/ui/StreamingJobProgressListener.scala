@@ -19,12 +19,11 @@ package org.apache.spark.streaming.ui
 
 import java.util.{LinkedHashMap, Map => JMap, Properties}
 
-import org.apache.spark.SparkConf
-
 import scala.collection.mutable.{ArrayBuffer, HashMap, Queue, SynchronizedBuffer}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.scheduler._
-import org.apache.spark.streaming.{StreamingContext, Time}
+import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 
 private[streaming] class StreamingJobProgressListener(conf: SparkConf)
