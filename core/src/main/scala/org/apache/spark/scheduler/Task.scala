@@ -144,8 +144,7 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean, readFullPartition: Boolean):
       Seq[AccumulableInfo] = {
-    println(s"collecting acc updates ${taskFailed}, ${readFullPartition}")
-    if (context != null) {
+     if (context != null) {
       context.taskMetrics.accumulatorUpdates().filter { a =>
         (!taskFailed || a.countFailedValues) && (readFullPartition || !a.consistent)}
     } else {
