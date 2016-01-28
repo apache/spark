@@ -81,7 +81,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
 
     /**
-    Using ImperativeAggregate:
+      Using ImperativeAggregate:
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
@@ -96,10 +96,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
       -------------------------------------------------------------------------------
-      stddev w/o codegen                      1499.08            13.99         1.00 X
-      stddev w codegen                         360.40            58.19         4.16 X
-      kurtosis w/o codegen                    2941.94             7.13         0.51 X
-      kurtosis w codegen                       432.04            48.54         3.47 X
+      stddev w/o codegen                       989.22            21.20         1.00 X
+      stddev w codegen                         352.35            59.52         2.81 X
+      kurtosis w/o codegen                    3636.91             5.77         0.27 X
+      kurtosis w codegen                       369.25            56.79         2.68 X
       */
     benchmark.run()
   }
