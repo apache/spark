@@ -32,6 +32,18 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     df.queryExecution.optimizedPlan.statistics.sizeInBytes
   }
 
+  test("spark-10777 order by") {
+
+    val df1 = sql("select a  r, sum(b) s FROM testData2 GROUP BY r")
+
+    val df2 = sql("SELECT * FROM ( select a r, sum(b) s FROM testData2 GROUP BY r) t")
+
+    val df3 = sql("SELECT r as c1, min(s) over () as c2 FROM" +
+                  "( select a r, sum(b) s FROM testData2 GROUP BY r) t order by r")
+
+    val df4 = sql("select a  r, sum(b) s FROM testData2 GROUP BY r, s")
+  }
+
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")

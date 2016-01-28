@@ -462,6 +462,43 @@ class Analyzer(
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
+      case a @ Aggregate(groups, aggs, child)
+        if (groups.nonEmpty && aggs.nonEmpty && child.resolved
+          && aggs.map(_.resolved).reduceLeft(_ && _)
+          && (!groups.map(_.resolved).reduceLeft(_ && _))) =>
+        val newGroups = groups.map(g => g transformUp {
+          case u @ UnresolvedAttribute(nameParts) =>
+            val result = withPosition(u) {
+              resolveAliases(nameParts,
+                aggs.collect { case a: Alias => a }, resolver).getOrElse(u)
+            }
+            logDebug(s"Resolving $u to $result")
+            result
+          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+            ExtractValue(child, fieldExpr, resolver)
+        })
+
+        val q = if (!newGroups.zip(groups).map(p => p._1 fastEquals (p._2))
+          .reduceLeft(_ && _)) {
+          Aggregate(newGroups, aggs, child)
+        } else {
+          a
+        }
+
+        logTrace(s"Attempting to resolve ${q.simpleString}")
+        q transformExpressionsUp {
+          case u @ UnresolvedAttribute(nameParts) =>
+            // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
+            val result =
+              withPosition(u) {
+                q.resolveChildren(nameParts, resolver).getOrElse(u)
+              }
+            logDebug(s"Resolving $u to $result")
+            result
+          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+            ExtractValue(child, fieldExpr, resolver)
+        }
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
@@ -492,6 +529,19 @@ class Analyzer(
      */
     def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+  }
+  /**
+   * Find matching Aliases for attribute name
+   */
+  private def resolveAliases(
+        nameParts: Seq[String],
+        aliases: Seq[Alias],
+        resolver: Resolver): Option[Alias] = {
+    val matches = if (nameParts.length == 1) {
+      aliases.distinct.filter(a => resolver(a.name, nameParts.head))
+    } else Nil
+    if (matches.isEmpty) None
+    else Some(matches.head)
   }
 
   private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
