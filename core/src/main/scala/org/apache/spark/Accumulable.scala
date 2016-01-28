@@ -60,7 +60,8 @@ import org.apache.spark.util.Utils
  */
 class GenericAccumulable[RR, R, T] private[spark] (
     val id: Long,
-    initialValue: R,
+    // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
+    @transient private val initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
     internal: Boolean,

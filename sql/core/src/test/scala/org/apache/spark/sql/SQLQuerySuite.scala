@@ -56,8 +56,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("show functions") {
-    checkAnswer(sql("SHOW functions"),
-      FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
+    def getFunctions(pattern: String): Seq[Row] = {
+      val regex = java.util.regex.Pattern.compile(pattern)
+      sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+    }
+    checkAnswer(sql("SHOW functions"), getFunctions(".*"))
+    Seq("^c.*", ".*e$", "log.*", ".*date.*").foreach { pattern =>
+      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
+    }
   }
 
   test("describe functions") {
