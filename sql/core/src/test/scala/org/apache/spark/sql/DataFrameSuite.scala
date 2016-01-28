@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
@@ -422,6 +423,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = src.drop("a", "b")
     checkAnswer(df, Row(3))
     assert(df.schema.map(_.name) === Seq("c"))
+  }
+
+  test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
+    val src = Seq((0, 3, 5)).toDF("a", "b", "c")
+      .withColumn("Data", struct("a", "b"))
+      .drop("a")
+      .drop("b")
+    val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
+    val df = src.select($"*", max("c").over(winSpec) as "max")
+    checkAnswer(df, Row(5, Row(0, 3), 5))
   }
 
   test("drop unknown column (no-op)") {

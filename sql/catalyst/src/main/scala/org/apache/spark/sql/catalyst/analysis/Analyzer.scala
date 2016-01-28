@@ -872,7 +872,8 @@ class Analyzer(
           if (missingExpr.nonEmpty) {
             extractedExprBuffer += ne
           }
-          ne.toAttribute
+          // alias will be cleaned in the rule CleanupAliases
+          if (ne.isInstanceOf[Alias]) ne else ne.toAttribute
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
         case e: Expression =>
