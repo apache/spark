@@ -118,10 +118,10 @@ RowsGroup.prototype = {
 			})
 			var iColumn = previousOrder.indexOf(orderingColumn);
 			if (iColumn >= 0) {
-				// assume change the direction, because we already has that in previos order
+				// assume change the direction, because we already has that in previous order
 				return [[orderingColumn, this._toogleDirection(this.order[iColumn][1])]]
 			} // else This is the new ordering column. Proceed as is.
-		} // else got milti order - work normal
+		} // else got multi order - work normal
 		return order;
 	},
 	
@@ -179,7 +179,7 @@ RowsGroup.prototype = {
 		currentOrder = this._getInjectedMonoSelectWorkaround(currentOrder);
 		this.order = this._getOrderWithGroupColumns(currentOrder)
 		// this.table.order($.extend(true, Array(), this.order)) // disable this line in order to support sorting on non-grouped columns
-		this.table.draw()
+		this.table.draw(false)
 	},
 };
 

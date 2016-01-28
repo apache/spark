@@ -36,14 +36,15 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val providerConfig = parent.getProviderConfig()
     val content =
       <div class="row-fluid">
-        <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script>
           <div class="span12">
             <ul class="unstyled">
               {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
             </ul>
             {
             if (allAppsSize > 0) {
-              <div id="history-summary" class="span12"></div>
+              <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script> ++
+              <div id="history-summary" class="span12"></div> ++
+              <script src={UIUtils.prependBaseUri("/static/historypage.js")}> </script>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
             } else {
@@ -67,8 +68,6 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               }
             </a>
           </div>
-        <script src={UIUtils.prependBaseUri("/static/historypage.js")}> </script>
-
       </div>
     UIUtils.basicSparkPage(content, "History Server")
   }

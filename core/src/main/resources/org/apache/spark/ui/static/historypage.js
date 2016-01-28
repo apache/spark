@@ -102,9 +102,10 @@ $(document).ready(function() {
           array.push(app_clone);
         }
       }
+
       var data = {"applications": array}
-      $.get("/static/historypage-template.html", function(template) { 
-        historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data)); 
+      $.get("/static/historypage-template.html", function(template) {
+        historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
         var conf = {
                     "columns": [
@@ -117,7 +118,6 @@ $(document).ready(function() {
                         {name: 'seventh'},
                         {name: 'eighth'},
                     ],
-                    "displayLength": 20,
         };
 
         var rowGroupConf = {
@@ -135,10 +135,6 @@ $(document).ready(function() {
           }
         }
 
-        if ($(selector.concat(" tr")).length <= 20) {
-          $.extend(conf, {paging: false});
-        }
-
         if (!hasMultipleAttempts) {
           var attemptIDCells = document.getElementsByClassName("attemptIDSpan");
           for (i = 0; i < attemptIDCells.length; i++) {
@@ -152,8 +148,11 @@ $(document).ready(function() {
           durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
         }
 
-        $(selector).DataTable(conf);
+        if ($(selector.concat(" tr")).length < 20) {
+          $.extend(conf, {paging: false});
+        }
 
+        $(selector).DataTable(conf);
         $('#hisotry-summary [data-toggle="tooltip"]').tooltip();
       });
     });
