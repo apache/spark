@@ -191,7 +191,7 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putShorts(int rowId, int count, short[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.INT_ARRAY_OFFSET + srcIndex * 2,
+    Platform.copyMemory(src, Platform.SHORT_ARRAY_OFFSET + srcIndex * 2,
         null, data + 2 * rowId, count * 2);
   }
 
@@ -287,13 +287,13 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putFloats(int rowId, int count, float[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex * 4,
+    Platform.copyMemory(src, Platform.FLOAT_ARRAY_OFFSET + srcIndex * 4,
         null, data + 4 * rowId, count * 4);
   }
 
   @Override
   public final void putFloats(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex,
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
         null, data + rowId * 4, count * 4);
   }
 
@@ -328,7 +328,7 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex,
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
         null, data + rowId * 8, count * 8);
   }
 
@@ -394,7 +394,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else if (type instanceof IntegerType || type instanceof FloatType) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 4, newCapacity * 4);
     } else if (type instanceof LongType || type instanceof DoubleType ||
-        DecimalType.isLongDecimalType(type)) {
+        DecimalType.is64BitDecimalType(type)) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 8, newCapacity * 8);
     } else if (resultStruct != null) {
       // Nothing to store.

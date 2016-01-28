@@ -274,7 +274,7 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final void putFloats(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex,
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
         floatData, Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
   }
 
@@ -380,7 +380,7 @@ public final class OnHeapColumnVector extends ColumnVector {
       int[] newData = new int[newCapacity];
       if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
       intData = newData;
-    } else if (type instanceof LongType || DecimalType.isLongDecimalType(type)) {
+    } else if (type instanceof LongType || DecimalType.is64BitDecimalType(type)) {
       long[] newData = new long[newCapacity];
       if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
       longData = newData;

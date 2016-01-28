@@ -151,7 +151,7 @@ object DecimalType extends AbstractDataType {
   /**
    * Returns if dt is a DecimalType that fits inside a long
    */
-  def isLongDecimalType(dt: DataType): Boolean = {
+  def is64BitDecimalType(dt: DataType): Boolean = {
     dt match {
       case t: DecimalType =>
         t.precision <= Decimal.MAX_LONG_DIGITS
