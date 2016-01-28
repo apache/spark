@@ -45,6 +45,7 @@ case class AccumulableInfo private[spark] (
     value: Option[Any],
     private[spark] val internal: Boolean,
     private[spark] val countFailedValues: Boolean,
+    // TODO: use this to identify internal task metrics instead of encoding it in the name
     private[spark] val metadata: Option[String] = None)
 
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.{Accumulable, AccumulableParam, Accumulators, SparkContext}
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.Utils
 
 /**
@@ -27,8 +28,15 @@ import org.apache.spark.util.Utils
  * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
-    name: String, val param: SQLMetricParam[R, T])
+    name: String,
+    val param: SQLMetricParam[R, T])
   extends Accumulable[R, T](param.zero, param, Some(name), internal = true) {
+
+  // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
+  override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
+    new AccumulableInfo(id, Some(name), update, value, isInternal, countFailedValues,
+      Some(SQLMetrics.ACCUM_IDENTIFIER))
+  }
 
   def reset(): Unit = {
     this.value = param.zero
@@ -125,6 +133,9 @@ private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
   }, -1L)
 
 private[sql] object SQLMetrics {
+
+  // Identifier for distinguishing SQL metrics from other accumulators
+  private[sql] val ACCUM_IDENTIFIER = "sql"
 
   private def createLongMetric(
       sc: SparkContext,
