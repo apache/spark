@@ -316,8 +316,6 @@ abstract class BinaryNode extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = Seq(left, right)
 
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
-
   override lazy val resolved: Boolean =
-    expressions.forall(_.resolved) && childrenResolved && duplicateResolved
+    expressions.forall(_.resolved) && childrenResolved
 }

@@ -421,16 +421,13 @@ class HiveTypeCoercionSuite extends PlanTest {
     assert(r2.left.isInstanceOf[Project])
     assert(r2.right.isInstanceOf[Project])
 
-    // Even if we are doing self Except, we still add Project. The node Except will not be marked
-    // as analyzed unless their exprId are de-duplicated. Thus, the func resolveOperators called in
-    // WidenSetOperationTypes does not skip and return the node before applying the rule.
     val r3 = wt(Except(firstTable, firstTable)).asInstanceOf[Except]
     checkOutput(r3.left, Seq(IntegerType, DecimalType.SYSTEM_DEFAULT, ByteType, DoubleType))
     checkOutput(r3.right, Seq(IntegerType, DecimalType.SYSTEM_DEFAULT, ByteType, DoubleType))
 
-    // Check if a Project is added
-    assert(r3.left.isInstanceOf[Project])
-    assert(r3.right.isInstanceOf[Project])
+    // Check if no Project is added
+    assert(r3.left.isInstanceOf[LocalRelation])
+    assert(r3.right.isInstanceOf[LocalRelation])
   }
 
   test("WidenSetOperationTypes for union") {

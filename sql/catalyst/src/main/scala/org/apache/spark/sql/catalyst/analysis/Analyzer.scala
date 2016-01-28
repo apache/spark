@@ -445,14 +445,11 @@ class Analyzer(
             .map(_.asInstanceOf[NamedExpression])
         a.copy(aggregateExpressions = expanded)
 
-      // To resolve duplicate expression IDs for all the BinaryNode
-      case b: BinaryNode if !b.duplicateResolved => b match {
-        case j @ Join(left, right, _, _) =>
-          j.copy(right = dedupRight(left, right))
-        case i @ Intersect(left, right) =>
-          i.copy(right = dedupRight(left, right))
-        case other => other
-      }
+      // To resolve duplicate expression IDs for Join and Intersect
+      case j @ Join(left, right, _, _) if !j.duplicateResolved =>
+        j.copy(right = dedupRight(left, right))
+      case i @ Intersect(left, right) if !i.duplicateResolved =>
+        i.copy(right = dedupRight(left, right))
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on grandchild

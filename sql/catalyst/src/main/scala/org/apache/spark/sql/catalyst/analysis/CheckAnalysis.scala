@@ -214,8 +214,18 @@ trait CheckAnalysis {
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
-          case j: BinaryNode if !j.duplicateResolved =>
+          case j: Join if !j.duplicateResolved =>
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references
+                 |in operator ${operator.simpleString}:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
+
+          case i: Intersect if !i.duplicateResolved =>
+            val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
             failAnalysis(
               s"""
                  |Failure when resolving conflicting references
