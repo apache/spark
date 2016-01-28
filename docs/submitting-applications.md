@@ -177,8 +177,9 @@ debugging information by running `spark-submit` with the `--verbose` option.
 
 # Advanced Dependency Management
 When using `spark-submit`, the application jar along with any jars included with the `--jars` option
-will be automatically transferred to the cluster. Spark uses the following URL scheme to allow
-different strategies for disseminating jars:
+will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included on the driver and executor classpaths. Directory expansion does not work with `--jars`.
+
+Spark uses the following URL scheme to allow different strategies for disseminating jars:
 
 - **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
   every executor pulls the file from the driver HTTP server.
