@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -29,15 +28,7 @@ import org.apache.spark.sql.types._
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
-case class Corr(
-    left: Expression,
-    right: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate {
-
-  def this(left: Expression, right: Expression) =
-    this(left, right, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+case class Corr(left: Expression, right: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = Seq(left, right)
 
@@ -47,147 +38,88 @@ case class Corr(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (left.dataType.isInstanceOf[DoubleType] && right.dataType.isInstanceOf[DoubleType]) {
-      TypeCheckResult.TypeCheckSuccess
+  protected val count = AttributeReference("count", DoubleType, nullable = false)()
+  protected val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
+  protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
+  protected val xMk = AttributeReference("xMk", DoubleType, nullable = false)()
+  protected val yMk = AttributeReference("yMk", DoubleType, nullable = false)()
+  protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
+
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, xAvg, yAvg, xMk, yMk, ck)
+
+  override val initialValues: Seq[Expression] = Seq(
+    /* count = */ Literal(0.0),
+    /* xAvg = */ Literal(0.0),
+    /* yAvg = */ Literal(0.0),
+    /* xMk = */ Literal(0.0),
+    /* yMk = */ Literal(0.0),
+    /* ck = */ Literal(0.0)
+  )
+
+  override lazy val updateExpressions: Seq[Expression] = {
+    val n = count + Literal(1.0)
+    val dx = left - xAvg
+    val dxN = dx / n
+    val dy = right - yAvg
+    val dyN = dy / n
+    val newXAvg = xAvg + dx / n
+    val newYAvg = yAvg + dyN
+    val newCk = ck + dx * (dy - dyN)
+    val newXMk = xMk + dx * (dx - dxN)
+    val newYMk = yMk + dy * (dy - dyN)
+
+    val isNull = Or(IsNull(left), IsNull(right))
+    if (left.nullable || right.nullable) {
+      Seq(
+        /* count = */ If(isNull, count, n),
+        /* xAvg = */ If(isNull, xAvg, newXAvg),
+        /* yAvg = */ If(isNull, yAvg, newYAvg),
+        /* xMk = */ If(isNull, xMk, newXMk),
+        /* yMk = */ If(isNull, yMk, newYMk),
+        /* ck = */ If(isNull, ck, newCk)
+      )
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"corr requires that both arguments are double type, " +
-          s"not (${left.dataType}, ${right.dataType}).")
+      Seq(
+        /* count = */ n,
+        /* xAvg = */ newXAvg,
+        /* yAvg = */ newYAvg,
+        /* xMk = */ newXMk,
+        /* yMk = */ newYMk,
+        /* ck = */ newCk
+      )
     }
   }
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override val mergeExpressions: Seq[Expression] = {
 
-  override def inputAggBufferAttributes: Seq[AttributeReference] = {
-    aggBufferAttributes.map(_.newInstance())
+    val n1 = count.left
+    val n2 = count.right
+    val n = n1 + n2
+    val dx = xAvg.right - xAvg.left
+    val dxN = If(EqualTo(n, Literal(0.0)), Literal(0.0), dx / n)
+    val dy = yAvg.right - yAvg.left
+    val dyN = If(EqualTo(n, Literal(0.0)), Literal(0.0), dy / n)
+    val newXAvg = xAvg.left + dxN * n2
+    val newYAvg = yAvg.left + dyN * n2
+    val newCk = ck.left + ck.right + dx * dyN * n1 * n2
+    val newXMk = xMk.left + xMk.right + dx * dxN * n1 * n2
+    val newYMk = yMk.left + yMk.right + dy * dyN * n1 * n2
+
+    Seq(
+      /* count = */ n,
+      /* xAvg = */ newXAvg,
+      /* yAvg = */ newYAvg,
+      /* xMk = */ newXMk,
+      /* yMk = */ newYMk,
+      /* ck = */ newCk
+    )
   }
 
-  override val aggBufferAttributes: Seq[AttributeReference] = Seq(
-    AttributeReference("xAvg", DoubleType)(),
-    AttributeReference("yAvg", DoubleType)(),
-    AttributeReference("Ck", DoubleType)(),
-    AttributeReference("MkX", DoubleType)(),
-    AttributeReference("MkY", DoubleType)(),
-    AttributeReference("count", LongType)())
-
-  // Local cache of mutableAggBufferOffset(s) that will be used in update and merge
-  private[this] val mutableAggBufferOffsetPlus1 = mutableAggBufferOffset + 1
-  private[this] val mutableAggBufferOffsetPlus2 = mutableAggBufferOffset + 2
-  private[this] val mutableAggBufferOffsetPlus3 = mutableAggBufferOffset + 3
-  private[this] val mutableAggBufferOffsetPlus4 = mutableAggBufferOffset + 4
-  private[this] val mutableAggBufferOffsetPlus5 = mutableAggBufferOffset + 5
-
-  // Local cache of inputAggBufferOffset(s) that will be used in update and merge
-  private[this] val inputAggBufferOffsetPlus1 = inputAggBufferOffset + 1
-  private[this] val inputAggBufferOffsetPlus2 = inputAggBufferOffset + 2
-  private[this] val inputAggBufferOffsetPlus3 = inputAggBufferOffset + 3
-  private[this] val inputAggBufferOffsetPlus4 = inputAggBufferOffset + 4
-  private[this] val inputAggBufferOffsetPlus5 = inputAggBufferOffset + 5
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def initialize(buffer: MutableRow): Unit = {
-    buffer.setDouble(mutableAggBufferOffset, 0.0)
-    buffer.setDouble(mutableAggBufferOffsetPlus1, 0.0)
-    buffer.setDouble(mutableAggBufferOffsetPlus2, 0.0)
-    buffer.setDouble(mutableAggBufferOffsetPlus3, 0.0)
-    buffer.setDouble(mutableAggBufferOffsetPlus4, 0.0)
-    buffer.setLong(mutableAggBufferOffsetPlus5, 0L)
+  override val evaluateExpression: Expression = {
+    If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
+      If(EqualTo(count, Literal(1.0)), Literal(Double.NaN),
+        ck / Sqrt(xMk * yMk)))
   }
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val leftEval = left.eval(input)
-    val rightEval = right.eval(input)
-
-    if (leftEval != null && rightEval != null) {
-      val x = leftEval.asInstanceOf[Double]
-      val y = rightEval.asInstanceOf[Double]
-
-      var xAvg = buffer.getDouble(mutableAggBufferOffset)
-      var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
-      var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
-      var MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
-      var MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
-      var count = buffer.getLong(mutableAggBufferOffsetPlus5)
-
-      val deltaX = x - xAvg
-      val deltaY = y - yAvg
-      count += 1
-      xAvg += deltaX / count
-      yAvg += deltaY / count
-      Ck += deltaX * (y - yAvg)
-      MkX += deltaX * (x - xAvg)
-      MkY += deltaY * (y - yAvg)
-
-      buffer.setDouble(mutableAggBufferOffset, xAvg)
-      buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
-      buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
-      buffer.setDouble(mutableAggBufferOffsetPlus3, MkX)
-      buffer.setDouble(mutableAggBufferOffsetPlus4, MkY)
-      buffer.setLong(mutableAggBufferOffsetPlus5, count)
-    }
-  }
-
-  // Merge counters from other partitions. Formula can be found at:
-  // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val count2 = buffer2.getLong(inputAggBufferOffsetPlus5)
-
-    // We only go to merge two buffers if there is at least one record aggregated in buffer2.
-    // We don't need to check count in buffer1 because if count2 is more than zero, totalCount
-    // is more than zero too, then we won't get a divide by zero exception.
-    if (count2 > 0) {
-      var xAvg = buffer1.getDouble(mutableAggBufferOffset)
-      var yAvg = buffer1.getDouble(mutableAggBufferOffsetPlus1)
-      var Ck = buffer1.getDouble(mutableAggBufferOffsetPlus2)
-      var MkX = buffer1.getDouble(mutableAggBufferOffsetPlus3)
-      var MkY = buffer1.getDouble(mutableAggBufferOffsetPlus4)
-      var count = buffer1.getLong(mutableAggBufferOffsetPlus5)
-
-      val xAvg2 = buffer2.getDouble(inputAggBufferOffset)
-      val yAvg2 = buffer2.getDouble(inputAggBufferOffsetPlus1)
-      val Ck2 = buffer2.getDouble(inputAggBufferOffsetPlus2)
-      val MkX2 = buffer2.getDouble(inputAggBufferOffsetPlus3)
-      val MkY2 = buffer2.getDouble(inputAggBufferOffsetPlus4)
-
-      val totalCount = count + count2
-      val deltaX = xAvg - xAvg2
-      val deltaY = yAvg - yAvg2
-      Ck += Ck2 + deltaX * deltaY * count / totalCount * count2
-      xAvg = (xAvg * count + xAvg2 * count2) / totalCount
-      yAvg = (yAvg * count + yAvg2 * count2) / totalCount
-      MkX += MkX2 + deltaX * deltaX * count / totalCount * count2
-      MkY += MkY2 + deltaY * deltaY * count / totalCount * count2
-      count = totalCount
-
-      buffer1.setDouble(mutableAggBufferOffset, xAvg)
-      buffer1.setDouble(mutableAggBufferOffsetPlus1, yAvg)
-      buffer1.setDouble(mutableAggBufferOffsetPlus2, Ck)
-      buffer1.setDouble(mutableAggBufferOffsetPlus3, MkX)
-      buffer1.setDouble(mutableAggBufferOffsetPlus4, MkY)
-      buffer1.setLong(mutableAggBufferOffsetPlus5, count)
-    }
-  }
-
-  override def eval(buffer: InternalRow): Any = {
-    val count = buffer.getLong(mutableAggBufferOffsetPlus5)
-    if (count > 0) {
-      val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
-      val MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
-      val MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
-      val corr = Ck / math.sqrt(MkX * MkY)
-      if (corr.isNaN) {
-        null
-      } else {
-        corr
-      }
-    } else {
-      null
-    }
-  }
+  override def prettyName: String = "corr"
 }
