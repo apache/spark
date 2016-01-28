@@ -53,6 +53,7 @@ trait CodegenSupport extends SparkPlan {
     */
   def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
+    ctx.freshNamePrefix = nodeName
     doProduce(ctx)
   }
 
@@ -93,6 +94,7 @@ trait CodegenSupport extends SparkPlan {
       child: SparkPlan,
       input: Seq[ExprCode],
       row: String = null): String = {
+    ctx.freshNamePrefix = nodeName
     if (row != null) {
       ctx.currentVars = null
       ctx.INPUT_ROW = row
@@ -101,10 +103,10 @@ trait CodegenSupport extends SparkPlan {
       }
       s"""
          | ${evals.map(_.code).mkString("\n")}
-         | ${doConsume(ctx, child, evals)}
+         | ${doConsume(ctx, evals)}
        """.stripMargin
     } else {
-      doConsume(ctx, child, input)
+      doConsume(ctx, input)
     }
   }
 
@@ -120,7 +122,7 @@ trait CodegenSupport extends SparkPlan {
     *     # call consume(), which will call parent.doConsume()
     *   }
     */
-  protected def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     throw new UnsupportedOperationException
   }
 }
@@ -142,6 +144,10 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     child.prepare()
   }
 
+  override def doExecute(): RDD[InternalRow] = {
+    child.execute()
+  }
+
   override def supportCodegen: Boolean = false
 
   override def upstream(): RDD[InternalRow] = {
@@ -155,16 +161,12 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
-       |  while (input.hasNext()) {
+       | while (input.hasNext()) {
        |   InternalRow $row = (InternalRow) input.next();
        |   ${columns.map(_.code).mkString("\n")}
        |   ${consume(ctx, columns)}
        | }
      """.stripMargin
-  }
-
-  override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException
   }
 
   override def simpleString: String = "INPUT"
@@ -181,11 +183,13 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
   *
   * -> execute()
   *     |
-  *  doExecute() -------->   produce()
+  *  doExecute() --------->   upstream() -------> upstream() ------> execute()
+  *     |
+  *      ----------------->   produce()
   *                             |
   *                          doProduce()  -------> produce()
   *                                                   |
-  *                                                doProduce() ---> execute()
+  *                                                doProduce()
   *                                                   |
   *                                                consume()
   *                        consumeChild() <-----------|

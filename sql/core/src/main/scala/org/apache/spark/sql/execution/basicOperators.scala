@@ -45,7 +45,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
@@ -88,7 +88,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val expr = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(condition, child.output))
     ctx.currentVars = input
@@ -162,21 +162,20 @@ case class Range(
   extends LeafNode with CodegenSupport {
 
   override def upstream(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
-      .map(i => InternalRow(i))
+    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
-    val initTerm = ctx.freshName("range_initRange")
+    val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
-    val partitionEnd = ctx.freshName("range_partitionEnd")
+    val partitionEnd = ctx.freshName("partitionEnd")
     ctx.addMutableState("long", partitionEnd, s"$partitionEnd = 0L;")
-    val number = ctx.freshName("range_number")
+    val number = ctx.freshName("number")
     ctx.addMutableState("long", number, s"$number = 0L;")
-    val overflow = ctx.freshName("range_overflow")
+    val overflow = ctx.freshName("overflow")
     ctx.addMutableState("boolean", overflow, s"$overflow = false;")
 
-    val value = ctx.freshName("range_value")
+    val value = ctx.freshName("value")
     val ev = ExprCode("", "false", value)
     val BigInt = classOf[java.math.BigInteger].getName
     val checkEnd = if (step > 0) {
@@ -185,55 +184,56 @@ case class Range(
       s"$number > $partitionEnd"
     }
 
-    val initRange = ctx.freshName("initRange")
-    ctx.addNewFunction(initRange,
+    ctx.addNewFunction("initRange",
       s"""
-      private void $initRange(InternalRow row) {
-        $BigInt index = $BigInt.valueOf(row.getInt(0));
-        $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
-        $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
-        $BigInt step = $BigInt.valueOf(${step}L);
-        $BigInt start = $BigInt.valueOf(${start}L);
-
-        $BigInt st = index.multiply(numElement).divide(numSlice).multiply(step).add(start);
-        if (st.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
-         $number = Long.MAX_VALUE;
-        } else if (st.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
-         $number = Long.MIN_VALUE;
-        } else {
-         $number = st.longValue();
-        }
-
-        $BigInt end = index.add($BigInt.ONE).multiply(numElement).divide(numSlice)
-         .multiply(step).add(start);
-        if (end.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
-         $partitionEnd = Long.MAX_VALUE;
-        } else if (end.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
-         $partitionEnd = Long.MIN_VALUE;
-        } else {
-         $partitionEnd = end.longValue();
-        }
-      }""")
+        | private void initRange(int idx) {
+        |   $BigInt index = $BigInt.valueOf(idx);
+        |   $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
+        |   $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
+        |   $BigInt step = $BigInt.valueOf(${step}L);
+        |   $BigInt start = $BigInt.valueOf(${start}L);
+        |
+        |   $BigInt st = index.multiply(numElement).divide(numSlice).multiply(step).add(start);
+        |   if (st.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
+        |     $number = Long.MAX_VALUE;
+        |   } else if (st.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
+        |     $number = Long.MIN_VALUE;
+        |   } else {
+        |     $number = st.longValue();
+        |   }
+        |
+        |   $BigInt end = index.add($BigInt.ONE).multiply(numElement).divide(numSlice)
+        |     .multiply(step).add(start);
+        |   if (end.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
+        |     $partitionEnd = Long.MAX_VALUE;
+        |   } else if (end.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
+        |     $partitionEnd = Long.MIN_VALUE;
+        |   } else {
+        |     $partitionEnd = end.longValue();
+        |   }
+        | }
+       """.stripMargin)
 
     s"""
-    // initialize Range
-    if (!$initTerm) {
-      $initTerm = true;
-      if (input.hasNext()) {
-        $initRange((InternalRow) input.next());
-      } else {
-        return;
-      }
-    }
-
-    while (!$overflow && $checkEnd) {
-     long $value = $number;
-     $number += ${step}L;
-     if ($number < $value ^ ${step}L < 0) {
-       $overflow = true;
-     }
-     ${consume(ctx, Seq(ev))}
-    }"""
+      | // initialize Range
+      | if (!$initTerm) {
+      |   $initTerm = true;
+      |   if (input.hasNext()) {
+      |     initRange(((InternalRow) input.next()).getInt(0));
+      |   } else {
+      |     return;
+      |   }
+      | }
+      |
+      | while (!$overflow && $checkEnd) {
+      |  long $value = $number;
+      |  $number += ${step}L;
+      |  if ($number < $value ^ ${step}L < 0) {
+      |    $overflow = true;
+      |  }
+      |  ${consume(ctx, Seq(ev))}
+      | }
+     """.stripMargin
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

@@ -136,11 +136,11 @@ case class TungstenAggregate(
     }
   }
 
-  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     if (groupingExpressions.isEmpty) {
-      doConsumeWithoutKeys(ctx, child, input)
+      doConsumeWithoutKeys(ctx, input)
     } else {
-      doConsumeWithKeys(ctx, child, input)
+      doConsumeWithKeys(ctx, input)
     }
   }
 
@@ -161,16 +161,15 @@ case class TungstenAggregate(
       ctx.addMutableState(ctx.javaType(e.dataType), value, "")
       // The initial expression should not access any column
       val ev = e.gen(ctx)
-      val initVars =
-        s"""
-         $isNull = ${ev.isNull};
-         $value = ${ev.value};
-       """
+      val initVars = s"""
+         | $isNull = ${ev.isNull};
+         | $value = ${ev.value};
+       """.stripMargin
       ExprCode(ev.code + initVars, isNull, value)
     }
 
     // generate variables for output
-    val (resultVars, genResult) = if (modes.contains(Final) |modes.contains(Complete)) {
+    val (resultVars, genResult) = if (modes.contains(Final) | modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = bufVars
       val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
@@ -183,9 +182,9 @@ case class TungstenAggregate(
         BindReferences.bindReference(e, aggregateAttributes).gen(ctx)
       }
       (resultVars, s"""
-         ${aggResults.map(_.code).mkString("\n")}
-         ${resultVars.map(_.code).mkString("\n")}
-       """)
+        | ${aggResults.map(_.code).mkString("\n")}
+        | ${resultVars.map(_.code).mkString("\n")}
+       """.stripMargin)
     } else {
       // output the aggregate buffer directly
       (bufVars, "")
@@ -194,31 +193,28 @@ case class TungstenAggregate(
     val doAgg = ctx.freshName("doAgg")
     ctx.addNewFunction(doAgg,
       s"""
-        private void $doAgg() throws java.io.IOException {
-          // initialize aggregation buffer
-          ${bufVars.map(_.code).mkString("\n")}
-
-          ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-        }
-       """)
+         | private void $doAgg() {
+         |   // initialize aggregation buffer
+         |   ${bufVars.map(_.code).mkString("\n")}
+         |
+         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+         | }
+       """.stripMargin)
 
     s"""
-    if (!$initAgg) {
-      $initAgg = true;
-      $doAgg();
-
-      // output the result
-      $genResult
-
-      ${consume(ctx, resultVars)}
-    }
-    """
+       | if (!$initAgg) {
+       |   $initAgg = true;
+       |   $doAgg();
+       |
+       |   // output the result
+       |   $genResult
+       |
+       |   ${consume(ctx, resultVars)}
+       | }
+     """.stripMargin
   }
 
-  private def doConsumeWithoutKeys(
-      ctx: CodegenContext,
-      child: SparkPlan,
-      input: Seq[ExprCode]): String = {
+  def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
@@ -378,10 +374,7 @@ case class TungstenAggregate(
      """
   }
 
-  private def doConsumeWithKeys(
-      ctx: CodegenContext,
-      child: SparkPlan,
-      input: Seq[ExprCode]): String = {
+  private def doConsumeWithKeys( ctx: CodegenContext, input: Seq[ExprCode]): String = {
 
     // create grouping key
     ctx.currentVars = input
