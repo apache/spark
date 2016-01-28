@@ -21,7 +21,7 @@ import java.sql.Connection
 import java.util.Properties
 
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{If, Literal}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -39,12 +39,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
     conn.setCatalog("foo")
+    conn.prepareStatement("CREATE TYPE enum_type AS ENUM ('d1', 'd2')").executeUpdate()
     conn.prepareStatement("CREATE TABLE bar (c0 text, c1 integer, c2 double precision, c3 bigint, "
       + "c4 bit(1), c5 bit(10), c6 bytea, c7 boolean, c8 inet, c9 cidr, "
-      + "c10 integer[], c11 text[], c12 real[])").executeUpdate()
+      + "c10 integer[], c11 text[], c12 real[], c13 enum_type)").executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES ('hello', 42, 1.25, 123456789012345, B'0', "
       + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16', "
-      + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}')""").executeUpdate()
+      + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}', 'd1')""").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -52,7 +53,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 13)
+    assert(types.length == 14)
     assert(classOf[String].isAssignableFrom(types(0)))
     assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
     assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
@@ -66,22 +67,24 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(classOf[Seq[Int]].isAssignableFrom(types(10)))
     assert(classOf[Seq[String]].isAssignableFrom(types(11)))
     assert(classOf[Seq[Double]].isAssignableFrom(types(12)))
+    assert(classOf[String].isAssignableFrom(types(13)))
     assert(rows(0).getString(0).equals("hello"))
     assert(rows(0).getInt(1) == 42)
     assert(rows(0).getDouble(2) == 1.25)
     assert(rows(0).getLong(3) == 123456789012345L)
-    assert(rows(0).getBoolean(4) == false)
+    assert(!rows(0).getBoolean(4))
     // BIT(10)'s come back as ASCII strings of ten ASCII 0's and 1's...
     assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](5),
       Array[Byte](49, 48, 48, 48, 49, 48, 48, 49, 48, 49)))
     assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](6),
       Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte)))
-    assert(rows(0).getBoolean(7) == true)
+    assert(rows(0).getBoolean(7))
     assert(rows(0).getString(8) == "172.16.0.42")
     assert(rows(0).getString(9) == "192.168.0.0/16")
     assert(rows(0).getSeq(10) == Seq(1, 2))
     assert(rows(0).getSeq(11) == Seq("a", null, "b"))
     assert(rows(0).getSeq(12).toSeq == Seq(0.11f, 0.22f))
+    assert(rows(0).getString(13) == "d1")
   }
 
   test("Basic write test") {
