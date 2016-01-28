@@ -45,7 +45,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat,
@@ -1303,11 +1303,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * :: Experimental ::
    * Create an [[org.apache.spark.ConsistentAccumulator]] variable of a given type, which tasks can
    * "add" values to using the `+=` method. Only the driver can access the accumulator's `value`.
    * Differs from `accumulator` in that the value is only incremented once per RDD/partition (so no
    * "double counting").
    */
+  @Experimental
   def consistentAccumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]):
       ConsistentAccumulator[T] = {
     val acc = new ConsistentAccumulator(initialValue, param)
@@ -1316,11 +1318,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * :: Experimental ::
    * Create an [[org.apache.spark.ConsistentAccumulator]] variable of a given type, with a name for
    * display in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only
    * the driver can access the accumulator's `value`. Differs from `accumulator` in that the value
    * is only incremented once per RDD/partition (so no "double counting").
    */
+  @Experimental
   def consistentAccumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : ConsistentAccumulator[T] = {
     val acc = new ConsistentAccumulator(initialValue, param, Some(name))
