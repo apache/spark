@@ -71,7 +71,7 @@ class JavaWrapper(Params):
                 pair = self._make_java_param_pair(param, paramMap[param])
                 self._java_obj.set(pair)
 
-    def _transfer_params_from_java(self, withParent=False):
+    def _transfer_params_from_java(self):
         """
         Transforms the embedded params from the companion Java object.
         """
@@ -79,8 +79,6 @@ class JavaWrapper(Params):
         parent = self._java_obj.uid()
         for param in self.params:
             if self._java_obj.hasParam(param.name):
-                if withParent:
-                    param.parent = parent
                 java_param = self._java_obj.getParam(param.name)
                 value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                 self._paramMap[param] = value
@@ -156,9 +154,14 @@ class JavaModel(Model, JavaTransformer):
         Initialize this instance with a Java model object.
         Subclasses should call this constructor, initialize params,
         and then call _transformer_params_from_java.
+
         This instance can be instantiated without specifying java_model,
         it will be assigned after that, but this scenario only used by
-        :py:class:`JavaMLReader` to load models.
+        :py:class:`JavaMLReader` to load models.  This is a bit of a
+        hack, but it is easiest since a proper fix would require
+        MLReader (in pyspark.ml.util) to depend on these wrappers, but
+        these wrappers depend on pyspark.ml.util (both directly and via
+        other ML classes).
         """
         super(JavaModel, self).__init__()
         if java_model is not None:

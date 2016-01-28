@@ -89,6 +89,8 @@ class JavaMLWriter(object):
 
     def save(self, path):
         """Save the ML instance to the input path."""
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         self._jwrite.save(path)
 
     def overwrite(self):
@@ -118,8 +120,6 @@ class MLWritable(object):
 
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
         self.write().save(path)
 
 
@@ -133,18 +133,20 @@ class JavaMLReader(object):
     .. versionadded:: 2.0.0
     """
 
-    def __init__(self, instance):
-        self._instance = instance
-        self._instance._java_obj = self._load_java_obj(self._instance)
-        self._jread = self._instance._java_obj.read()
+    def __init__(self, clazz):
+        self._clazz = clazz
+        self._jread = self._load_java_obj(clazz).read()
 
     def load(self, path):
         """Load the ML instance from the input path."""
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         java_obj = self._jread.load(path)
-        self._instance._java_obj = java_obj
-        self._instance.uid = java_obj.uid()
-        self._instance._transfer_params_from_java(True)
-        return self._instance
+        instance = self._clazz()
+        instance._java_obj = java_obj
+        instance._resetUid(java_obj.uid())
+        instance._transfer_params_from_java()
+        return instance
 
     def context(self, sqlContext):
         """Sets the SQL context to use for loading."""
@@ -152,19 +154,19 @@ class JavaMLReader(object):
         return self
 
     @classmethod
-    def _java_loader_class(cls, instance):
+    def _java_loader_class(cls, clazz):
         """
         Returns the full class name of the Java ML instance. The default
         implementation replaces "pyspark" by "org.apache.spark" in
         the Python full class name.
         """
-        java_package = instance.__module__.replace("pyspark", "org.apache.spark")
-        return ".".join([java_package, instance.__class__.__name__])
+        java_package = clazz.__module__.replace("pyspark", "org.apache.spark")
+        return ".".join([java_package, clazz.__name__])
 
     @classmethod
-    def _load_java_obj(cls, instance):
+    def _load_java_obj(cls, clazz):
         """Load the peer Java object of the ML instance."""
-        java_class = cls._java_loader_class(instance)
+        java_class = cls._java_loader_class(clazz)
         java_obj = _jvm()
         for name in java_class.split("."):
             java_obj = getattr(java_obj, name)
@@ -184,11 +186,9 @@ class MLReadable(object):
     @classmethod
     def read(cls):
         """Returns an JavaMLReader instance for this class."""
-        return JavaMLReader(cls())
+        return JavaMLReader(cls)
 
     @classmethod
     def load(cls, path):
         """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
         return cls.read().load(path)
