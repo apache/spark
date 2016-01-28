@@ -2079,4 +2079,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(rdd.takeAsync(2147483638).get.size === 3)
   }
 
+  test("SPARK-10777: resolve the alias defined in aggregation expression used in group by") {
+    val structDf = testData2.select("a", "b").as("record")
+
+    checkAnswer(
+      sql("SELECT a as r, sum(b) as s from testData2 GROUP BY r"),
+      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
+    )
+
+    checkAnswer(
+      sql("SELECT * FROM " +
+        "(SELECT a as r, sum(b) as s from testData2 GROUP BY r) t"),
+      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
+    )
+
+  }
 }

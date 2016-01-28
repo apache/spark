@@ -36,6 +36,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     val df1 = sql("select a  r, sum(b) s FROM testData2 GROUP BY r")
 
+
+
     val df2 = sql("SELECT * FROM ( select a r, sum(b) s FROM testData2 GROUP BY r) t")
 
     val df3 = sql("SELECT r as c1, min(s) over () as c2 FROM" +
