@@ -92,13 +92,13 @@ $(document).ready(function() {
         if (app["attempts"].length > 1) {
             hasMultipleAttempts = true;
         }
+        var num = app["attempts"].length;
         for (j in app["attempts"]) {
           var attempt = app["attempts"][j];
           attempt["startTime"] = formatDate(attempt["startTime"]);
           attempt["endTime"] = formatDate(attempt["endTime"]);
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
-
-          var app_clone = {"id" : id, "name" : name, "attempts" : [attempt]};
+          var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }
