@@ -24,10 +24,10 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.ListenerBus
 
 /**
- * A Streaming listener bus to forward events to StreamingListeners. This one will wrap received
- * Streaming events as WrappedStreamingListenerEvent and send them to Spark listener bus. It also
- * registers itself with Spark listener bus, so that it can receive WrappedStreamingListenerEvents,
- * unwrap them as StreamingListenerEvent and dispatch them to StreamingListeners.
+ * A Streaming listener bus to forward events to StreamingListeners. This one will forward received
+ * Streaming events as SparkListenerEvent and send them to Spark listener bus. It also
+ * registers itself with Spark listener bus, so that it can receive SparkListenerEvents,
+ * forward them as StreamingListenerEvent and dispatch them to StreamingListeners.
  */
 private[streaming] abstract class StreamingListenerBus
   extends SparkListener with ListenerBus[StreamingListener, StreamingListenerEvent] {
@@ -48,6 +48,8 @@ private[streaming] abstract class StreamingListenerBus
         listener.onStreamingApplicationStarted(applicationStarted)
       case applicationEnd: StreamingListenerApplicationEnd =>
         listener.onStreamingApplicationEnd(applicationEnd)
+      case inputStreamRegistered: StreamingListenerInputStreamRegistered =>
+        listener.onInputStreamRegistered(inputStreamRegistered)
       case receiverStarted: StreamingListenerReceiverStarted =>
         listener.onReceiverStarted(receiverStarted)
       case receiverError: StreamingListenerReceiverError =>
@@ -69,12 +71,6 @@ private[streaming] abstract class StreamingListenerBus
   }
 }
 
-/**
- * A Streaming listener bus to forward events to StreamingListeners. This one will wrap received
- * Streaming events as WrappedStreamingListenerEvent and send them to Spark listener bus. It also
- * registers itself with Spark listener bus, so that it can receive WrappedStreamingListenerEvents,
- * unwrap them as StreamingListenerEvent and dispatch them to StreamingListeners.
- */
 private[streaming] class LiveStreamingListenerBus(sparkListenerBus: LiveListenerBus)
   extends StreamingListenerBus {
 
