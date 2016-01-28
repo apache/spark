@@ -1189,6 +1189,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         self._eventually(condition, catch_assertions=True)
 
+    @unittest.skip("SPARK-10086: Flaky StreamingKMeans test in PySpark")
     def test_trainOn_predictOn(self):
         """Test that prediction happens on the updated model."""
         stkm = StreamingKMeans(decayFactor=0.0, k=2)

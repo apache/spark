@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.StructType
 
@@ -30,6 +31,18 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
+      case Token("TOK_SETCONFIG", Nil) =>
+        val keyValueSeparatorIndex = node.remainder.indexOf('=')
+        if (keyValueSeparatorIndex >= 0) {
+          val key = node.remainder.substring(0, keyValueSeparatorIndex).trim
+          val value = node.remainder.substring(keyValueSeparatorIndex + 1).trim
+          SetCommand(Some(key -> Option(value)))
+        } else if (node.remainder.nonEmpty) {
+          SetCommand(Some(node.remainder -> None))
+        } else {
+          SetCommand(None)
+        }
+
       // Just fake explain for any of the native commands.
       case Token("TOK_EXPLAIN", explainArgs) if isNoExplainCommand(explainArgs.head.text) =>
         ExplainCommand(OneRowRelation)
@@ -65,12 +78,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           "TOK_TABLEOPTIONS",
           "TOK_QUERY"), createTableArgs)
 
-        val tableIdent: TableIdentifier = tabName match {
-          case Token("TOK_TABNAME", Token(dbName, Nil) :: Token(tableName, Nil) :: Nil) =>
-            new TableIdentifier(cleanIdentifier(tableName), Some(cleanIdentifier(dbName)))
-          case Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) =>
-            TableIdentifier(cleanIdentifier(tableName))
-        }
+        val tableIdent: TableIdentifier = extractTableIdent(tabName)
 
         val columns = tableCols.map {
           case Token("TOK_TABCOLLIST", fields) => StructType(fields.map(nodeToStructField))
@@ -80,19 +88,15 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           case Token(name, Nil) => name
         }.mkString(".")
 
-        val options = tableOpts.map { opts =>
-          opts match {
-            case Token("TOK_TABLEOPTIONS", options) =>
-              options.map {
-                case Token("TOK_TABLEOPTION", keysAndValue) =>
-                  val key = keysAndValue.init.map {
-                    case Token(k, Nil) => k
-                  }.mkString(".")
-                  val value = unquoteString(keysAndValue.last.text)
-                  (key, unquoteString(value))
-              }.asInstanceOf[Seq[(String, String)]].toMap
-          }
-        }.getOrElse(Map.empty[String, String])
+        val options: Map[String, String] = tableOpts.toSeq.flatMap {
+          case Token("TOK_TABLEOPTIONS", options) =>
+            options.map {
+              case Token("TOK_TABLEOPTION", keysAndValue) =>
+                val key = keysAndValue.init.map(_.text).mkString(".")
+                val value = unquoteString(keysAndValue.last.text)
+                (key, value)
+            }
+        }.toMap
 
         val asClause = tableAs.map(nodeToPlan(_))
 
@@ -170,6 +174,24 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
               nodeToDescribeFallback(node)
           }
         }
+
+      case Token("TOK_CACHETABLE", Token(tableName, Nil) :: args) =>
+       val Seq(lzy, selectAst) = getClauses(Seq("LAZY", "TOK_QUERY"), args)
+        CacheTableCommand(tableName, selectAst.map(nodeToPlan), lzy.isDefined)
+
+      case Token("TOK_UNCACHETABLE", Token(tableName, Nil) :: Nil) =>
+        UncacheTableCommand(tableName)
+
+      case Token("TOK_CLEARCACHE", Nil) =>
+        ClearCacheCommand
+
+      case Token("TOK_SHOWTABLES", args) =>
+        val databaseName = args match {
+          case Nil => None
+          case Token("TOK_FROM", Token(dbName, Nil) :: Nil) :: Nil => Option(dbName)
+          case _ => noParseRule("SHOW TABLES", node)
+        }
+        ShowTablesCommand(databaseName)
 
       case _ =>
         super.nodeToPlan(node)

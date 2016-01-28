@@ -119,8 +119,7 @@ case class BroadcastHashOuterJoin(
 
       hashTable match {
         case unsafe: UnsafeHashedRelation =>
-          TaskContext.get().internalMetricsToAccumulators(
-            InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+          TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
         case _ =>
       }
 

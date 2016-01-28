@@ -329,6 +329,11 @@ KW_OPTIONS: 'OPTIONS';
 KW_WEEK: 'WEEK'|'WEEKS';
 KW_MILLISECOND: 'MILLISECOND'|'MILLISECONDS';
 KW_MICROSECOND: 'MICROSECOND'|'MICROSECONDS';
+KW_CLEAR: 'CLEAR';
+KW_LAZY: 'LAZY';
+KW_CACHE: 'CACHE';
+KW_UNCACHE: 'UNCACHE';
+KW_DFS: 'DFS';
 
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.

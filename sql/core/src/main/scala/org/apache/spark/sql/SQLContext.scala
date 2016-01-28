@@ -74,6 +74,7 @@ class SQLContext private[sql](
   def this(sparkContext: SparkContext) = {
     this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
   }
+
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
@@ -203,7 +204,7 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val sqlParser: ParserInterface = new SparkSQLParser(new SparkQl(conf))
+  protected[sql] val sqlParser: ParserInterface = new SparkQl(conf)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
 
