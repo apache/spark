@@ -21,12 +21,12 @@ import java.io._
 import java.net.{InetAddress, ServerSocket}
 import java.util.Arrays
 
+import scala.io.Source
+import scala.util.Try
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.util.Utils
-
-import scala.io.Source
-import scala.util.Try
 
 /**
  * A helper class to run R UDFs in Spark.
