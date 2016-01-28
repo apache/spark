@@ -251,18 +251,27 @@ class AnalysisSuite extends AnalysisTest {
   }
 
   test("check resolve of natural join") {
-    val a = testRelation2.output(0)
-    val c = testRelation2.output(2)
-
     val t1 = testRelation2.select('a, 'b)
     val t2 = testRelation2.select('a, 'c)
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+    val c = testRelation2.output(2)
+
     val plan1 = t1.join(t2, NaturalJoin(Inner), None)
-    assertAnalysisSuccess(plan1)
+    val expected1 = testRelation2.select(a, b).join(
+      testRelation2.select(a, c), Inner, Some(EqualTo(a, a))).select(a, b, c)
+    checkAnalysis(plan1, expected1)
     val plan2 = t1.join(t2, NaturalJoin(LeftOuter), None)
-    assertAnalysisSuccess(plan2)
+    val expected2 = testRelation2.select(a, b).join(
+      testRelation2.select(a, c), LeftOuter, Some(EqualTo(a, a))).select(a, b, c)
+    checkAnalysis(plan2, expected2)
     val plan3 = t1.join(t2, NaturalJoin(RightOuter), None)
-    assertAnalysisSuccess(plan3)
+    val expected3 = testRelation2.select(a, b).join(
+      testRelation2.select(a, c), RightOuter, Some(EqualTo(a, a))).select(a, b, c)
+    checkAnalysis(plan3, expected3)
     val plan4 = t1.join(t2, NaturalJoin(FullOuter), None)
-    assertAnalysisSuccess(plan4)
+    val expected4 = testRelation2.select(a, b).join(testRelation2.select(
+      a, c), FullOuter, Some(EqualTo(a, a))).select(Alias(Coalesce(Seq(a, a)), "a")(), b, c)
+    checkAnalysis(plan4, expected4)
   }
 }

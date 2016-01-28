@@ -164,50 +164,21 @@ case class Join(
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case NaturalJoin(jt) =>
-        outerProjectList(jt).map(_.toAttribute)
       case _ =>
         left.output ++ right.output
-    }
-  }
-
-  def outerProjectList(jt: JoinType): Seq[NamedExpression] = {
-    val leftNames = left.output.map(_.name)
-    val rightNames = right.output.map(_.name)
-    val commonNames = leftNames.intersect(rightNames)
-    val commonOutputFromLeft = left.output.filter(att => commonNames.contains(att.name))
-    val lUniqueOutput = left.output.filterNot(att => commonNames.contains(att.name))
-    val rUniqueOutput = right.output.filterNot(att => commonNames.contains(att.name))
-    jt match {
-      case LeftOuter =>
-        commonOutputFromLeft ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
-      case RightOuter =>
-        val commonOutputFromRight =
-          commonNames.map(cn => right.output.find(att => att.name == cn).get)
-        commonOutputFromRight ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
-      case FullOuter =>
-        val commonOutputFromRight =
-          commonNames.map(cn => right.output.find(att => att.name == cn).get)
-        val commonPairs = commonOutputFromLeft.zip(commonOutputFromRight)
-        val commonOutputExp = commonPairs.map {
-          case (l: Attribute, r: Attribute) =>
-            Alias(Coalesce(Seq(l, r)), l.name)()
-        }
-        commonOutputExp ++
-          lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput.map(_.withNullability(true))
-      case _ =>
-        commonOutputFromLeft ++ lUniqueOutput ++ rUniqueOutput
     }
   }
 
   def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
-  override lazy val resolved: Boolean = {
-    childrenResolved &&
-      expressions.forall(_.resolved) &&
-      selfJoinResolved &&
-      condition.forall(_.dataType == BooleanType)
+  override lazy val resolved: Boolean = joinType match {
+    case NaturalJoin(_) => false
+    case _ =>
+      childrenResolved &&
+        expressions.forall(_.resolved) &&
+        selfJoinResolved &&
+        condition.forall(_.dataType == BooleanType)
   }
 }
 

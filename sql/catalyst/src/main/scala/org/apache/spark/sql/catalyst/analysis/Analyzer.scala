@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.NaturalJoin
+import org.apache.spark.sql.catalyst.plans.{FullOuter, RightOuter, LeftOuter, NaturalJoin}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
@@ -1163,12 +1163,12 @@ class Analyzer(
   }
 
   /**
-   * Removes natural joins.
+   * Removes natural joins by calculating output columns based on output from two sides,
+   * Then apply a Project on a normal Join to eliminate natural join.
    */
   object ResolveNaturalJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p if !p.resolved => p // Skip unresolved nodes.
-
+      // Should not skip unresolved nodes because natural join is always unresolved.
       case j @ Join(left, right, NaturalJoin(joinType), condition) =>
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
         val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
@@ -1177,7 +1177,23 @@ class Analyzer(
         val newCondition = (condition ++ joinPairs.map {
           case (l, r) => EqualTo(l, r)
         }).reduceLeftOption(And)
-        Project(j.outerProjectList(joinType), Join(left, right, joinType, newCondition))
+        val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
+        val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
+        val projectList = joinType match {
+          case LeftOuter =>
+            leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
+          case RightOuter =>
+            rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
+          case FullOuter =>
+            val joinedCols = joinPairs.map {
+              case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)()
+            }
+            joinedCols ++ lUniqueOutput.map(_.withNullability(true)) ++
+              rUniqueOutput.map(_.withNullability(true))
+          case _ =>
+            leftKeys ++ lUniqueOutput ++ rUniqueOutput
+        }
+        Project(projectList, Join(left, right, joinType, newCondition))
     }
   }
 }
