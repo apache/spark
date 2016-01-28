@@ -81,16 +81,16 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       Using DeclarativeAggregate:
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      stddev:                Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-      -------------------------------------------------------------------
-      stddev w/o codegen          4128.44            25.40         1.00 X
-      stddev w codegen            1400.25            74.88         2.95 X
+      stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      stddev w/o codegen                      4237.69            24.74         1.00 X
+      stddev w codegen                        2089.44            50.18         2.03 X
       */
     benchmark.run()
   }
 
   test("benchmark") {
     // testWholeStage(200 << 20)
-    testStddev(100 << 20)
+    // testStddev(100 << 20)
   }
 }

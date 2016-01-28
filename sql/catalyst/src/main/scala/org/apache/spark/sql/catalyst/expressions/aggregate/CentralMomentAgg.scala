@@ -125,19 +125,15 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
       mean += deltaN
       buffer.setDouble(meanOffset, mean)
 
-      if (momentOrder >= 2) {
-        m2 = buffer.getDouble(secondMomentOffset)
-        m2 += delta * (delta - deltaN)
-        buffer.setDouble(secondMomentOffset, m2)
-      }
+      m2 = buffer.getDouble(secondMomentOffset)
+      m2 += delta * (delta - deltaN)
+      buffer.setDouble(secondMomentOffset, m2)
 
-      if (momentOrder >= 3) {
-        delta2 = delta * delta
-        deltaN2 = deltaN * deltaN
-        m3 = buffer.getDouble(thirdMomentOffset)
-        m3 += -3.0 * deltaN * m2 + delta * (delta2 - deltaN2)
-        buffer.setDouble(thirdMomentOffset, m3)
-      }
+      delta2 = delta * delta
+      deltaN2 = deltaN * deltaN
+      m3 = buffer.getDouble(thirdMomentOffset)
+      m3 += -3.0 * deltaN * m2 + delta * (delta2 - deltaN2)
+      buffer.setDouble(thirdMomentOffset, m3)
 
       if (momentOrder >= 4) {
         m4 = buffer.getDouble(fourthMomentOffset)
@@ -175,20 +171,16 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
 
     // higher order moments computed according to:
     // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
-    if (momentOrder >= 2) {
-      secondMoment1 = buffer1.getDouble(secondMomentOffset)
-      secondMoment2 = buffer2.getDouble(inputAggBufferOffset + 2)
-      m2 = secondMoment1 + secondMoment2 + delta * deltaN * n1 * n2
-      buffer1.setDouble(secondMomentOffset, m2)
-    }
+    secondMoment1 = buffer1.getDouble(secondMomentOffset)
+    secondMoment2 = buffer2.getDouble(inputAggBufferOffset + 2)
+    m2 = secondMoment1 + secondMoment2 + delta * deltaN * n1 * n2
+    buffer1.setDouble(secondMomentOffset, m2)
 
-    if (momentOrder >= 3) {
-      thirdMoment1 = buffer1.getDouble(thirdMomentOffset)
-      thirdMoment2 = buffer2.getDouble(inputAggBufferOffset + 3)
-      m3 = thirdMoment1 + thirdMoment2 + deltaN * deltaN * delta * n1 * n2 *
-        (n1 - n2) + 3.0 * deltaN * (n1 * secondMoment2 - n2 * secondMoment1)
-      buffer1.setDouble(thirdMomentOffset, m3)
-    }
+    thirdMoment1 = buffer1.getDouble(thirdMomentOffset)
+    thirdMoment2 = buffer2.getDouble(inputAggBufferOffset + 3)
+    m3 = thirdMoment1 + thirdMoment2 + deltaN * deltaN * delta * n1 * n2 *
+      (n1 - n2) + 3.0 * deltaN * (n1 * secondMoment2 - n2 * secondMoment1)
+    buffer1.setDouble(thirdMomentOffset, m3)
 
     if (momentOrder >= 4) {
       fourthMoment1 = buffer1.getDouble(fourthMomentOffset)
@@ -214,12 +206,8 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     val moments = Array.ofDim[Double](momentOrder + 1)
     moments(0) = 1.0
     moments(1) = 0.0
-    if (momentOrder >= 2) {
-      moments(2) = buffer.getDouble(secondMomentOffset)
-    }
-    if (momentOrder >= 3) {
-      moments(3) = buffer.getDouble(thirdMomentOffset)
-    }
+    moments(2) = buffer.getDouble(secondMomentOffset)
+    moments(3) = buffer.getDouble(thirdMomentOffset)
     if (momentOrder >= 4) {
       moments(4) = buffer.getDouble(fourthMomentOffset)
     }

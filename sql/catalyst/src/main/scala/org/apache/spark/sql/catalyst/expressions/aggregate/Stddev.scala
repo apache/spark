@@ -49,14 +49,10 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
   override val updateExpressions: Seq[Expression] = {
     val newCount = count + Literal(1.0)
-
-    // update average
-    // avg = avg + (value - avg)/count
-    val newAvg = avg + (child - avg) / newCount
-
-    // update sum ofference from mean
-    // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-    val newMk = mk + (child - avg) * (child - newAvg)
+    val delta = child - avg
+    val deltaN = delta / newCount
+    val newAvg = avg + deltaN
+    val newMk = mk + delta * (delta - deltaN)
 
     if (child.nullable) {
       Seq(
@@ -75,18 +71,11 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
   override val mergeExpressions: Seq[Expression] = {
 
-    // count merge
     val newCount = count.left + count.right
-
-    // average merge
-    val newAvg = ((avg.left * count.left) + (avg.right * count.right)) / newCount
-
-    // update sum of square differences
-    val newMk = {
-      val avgDelta = avg.right - avg.left
-      val mkDelta = (avgDelta * avgDelta) * (count.left * count.right) / newCount
-      mk.left + mk.right + mkDelta
-    }
+    val delta = avg.right - avg.left
+    val deltaN = If(EqualTo(newCount, Literal(0.0)), Literal(0.0), delta / newCount)
+    val newAvg = avg.left + deltaN * count.right
+    val newMk = mk.left + mk.right + delta * deltaN * count.left * count.right
 
     Seq(
       /* count = */ newCount,
