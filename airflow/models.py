@@ -2115,7 +2115,7 @@ class DAG(LoggingMixin):
         return [t.task_id for t in self.tasks if not t.adhoc]
 
     @property
-    def active_task(self):
+    def active_tasks(self):
         return [t for t in self.tasks if not t.adhoc]
 
     @property
