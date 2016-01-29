@@ -485,11 +485,10 @@ class CodegenContext {
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
-      val param = if (INPUT_ROW != "") s"InternalRow $INPUT_ROW" else ""
       val code = expr.gen(this)
       val fn =
         s"""
-           |private void $fnName($param) {
+           |private void $fnName(InternalRow $INPUT_ROW) {
            |  ${code.code.trim}
            |  $isNull = ${code.isNull};
            |  $value = ${code.value};

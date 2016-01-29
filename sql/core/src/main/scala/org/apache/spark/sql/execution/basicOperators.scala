@@ -49,12 +49,8 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
-    ctx.INPUT_ROW = ""
-    val output = ctx.generateExpressions(exprs, subexpressionEliminationEnabled)
-    val callSubexpr = ctx.subexprFunctions.mkString("\n")
-    ctx.subexprFunctions.clear()
+    val output = exprs.map(_.gen(ctx))
     s"""
-       | $callSubexpr
        | ${output.map(_.code).mkString("\n")}
        |
        | ${consume(ctx, output)}
