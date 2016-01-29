@@ -218,7 +218,7 @@ case class TungstenAggregate(
      """.stripMargin
   }
 
-  def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
@@ -249,16 +249,16 @@ case class TungstenAggregate(
      """.stripMargin
   }
 
-  val groupingAttributes = groupingExpressions.map(_.toAttribute)
-  val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
-  val declFunctions = aggregateExpressions.map(_.aggregateFunction)
+  private val groupingAttributes = groupingExpressions.map(_.toAttribute)
+  private val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
+  private val declFunctions = aggregateExpressions.map(_.aggregateFunction)
     .filter(_.isInstanceOf[DeclarativeAggregate])
     .map(_.asInstanceOf[DeclarativeAggregate])
-  val bufferAttributes = declFunctions.flatMap(_.aggBufferAttributes)
-  val bufferSchema = StructType.fromAttributes(bufferAttributes)
+  private val bufferAttributes = declFunctions.flatMap(_.aggBufferAttributes)
+  private val bufferSchema = StructType.fromAttributes(bufferAttributes)
 
   // The name for HashMap
-  var hashMapTerm: String = _
+  private var hashMapTerm: String = _
 
   /**
     * This is called by generated Java class, should be public.
@@ -292,7 +292,7 @@ case class TungstenAggregate(
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
     // create hashMap
-    val thisPlan = ctx.addReferenceObj("tungstenAggregate", this)
+    val thisPlan = ctx.addReferenceObj("plan", this)
     hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
     ctx.addMutableState(hashMapClassName, hashMapTerm, s"$hashMapTerm = $thisPlan.createHashMap();")
@@ -304,7 +304,7 @@ case class TungstenAggregate(
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-    val outputCode = if (modes.contains(Final) |modes.contains(Complete)) {
+    val outputCode = if (modes.contains(Final) || modes.contains(Complete)) {
       // generate output using resultExpressions
       ctx.currentVars = null
       ctx.INPUT_ROW = keyTerm
@@ -335,7 +335,7 @@ case class TungstenAggregate(
        ${consume(ctx, resultVars)}
        """
 
-    } else if (modes.contains(Partial) |modes.contains(PartialMerge)) {
+    } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       // This should be the last operator in a stage, we should output UnsafeRow directly
       val joinerTerm = ctx.freshName("unsafeRowJoiner")
       ctx.addMutableState(classOf[UnsafeRowJoiner].getName, joinerTerm,
@@ -347,7 +347,7 @@ case class TungstenAggregate(
        """
 
     } else {
-      // only grouping key
+      // generate result based on grouping key
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
       val eval = resultExpressions.map{ e =>
@@ -359,7 +359,7 @@ case class TungstenAggregate(
        """
     }
 
-    val doAgg = ctx.freshName("doAgg")
+    val doAgg = ctx.freshName("doAggregate")
     ctx.addNewFunction(doAgg,
       s"""
         private void $doAgg() throws java.io.IOException {
@@ -406,11 +406,10 @@ case class TungstenAggregate(
     }
 
     val inputAttr = bufferAttributes ++ child.output
-    val boundExpr = updateExpr.map(e => BindReferences.bindReference(e, inputAttr))
     ctx.currentVars = new Array[ExprCode](bufferAttributes.length) ++ input
     ctx.INPUT_ROW = buffer
     // TODO: support subexpression elimination
-    val evals = boundExpr.map(_.gen(ctx))
+    val evals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
     val updates = evals.zipWithIndex.map { case (ev, i) =>
       val dt = updateExpr(i).dataType
       ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
@@ -427,7 +426,6 @@ case class TungstenAggregate(
 
      // evaluate aggregate function
      ${evals.map(_.code).mkString("\n")}
-
      // update aggregate buffer
      ${updates.mkString("\n")}
      """
