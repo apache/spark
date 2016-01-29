@@ -171,16 +171,20 @@ case class Join(
 
   def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  lazy val partlyResolved: Boolean = {
+  // if not a natural join, it is resolved. if it is a natural join, we still need to
+  // eliminate natural before we mark it resolved, but the node should be ready for
+  // resolution only if everything else is resolved here.
+  lazy val resolvedExceptNatural: Boolean = {
     childrenResolved &&
       expressions.forall(_.resolved) &&
       selfJoinResolved &&
       condition.forall(_.dataType == BooleanType)
   }
+
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = joinType match {
     case NaturalJoin(_) => false
-    case _ => partlyResolved
+    case _ => resolvedExceptNatural
   }
 }
 
