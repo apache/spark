@@ -20,18 +20,6 @@ package org.apache.spark.sql.catalyst.catalog
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
-abstract class FunctionCatalog {
-
-  def createFunction(db: String, func: String): Unit
-
-  def dropFunction(db: String, func: String): Unit
-
-  def listFunctions(db: String): java.util.List[String]
-
-  def lookupFunction(db: String, func: String): Expression
-}
-
-
 /**
  * Interface for the system catalog (of columns, partitions, tables, and databases).
  *
