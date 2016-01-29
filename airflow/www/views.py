@@ -791,7 +791,9 @@ class Airflow(BaseView):
 
             session.commit()
             session.close()
-        log = log.decode('utf-8') if PY2 else log
+
+        if PY2 and not isinstance(log, unicode):
+            log = log.decode('utf-8')
 
         title = "Log"
 
