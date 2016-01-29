@@ -17,20 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.math.BigDecimal
-import java.sql.{Date, Timestamp}
-import java.text.NumberFormat
-import java.util.Locale
+import java.sql.Timestamp
 
 import scala.util.control.Exception._
-import scala.util.Try
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.types._
 
 
-private[csv] object CSVInferSchema {
+private[csv] object InferSchema {
 
   /**
     * Similar to the JSON schema inference
@@ -152,46 +148,6 @@ private[csv] object CSVInferSchema {
 
 
 private[csv] object CSVTypeCast {
-
-  /**
-   * Casts given string datum to specified type.
-   * Currently we do not support complex types (ArrayType, MapType, StructType).
-   *
-   * For string types, this is simply the datum. For other types.
-   * For other nullable types, this is null if the string datum is empty.
-   *
-   * @param datum string value
-   * @param castType SparkSQL type
-   */
-  def castTo(
-      datum: String,
-      castType: DataType,
-      nullable: Boolean = true,
-      nullValue: String = ""): Any = {
-
-    if (datum == nullValue && nullable && (!castType.isInstanceOf[StringType])) {
-      null
-    } else {
-      castType match {
-        case _: ByteType => datum.toByte
-        case _: ShortType => datum.toShort
-        case _: IntegerType => datum.toInt
-        case _: LongType => datum.toLong
-        case _: FloatType => Try(datum.toFloat)
-          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
-        case _: DoubleType => Try(datum.toDouble)
-          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
-        case _: BooleanType => datum.toBoolean
-        case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
-        // TODO(hossein): would be good to support other common timestamp formats
-        case _: TimestampType => Timestamp.valueOf(datum)
-        // TODO(hossein): would be good to support other common date formats
-        case _: DateType => Date.valueOf(datum)
-        case _: StringType => datum
-        case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
-      }
-    }
-  }
 
   /**
    * Helper method that converts string representation of a character to actual character.

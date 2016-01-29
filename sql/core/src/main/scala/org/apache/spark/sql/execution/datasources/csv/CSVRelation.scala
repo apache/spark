@@ -33,7 +33,8 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Literal, Cast}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -229,11 +230,17 @@ object CSVRelation extends Logging {
             while (subIndex < safeRequiredIndices.length) {
               index = safeRequiredIndices(subIndex)
               val field = schemaFields(index)
-              rowArray(subIndex) = CSVTypeCast.castTo(
-                indexSafeTokens(index),
-                field.dataType,
-                field.nullable,
-                params.nullValue)
+              val value = indexSafeTokens(index)
+              val dataType = field.dataType
+              val isNull =
+                value == params.nullValue && field.nullable && !dataType.isInstanceOf[StringType]
+              val safeValue = dataType match {
+                case _: DecimalType if !isNull => value.replaceAll(",", "")
+                case _ if !isNull => value
+                case _ => null
+              }
+              val castedValue = Cast(Literal(safeValue), dataType).eval()
+              rowArray(subIndex) = CatalystTypeConverters.convertToScala(castedValue, dataType)
               subIndex = subIndex + 1
             }
             Some(Row.fromSeq(rowArray.take(requiredSize)))

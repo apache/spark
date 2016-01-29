@@ -23,49 +23,49 @@ import org.apache.spark.sql.types._
 class InferSchemaSuite extends SparkFunSuite {
 
   test("String fields types are inferred correctly from null types") {
-    assert(CSVInferSchema.inferField(NullType, "") == NullType)
-    assert(CSVInferSchema.inferField(NullType, null) == NullType)
-    assert(CSVInferSchema.inferField(NullType, "100000000000") == LongType)
-    assert(CSVInferSchema.inferField(NullType, "60") == IntegerType)
-    assert(CSVInferSchema.inferField(NullType, "3.5") == DoubleType)
-    assert(CSVInferSchema.inferField(NullType, "test") == StringType)
-    assert(CSVInferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
+    assert(InferSchema.inferField(NullType, "") == NullType)
+    assert(InferSchema.inferField(NullType, null) == NullType)
+    assert(InferSchema.inferField(NullType, "100000000000") == LongType)
+    assert(InferSchema.inferField(NullType, "60") == IntegerType)
+    assert(InferSchema.inferField(NullType, "3.5") == DoubleType)
+    assert(InferSchema.inferField(NullType, "test") == StringType)
+    assert(InferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
   }
 
   test("String fields types are inferred correctly from other types") {
-    assert(CSVInferSchema.inferField(LongType, "1.0") == DoubleType)
-    assert(CSVInferSchema.inferField(LongType, "test") == StringType)
-    assert(CSVInferSchema.inferField(IntegerType, "1.0") == DoubleType)
-    assert(CSVInferSchema.inferField(DoubleType, null) == DoubleType)
-    assert(CSVInferSchema.inferField(DoubleType, "test") == StringType)
-    assert(CSVInferSchema.inferField(LongType, "2015-08-20 14:57:00") == TimestampType)
-    assert(CSVInferSchema.inferField(DoubleType, "2015-08-20 15:57:00") == TimestampType)
+    assert(InferSchema.inferField(LongType, "1.0") == DoubleType)
+    assert(InferSchema.inferField(LongType, "test") == StringType)
+    assert(InferSchema.inferField(IntegerType, "1.0") == DoubleType)
+    assert(InferSchema.inferField(DoubleType, null) == DoubleType)
+    assert(InferSchema.inferField(DoubleType, "test") == StringType)
+    assert(InferSchema.inferField(LongType, "2015-08-20 14:57:00") == TimestampType)
+    assert(InferSchema.inferField(DoubleType, "2015-08-20 15:57:00") == TimestampType)
   }
 
   test("Timestamp field types are inferred correctly from other types") {
-    assert(CSVInferSchema.inferField(IntegerType, "2015-08-20 14") == StringType)
-    assert(CSVInferSchema.inferField(DoubleType, "2015-08-20 14:10") == StringType)
-    assert(CSVInferSchema.inferField(LongType, "2015-08 14:49:00") == StringType)
+    assert(InferSchema.inferField(IntegerType, "2015-08-20 14") == StringType)
+    assert(InferSchema.inferField(DoubleType, "2015-08-20 14:10") == StringType)
+    assert(InferSchema.inferField(LongType, "2015-08 14:49:00") == StringType)
   }
 
   test("Type arrays are merged to highest common type") {
     assert(
-      CSVInferSchema.mergeRowTypes(Array(StringType),
+      InferSchema.mergeRowTypes(Array(StringType),
         Array(DoubleType)).deep == Array(StringType).deep)
     assert(
-      CSVInferSchema.mergeRowTypes(Array(IntegerType),
+      InferSchema.mergeRowTypes(Array(IntegerType),
         Array(LongType)).deep == Array(LongType).deep)
     assert(
-      CSVInferSchema.mergeRowTypes(Array(DoubleType),
+      InferSchema.mergeRowTypes(Array(DoubleType),
         Array(LongType)).deep == Array(DoubleType).deep)
   }
 
   test("Null fields are handled properly when a nullValue is specified") {
-    assert(CSVInferSchema.inferField(NullType, "null", "null") == NullType)
-    assert(CSVInferSchema.inferField(StringType, "null", "null") == StringType)
-    assert(CSVInferSchema.inferField(LongType, "null", "null") == LongType)
-    assert(CSVInferSchema.inferField(IntegerType, "\\N", "\\N") == IntegerType)
-    assert(CSVInferSchema.inferField(DoubleType, "\\N", "\\N") == DoubleType)
-    assert(CSVInferSchema.inferField(TimestampType, "\\N", "\\N") == TimestampType)
+    assert(InferSchema.inferField(NullType, "null", "null") == NullType)
+    assert(InferSchema.inferField(StringType, "null", "null") == StringType)
+    assert(InferSchema.inferField(LongType, "null", "null") == LongType)
+    assert(InferSchema.inferField(IntegerType, "\\N", "\\N") == IntegerType)
+    assert(InferSchema.inferField(DoubleType, "\\N", "\\N") == DoubleType)
+    assert(InferSchema.inferField(TimestampType, "\\N", "\\N") == TimestampType)
   }
 }
