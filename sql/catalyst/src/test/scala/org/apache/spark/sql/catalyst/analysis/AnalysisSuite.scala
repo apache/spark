@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -248,59 +247,5 @@ class AnalysisSuite extends AnalysisTest {
     val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
     val plan = relation.select(CaseWhen(Seq((Literal(true), 'a.attr)), 'b).as("val"))
     assertAnalysisSuccess(plan)
-  }
-
-  test("check resolve of natural join") {
-    val t1 = testRelation2.select('a, 'b)
-    val t2 = testRelation2.select('a, 'c)
-    val a = testRelation2.output(0)
-    val b = testRelation2.output(1)
-    val c = testRelation2.output(2)
-    val testRelation0 = LocalRelation(
-      AttributeReference("a", StringType, nullable = false)(),
-      AttributeReference("b", StringType, nullable = false)(),
-      AttributeReference("c", StringType, nullable = false)())
-    val tt1 = testRelation0.select('a, 'b)
-    val tt2 = testRelation0.select('a, 'c)
-    val aa = testRelation0.output(0)
-    val bb = testRelation0.output(1)
-    val cc = testRelation0.output(2)
-    val truebb = testRelation0.output(1).withNullability(true)
-    val truecc = testRelation0.output(2).withNullability(true)
-
-    val plan1 = t1.join(t2, NaturalJoin(Inner), None)
-    val expected1 = testRelation2.select(a, b).join(
-      testRelation2.select(a, c), Inner, Some(EqualTo(a, a))).select(a, b, c)
-    checkAnalysis(plan1, expected1)
-    val plan2 = t1.join(t2, NaturalJoin(LeftOuter), None)
-    val expected2 = testRelation2.select(a, b).join(
-      testRelation2.select(a, c), LeftOuter, Some(EqualTo(a, a))).select(a, b, c)
-    checkAnalysis(plan2, expected2)
-    val plan3 = t1.join(t2, NaturalJoin(RightOuter), None)
-    val expected3 = testRelation2.select(a, b).join(
-      testRelation2.select(a, c), RightOuter, Some(EqualTo(a, a))).select(a, b, c)
-    checkAnalysis(plan3, expected3)
-    val plan4 = t1.join(t2, NaturalJoin(FullOuter), None)
-    val expected4 = testRelation2.select(a, b).join(testRelation2.select(
-      a, c), FullOuter, Some(EqualTo(a, a))).select(Alias(Coalesce(Seq(a, a)), "a")(), b, c)
-    checkAnalysis(plan4, expected4)
-
-    val plan5 = tt1.join(tt2, NaturalJoin(Inner), None)
-    val expected5 = testRelation0.select(aa, bb).join(
-      testRelation0.select(aa, cc), Inner, Some(EqualTo(aa, aa))).select(aa, bb, cc)
-    checkAnalysis(plan5, expected5)
-    val plan6 = tt1.join(tt2, NaturalJoin(LeftOuter), None)
-    val expected6 = testRelation0.select(aa, bb).join(
-      testRelation0.select(aa, cc), LeftOuter, Some(EqualTo(aa, aa))).select(aa, bb, truecc)
-    checkAnalysis(plan6, expected6)
-    val plan7 = tt1.join(tt2, NaturalJoin(RightOuter), None)
-    val expected7 = testRelation0.select(aa, bb).join(
-      testRelation0.select(aa, cc), RightOuter, Some(EqualTo(aa, aa))).select(aa, truebb, cc)
-    checkAnalysis(plan7, expected7)
-    val plan8 = tt1.join(tt2, NaturalJoin(FullOuter), None)
-    val expected8 = testRelation0.select(aa, bb).join(
-      testRelation0.select(aa, cc), FullOuter, Some(EqualTo(aa, aa))).select(
-      Alias(Coalesce(Seq(aa, aa)), "a")(), truebb, truecc)
-    checkAnalysis(plan8, expected8)
   }
 }
