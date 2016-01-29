@@ -99,9 +99,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (partitionAndNormalColumnAttrs ++ projects).toSeq
       }
 
-      // Prune the buckets based on the pushed filters  hat does not contain partitioning key
+      // Prune the buckets based on the pushed filters that do not contain partitioning key
       // since the bucketing key is not allowed to use the columns in partitioning key
-      val bucketSet = getBuckets(pushedFilters, t.getBucketSpec)
+      val bucketSet = getBuckets(pushedFilters, t.getBucketSpec, t.columnNameEquality)
 
       val scan = buildPartitionedTableScan(
         l,
@@ -132,7 +132,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val confBroadcast =
         t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
       // Prune the buckets based on the filters
-      val bucketSet = getBuckets(filters, t.getBucketSpec)
+      val bucketSet = getBuckets(filters, t.getBucketSpec, t.columnNameEquality)
       pruneFilterProject(
         l,
         projects,
@@ -265,7 +265,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   // Get the bucket ID based on the bucketing values.
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
   private def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    lazy val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
     mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
     val bucketIdGeneration = UnsafeProjection.create(
       HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
@@ -279,7 +279,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
   private def getBuckets(
       filters: Seq[Expression],
-      bucketSpec: Option[BucketSpec]): Option[BitSet] = {
+      bucketSpec: Option[BucketSpec],
+      nameEquality: (String, String) => Boolean): Option[BitSet] = {
 
     if (bucketSpec.isEmpty ||
       bucketSpec.get.numBuckets == 1 ||
@@ -295,23 +296,30 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     matchedBuckets.clear()
 
     filters.foreach {
-      case expressions.EqualTo(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+      case expressions.EqualTo(a: Attribute, Literal(v, _))
+          if nameEquality(a.name, bucketColumnName) =>
         matchedBuckets.set(getBucketId(a, numBuckets, v))
-      case expressions.EqualTo(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+      case expressions.EqualTo(Literal(v, _), a: Attribute)
+          if nameEquality(a.name, bucketColumnName) =>
         matchedBuckets.set(getBucketId(a, numBuckets, v))
-      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, _))
+          if nameEquality(a.name, bucketColumnName) =>
         matchedBuckets.set(getBucketId(a, numBuckets, v))
-      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+      case expressions.EqualNullSafe(Literal(v, _), a: Attribute)
+          if nameEquality(a.name, bucketColumnName) =>
         matchedBuckets.set(getBucketId(a, numBuckets, v))
-      case expressions.InSet(a: Attribute, set) =>
+      case expressions.InSet(a: Attribute, set)
+          if nameEquality(a.name, bucketColumnName) =>
         set.foreach(e => matchedBuckets.set(getBucketId(a, numBuckets, e)))
       // Because we only convert In to InSet in Optimizer when there are more than certain
       // items. So it is possible we still get an In expression here that needs to be pushed
       // down.
-      case expressions.In(a: Attribute, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+      case expressions.In(a: Attribute, list)
+          if list.forall(_.isInstanceOf[Literal]) && nameEquality(a.name, bucketColumnName) =>
         val hSet = list.map(e => e.eval(EmptyRow))
         hSet.foreach(e => matchedBuckets.set(getBucketId(a, numBuckets, e)))
-      case expressions.IsNull(a: Attribute) =>
+      case expressions.IsNull(a: Attribute)
+          if nameEquality(a.name, bucketColumnName) =>
         matchedBuckets.set(getBucketId(a, numBuckets, null))
     }
 

@@ -466,6 +466,14 @@ abstract class HadoopFsRelation private[sql](
   final private[sql] def getBucketSpec: Option[BucketSpec] =
     maybeBucketSpec.filter(_ => sqlContext.conf.bucketingEnabled() && !malformedBucketFile)
 
+  private[sql] def columnNameEquality: (String, String) => Boolean = {
+    if (sqlContext.conf.caseSensitiveAnalysis) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
+  }
+
   private class FileStatusCache {
     var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
 
