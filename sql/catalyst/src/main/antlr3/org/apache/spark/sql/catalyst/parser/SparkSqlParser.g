@@ -116,16 +116,20 @@ TOK_DATELITERAL;
 TOK_DATETIME;
 TOK_TIMESTAMP;
 TOK_TIMESTAMPLITERAL;
+TOK_INTERVAL;
 TOK_INTERVAL_YEAR_MONTH;
 TOK_INTERVAL_YEAR_MONTH_LITERAL;
 TOK_INTERVAL_DAY_TIME;
 TOK_INTERVAL_DAY_TIME_LITERAL;
 TOK_INTERVAL_YEAR_LITERAL;
 TOK_INTERVAL_MONTH_LITERAL;
+TOK_INTERVAL_WEEK_LITERAL;
 TOK_INTERVAL_DAY_LITERAL;
 TOK_INTERVAL_HOUR_LITERAL;
 TOK_INTERVAL_MINUTE_LITERAL;
 TOK_INTERVAL_SECOND_LITERAL;
+TOK_INTERVAL_MILLISECOND_LITERAL;
+TOK_INTERVAL_MICROSECOND_LITERAL;
 TOK_STRING;
 TOK_CHAR;
 TOK_VARCHAR;
@@ -228,7 +232,6 @@ TOK_TMP_FILE;
 TOK_TABSORTCOLNAMEASC;
 TOK_TABSORTCOLNAMEDESC;
 TOK_STRINGLITERALSEQUENCE;
-TOK_CHARSETLITERAL;
 TOK_CREATEFUNCTION;
 TOK_DROPFUNCTION;
 TOK_RELOADFUNCTION;
@@ -368,6 +371,13 @@ TOK_TXN_READ_WRITE;
 TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
+TOK_CACHETABLE;
+TOK_UNCACHETABLE;
+TOK_CLEARCACHE;
+TOK_SETCONFIG;
+TOK_DFS;
+TOK_ADDFILE;
+TOK_ADDJAR;
 }
 
 
@@ -509,7 +519,14 @@ import java.util.HashMap;
     xlateMap.put("KW_UPDATE", "UPDATE");
     xlateMap.put("KW_VALUES", "VALUES");
     xlateMap.put("KW_PURGE", "PURGE");
-
+    xlateMap.put("KW_WEEK", "WEEK");
+    xlateMap.put("KW_MILLISECOND", "MILLISECOND");
+    xlateMap.put("KW_MICROSECOND", "MICROSECOND");
+    xlateMap.put("KW_CLEAR", "CLEAR");
+    xlateMap.put("KW_LAZY", "LAZY");
+    xlateMap.put("KW_CACHE", "CACHE");
+    xlateMap.put("KW_UNCACHE", "UNCACHE");
+    xlateMap.put("KW_DFS", "DFS");
 
     // Operators
     xlateMap.put("DOT", ".");
@@ -682,8 +699,12 @@ catch (RecognitionException e) {
 
 // starting rule
 statement
-	: explainStatement EOF
-	| execStatement EOF
+    : explainStatement EOF
+    | execStatement EOF
+    | KW_ADD KW_JAR -> ^(TOK_ADDJAR)
+    | KW_ADD KW_FILE -> ^(TOK_ADDFILE)
+    | KW_DFS -> ^(TOK_DFS)
+    | (KW_SET)=> KW_SET -> ^(TOK_SETCONFIG)
 	;
 
 explainStatement
@@ -712,6 +733,7 @@ execStatement
     | deleteStatement
     | updateStatement
     | sqlTransactionStatement
+    | cacheStatement
     ;
 
 loadStatement
@@ -1385,7 +1407,7 @@ showStatement
 @init { pushMsg("show statement", state); }
 @after { popMsg(state); }
     : KW_SHOW (KW_DATABASES|KW_SCHEMAS) (KW_LIKE showStmtIdentifier)? -> ^(TOK_SHOWDATABASES showStmtIdentifier?)
-    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES (TOK_FROM $db_name)? showStmtIdentifier?)
+    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES ^(TOK_FROM $db_name)? showStmtIdentifier?)
     | KW_SHOW KW_COLUMNS (KW_FROM|KW_IN) tableName ((KW_FROM|KW_IN) db_name=identifier)?
     -> ^(TOK_SHOWCOLUMNS tableName $db_name?)
     | KW_SHOW KW_FUNCTIONS (KW_LIKE showFunctionIdentifier|showFunctionIdentifier)?  -> ^(TOK_SHOWFUNCTIONS KW_LIKE? showFunctionIdentifier?)
@@ -2078,6 +2100,7 @@ primitiveType
     | KW_SMALLINT      ->    TOK_SMALLINT
     | KW_INT           ->    TOK_INT
     | KW_BIGINT        ->    TOK_BIGINT
+    | KW_LONG          ->    TOK_BIGINT
     | KW_BOOLEAN       ->    TOK_BOOLEAN
     | KW_FLOAT         ->    TOK_FLOAT
     | KW_DOUBLE        ->    TOK_DOUBLE
@@ -2432,12 +2455,11 @@ BEGIN user defined transaction boundaries; follows SQL 2003 standard exactly exc
 sqlTransactionStatement
 @init { pushMsg("transaction statement", state); }
 @after { popMsg(state); }
-  :
-  startTransactionStatement
-	|	commitStatement
-	|	rollbackStatement
-	| setAutoCommitStatement
-	;
+  : startTransactionStatement
+  | commitStatement
+  | rollbackStatement
+  | setAutoCommitStatement
+  ;
 
 startTransactionStatement
   :
@@ -2483,3 +2505,31 @@ setAutoCommitStatement
 /*
 END user defined transaction boundaries
 */
+
+/*
+Table Caching statements.
+ */
+cacheStatement
+@init { pushMsg("cache statement", state); }
+@after { popMsg(state); }
+  :
+  cacheTableStatement
+  | uncacheTableStatement
+  | clearCacheStatement
+  ;
+
+cacheTableStatement
+  :
+  KW_CACHE (lazy=KW_LAZY)? KW_TABLE identifier (KW_AS selectStatementWithCTE)? -> ^(TOK_CACHETABLE identifier $lazy? selectStatementWithCTE?)
+  ;
+
+uncacheTableStatement
+  :
+  KW_UNCACHE KW_TABLE identifier -> ^(TOK_UNCACHETABLE identifier)
+  ;
+
+clearCacheStatement
+  :
+  KW_CLEAR KW_CACHE -> ^(TOK_CLEARCACHE)
+  ;
+

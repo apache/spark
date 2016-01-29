@@ -601,6 +601,20 @@ object ScalaReflection extends ScalaReflection {
     getConstructorParameters(t)
   }
 
+  /**
+   * Returns the parameter names for the primary constructor of this class.
+   *
+   * Logically we should call `getConstructorParameters` and throw away the parameter types to get
+   * parameter names, however there are some weird scala reflection problems and this method is a
+   * workaround to avoid getting parameter types.
+   */
+  def getConstructorParameterNames(cls: Class[_]): Seq[String] = {
+    val m = runtimeMirror(cls.getClassLoader)
+    val classSymbol = m.staticClass(cls.getName)
+    val t = classSymbol.selfType
+    constructParams(t).map(_.name.toString)
+  }
+
   def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 }
 
@@ -642,7 +656,10 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
+  def localTypeOf[T: TypeTag]: `Type` = {
+    val tag = implicitly[TypeTag[T]]
+    tag.in(mirror).tpe.normalize
+  }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
@@ -742,6 +759,12 @@ trait ScalaReflection {
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = tpe
+    constructParams(tpe).map { p =>
+      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+    }
+  }
+
+  protected def constructParams(tpe: Type): Seq[Symbol] = {
     val constructorSymbol = tpe.member(nme.CONSTRUCTOR)
     val params = if (constructorSymbol.isMethod) {
       constructorSymbol.asMethod.paramss
@@ -755,9 +778,6 @@ trait ScalaReflection {
         primaryConstructorSymbol.get.asMethod.paramss
       }
     }
-
-    params.flatten.map { p =>
-      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
-    }
+    params.flatten
   }
 }

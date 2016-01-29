@@ -86,6 +86,7 @@
   </mailingLists>
 
   <modules>
+    <module>common/sketch</module>
     <module>tags</module>
     <module>core</module>
     <module>graphx</module>
@@ -104,6 +105,7 @@
     <module>external/flume</module>
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
+    <module>external/akka</module>
     <module>external/mqtt</module>
     <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
@@ -567,6 +569,11 @@
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
         <version>4.0.29.Final</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty</artifactId>
+        <version>3.8.0.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -2415,6 +2422,16 @@
       <id>hadoop-2.6</id>
       <properties>
         <hadoop.version>2.6.0</hadoop.version>
+        <jets3t.version>0.9.3</jets3t.version>
+        <zookeeper.version>3.4.6</zookeeper.version>
+        <curator.version>2.6.0</curator.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.7</id>
+      <properties>
+        <hadoop.version>2.7.0</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>

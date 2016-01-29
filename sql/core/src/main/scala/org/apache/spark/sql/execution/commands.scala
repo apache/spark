@@ -201,13 +201,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     case Some((key, None)) =>
       val runFunc = (sqlContext: SQLContext) => {
         val value =
-          try {
-            if (key == SQLConf.DIALECT.key) {
-              sqlContext.conf.dialect
-            } else {
-              sqlContext.getConf(key)
-            }
-          } catch {
+          try sqlContext.getConf(key) catch {
             case _: NoSuchElementException => "<undefined>"
           }
         Seq(Row(key, value))
@@ -413,4 +407,14 @@ case class DescribeFunction(
       case None => Seq(Row(s"Function: $functionName is not found."))
     }
   }
+}
+
+case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.setCurrentDatabase(databaseName)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
 }

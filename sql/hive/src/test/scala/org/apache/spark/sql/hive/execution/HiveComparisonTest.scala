@@ -150,7 +150,11 @@ abstract class HiveComparisonTest
        """.stripMargin
     })
 
-    super.afterAll()
+    try {
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   protected def prepareAnswer(
@@ -485,7 +489,7 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  case (q, e) => e.executedPlan.collect {
+                  case (q, e) => e.sparkPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
                   }

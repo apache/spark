@@ -154,6 +154,11 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("self intersect should resolve duplicate expression IDs") {
+    val plan = testRelation.intersect(testRelation)
+    assertAnalysisSuccess(plan)
+  }
+
   test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
       LocalRelation()
@@ -237,9 +242,15 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("Eliminate the unnecessary union") {
+    val plan = Union(testRelation :: Nil)
+    val expected = testRelation
+    checkAnalysis(plan, expected)
+  }
+
   test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
     val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
-    val plan = relation.select(CaseWhen(Seq(Literal(true), 'a, 'b)).as("val"))
+    val plan = relation.select(CaseWhen(Seq((Literal(true), 'a.attr)), 'b).as("val"))
     assertAnalysisSuccess(plan)
   }
 }

@@ -30,16 +30,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
-private[sql] object CatalystQl {
-  val parser = new CatalystQl
-  def parseExpression(sql: String): Expression = parser.parseExpression(sql)
-  def parseTableIdentifier(sql: String): TableIdentifier = parser.parseTableIdentifier(sql)
-}
-
 /**
- * This class translates a HQL String to a Catalyst [[LogicalPlan]] or [[Expression]].
+ * This class translates SQL to Catalyst [[LogicalPlan]]s or [[Expression]]s.
  */
-private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) {
+private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends ParserInterface {
   object Token {
     def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
       CurrentOrigin.setPosition(node.line, node.positionInLine)
@@ -216,6 +210,28 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
+    case Token("TOK_SHOWFUNCTIONS", args) =>
+      // Skip LIKE.
+      val pattern = args match {
+        case like :: nodes if like.text.toUpperCase == "LIKE" => nodes
+        case nodes => nodes
+      }
+
+      // Extract Database and Function name
+      pattern match {
+        case Nil =>
+          ShowFunctions(None, None)
+        case Token(name, Nil) :: Nil =>
+          ShowFunctions(None, Some(unquoteString(name)))
+        case Token(db, Nil) :: Token(name, Nil) :: Nil =>
+          ShowFunctions(Some(unquoteString(db)), Some(unquoteString(name)))
+        case _ =>
+          noParseRule("SHOW FUNCTIONS", node)
+      }
+
+    case Token("TOK_DESCFUNCTION", Token(functionName, Nil) :: isExtended) =>
+      DescribeFunction(functionName, isExtended.nonEmpty)
+
     case Token("TOK_QUERY", queryArgs @ Token("TOK_CTE" | "TOK_FROM" | "TOK_INSERT", _) :: _) =>
       val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
         queryArgs match {
@@ -408,8 +424,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             overwrite)
       }
 
-      // If there are multiple INSERTS just UNION them together into on query.
-      val query = queries.reduceLeft(Union)
+      // If there are multiple INSERTS just UNION them together into one query.
+      val query = if (queries.length == 1) queries.head else Union(queries)
 
       // return With plan if there is CTE
       cteRelations.map(With(query, _)).getOrElse(query)
@@ -611,13 +627,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case plainIdent => plainIdent
   }
 
-  val numericAstTypes = Seq(
-    SparkSqlParser.Number,
-    SparkSqlParser.TinyintLiteral,
-    SparkSqlParser.SmallintLiteral,
-    SparkSqlParser.BigintLiteral,
-    SparkSqlParser.DecimalLiteral)
-
   /* Case insensitive matches */
   val COUNT = "(?i)COUNT".r
   val SUM = "(?i)SUM".r
@@ -635,6 +644,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
 
+  val INTEGRAL = "[+-]?\\d+".r
+  val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
+
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
     case Token("TOK_TABLE_OR_COL", Token(name, Nil) :: Nil) =>
@@ -650,8 +662,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_ALLCOLREF", Nil) => UnresolvedStar(None)
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
-    case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
-      UnresolvedStar(Some(UnresolvedAttribute.parseAttributeName(name)))
+    case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", target) :: Nil) if target.nonEmpty =>
+      UnresolvedStar(Some(target.map(_.text)))
 
     /* Aggregate Functions */
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
@@ -752,7 +764,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     /* Case statements */
     case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
-      CaseWhen(branches.map(nodeToExpr))
+      CaseWhen.createFromParser(branches.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
       val keyExpr = nodeToExpr(branches.head)
       CaseKeyWhen(keyExpr, branches.drop(1).map(nodeToExpr))
@@ -787,71 +799,74 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => ParseUtils.unescapeSQLString(s.text)).mkString)
 
-    // This code is adapted from
-    // /ql/src/java/org/apache/hadoop/hive/ql/parse/TypeCheckProcFactory.java#L223
-    case ast: ASTNode if numericAstTypes contains ast.tokenType =>
-      var v: Literal = null
-      try {
-        if (ast.text.endsWith("L")) {
-          // Literal bigint.
-          v = Literal.create(ast.text.substring(0, ast.text.length() - 1).toLong, LongType)
-        } else if (ast.text.endsWith("S")) {
-          // Literal smallint.
-          v = Literal.create(ast.text.substring(0, ast.text.length() - 1).toShort, ShortType)
-        } else if (ast.text.endsWith("Y")) {
-          // Literal tinyint.
-          v = Literal.create(ast.text.substring(0, ast.text.length() - 1).toByte, ByteType)
-        } else if (ast.text.endsWith("BD") || ast.text.endsWith("D")) {
-          // Literal decimal
-          val strVal = ast.text.stripSuffix("D").stripSuffix("B")
-          v = Literal(Decimal(strVal))
-        } else {
-          v = Literal.create(ast.text.toDouble, DoubleType)
-          v = Literal.create(ast.text.toLong, LongType)
-          v = Literal.create(ast.text.toInt, IntegerType)
-        }
-      } catch {
-        case nfe: NumberFormatException => // Do nothing
-      }
+    case ast if ast.tokenType == SparkSqlParser.TinyintLiteral =>
+      Literal.create(ast.text.substring(0, ast.text.length() - 1).toByte, ByteType)
 
-      if (v == null) {
-        sys.error(s"Failed to parse number '${ast.text}'.")
-      } else {
-        v
-      }
+    case ast if ast.tokenType == SparkSqlParser.SmallintLiteral =>
+      Literal.create(ast.text.substring(0, ast.text.length() - 1).toShort, ShortType)
 
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.StringLiteral =>
+    case ast if ast.tokenType == SparkSqlParser.BigintLiteral =>
+      Literal.create(ast.text.substring(0, ast.text.length() - 1).toLong, LongType)
+
+    case ast if ast.tokenType == SparkSqlParser.DoubleLiteral =>
+      Literal(ast.text.toDouble)
+
+    case ast if ast.tokenType == SparkSqlParser.Number =>
+      val text = ast.text
+      text match {
+        case INTEGRAL() =>
+          BigDecimal(text) match {
+            case v if v.isValidInt =>
+              Literal(v.intValue())
+            case v if v.isValidLong =>
+              Literal(v.longValue())
+            case v => Literal(v.underlying())
+          }
+        case DECIMAL(_*) =>
+          Literal(BigDecimal(text).underlying())
+        case _ =>
+          // Convert a scientifically notated decimal into a double.
+          Literal(text.toDouble)
+      }
+    case ast if ast.tokenType == SparkSqlParser.StringLiteral =>
       Literal(ParseUtils.unescapeSQLString(ast.text))
 
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_DATELITERAL =>
+    case ast if ast.tokenType == SparkSqlParser.TOK_DATELITERAL =>
       Literal(Date.valueOf(ast.text.substring(1, ast.text.length - 1)))
 
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_CHARSETLITERAL =>
-      Literal(ParseUtils.charSetString(ast.children.head.text, ast.children(1).text))
+    case ast if ast.tokenType == SparkSqlParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
+      Literal(CalendarInterval.fromYearMonthString(ast.children.head.text))
 
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
-      Literal(CalendarInterval.fromYearMonthString(ast.text))
+    case ast if ast.tokenType == SparkSqlParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
+      Literal(CalendarInterval.fromDayTimeString(ast.children.head.text))
 
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
-      Literal(CalendarInterval.fromDayTimeString(ast.text))
-
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_YEAR_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("year", ast.text))
-
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_MONTH_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("month", ast.text))
-
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_DAY_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("day", ast.text))
-
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_HOUR_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("hour", ast.text))
-
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_MINUTE_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("minute", ast.text))
-
-    case ast: ASTNode if ast.tokenType == SparkSqlParser.TOK_INTERVAL_SECOND_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("second", ast.text))
+    case Token("TOK_INTERVAL", elements) =>
+      var interval = new CalendarInterval(0, 0)
+      var updated = false
+      elements.foreach {
+        // The interval node will always contain children for all possible time units. A child node
+        // is only useful when it contains exactly one (numeric) child.
+        case e @ Token(name, Token(value, Nil) :: Nil) =>
+          val unit = name match {
+            case "TOK_INTERVAL_YEAR_LITERAL" => "year"
+            case "TOK_INTERVAL_MONTH_LITERAL" => "month"
+            case "TOK_INTERVAL_WEEK_LITERAL" => "week"
+            case "TOK_INTERVAL_DAY_LITERAL" => "day"
+            case "TOK_INTERVAL_HOUR_LITERAL" => "hour"
+            case "TOK_INTERVAL_MINUTE_LITERAL" => "minute"
+            case "TOK_INTERVAL_SECOND_LITERAL" => "second"
+            case "TOK_INTERVAL_MILLISECOND_LITERAL" => "millisecond"
+            case "TOK_INTERVAL_MICROSECOND_LITERAL" => "microsecond"
+            case _ => noParseRule(s"Interval($name)", e)
+          }
+          interval = interval.add(CalendarInterval.fromSingleUnitString(unit, value))
+          updated = true
+        case _ =>
+      }
+      if (!updated) {
+        throw new AnalysisException("at least one time unit should be given for interval literal")
+      }
+      Literal(interval)
 
     case _ =>
       noParseRule("Expression", node)

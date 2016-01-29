@@ -21,10 +21,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.Preconditions;
+import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.column.Encoding;
@@ -35,9 +35,12 @@ import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -71,11 +74,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   private boolean containsVarLenFields;
 
   /**
-   * The number of bytes in the fixed length portion of the row.
-   */
-  private int fixedSizeBytes;
-
-  /**
    * For each request column, the reader to read this column.
    * columnsReaders[i] populated the UnsafeRow's attribute at i.
    */
@@ -101,6 +99,25 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    * largest column.
    */
   private static final int DEFAULT_VAR_LEN_SIZE = 32;
+
+  /**
+   * columnBatch object that is used for batch decoding. This is created on first use and triggers
+   * batched decoding. It is not valid to interleave calls to the batched interface with the row
+   * by row RecordReader APIs.
+   * This is only enabled with additional flags for development. This is still a work in progress
+   * and currently unsupported cases will fail with potentially difficult to diagnose errors.
+   * This should be only turned on for development to work on this feature.
+   *
+   * TODOs:
+   *  - Implement all the encodings to support vectorized.
+   *  - Implement v2 page formats (just make sure we create the correct decoders).
+   */
+  private ColumnarBatch columnarBatch;
+
+  /**
+   * The default config on whether columnarBatch should be offheap.
+   */
+  private static final MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
 
   /**
    * Tries to initialize the reader for this split. Returns true if this reader supports reading
@@ -136,6 +153,15 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   }
 
   @Override
+  public void close() throws IOException {
+    if (columnarBatch != null) {
+      columnarBatch.close();
+      columnarBatch = null;
+    }
+    super.close();
+  }
+
+  @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
     if (batchIdx >= numBatched) {
       if (!loadBatch()) return false;
@@ -152,6 +178,46 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   @Override
   public float getProgress() throws IOException, InterruptedException {
     return (float) rowsReturned / totalRowCount;
+  }
+
+  /**
+   * Returns the ColumnarBatch object that will be used for all rows returned by this reader.
+   * This object is reused. Calling this enables the vectorized reader. This should be called
+   * before any calls to nextKeyValue/nextBatch.
+   */
+  public ColumnarBatch resultBatch() {
+    return resultBatch(DEFAULT_MEMORY_MODE);
+  }
+
+  public ColumnarBatch resultBatch(MemoryMode memMode) {
+    if (columnarBatch == null) {
+      columnarBatch = ColumnarBatch.allocate(sparkSchema, memMode);
+    }
+    return columnarBatch;
+  }
+
+  /**
+   * Advances to the next batch of rows. Returns false if there are no more.
+   */
+  public boolean nextBatch() throws IOException {
+    assert(columnarBatch != null);
+    columnarBatch.reset();
+    if (rowsReturned >= totalRowCount) return false;
+    checkEndOfRowGroup();
+
+    int num = (int)Math.min((long) columnarBatch.capacity(), totalRowCount - rowsReturned);
+    for (int i = 0; i < columnReaders.length; ++i) {
+      switch (columnReaders[i].descriptor.getType()) {
+        case INT32:
+          columnReaders[i].readIntBatch(num, columnarBatch.column(i));
+          break;
+        default:
+          throw new IOException("Unsupported type: " + columnReaders[i].descriptor.getType());
+      }
+    }
+    rowsReturned += num;
+    columnarBatch.setNumRows(num);
+    return true;
   }
 
   private void initializeInternal() throws IOException {
@@ -195,19 +261,13 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     /**
      * Initialize rows and rowWriters. These objects are reused across all rows in the relation.
      */
-    int rowByteSize = UnsafeRow.calculateBitSetWidthInBytes(requestedSchema.getFieldCount());
-    rowByteSize += 8 * requestedSchema.getFieldCount();
-    fixedSizeBytes = rowByteSize;
-    rowByteSize += numVarLenFields * DEFAULT_VAR_LEN_SIZE;
     containsVarLenFields = numVarLenFields > 0;
     rowWriters = new UnsafeRowWriter[rows.length];
 
     for (int i = 0; i < rows.length; ++i) {
       rows[i] = new UnsafeRow(requestedSchema.getFieldCount());
-      rowWriters[i] = new UnsafeRowWriter();
-      BufferHolder holder = new BufferHolder(rowByteSize);
-      rowWriters[i].initialize(rows[i], holder, requestedSchema.getFieldCount());
-      rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, holder.buffer.length);
+      BufferHolder holder = new BufferHolder(rows[i], numVarLenFields * DEFAULT_VAR_LEN_SIZE);
+      rowWriters[i] = new UnsafeRowWriter(holder, requestedSchema.getFieldCount());
     }
   }
 
@@ -224,7 +284,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
     if (containsVarLenFields) {
       for (int i = 0; i < rowWriters.length; ++i) {
-        rowWriters[i].holder().resetTo(fixedSizeBytes);
+        rowWriters[i].holder().reset();
       }
     }
 
@@ -382,7 +442,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    *
    * Decoder to return values from a single column.
    */
-  private static final class ColumnReader {
+  private final class ColumnReader {
     /**
      * Total number of values read.
      */
@@ -415,6 +475,10 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     private IntIterator repetitionLevelColumn;
     private IntIterator definitionLevelColumn;
     private ValuesReader dataColumn;
+
+    // Only set if vectorized decoding is true. This is used instead of the row by row decoding
+    // with `definitionLevelColumn`.
+    private VectorizedRleValuesReader defColumn;
 
     /**
      * Total number of values in this column (in this row group).
@@ -521,6 +585,35 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       return definitionLevelColumn.nextInt() == maxDefLevel;
     }
 
+    /**
+     * Reads `total` values from this columnReader into column.
+     * TODO: implement the other encodings.
+     */
+    private void readIntBatch(int total, ColumnVector column) throws IOException {
+      int rowId = 0;
+      while (total > 0) {
+        // Compute the number of values we want to read in this page.
+        int leftInPage = (int)(endOfPageValueCount - valuesRead);
+        if (leftInPage == 0) {
+          readPage();
+          leftInPage = (int)(endOfPageValueCount - valuesRead);
+        }
+        int num = Math.min(total, leftInPage);
+        defColumn.readIntegers(
+            num, column, rowId, maxDefLevel, (VectorizedValuesReader)dataColumn, 0);
+
+        // Remap the values if it is dictionary encoded.
+        if (useDictionary) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            column.putInt(i, dictionary.decodeToInt(column.getInt(i)));
+          }
+        }
+        valuesRead += num;
+        rowId += num;
+        total -= num;
+      }
+    }
+
     private void readPage() throws IOException {
       DataPage page = pageReader.readPage();
       // TODO: Why is this a visitor?
@@ -547,21 +640,28 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       });
     }
 
-    private void initDataReader(Encoding dataEncoding, byte[] bytes, int offset, int valueCount)
-        throws IOException {
-      this.pageValueCount = valueCount;
+    private void initDataReader(Encoding dataEncoding, byte[] bytes, int offset)throws IOException {
       this.endOfPageValueCount = valuesRead + pageValueCount;
       if (dataEncoding.usesDictionary()) {
+        this.dataColumn = null;
         if (dictionary == null) {
           throw new IOException(
               "could not read page in col " + descriptor +
                   " as the dictionary was missing for encoding " + dataEncoding);
         }
-        this.dataColumn = dataEncoding.getDictionaryBasedValuesReader(
-            descriptor, VALUES, dictionary);
+        if (columnarBatch != null && dataEncoding == Encoding.PLAIN_DICTIONARY) {
+          this.dataColumn = new VectorizedRleValuesReader();
+        } else {
+          this.dataColumn = dataEncoding.getDictionaryBasedValuesReader(
+              descriptor, VALUES, dictionary);
+        }
         this.useDictionary = true;
       } else {
-        this.dataColumn = dataEncoding.getValuesReader(descriptor, VALUES);
+        if (columnarBatch != null && dataEncoding == Encoding.PLAIN) {
+          this.dataColumn = new VectorizedPlainValuesReader(4);
+        } else {
+          this.dataColumn = dataEncoding.getValuesReader(descriptor, VALUES);
+        }
         this.useDictionary = false;
       }
 
@@ -573,8 +673,19 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     }
 
     private void readPageV1(DataPageV1 page) throws IOException {
+      this.pageValueCount = page.getValueCount();
       ValuesReader rlReader = page.getRlEncoding().getValuesReader(descriptor, REPETITION_LEVEL);
-      ValuesReader dlReader = page.getDlEncoding().getValuesReader(descriptor, DEFINITION_LEVEL);
+      ValuesReader dlReader;
+
+      // Initialize the decoders. Use custom ones if vectorized decoding is enabled.
+      if (columnarBatch != null && page.getDlEncoding() == Encoding.RLE) {
+        int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
+        assert(bitWidth != 0); // not implemented
+        this.defColumn = new VectorizedRleValuesReader(bitWidth);
+        dlReader = this.defColumn;
+      } else {
+        dlReader = page.getDlEncoding().getValuesReader(descriptor, DEFINITION_LEVEL);
+      }
       this.repetitionLevelColumn = new ValuesReaderIntIterator(rlReader);
       this.definitionLevelColumn = new ValuesReaderIntIterator(dlReader);
       try {
@@ -583,20 +694,20 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         int next = rlReader.getNextOffset();
         dlReader.initFromPage(pageValueCount, bytes, next);
         next = dlReader.getNextOffset();
-        initDataReader(page.getValueEncoding(), bytes, next, page.getValueCount());
+        initDataReader(page.getValueEncoding(), bytes, next);
       } catch (IOException e) {
         throw new IOException("could not read page " + page + " in col " + descriptor, e);
       }
     }
 
     private void readPageV2(DataPageV2 page) throws IOException {
+      this.pageValueCount = page.getValueCount();
       this.repetitionLevelColumn = createRLEIterator(descriptor.getMaxRepetitionLevel(),
           page.getRepetitionLevels(), descriptor);
       this.definitionLevelColumn = createRLEIterator(descriptor.getMaxDefinitionLevel(),
           page.getDefinitionLevels(), descriptor);
       try {
-        initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0,
-            page.getValueCount());
+        initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0);
       } catch (IOException e) {
         throw new IOException("could not read page " + page + " in col " + descriptor, e);
       }
