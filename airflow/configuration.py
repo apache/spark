@@ -54,6 +54,7 @@ defaults = {
         'security': None,
         'donot_pickle': False,
         's3_log_folder': '',
+        'encrypt_s3_logs': False,
         'dag_concurrency': 16,
         'max_active_runs_per_dag': 16,
         'executor': 'SequentialExecutor',

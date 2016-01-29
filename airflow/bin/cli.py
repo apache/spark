@@ -225,7 +225,8 @@ def run(args):
                     new_log = old_s3_log + '\n' + new_log
 
                 # send log to S3
-                s3_key.set_contents_from_string(new_log)
+                encrypt = configuration.get('core', 'ENCRYPT_S3_LOGS')
+                s3_key.set_contents_from_string(new_log, encrypt_key=encrypt)
             except:
                 print('Could not send logs to S3.')
 
