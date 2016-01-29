@@ -57,15 +57,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     Utils.deleteRecursively(testDir)
   }
 
-  val SPARK_VERSION_KEY = "SPARK_VERSION"
-  val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
-
-  // Constants used to parse Spark 1.0.0 log directories.
-  val LOG_PREFIX = "EVENT_LOG_"
-  val SPARK_VERSION_PREFIX = SPARK_VERSION_KEY + "_"
-  val COMPRESSION_CODEC_PREFIX = COMPRESSION_CODEC_KEY + "_"
-  val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
-
   /** Create a fake log file using the new log format used in Spark 1.3+ */
   private def newLogFile(
       appId: String,
@@ -78,7 +69,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     new File(logPath)
   }
 
-  test("Parse new and old application logs") {
+  test("Parse application logs") {
     val provider = new FsHistoryProvider(createTestConf())
 
     // Write a new-style application log.
@@ -104,24 +95,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         None)
       )
 
-    // Write an old-style application log.
-    val oldAppComplete = writeOldLog("old1", "1.0", None, true,
-      SparkListenerApplicationStart("old1", Some("old-app-complete"), 2L, "test", None),
-      SparkListenerApplicationEnd(3L)
-      )
-
-    // Check for logs so that we force the older unfinished app to be loaded, to make
-    // sure unfinished apps are also sorted correctly.
-    provider.checkForLogs()
-
-    // Write an unfinished app, old-style.
-    val oldAppIncomplete = writeOldLog("old2", "1.0", None, false,
-      SparkListenerApplicationStart("old2", None, 2L, "test", None)
-      )
-
-    // Force a reload of data from the log directory, and check that both logs are loaded.
+    // Force a reload of data from the log directory, and check that logs are loaded.
     // Take the opportunity to check that the offset checks work as expected.
-    // Old-style logs are ignored.
     updateAndCheck(provider) { list =>
       list.size should be (3)
       list.count(_.attempts.head.completed) should be (2)
@@ -369,18 +344,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       SparkListenerLogStart("1.4")
     )
 
-    // Write a 1.2 log file with no start event (= no app id), it should be ignored.
-    writeOldLog("v12Log", "1.2", None, false)
-
-    // Write 1.0 and 1.1 logs, which don't have app ids.
-    writeOldLog("v11Log", "1.1", None, true,
-      SparkListenerApplicationStart("v11Log", None, 2L, "test", None),
-      SparkListenerApplicationEnd(3L))
-    writeOldLog("v10Log", "1.0", None, true,
-      SparkListenerApplicationStart("v10Log", None, 2L, "test", None),
-      SparkListenerApplicationEnd(4L))
-
-    // Old-style logs are ignored.
     updateAndCheck(provider) { list =>
       list.size should be (0)
     }
@@ -470,25 +433,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   private def createTestConf(): SparkConf = {
     new SparkConf().set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
-  }
-
-  private def writeOldLog(
-      fname: String,
-      sparkVersion: String,
-      codec: Option[CompressionCodec],
-      completed: Boolean,
-      events: SparkListenerEvent*): File = {
-    val log = new File(testDir, fname)
-    log.mkdir()
-
-    val oldEventLog = new File(log, LOG_PREFIX + "1")
-    createEmptyFile(new File(log, SPARK_VERSION_PREFIX + sparkVersion))
-    writeFile(new File(log, LOG_PREFIX + "1"), false, codec, events: _*)
-    if (completed) {
-      createEmptyFile(new File(log, APPLICATION_COMPLETE))
-    }
-
-    log
   }
 
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)

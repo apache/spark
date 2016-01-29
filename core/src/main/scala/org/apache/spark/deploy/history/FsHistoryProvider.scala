@@ -248,9 +248,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
-            getModificationTime(entry).map { time =>
-              time >= lastScanTime
-            }.getOrElse(false)
+            entry.getModificationTime() >= lastScanTime
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
@@ -261,8 +259,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
         .flatMap { entry => Some(entry) }
         .sortWith { case (entry1, entry2) =>
-          val mod1 = getModificationTime(entry1).getOrElse(-1L)
-          val mod2 = getModificationTime(entry2).getOrElse(-1L)
+          val mod1 = entry1.getModificationTime()
+          val mod2 = entry2.getModificationTime()
           mod1 >= mod2
       }
 
@@ -532,7 +530,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appListener.appAttemptId,
           appListener.startTime.getOrElse(-1L),
           appListener.endTime.getOrElse(-1L),
-          getModificationTime(eventLog).get,
+          eventLog.getModificationTime(),
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted))
       } else {
@@ -541,14 +539,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } finally {
       logInput.close()
     }
-  }
-
-  /**
-   * Returns the modification time of the given event log. If the status points at an empty
-   * directory, `None` is returned, indicating that there isn't an event log at that location.
-   */
-  private def getModificationTime(fsEntry: FileStatus): Option[Long] = {
-    Some(fsEntry.getModificationTime())
   }
 
   /**
