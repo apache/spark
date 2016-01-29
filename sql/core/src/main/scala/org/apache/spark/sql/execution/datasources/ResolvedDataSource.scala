@@ -26,7 +26,6 @@ import scala.util.{Failure, Success, Try}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.compress.{CompressionCodec, CompressionCodecFactory}
 import org.apache.hadoop.util.StringUtils
-import org.apache.hadoop.io.compress.{CompressionCodec, CompressionCodecFactory}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil

@@ -59,7 +59,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
     mode: SaveMode,
-    codec: Option[Class[_ <: CompressionCodec]])
+    codec: Option[Class[_ <: CompressionCodec]] = None)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
