@@ -310,10 +310,10 @@ case class GetMapValue(child: Expression, key: Expression)
           }
         }
 
-        if ($found && !$values.isNullAt($index)) {
-          ${ev.value} = ${ctx.getValue(values, dataType, index)};
-        } else {
+        if (!$found || $values.isNullAt($index)) {
           ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${ctx.getValue(values, dataType, index)};
         }
       """
     })

@@ -1465,9 +1465,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-13056: Null in map value causes NPE") {
-    Seq((1, "abc=somestring,cba")).toDF("key", "value").registerTempTable("mapsrc")
-    sql("""CREATE TABLE maptest AS SELECT str_to_map(value, ",", "=") as col1 FROM mapsrc""")
-    checkAnswer(sql("SELECT col1['abc'] FROM maptest"), Row("somestring"))
-    checkAnswer(sql("SELECT col1['cba'] FROM maptest"), Row(null))
+    val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
+    df.registerTempTable("maptest")
+    checkAnswer(sql("SELECT value['abc'] FROM maptest"), Row("somestring"))
+    checkAnswer(sql("SELECT value['cba'] FROM maptest"), Row(null))
   }
 }
