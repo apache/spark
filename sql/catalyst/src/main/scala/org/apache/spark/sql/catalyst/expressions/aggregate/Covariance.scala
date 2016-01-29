@@ -26,13 +26,11 @@ import org.apache.spark.sql.types._
  * When applied on empty data (i.e., count is zero), it returns NULL.
  *
  */
-abstract class Covariance(left: Expression, right: Expression) extends DeclarativeAggregate {
-  override def children: Seq[Expression] = Seq(left, right)
+abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggregate {
 
+  override def children: Seq[Expression] = Seq(x, y)
   override def nullable: Boolean = true
-
   override def dataType: DataType = DoubleType
-
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
   protected val count = AttributeReference("count", DoubleType, nullable = false)()
@@ -51,15 +49,15 @@ abstract class Covariance(left: Expression, right: Expression) extends Declarati
 
   override lazy val updateExpressions: Seq[Expression] = {
     val n = count + Literal(1.0)
-    val dx = left - xAvg
-    val dy = right - yAvg
+    val dx = x - xAvg
+    val dy = y - yAvg
     val dyN = dy / n
     val newXAvg = xAvg + dx / n
     val newYAvg = yAvg + dyN
     val newCk = ck + dx * (dy - dyN)
 
-    val isNull = Or(IsNull(left), IsNull(right))
-    if (left.nullable || right.nullable) {
+    val isNull = Or(IsNull(x), IsNull(y))
+    if (x.nullable || y.nullable) {
       Seq(
         /* count = */ If(isNull, count, n),
         /* xAvg = */ If(isNull, xAvg, newXAvg),
@@ -103,7 +101,6 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
     If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
       ck / count)
   }
-
   override def prettyName: String = "covar_pop"
 }
 
@@ -114,6 +111,5 @@ case class CovSample(left: Expression, right: Expression) extends Covariance(lef
       If(EqualTo(count, Literal(1.0)), Literal(Double.NaN),
         ck / (count - Literal(1.0))))
   }
-
   override def prettyName: String = "covar_samp"
 }

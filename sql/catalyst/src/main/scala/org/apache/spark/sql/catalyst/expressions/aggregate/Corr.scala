@@ -28,64 +28,61 @@ import org.apache.spark.sql.types._
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
-case class Corr(left: Expression, right: Expression) extends DeclarativeAggregate {
+case class Corr(x: Expression, y: Expression) extends DeclarativeAggregate {
 
-  override def children: Seq[Expression] = Seq(left, right)
-
+  override def children: Seq[Expression] = Seq(x, y)
   override def nullable: Boolean = true
-
   override def dataType: DataType = DoubleType
-
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
   protected val count = AttributeReference("count", DoubleType, nullable = false)()
   protected val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
   protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
+  protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
   protected val xMk = AttributeReference("xMk", DoubleType, nullable = false)()
   protected val yMk = AttributeReference("yMk", DoubleType, nullable = false)()
-  protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
 
-  override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, xAvg, yAvg, xMk, yMk, ck)
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, xAvg, yAvg, ck, xMk, yMk)
 
   override val initialValues: Seq[Expression] = Seq(
     /* count = */ Literal(0.0),
     /* xAvg = */ Literal(0.0),
     /* yAvg = */ Literal(0.0),
+    /* ck = */ Literal(0.0),
     /* xMk = */ Literal(0.0),
-    /* yMk = */ Literal(0.0),
-    /* ck = */ Literal(0.0)
+    /* yMk = */ Literal(0.0)
   )
 
   override lazy val updateExpressions: Seq[Expression] = {
     val n = count + Literal(1.0)
-    val dx = left - xAvg
+    val dx = x - xAvg
     val dxN = dx / n
-    val dy = right - yAvg
+    val dy = y - yAvg
     val dyN = dy / n
-    val newXAvg = xAvg + dx / n
+    val newXAvg = xAvg + dxN
     val newYAvg = yAvg + dyN
     val newCk = ck + dx * (dy - dyN)
     val newXMk = xMk + dx * (dx - dxN)
     val newYMk = yMk + dy * (dy - dyN)
 
-    val isNull = Or(IsNull(left), IsNull(right))
-    if (left.nullable || right.nullable) {
+    val isNull = Or(IsNull(x), IsNull(y))
+    if (x.nullable || y.nullable) {
       Seq(
         /* count = */ If(isNull, count, n),
         /* xAvg = */ If(isNull, xAvg, newXAvg),
         /* yAvg = */ If(isNull, yAvg, newYAvg),
+        /* ck = */ If(isNull, ck, newCk),
         /* xMk = */ If(isNull, xMk, newXMk),
-        /* yMk = */ If(isNull, yMk, newYMk),
-        /* ck = */ If(isNull, ck, newCk)
+        /* yMk = */ If(isNull, yMk, newYMk)
       )
     } else {
       Seq(
         /* count = */ n,
         /* xAvg = */ newXAvg,
         /* yAvg = */ newYAvg,
+        /* ck = */ newCk,
         /* xMk = */ newXMk,
-        /* yMk = */ newYMk,
-        /* ck = */ newCk
+        /* yMk = */ newYMk
       )
     }
   }
@@ -109,9 +106,9 @@ case class Corr(left: Expression, right: Expression) extends DeclarativeAggregat
       /* count = */ n,
       /* xAvg = */ newXAvg,
       /* yAvg = */ newYAvg,
+      /* ck = */ newCk,
       /* xMk = */ newXMk,
-      /* yMk = */ newYMk,
-      /* ck = */ newCk
+      /* yMk = */ newYMk
     )
   }
 
