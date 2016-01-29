@@ -44,7 +44,7 @@ private[sql] abstract class BaseWriterContainer(
     @transient val relation: HadoopFsRelation,
     @transient private val job: Job,
     isAppend: Boolean,
-    codec: Option[Class[_ <: CompressionCodec]])
+    codec: Option[Class[_ <: CompressionCodec]] = None)
   extends Logging with Serializable {
 
   protected val dataSchema = relation.dataSchema
@@ -251,8 +251,7 @@ private[sql] class DefaultWriterContainer(
     job: Job,
     isAppend: Boolean,
     codec: Option[Class[_ <: CompressionCodec]])
-  extends BaseWriterContainer(relation, job, isAppend,
-    codec: Option[Class[_ <: CompressionCodec]]) {
+  extends BaseWriterContainer(relation, job, isAppend, codec) {
 
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     executorSideSetup(taskContext)

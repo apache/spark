@@ -180,9 +180,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     this
   }
   /*
-   * Specify the compression codec when saving it on hdfs
+   * Specify the compression codec when saving it on hdfs.
    *
-   * @since 1.7.0
+   * @since 2.0.0
    */
   def compress(codec: Class[_ <: CompressionCodec]): DataFrameWriter = {
     this.extraOptions += ("compression.codec" -> codec.getCanonicalName)

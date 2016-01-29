@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.{RunnableCommand, SQLExecution}
 import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
 
+
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
  * Writing to dynamic partitions is also supported.  Each [[InsertIntoHadoopFsRelation]] issues a
