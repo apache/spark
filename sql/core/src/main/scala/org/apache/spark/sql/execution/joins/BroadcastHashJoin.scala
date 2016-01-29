@@ -114,8 +114,7 @@ case class BroadcastHashJoin(
       val hashedRelation = broadcastRelation.value
       hashedRelation match {
         case unsafe: UnsafeHashedRelation =>
-          TaskContext.get().internalMetricsToAccumulators(
-            InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+          TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
         case _ =>
       }
       hashJoin(streamedIter, numStreamedRows, hashedRelation, numOutputRows)
@@ -145,7 +144,7 @@ case class BroadcastHashJoin(
      """.stripMargin
   }
 
-  override def doConsume(ctx: CodegenContext, child: SparkPlan, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     ctx.currentVars = input
     val keyExpr = streamedKeys.map(BindReferences.bindReference(_, streamedPlan.output))
     val keyVal = GenerateUnsafeProjection.createCode(ctx, keyExpr)

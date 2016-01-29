@@ -364,6 +364,15 @@ class SQLTests(ReusedPySparkTestCase):
         df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
         self.assertEqual(10, df3.count())
 
+    def test_create_dataframe_schema_mismatch(self):
+        input = [Row(a=1)]
+        rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
+        schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
+        df = self.sqlCtx.createDataFrame(rdd, schema)
+        message = ".*Input row doesn't have expected number of values required by the schema.*"
+        with self.assertRaisesRegexp(Exception, message):
+            df.show()
+
     def test_serialize_nested_array_and_map(self):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
         rdd = self.sc.parallelize(d)
@@ -737,6 +746,13 @@ class SQLTests(ReusedPySparkTestCase):
             self.assertEqual(1, 0)
         except ValueError:
             self.assertEqual(1, 1)
+
+    def test_metadata_null(self):
+        from pyspark.sql.types import StructType, StringType, StructField
+        schema = StructType([StructField("f1", StringType(), True, None),
+                             StructField("f2", StringType(), True, {'a': None})])
+        rdd = self.sc.parallelize([["a", "b"], ["c", "d"]])
+        self.sqlCtx.createDataFrame(rdd, schema)
 
     def test_save_and_load(self):
         df = self.df

@@ -43,14 +43,14 @@ private[csv] class CSVRelation(
     private val maybeDataSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
     private val parameters: Map[String, String])
-    (@transient val sqlContext: SQLContext) extends HadoopFsRelation with Serializable {
+    (@transient val sqlContext: SQLContext) extends HadoopFsRelation {
 
   override lazy val dataSchema: StructType = maybeDataSchema match {
     case Some(structType) => structType
     case None => inferSchema(paths)
   }
 
-  private val params = new CSVParameters(parameters)
+  private val params = new CSVOptions(parameters)
 
   @transient
   private var cachedRDD: Option[RDD[String]] = None
@@ -139,7 +139,7 @@ private[csv] class CSVRelation(
 
     val parsedRdd = tokenRdd(header, paths)
     if (params.inferSchemaFlag) {
-      CSVInferSchema(parsedRdd, header, params.nullValue)
+      CSVInferSchema.infer(parsedRdd, header, params.nullValue)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
@@ -170,7 +170,7 @@ object CSVRelation extends Logging {
       file: RDD[String],
       header: Seq[String],
       firstLine: String,
-      params: CSVParameters): RDD[Array[String]] = {
+      params: CSVOptions): RDD[Array[String]] = {
     // If header is set, make sure firstLine is materialized before sending to executors.
     file.mapPartitionsWithIndex({
       case (split, iter) => new BulkCsvReader(
@@ -186,7 +186,7 @@ object CSVRelation extends Logging {
       requiredColumns: Array[String],
       inputs: Array[FileStatus],
       sqlContext: SQLContext,
-      params: CSVParameters): RDD[Row] = {
+      params: CSVOptions): RDD[Row] = {
 
     val schemaFields = schema.fields
     val requiredFields = StructType(requiredColumns.map(schema(_))).fields
@@ -249,7 +249,7 @@ object CSVRelation extends Logging {
   }
 }
 
-private[sql] class CSVOutputWriterFactory(params: CSVParameters) extends OutputWriterFactory {
+private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
       dataSchema: StructType,
@@ -262,7 +262,7 @@ private[sql] class CsvOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
-    params: CSVParameters) extends OutputWriter with Logging {
+    params: CSVOptions) extends OutputWriter with Logging {
 
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()

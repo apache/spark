@@ -159,13 +159,22 @@ class CodegenContext {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
   /**
+    * A prefix used to generate fresh name.
+    */
+  var freshNamePrefix = ""
+
+  /**
    * Returns a term name that is unique within this instance of a `CodeGenerator`.
    *
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  def freshName(prefix: String): String = {
-    s"$prefix${curId.getAndIncrement}"
+  def freshName(name: String): String = {
+    if (freshNamePrefix == "") {
+      s"$name${curId.getAndIncrement}"
+    } else {
+      s"${freshNamePrefix}_$name${curId.getAndIncrement}"
+    }
   }
 
   /**
@@ -200,6 +209,39 @@ class CodegenContext {
       case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       case _ => s"$row.update($ordinal, $value)"
+    }
+  }
+
+  /**
+    * Update a column in MutableRow from ExprCode.
+    */
+  def updateColumn(
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      // Can't call setNullAt on DecimalType, because we need to keep the offset
+      if (dataType.isInstanceOf[DecimalType]) {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             ${setColumn(row, dataType, ordinal, "null")};
+           }
+         """
+      } else {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             $row.setNullAt($ordinal);
+           }
+         """
+      }
+    } else {
+      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
     }
   }
 

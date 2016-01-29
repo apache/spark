@@ -86,7 +86,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       // If we can track all jobs, check the metric values
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       val actualMetrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
-        df.queryExecution.executedPlan)).nodes.filter { node =>
+        df.queryExecution.executedPlan)).allNodes.filter { node =>
         expectedMetrics.contains(node.id)
       }.map { node =>
         val nodeMetrics = node.metrics.map { metric =>
@@ -132,6 +132,14 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         "number of input rows" -> 2L,
         "number of output rows" -> 1L)))
     )
+  }
+
+  test("WholeStageCodegen metrics") {
+    // Assume the execution plan is
+    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
+    // TODO: update metrics in generated operators
+    val df = sqlContext.range(10).filter('id < 5)
+    testSparkPlanMetrics(df, 1, Map.empty)
   }
 
   test("TungstenAggregate metrics") {
@@ -327,22 +335,24 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("save metrics") {
     withTempPath { file =>
-      val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 0)
-      person.select('name).write.format("json").save(file.getAbsolutePath)
-      sparkContext.listenerBus.waitUntilEmpty(10000)
-      val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
-      assert(executionIds.size === 1)
-      val executionId = executionIds.head
-      val jobs = sqlContext.listener.getExecution(executionId).get.jobs
-      // Use "<=" because there is a race condition that we may miss some jobs
-      // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
-      assert(jobs.size <= 1)
-      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
-      // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
-      // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq("2"))
+      withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+        val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
+        // Assume the execution plan is
+        // PhysicalRDD(nodeId = 0)
+        person.select('name).write.format("json").save(file.getAbsolutePath)
+        sparkContext.listenerBus.waitUntilEmpty(10000)
+        val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+        assert(executionIds.size === 1)
+        val executionId = executionIds.head
+        val jobs = sqlContext.listener.getExecution(executionId).get.jobs
+        // Use "<=" because there is a race condition that we may miss some jobs
+        // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
+        assert(jobs.size <= 1)
+        val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
+        // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
+        // However, we still can check the value.
+        assert(metricValues.values.toSeq === Seq("2"))
+      }
     }
   }
 
