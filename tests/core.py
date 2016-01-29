@@ -1002,6 +1002,11 @@ class WebLdapAuthTest(unittest.TestCase):
         session.close()
         configuration.conf.set("webserver", "authenticate", "False")
 
+    def test_no_filter(self):
+        self.login('user1', 'user1')
+        response = self.app.get("/admin")
+        self.assertEqual(response.status_code, 200)
+
 
 if 'MySqlOperator' in dir(operators):
     # Only testing if the operator is installed
