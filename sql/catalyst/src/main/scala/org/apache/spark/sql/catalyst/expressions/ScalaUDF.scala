@@ -43,7 +43,7 @@ case class ScalaUDF(
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"ScalaUDF(${children.mkString(",")})"
+  override def toString: String = s"UDF(${children.mkString(", ")})"
 
   // scalastyle:off line.size.limit
 
