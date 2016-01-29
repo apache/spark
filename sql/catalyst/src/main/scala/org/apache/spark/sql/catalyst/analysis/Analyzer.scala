@@ -873,12 +873,12 @@ class Analyzer(
             extractedExprBuffer += ne
           }
           // alias will be cleaned in the rule CleanupAliases
-          if (ne.isInstanceOf[Alias]) ne else ne.toAttribute
+          ne
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
         case e: Expression =>
           // For other expressions, we extract it and replace it with an AttributeReference (with
-          // an interal column name, e.g. "_w0").
+          // an internal column name, e.g. "_w0").
           val withName = Alias(e, s"_w${extractedExprBuffer.length}")()
           extractedExprBuffer += withName
           withName.toAttribute

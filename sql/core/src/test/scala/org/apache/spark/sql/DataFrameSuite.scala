@@ -425,16 +425,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("c"))
   }
 
-  test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
-    val src = Seq((0, 3, 5)).toDF("a", "b", "c")
-      .withColumn("Data", struct("a", "b"))
-      .drop("a")
-      .drop("b")
-    val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
-    val df = src.select($"*", max("c").over(winSpec) as "max")
-    checkAnswer(df, Row(5, Row(0, 3), 5))
-  }
-
   test("drop unknown column (no-op)") {
     val df = testData.drop("random")
     checkAnswer(
