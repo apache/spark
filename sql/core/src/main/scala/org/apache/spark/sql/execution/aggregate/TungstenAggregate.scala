@@ -151,10 +151,10 @@ case class TungstenAggregate(
     }
 
     // generate variables for output
-    val (resultVars, genResult) = if (modes.contains(Final) | modes.contains(Complete)) {
+    val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
+    val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = bufVars
-      val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
       val aggResults = functions.map(_.evaluateExpression).map { e =>
         BindReferences.bindReference(e, bufferAttrs).gen(ctx)
       }
@@ -167,9 +167,13 @@ case class TungstenAggregate(
         | ${aggResults.map(_.code).mkString("\n")}
         | ${resultVars.map(_.code).mkString("\n")}
        """.stripMargin)
-    } else {
+    } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       // output the aggregate buffer directly
       (bufVars, "")
+    } else {
+      // no aggregate function, the result should be literals
+      val resultVars = resultExpressions.map(_.gen(ctx))
+      (resultVars, resultVars.map(_.code).mkString("\n"))
     }
 
     val doAgg = ctx.freshName("doAgg")
@@ -211,7 +215,8 @@ case class TungstenAggregate(
 
     ctx.currentVars = bufVars ++ input
     // TODO: support subexpression elimination
-    val aggVals = updateExpr.map(BindReferences.bindReference[Expression](_, inputAttrs).gen(ctx))
+    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).gen(ctx))
+    // aggregate buffer should be updated atomic
     val updates = aggVals.zipWithIndex.map { case (ev, i) =>
       s"""
          | ${bufVars(i).isNull} = ${ev.isNull};
@@ -221,7 +226,6 @@ case class TungstenAggregate(
     s"""
        | // do aggregate
        | ${aggVals.map(_.code).mkString("\n")}
-       |
        | // update aggregation buffer
        | ${updates.mkString("")}
      """.stripMargin
