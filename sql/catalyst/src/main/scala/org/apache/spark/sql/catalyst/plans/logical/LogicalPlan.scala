@@ -315,7 +315,4 @@ abstract class BinaryNode extends LogicalPlan {
   def right: LogicalPlan
 
   override def children: Seq[LogicalPlan] = Seq(left, right)
-
-  override lazy val resolved: Boolean =
-    expressions.forall(_.resolved) && childrenResolved
 }

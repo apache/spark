@@ -218,8 +218,7 @@ trait CheckAnalysis {
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             failAnalysis(
               s"""
-                 |Failure when resolving conflicting references
-                 |in operator ${operator.simpleString}:
+                 |Failure when resolving conflicting references in Join:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                  |""".stripMargin)
@@ -228,8 +227,7 @@ trait CheckAnalysis {
             val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
             failAnalysis(
               s"""
-                 |Failure when resolving conflicting references
-                 |in operator ${operator.simpleString}:
+                 |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                  |""".stripMargin)

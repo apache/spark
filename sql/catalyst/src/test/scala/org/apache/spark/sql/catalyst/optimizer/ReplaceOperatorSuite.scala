@@ -27,7 +27,8 @@ class ReplaceOperatorSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Intersect", FixedPoint(100),
+      Batch("Replace Operators", FixedPoint(100),
+        ReplaceDistinctWithAggregate,
         ReplaceIntersectWithSemiJoin) :: Nil
   }
 
@@ -39,7 +40,19 @@ class ReplaceOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
-      Distinct(Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
+      Aggregate(table1.output, table1.output,
+        Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Distinct with Aggregate") {
+    val input = LocalRelation('a.int, 'b.int)
+
+    val query = Distinct(input)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = Aggregate(input.output, input.output, input)
 
     comparePlans(optimized, correctAnswer)
   }
