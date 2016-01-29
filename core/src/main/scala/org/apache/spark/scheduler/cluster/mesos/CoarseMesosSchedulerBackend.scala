@@ -18,8 +18,8 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.util.concurrent.TimeUnit
 import java.util.{Collections, List => JList}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
