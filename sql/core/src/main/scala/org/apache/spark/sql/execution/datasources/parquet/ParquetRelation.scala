@@ -803,8 +803,8 @@ private[sql] object ParquetRelation extends Logging {
           if (footers.isEmpty) {
             Iterator.empty
           } else {
-            var mergedSchema = StructType(Nil)
-            footers.foreach { footer =>
+            var mergedSchema = ParquetRelation.readSchemaFromFooter(footers.head, converter)
+            footers.tail.foreach { footer =>
               val schema = ParquetRelation.readSchemaFromFooter(footer, converter)
               try {
                 mergedSchema = mergedSchema.merge(schema)
