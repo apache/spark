@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import scala.collection.mutable.ArrayBuilder
+
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
@@ -25,7 +27,8 @@ import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.types._
+import org.apache.spark.mllib.linalg._
 
 /**
  * :: Experimental ::
@@ -62,28 +65,57 @@ final class Binarizer(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema)
+    val schema = dataset.schema
+    val inputType = schema($(inputCol)).dataType
     val td = $(threshold)
-    val binarizer = udf { in: Double => if (in > td) 1.0 else 0.0 }
-    val outputColName = $(outputCol)
-    val metadata = BinaryAttribute.defaultAttr.withName(outputColName).toMetadata()
-    dataset.select(col("*"),
-      binarizer(col($(inputCol))).as(outputColName, metadata))
+
+    val binarizerDouble = udf { in: Double => if (in > td) 1.0 else 0.0 }
+    val binarizerVector = udf { (data: Vector) =>
+      val indices = ArrayBuilder.make[Int]
+      val values = ArrayBuilder.make[Double]
+
+      data.foreachActive { (index, value) =>
+        indices += index
+        values += (if (value > td) 1.0 else 0.0)
+      }
+
+      data match {
+        case dv: DenseVector =>
+          Vectors.dense(values.result())
+        case sv: SparseVector =>
+          Vectors.sparse(data.size, indices.result(), values.result()).compressed
+      }
+    }
+
+    val metadata = outputSchema($(outputCol)).metadata
+
+    inputType match {
+      case DoubleType =>
+        dataset.select(col("*"), binarizerDouble(col($(inputCol))).as($(outputCol), metadata))
+      case _: VectorUDT =>
+        dataset.select(col("*"), binarizerVector(col($(inputCol))).as($(outputCol), metadata))
+    }
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
-
-    val inputFields = schema.fields
+    val inputType = schema($(inputCol)).dataType
     val outputColName = $(outputCol)
+    var outCol: StructField = null
 
-    require(inputFields.forall(_.name != outputColName),
-      s"Output column $outputColName already exists.")
+    inputType match {
+      case DoubleType =>
+        outCol = BinaryAttribute.defaultAttr.withName(outputColName).toStructField()
+      case _: VectorUDT =>
+        outCol = new StructField(outputColName, new VectorUDT, true)
+      case other =>
+        throw new IllegalArgumentException(s"Data type $other is not supported.")
+    }
 
-    val attr = BinaryAttribute.defaultAttr.withName(outputColName)
-    val outputFields = inputFields :+ attr.toStructField()
-    StructType(outputFields)
+    if (schema.fieldNames.contains(outputColName)) {
+      throw new IllegalArgumentException(s"Output column $outputColName already exists.")
+    }
+    StructType(schema.fields :+ outCol)
   }
 
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
