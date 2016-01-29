@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 
-case class StddevSamp(child: Expression,
+case class VarianceSamp(child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends CentralMomentAgg(child) {
@@ -32,7 +32,7 @@ case class StddevSamp(child: Expression,
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def prettyName: String = "stddev_samp"
+  override def prettyName: String = "var_samp"
 
   override protected val momentOrder = 2
 
@@ -45,12 +45,12 @@ case class StddevSamp(child: Expression,
     } else if (n == 1.0) {
       Double.NaN
     } else {
-      math.sqrt(moments(2) / (n - 1.0))
+      moments(2) / (n - 1.0)
     }
   }
 }
 
-case class StddevPop(
+case class VariancePop(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
@@ -64,7 +64,7 @@ case class StddevPop(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def prettyName: String = "stddev_pop"
+  override def prettyName: String = "var_pop"
 
   override protected val momentOrder = 2
 
@@ -75,7 +75,7 @@ case class StddevPop(
     if (n == 0.0) {
       null
     } else {
-      math.sqrt(moments(2) / n)
+      moments(2) / n
     }
   }
 }
