@@ -27,22 +27,22 @@ import org.apache.spark.sql.types.StringType
 class ResolveNaturalJoinSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
-  val t1 = testRelation2.select('a, 'b)
-  val t2 = testRelation2.select('a, 'c)
-  val a = testRelation2.output(0)
-  val b = testRelation2.output(1)
-  val c = testRelation2.output(2)
-  val testRelation0 = LocalRelation(
+  lazy val t1 = testRelation2.select('a, 'b)
+  lazy val t2 = testRelation2.select('a, 'c)
+  lazy val a = testRelation2.output(0)
+  lazy val b = testRelation2.output(1)
+  lazy val c = testRelation2.output(2)
+  lazy val testRelation0 = LocalRelation(
     AttributeReference("a", StringType, nullable = false)(),
     AttributeReference("b", StringType, nullable = false)(),
     AttributeReference("c", StringType, nullable = false)())
-  val tt1 = testRelation0.select('a, 'b)
-  val tt2 = testRelation0.select('a, 'c)
-  val aa = testRelation0.output(0)
-  val bb = testRelation0.output(1)
-  val cc = testRelation0.output(2)
-  val trueB = testRelation0.output(1).withNullability(true)
-  val trueC = testRelation0.output(2).withNullability(true)
+  lazy val tt1 = testRelation0.select('a, 'b)
+  lazy  val tt2 = testRelation0.select('a, 'c)
+  lazy val aa = testRelation0.output(0)
+  lazy val bb = testRelation0.output(1)
+  lazy val cc = testRelation0.output(2)
+  lazy val trueB = testRelation0.output(1).withNullability(true)
+  lazy val trueC = testRelation0.output(2).withNullability(true)
 
   test("natural inner join") {
     val plan = t1.join(t2, NaturalJoin(Inner), None)
