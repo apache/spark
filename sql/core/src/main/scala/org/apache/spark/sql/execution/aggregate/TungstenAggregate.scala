@@ -194,10 +194,10 @@ case class TungstenAggregate(
       (resultVars, resultVars.map(_.code).mkString("\n"))
     }
 
-    val doAgg = ctx.freshName("doAgg")
+    val doAgg = ctx.freshName("doAggregateWithoutKey")
     ctx.addNewFunction(doAgg,
       s"""
-         | private void $doAgg() {
+         | private void $doAgg() throws java.io.IOException {
          |   // initialize aggregation buffer
          |   ${bufVars.map(_.code).mkString("\n")}
          |
@@ -359,7 +359,7 @@ case class TungstenAggregate(
        """
     }
 
-    val doAgg = ctx.freshName("doAggregate")
+    val doAgg = ctx.freshName("doAggregateWithKeys")
     ctx.addNewFunction(doAgg,
       s"""
         private void $doAgg() throws java.io.IOException {
