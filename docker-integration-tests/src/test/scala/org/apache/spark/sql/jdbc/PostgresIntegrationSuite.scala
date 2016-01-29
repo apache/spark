@@ -22,7 +22,7 @@ import java.util.Properties
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.{ArrayType, DecimalType}
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -95,8 +95,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     // Test only that it doesn't crash.
     df.write.jdbc(jdbcUrl, "public.barcopy", new Properties)
     // Test that written numeric type has same DataType as input
-    assert(sqlContext.read.jdbc(jdbcUrl, "public.barcopy", new Properties).schema(13) ==
-      DecimalType(2, 2))
+    assert(sqlContext.read.jdbc(jdbcUrl, "public.barcopy", new Properties).schema(13).dataType ==
+      ArrayType(DecimalType(2, 2), true))
     // Test write null values.
     df.select(df.queryExecution.analyzed.output.map { a =>
       Column(Literal.create(null, a.dataType)).as(a.name)
