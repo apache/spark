@@ -155,8 +155,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_SHOWLOCKS",
     "TOK_SHOWPARTITIONS",
 
-    "TOK_SWITCHDATABASE",
-
     "TOK_UNLOCKTABLE"
   )
 

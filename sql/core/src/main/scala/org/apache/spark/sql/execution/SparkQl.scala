@@ -138,6 +138,9 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             managedIfNoPath = false)
         }
 
+      case Token("TOK_SWITCHDATABASE", Token(database, Nil) :: Nil) =>
+        SetDatabaseCommand(cleanIdentifier(database))
+
       case Token("TOK_DESCTABLE", describeArgs) =>
         // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
         val Some(tableType) :: formatted :: extended :: pretty :: Nil =
