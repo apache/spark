@@ -800,9 +800,31 @@ private[sql] object ParquetRelation extends Logging {
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
               writeLegacyParquetFormat = writeLegacyParquetFormat)
 
-          footers.map { footer =>
-            ParquetRelation.readSchemaFromFooter(footer, converter)
-          }.reduceLeftOption(_ merge _).iterator
+          if (footers.isEmpty) {
+            Iterator.empty
+          } else {
+            val pathsAndSchemata = footers.map { footer =>
+              footer.getFile -> ParquetRelation.readSchemaFromFooter(footer, converter)
+            }
+
+            pathsAndSchemata.foldLeft(StructType(Nil)) { case (mergedSoFar, (file, schema)) =>
+              try {
+                mergedSoFar.merge(schema)
+              } catch {
+                case cause: Throwable =>
+                  throw new SparkException(
+                    s"""Failed merging schema of file $file:
+                       |${schema.treeString}
+                     """.stripMargin,
+                    cause
+                  )
+              }
+            }
+
+            footers.map { footer =>
+              ParquetRelation.readSchemaFromFooter(footer, converter)
+            }.reduceLeftOption(_ merge _).iterator
+          }
         }.collect()
 
     partiallyMergedSchemas.reduceLeftOption(_ merge _)
