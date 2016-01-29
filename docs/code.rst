@@ -49,6 +49,7 @@ Operator API
         BashOperator,
         BranchPythonOperator,
         TriggerDagRunOperator,
+        DockerOperator,
         DummyOperator,
         EmailOperator,
         ExternalTaskSensor,
