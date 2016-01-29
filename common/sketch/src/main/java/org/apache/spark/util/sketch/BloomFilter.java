@@ -47,10 +47,12 @@ public abstract class BloomFilter {
   public enum Version {
     /**
      * {@code BloomFilter} binary format version 1 (all values written in big-endian order):
-     * - Version number, always 1 (32 bit)
-     * - Total number of words of the underlying bit array (32 bit)
-     * - The words/longs (numWords * 64 bit)
-     * - Number of hash functions (32 bit)
+     * <ul>
+     *   <li>Version number, always 1 (32 bit)</li>
+     *   <li>Number of hash functions (32 bit)</li>
+     *   <li>Total number of words of the underlying bit array (32 bit)</li>
+     *   <li>The words/longs (numWords * 64 bit)</li>
+     * </ul>
      */
     V1(1);
 
@@ -96,6 +98,21 @@ public abstract class BloomFilter {
   public abstract boolean put(Object item);
 
   /**
+   * A specialized variant of {@link #put(Object)}, that can only be used to put utf-8 string.
+   */
+  public abstract boolean putString(String str);
+
+  /**
+   * A specialized variant of {@link #put(Object)}, that can only be used to put long.
+   */
+  public abstract boolean putLong(long l);
+
+  /**
+   * A specialized variant of {@link #put(Object)}, that can only be used to put byte array.
+   */
+  public abstract boolean putBinary(byte[] bytes);
+
+  /**
    * Determines whether a given bloom filter is compatible with this bloom filter. For two
    * bloom filters to be compatible, they must have the same bit size.
    *
@@ -118,6 +135,23 @@ public abstract class BloomFilter {
    * {@code false} if this is <i>definitely</i> not the case.
    */
   public abstract boolean mightContain(Object item);
+
+  /**
+   * A specialized variant of {@link #mightContain(Object)}, that can only be used to test utf-8
+   * string.
+   */
+  public abstract boolean mightContainString(String str);
+
+  /**
+   * A specialized variant of {@link #mightContain(Object)}, that can only be used to test long.
+   */
+  public abstract boolean mightContainLong(long l);
+
+  /**
+   * A specialized variant of {@link #mightContain(Object)}, that can only be used to test byte
+   * array.
+   */
+  public abstract boolean mightContainBinary(byte[] bytes);
 
   /**
    * Writes out this {@link BloomFilter} to an output stream in binary format.

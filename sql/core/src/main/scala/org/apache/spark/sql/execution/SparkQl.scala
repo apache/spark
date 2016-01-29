@@ -20,6 +20,7 @@ import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
   /** Check if a command should not be explained. */
@@ -27,6 +28,18 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
+      case Token("TOK_SETCONFIG", Nil) =>
+        val keyValueSeparatorIndex = node.remainder.indexOf('=')
+        if (keyValueSeparatorIndex >= 0) {
+          val key = node.remainder.substring(0, keyValueSeparatorIndex).trim
+          val value = node.remainder.substring(keyValueSeparatorIndex + 1).trim
+          SetCommand(Some(key -> Option(value)))
+        } else if (node.remainder.nonEmpty) {
+          SetCommand(Some(node.remainder -> None))
+        } else {
+          SetCommand(None)
+        }
+
       // Just fake explain for any of the native commands.
       case Token("TOK_EXPLAIN", explainArgs) if isNoExplainCommand(explainArgs.head.text) =>
         ExplainCommand(OneRowRelation)
@@ -41,6 +54,9 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         val Some(query) :: _ :: extended :: Nil =
           getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
         ExplainCommand(nodeToPlan(query), extended = extended.isDefined)
+
+      case Token("TOK_SWITCHDATABASE", Token(database, Nil) :: Nil) =>
+        SetDatabaseCommand(cleanIdentifier(database))
 
       case Token("TOK_DESCTABLE", describeArgs) =>
         // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -74,6 +90,24 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             case _ => nodeToDescribeFallback(node)
           }
         }
+
+      case Token("TOK_CACHETABLE", Token(tableName, Nil) :: args) =>
+       val Seq(lzy, selectAst) = getClauses(Seq("LAZY", "TOK_QUERY"), args)
+        CacheTableCommand(tableName, selectAst.map(nodeToPlan), lzy.isDefined)
+
+      case Token("TOK_UNCACHETABLE", Token(tableName, Nil) :: Nil) =>
+        UncacheTableCommand(tableName)
+
+      case Token("TOK_CLEARCACHE", Nil) =>
+        ClearCacheCommand
+
+      case Token("TOK_SHOWTABLES", args) =>
+        val databaseName = args match {
+          case Nil => None
+          case Token("TOK_FROM", Token(dbName, Nil) :: Nil) :: Nil => Option(dbName)
+          case _ => noParseRule("SHOW TABLES", node)
+        }
+        ShowTablesCommand(databaseName)
 
       case _ =>
         super.nodeToPlan(node)
