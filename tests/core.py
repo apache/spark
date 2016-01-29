@@ -994,6 +994,23 @@ class WebLdapAuthTest(unittest.TestCase):
         response = self.app.get("/admin/airflow/landing_times")
         self.assertEqual(response.status_code, 302)
 
+    def test_no_filter(self):
+        response = self.login('user1', 'user1')
+        assert 'Data Profiling' in response.data.decode('utf-8')
+        assert 'Connections' in response.data.decode('utf-8')
+
+    def test_with_filters(self):
+        configuration.conf.set('ldap', 'superuser_filter',
+                               'description=superuser')
+        configuration.conf.set('ldap', 'data_profiler_filter',
+                               'description=dataprofiler')
+
+        response = self.login('dataprofiler', 'dataprofiler')
+        assert 'Data Profiling' in response.data.decode('utf-8')
+
+        response = self.login('superuser', 'superuser')
+        assert 'Connections' in response.data.decode('utf-8')
+
     def tearDown(self):
         configuration.test_mode()
         session = Session()
@@ -1001,11 +1018,6 @@ class WebLdapAuthTest(unittest.TestCase):
         session.commit()
         session.close()
         configuration.conf.set("webserver", "authenticate", "False")
-
-    def test_no_filter(self):
-        self.login('user1', 'user1')
-        response = self.app.get("/admin")
-        self.assertEqual(response.status_code, 200)
 
 
 if 'MySqlOperator' in dir(operators):
