@@ -46,10 +46,6 @@ trait Catalog {
 
   def lookupRelation(tableIdent: TableIdentifier, alias: Option[String] = None): LogicalPlan
 
-  def currentDatabase: String = {
-    throw new UnsupportedOperationException
-  }
-
   def setCurrentDatabase(databaseName: String): Unit = {
     throw new UnsupportedOperationException
   }
