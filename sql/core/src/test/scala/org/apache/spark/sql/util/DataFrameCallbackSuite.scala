@@ -97,12 +97,10 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     }
     sqlContext.listenerManager.register(listener)
 
-    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
-      val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
-      df.collect()
-      df.collect()
-      Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
-    }
+    val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
+    df.collect()
+    df.collect()
+    Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
 
     assert(metrics.length == 3)
     assert(metrics(0) == 1)
