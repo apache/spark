@@ -287,6 +287,16 @@ case class TungstenAggregate(
     GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
   }
 
+
+  /**
+    * Update peak execution memory, called in generated Java class.
+    */
+  def updatePeakMemory(hashMap: UnsafeFixedWidthAggregationMap): Unit = {
+    val mapMemory = hashMap.getPeakMemoryUsedBytes
+    val metrics = TaskContext.get().taskMetrics()
+    metrics.incPeakExecutionMemory(mapMemory)
+  }
+
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
@@ -382,6 +392,7 @@ case class TungstenAggregate(
        $outputCode
      }
 
+     $thisPlan.updatePeakMemory($hashMapTerm);
      $hashMapTerm.free();
      """
   }
