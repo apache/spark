@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -98,7 +98,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
-  class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
+  class DriverEndpoint(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
 
     // Executors that have been lost, but for which we don't yet know the real exit reason.
@@ -228,6 +228,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(true)
 
       case RetrieveSparkAppConfig =>
+        val sparkProperties = new ArrayBuffer[(String, String)]
+        for ((key, value) <- scheduler.sc.conf.getAll) {
+          if (key.startsWith("spark.")) {
+            sparkProperties += ((key, value))
+          }
+        }
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
@@ -380,24 +386,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected def minRegisteredRatio: Double = _minRegisteredRatio
 
   override def start() {
-    val properties = new ArrayBuffer[(String, String)]
-    for ((key, value) <- scheduler.sc.conf.getAll) {
-      if (key.startsWith("spark.")) {
-        properties += ((key, value))
-      }
-    }
-
     // TODO (prashant) send conf instead of properties
-    driverEndpoint = createDriverEndpointRef(properties)
+    driverEndpoint = createDriverEndpointRef()
   }
 
-  protected def createDriverEndpointRef(
-      properties: ArrayBuffer[(String, String)]): RpcEndpointRef = {
-    rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint(properties))
+  protected def createDriverEndpointRef(): RpcEndpointRef = {
+    rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint())
   }
 
-  protected def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new DriverEndpoint(rpcEnv, properties)
+  protected def createDriverEndpoint(): DriverEndpoint = {
+    new DriverEndpoint(rpcEnv)
   }
 
   def stopExecutors() {

@@ -439,6 +439,19 @@ private[spark] class SparkSubmit extends Logging {
       sparkConf.set("spark.submit.pyFiles", localPyFiles)
     }
 
+    // for pyspark virtualenv
+    if (args.isPython) {
+      if (clusterManager != YARN &&
+        args.sparkProperties.getOrElse("spark.pyspark.virtualenv.enabled", "false") == "true") {
+        printErrorAndExit("virtualenv is only supported in yarn mode")
+      }
+      if (args.sparkProperties.contains("spark.pyspark.virtualenv.requirements")) {
+        // distribute virtualenv requirement file as --files
+        args.files = mergeFileLists(args.files,
+          args.sparkProperties("spark.pyspark.virtualenv.requirements"))
+      }
+    }
+
     // In YARN mode for an R app, add the SparkR package archive and the R package
     // archive containing all of the built R libraries to archives so that they can
     // be distributed with the job

@@ -28,7 +28,7 @@ from tempfile import NamedTemporaryFile
 
 from py4j.protocol import Py4JError
 
-from pyspark import accumulators
+from pyspark import accumulators, since
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
@@ -44,6 +44,7 @@ from pyspark.profiler import ProfilerCollector, BasicProfiler
 
 if sys.version > '3':
     xrange = range
+    basestring = unicode = str
 
 
 __all__ = ['SparkContext']
@@ -189,6 +190,14 @@ class SparkContext(object):
         self._jsc.sc().register(self._javaAccumulator)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        if self._conf.get("spark.pyspark.virtualenv.enabled") == "true":
+            self.pythonExec = self._conf.get("spark.pyspark.python", self.pythonExec)
+            virtualEnvBinPath = self._conf.get("spark.pyspark.virtualenv.bin.path")
+
+            if virtualEnvBinPath is None:
+                raise Exception("spark.pyspark.virtualenv.enabled is set as true but no value for "
+                                "spark.pyspark.virtualenv.bin.path")
+
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -1034,6 +1043,46 @@ class SparkContext(object):
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
+
+    @since(2.4)
+    def install_packages(self, packages):
+        """
+        Install python packages on all executors and driver through pip. pip will be installed
+        by default no matter using native virtualenv or conda. So it is guaranteed that pip is
+        available if virtualenv is enabled.
+
+        .. note:: Experimental
+        .. versionadded:: 2.4
+
+        :param packages: string for single package or a list of string for multiple packages
+        """
+        import functools
+        if self._conf.get("spark.pyspark.virtualenv.enabled") != "true":
+            raise RuntimeError("install_packages can only use called when "
+                               "spark.pyspark.virtualenv.enabled is set as true")
+        if isinstance(packages, basestring):
+            packages = [packages]
+        # seems statusTracker.getExecutorInfos() will return driver + exeuctors, so -1 here.
+        num_executors = len(self._jsc.sc().statusTracker().getExecutorInfos()) - 1
+        dummyRDD = self.parallelize(range(num_executors), num_executors)
+
+        def _run_pip(packages, iterator):
+            import pip
+            return pip.main(["install"] + packages)
+
+        # install package on driver first. if installation succeeded, continue the installation
+        # on executors, otherwise return directly.
+        if _run_pip(packages, None) != 0:
+            return
+
+        virtualenvPackages = self._conf.get("spark.pyspark.virtualenv.packages")
+        if virtualenvPackages:
+            self._conf.set("spark.pyspark.virtualenv.packages", virtualenvPackages + ":" +
+                           ":".join(packages))
+        else:
+            self._conf.set("spark.pyspark.virtualenv.packages", ":".join(packages))
+
+        dummyRDD.foreachPartition(functools.partial(_run_pip, packages))
 
 
 def _test():

@@ -19,6 +19,7 @@ package org.apache.spark.launcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -323,20 +324,34 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // 4. environment variable PYSPARK_PYTHON
     // 5. python
     List<String> pyargs = new ArrayList<>();
-    pyargs.add(firstNonEmpty(conf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON),
+    String pythonExec = firstNonEmpty(conf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON),
       conf.get(SparkLauncher.PYSPARK_PYTHON),
       System.getenv("PYSPARK_DRIVER_PYTHON"),
       System.getenv("PYSPARK_PYTHON"),
-      "python"));
-    String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
-    if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
-      // pass conf spark.pyspark.python to python by environment variable.
-      env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
+      "python");
+    if (conf.getOrDefault("spark.pyspark.virtualenv.enabled", "false").equals("true")) {
+      try {
+        // setup virtualenv in launcher when virtualenv is enabled in pyspark shell
+        Class virtualEnvClazz = Class.forName("org.apache.spark.api.python.VirtualEnvFactory");
+        Object virtualEnv = virtualEnvClazz.getConstructor(String.class, Map.class, Boolean.class)
+          .newInstance(pythonExec, conf, true);
+        Method virtualEnvMethod = virtualEnvClazz.getMethod("setupVirtualEnv");
+        pythonExec = (String) virtualEnvMethod.invoke(virtualEnv);
+        pyargs.add(pythonExec);
+      } catch (Exception e) {
+        throw new IOException(e);
+      }
+    } else {
+      pyargs.add(pythonExec);
+      if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
+        // pass conf spark.pyspark.python to python by environment variable.
+        env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
+      }
     }
+    String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }
-
     return pyargs;
   }
 

@@ -218,6 +218,117 @@ These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to 
 For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries
 to executors.
 
+# VirtualEnv for PySpark
+For simple PySpark application, we can use `--py-files` to add its dependencies. While for a large PySpark application,
+usually you will have many dependencies which may also have transitive dependencies and even some dependencies need to be compiled
+first to be installed. In this case `--py-files` is not so convenient. Luckily, in python world we have virtualenv/conda to help create isolated
+python work environment. We also implement virtualenv in PySpark (It is only supported in yarn mode for now). User can use this feature
+in 2 scenarios:
+* Batch mode (submit spark app via spark-submit)
+* Interactive mode (PySpark shell or other third party Spark Notebook)
+
+## Prerequisites
+- Each node have virtualenv/conda, python-devel installed
+- Each node is internet accessible (for downloading packages)
+
+## Batch Mode
+
+In batch mode, user need to specify the additional python packages before launching spark app. There're 2 approaches to specify that:
+* Provide a requirement file which contains all the packages for the virtualenv.  
+* Specify packages via spark configuration `spark.pyspark.virtualenv.packages`.
+
+Here're several examples:
+
+{% highlight bash %}
+### Setup virtualenv using native virtualenv on yarn-client mode
+bin/spark-submit \
+    --master yarn \
+    --deploy-mode client \
+    --conf "spark.pyspark.virtualenv.enabled=true" \
+    --conf "spark.pyspark.virtualenv.type=native" \
+    --conf "spark.pyspark.virtualenv.requirements=<local_requirement_file>" \
+    --conf "spark.pyspark.virtualenv.bin.path=<virtualenv_bin_path>" \
+    <pyspark_script>
+
+### Setup virtualenv using conda on yarn-client mode
+bin/spark-submit \
+    --master yarn \
+    --deploy-mode client \
+    --conf "spark.pyspark.virtualenv.enabled=true" \
+    --conf "spark.pyspark.virtualenv.type=conda" \
+    --conf "spark.pyspark.virtualenv.requirements=<local_requirement_file>" \
+    --conf "spark.pyspark.virtualenv.bin.path=<conda_bin_path>" \
+    <pyspark_script>
+    
+### Setup virtualenv using conda on yarn-client mode and specify packages via `spark.pyspark.virtualenv.packages`
+bin/spark-submit \
+    --master yarn \
+    --deploy-mode client \
+    --conf "spark.pyspark.virtualenv.enabled=true" \
+    --conf "spark.pyspark.virtualenv.type=conda" \
+    --conf "spark.pyspark.virtualenv.packages=numpy,pandas" \
+    --conf "spark.pyspark.virtualenv.bin.path=<conda_bin_path>" \
+    <pyspark_script>
+{% endhighlight %}
+
+### How to create requirement file ?
+Usually before running distributed PySpark job, you need first to run it in local environment. It is encouraged to first create your own virtualenv for your project, so you know what packages you need. After you are confident with your work and want to move it to cluster, you can run the following command to generate the requirement file for virtualenv and conda.
+- pip freeze > requirements.txt
+- conda list --export  > requirements.txt
+
+## Interactive Mode
+In interactive mode，user can install python packages at runtime instead of specifying them in requirement file when submitting spark app.
+Here are several ways to install packages
+
+{% highlight python %}
+sc.install_packages("numpy")                # install the latest numpy
+sc.install_packages("numpy==1.11.0")        # install a specific version of numpy
+sc.install_packages(["numpy", "pandas"])    # install multiple python packages
+{% endhighlight %}
+
+## How to specify python version ?
+Due to different mechanism of native virtualenv and conda, specifying python version for them is a little different.
+In batch mode, python version is specified in requirement file for conda, while for native virtualenv python is not incuded in requirement file so you have to specify python version by setting 
+`spark.pyspark.python` to the specific python version executable file. In interactive mode, you don't need to specify requirement file, in this case user can set `spark.pyspark.virtualenv.python_version` for python version when using conda.
+And still use `spark.pyspark.python` for native virtualenv.
+
+
+## PySpark VirtualEnv Configurations
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.pyspark.virtualenv.enabled</code></td>
+  <td>false</td>
+  <td>Whether to enable virtualenv</td>
+</tr>
+<tr>
+  <td><code>spark.pyspark.virtualenv.type</code></td>
+  <td>native</td>
+  <td>There're 2 approaches to support virtualenv in pyspark. One is the native virtualenv another is conda. By default it is native virtualenv.</td>
+</tr>
+<tr>
+  <td><code>spark.pyspark.virtualenv.requirements</code></td>
+  <td>(none)</td>
+  <td>Requirement file where required packages are specified. To be noted, the requirement file of virtualenv and conda is not compatible with each other.</td>
+</tr>
+<tr>
+  <td><code>spark.pyspark.virtualenv.bin.path</code></td>
+  <td>(none)</td>
+  <td>Path for virtualenv executable file or conda executable file in the cluster. It requires that the virtualenv/conda installed in the same location across the cluster.</td>
+</tr>
+<tr>
+  <td><code>spark.pyspark.virtualenv.packages</code></td>
+  <td>(none)</td>
+  <td>Additional python packages need to be installed when creating virtualenv runtime. Packages are separated with comma, and you can also specify version. e.g. "numpy==1.13,pandas"</td>
+</tr>
+</table>
+
+## Penalty of virtualenv
+For each executor, it needs to take some time to setup the virtualenv (installing the packages), and for the first time, it may be very slow. e.g. The first time I install numpy on each node it takes almost 3 minutes, because it needs to download it and compiling it to wheel format. But for the next time, it only takes 3 seconds to install numpy, because it would install the numpy from the cached wheel file.
+   
+## Note
+Virtualenv in PySpark is an experimental feature added from Spark 2.4.0 and may evolve in the future version.
+  
 # More Information
 
 Once you have deployed your application, the [cluster mode overview](cluster-overview.html) describes

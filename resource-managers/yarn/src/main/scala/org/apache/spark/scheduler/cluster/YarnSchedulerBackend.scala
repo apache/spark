@@ -177,8 +177,8 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
-  override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new YarnDriverEndpoint(rpcEnv, properties)
+  override def createDriverEndpoint(): DriverEndpoint = {
+    new YarnDriverEndpoint(rpcEnv)
   }
 
   /**
@@ -196,8 +196,8 @@ private[spark] abstract class YarnSchedulerBackend(
    * This endpoint communicates with the executors and queries the AM for an executor's exit
    * status when the executor is disconnected.
    */
-  private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-      extends DriverEndpoint(rpcEnv, sparkProperties) {
+  private class YarnDriverEndpoint(rpcEnv: RpcEnv)
+      extends DriverEndpoint(rpcEnv) {
 
     /**
      * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
