@@ -248,7 +248,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
-            entry.getModificationTime() >= lastScanTime
+            !entry.isDirectory() && (entry.getModificationTime() >= lastScanTime)
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
