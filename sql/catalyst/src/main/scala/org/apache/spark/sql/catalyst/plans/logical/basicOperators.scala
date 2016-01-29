@@ -89,10 +89,11 @@ case class Generate(
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def constraints: Set[Expression] = {
-    val newConstraint = splitConjunctivePredicates(condition).filter(
-      _.references.subsetOf(outputSet)).toSet
-    newConstraint.union(extractConstraintsFromChild(child))
+  override protected def validConstraints: Set[Expression] = {
+    val newConstraint = splitConjunctivePredicates(condition)
+      .filter(_.references.subsetOf(outputSet))
+      .toSet
+    newConstraint.union(getRelevantConstraints(child))
   }
 }
 
@@ -102,16 +103,16 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 
-  override def extractConstraintsFromChild(child: QueryPlan[LogicalPlan]): Set[Expression] = {
+  override def getRelevantConstraints(child: QueryPlan[LogicalPlan]): Set[Expression] = {
     child.constraints.filter(_.references.subsetOf(child.outputSet))
   }
 
-  protected def leftConstraints: Set[Expression] = extractConstraintsFromChild(left)
+  protected def leftConstraints: Set[Expression] = getRelevantConstraints(left)
 
   protected def rightConstraints: Set[Expression] = {
     require(left.output.size == right.output.size)
     val attributeRewrites = AttributeMap(right.output.zip(left.output))
-    extractConstraintsFromChild(right).map(_ transform {
+    getRelevantConstraints(right).map(_ transform {
       case a: Attribute => attributeRewrites(a)
     })
   }
@@ -128,7 +129,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override def constraints: Set[Expression] = {
+  override protected def validConstraints: Set[Expression] = {
     leftConstraints.union(rightConstraints)
   }
 }
@@ -137,7 +138,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
-  override def constraints: Set[Expression] = leftConstraints
+  override protected def validConstraints: Set[Expression] = leftConstraints
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -173,7 +174,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     Statistics(sizeInBytes = sizeInBytes)
   }
 
-  override def extractConstraintsFromChild(child: QueryPlan[LogicalPlan]): Set[Expression] = {
+  override def getRelevantConstraints(child: QueryPlan[LogicalPlan]): Set[Expression] = {
     child.constraints.filter(_.references.subsetOf(child.outputSet))
   }
 
@@ -188,9 +189,10 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     })
   }
 
-  override def constraints: Set[Expression] = {
-    children.map(child => rewriteConstraints(children.head, child,
-      extractConstraintsFromChild(child))).reduce(_ intersect _)
+  override protected def validConstraints: Set[Expression] = {
+    children
+      .map(child => rewriteConstraints(children.head, child, getRelevantConstraints(child)))
+      .reduce(_ intersect _)
   }
 }
 
@@ -215,50 +217,51 @@ case class Join(
     }
   }
 
-  override def constraints: Set[Expression] = {
-    var constraints = Set.empty[Expression]
-
+  override protected def validConstraints: Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints
-    def extractIsNotNullConstraints(condition: Expression): Set[Expression] = {
-      splitConjunctivePredicates(condition).foreach {
+    def constructIsNotNullConstraints(condition: Expression): Set[Expression] = {
+      splitConjunctivePredicates(condition).map {
         case EqualTo(l, r) =>
-          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+          Set(IsNotNull(l), IsNotNull(r))
         case GreaterThan(l, r) =>
-          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+          Set(IsNotNull(l), IsNotNull(r))
         case GreaterThanOrEqual(l, r) =>
-          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+          Set(IsNotNull(l), IsNotNull(r))
         case LessThan(l, r) =>
-          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
+          Set(IsNotNull(l), IsNotNull(r))
         case LessThanOrEqual(l, r) =>
-          constraints = constraints.union(Set(IsNotNull(l), IsNotNull(r)))
-      }
-      constraints
+          Set(IsNotNull(l), IsNotNull(r))
+        case _ =>
+          Set.empty[Expression]
+      }.foldLeft(Set.empty[Expression])(_ union _.toSet)
     }
 
-    def extractIsNullConstraints(plan: LogicalPlan): Set[Expression] = {
-      constraints = constraints.union(plan.output.map(IsNull).toSet)
-      constraints
+    def constructIsNullConstraints(plan: LogicalPlan): Set[Expression] = {
+      plan.output.map(IsNull).toSet
     }
 
-    constraints = joinType match {
+    (joinType match {
       case Inner if condition.isDefined =>
-        extractConstraintsFromChild(left).union(extractConstraintsFromChild(right))
-          .union(extractIsNotNullConstraints(condition.get))
+        getRelevantConstraints(left)
+          .union(getRelevantConstraints(right))
+          .union(constructIsNotNullConstraints(condition.get))
       case LeftSemi if condition.isDefined =>
-        extractConstraintsFromChild(left).union(extractConstraintsFromChild(right))
-          .union(extractIsNotNullConstraints(condition.get))
+        getRelevantConstraints(left)
+          .union(getRelevantConstraints(right))
+          .union(constructIsNotNullConstraints(condition.get))
       case LeftOuter =>
-        extractConstraintsFromChild(left).union(extractIsNullConstraints(right))
+        getRelevantConstraints(left)
+          .union(constructIsNullConstraints(right))
       case RightOuter =>
-        extractConstraintsFromChild(right).union(extractIsNullConstraints(left))
+        getRelevantConstraints(right)
+          .union(constructIsNullConstraints(left))
       case FullOuter =>
-        extractIsNullConstraints(left).union(extractIsNullConstraints(right))
+        constructIsNullConstraints(left)
+          .union(constructIsNullConstraints(right))
       case _ =>
-        Set.empty
-    }
-
-    constraints.filter(_.references.subsetOf(outputSet))
+        Set.empty[Expression]
+    }).filter(_.references.subsetOf(outputSet))
   }
 
   def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty

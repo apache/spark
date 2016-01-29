@@ -28,18 +28,21 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
   def output: Seq[Attribute]
 
   /**
-   * Extracts the output property from a given child.
+   * Extracts the relevant per-row constraints from a given child while removing those that
+   * don't apply anymore.
    */
-  def extractConstraintsFromChild(child: QueryPlan[PlanType]): Set[Expression] = {
+  protected def getRelevantConstraints(child: QueryPlan[PlanType]): Set[Expression] = {
     child.constraints.filter(_.references.subsetOf(outputSet))
   }
 
   /**
-   * An sequence of expressions that describes the data property of the output rows of this
+   * A sequence of expressions that describes the data property of the output rows of this
    * operator. For example, if the output of this operator is column `a`, an example `constraints`
    * can be `Set(a > 10, a < 20)`.
    */
-  def constraints: Set[Expression] = Set.empty
+  lazy val constraints: Set[Expression] = validConstraints
+
+  protected def validConstraints: Set[Expression] = Set.empty
 
   /**
    * Returns the set of attributes that are output by this node.

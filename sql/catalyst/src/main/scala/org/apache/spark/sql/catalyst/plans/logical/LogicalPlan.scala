@@ -306,8 +306,8 @@ abstract class UnaryNode extends LogicalPlan with PredicateHelper {
 
   override def children: Seq[LogicalPlan] = child :: Nil
 
-  override def constraints: Set[Expression] = {
-    extractConstraintsFromChild(child)
+  override protected def validConstraints: Set[Expression] = {
+    getRelevantConstraints(child)
   }
 }
 
