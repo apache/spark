@@ -66,8 +66,7 @@ public abstract class BloomFilter {
 
   /**
    * Returns the probability that {@linkplain #mightContain(Object)} erroneously return {@code true}
-   * for an object that has not actually been put in the
-   * {@code BloomFilter}).
+   * for an object that has not actually been put in the {@code BloomFilter}.
    *
    * Ideally, this number should be close to the {@code fpp} parameter passed in
    * {@linkplain #create(long, double)}, or smaller. If it is significantly higher, it is usually
