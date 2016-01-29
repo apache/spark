@@ -115,14 +115,44 @@ abstract public class CountMinSketch {
   public abstract long totalCount();
 
   /**
-   * Adds 1 to {@code item}.
+   * Increments {@code item}'s count by one.
    */
   public abstract void add(Object item);
 
   /**
-   * Adds {@code count} to {@code item}.
+   * Increments {@code item}'s count by {@code count}.
    */
   public abstract void add(Object item, long count);
+
+  /**
+   * Increments {@code item}'s count by one.
+   */
+  public abstract void addLong(long item);
+
+  /**
+   * Increments {@code item}'s count by {@code count}.
+   */
+  public abstract void addLong(long item, long count);
+
+  /**
+   * Increments {@code item}'s count by one.
+   */
+  public abstract void addString(String item);
+
+  /**
+   * Increments {@code item}'s count by {@code count}.
+   */
+  public abstract void addString(String item, long count);
+
+  /**
+   * Increments {@code item}'s count by one.
+   */
+  public abstract void addBinary(byte[] item);
+
+  /**
+   * Increments {@code item}'s count by {@code count}.
+   */
+  public abstract void addBinary(byte[] item, long count);
 
   /**
    * Returns the estimated frequency of {@code item}.
