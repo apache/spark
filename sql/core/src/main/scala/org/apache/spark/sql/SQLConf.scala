@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
@@ -278,11 +279,6 @@ private[spark] object SQLConf {
     doc = "When true, common subexpressions will be eliminated.",
     isPublic = false)
 
-  val DIALECT = stringConf(
-    "spark.sql.dialect",
-    defaultValue = Some("sql"),
-    doc = "The default SQL dialect to use.")
-
   val CASE_SENSITIVE = booleanConf("spark.sql.caseSensitive",
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
@@ -372,6 +368,14 @@ private[spark] object SQLConf {
           "possible, or you may get wrong result.",
     isPublic = false)
 
+  val CANONICAL_NATIVE_VIEW = booleanConf("spark.sql.nativeView.canonical",
+    defaultValue = Some(true),
+    doc = "When this option and spark.sql.nativeView are both true, Spark SQL tries to handle " +
+          "CREATE VIEW statement using SQL query string generated from view definition logical " +
+          "plan.  If the logical plan doesn't have a SQL representation, we fallback to the " +
+          "original native view implementation.",
+    isPublic = false)
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
     doc = "The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
@@ -421,6 +425,10 @@ private[spark] object SQLConf {
       defaultValue = Some(5),
       doc = "The maximum number of concurrent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
+
+  val BUCKETING_ENABLED = booleanConf("spark.sql.sources.bucketing.enabled",
+    defaultValue = Some(true),
+    doc = "When false, we will treat bucketed table as normal table")
 
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
@@ -485,6 +493,13 @@ private[spark] object SQLConf {
     isPublic = false,
     doc = "This flag should be set to true to enable support for SQL2011 reserved keywords.")
 
+  val WHOLESTAGE_CODEGEN_ENABLED = booleanConf("spark.sql.codegen.wholeStage",
+    defaultValue = Some(true),
+    doc = "When true, the whole stage (of multiple operators) will be compiled into single java" +
+      " method",
+    isPublic = false)
+
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -505,7 +520,7 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf {
+private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -513,21 +528,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
-  // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
-
-  /**
-   * The SQL dialect that is used when parsing queries.  This defaults to 'sql' which uses
-   * a simple SQL parser provided by Spark SQL.  This is currently the only option for users of
-   * SQLContext.
-   *
-   * When using a HiveContext, this value defaults to 'hiveql', which uses the Hive 0.12.0 HiveQL
-   * parser.  Users can change this to 'sql' if they want to run queries that aren't supported by
-   * HiveQL (e.g., SELECT 1).
-   *
-   * Note that the choice of dialect does not affect things like what tables are available or
-   * how query execution is performed.
-   */
-  private[spark] def dialect: String = getConf(DIALECT)
 
   private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
@@ -556,6 +556,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
+
+  private[spark] def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  private[spark] def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
@@ -590,6 +594,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   private[spark] def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
+  private[spark] def bucketingEnabled(): Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
   private[spark] def schemaStringLengthThreshold: Int = getConf(SCHEMA_STRING_LENGTH_THRESHOLD)
@@ -623,7 +629,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
       // Only verify configs in the SQLConf object
       entry.valueConverter(value)
     }
-    settings.put(key, value)
+    setConfWithCheck(key, value)
   }
 
   /** Set the given Spark SQL configuration property. */
@@ -631,7 +637,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     require(entry != null, "entry cannot be null")
     require(value != null, s"value cannot be null for key: ${entry.key}")
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    settings.put(entry.key, entry.stringConverter(value))
+    setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
@@ -692,6 +698,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       (entry.key, entry.defaultValueString, entry.doc)
     }.toSeq
+  }
+
+  private def setConfWithCheck(key: String, value: String): Unit = {
+    if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
+      logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
+    }
+    settings.put(key, value)
   }
 
   private[spark] def unsetConf(key: String): Unit = {

@@ -58,6 +58,12 @@
         <property name="eachLine" value="true"/>
     </module>
 
+    <module name="RegexpSingleline">
+        <!-- \s matches whitespace character, $ matches end of line. -->
+        <property name="format" value="\s+$"/>
+        <property name="message" value="No trailing whitespace allowed."/>
+    </module>
+
     <module name="TreeWalker">
         <module name="OuterTypeFilename"/>
         <module name="IllegalTokenText">
@@ -84,7 +90,7 @@
         </module>
         <module name="NeedBraces">
             <property name="allowSingleLineStatement" value="true"/>
-	</module>
+        </module>
         <module name="OneStatementPerLine"/>
         <module name="ArrayTypeStyle"/>
         <module name="FallThrough"/>

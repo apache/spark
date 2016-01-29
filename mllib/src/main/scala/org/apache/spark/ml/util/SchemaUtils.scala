@@ -44,20 +44,20 @@ private[spark] object SchemaUtils {
   }
 
   /**
-    * Check whether the given column is one of the required data types.
+    * Check whether the given schema contains a column of one of the require data types.
     * @param colName  column name
-    * @param dataTypes  required column data type
+    * @param dataTypes  required column data types
     */
-  def checkUnionColumnType(
-                       schema: StructType,
-                       colName: String,
-                       dataTypes: Seq[DataType],
-                       msg: String = ""): Unit = {
+  def checkColumnTypes(
+      schema: StructType,
+      colName: String,
+      dataTypes: Seq[DataType],
+      msg: String = ""): Unit = {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
-    lazy val typesMsg = dataTypes.mkString(",")
-    require(dataTypes.exists(_ equals actualDataType),
-      s"Column $colName must be one of type $typesMsg but was actually $actualDataType.$message")
+    require(dataTypes.exists(actualDataType.equals),
+      s"Column $colName must be of type equal to one of the following types: " +
+        s"${dataTypes.mkString("[", ", ", "]")} but was actually of type $actualDataType.$message")
   }
 
   /**
