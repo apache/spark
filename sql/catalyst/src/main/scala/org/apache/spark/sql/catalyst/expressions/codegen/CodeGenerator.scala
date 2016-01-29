@@ -145,22 +145,13 @@ class CodegenContext {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
   /**
-    * A prefix used to generate fresh name.
-    */
-  var freshNamePrefix = ""
-
-  /**
    * Returns a term name that is unique within this instance of a `CodeGenerator`.
    *
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  def freshName(name: String): String = {
-    if (freshNamePrefix == "") {
-      s"$name${curId.getAndIncrement}"
-    } else {
-      s"${freshNamePrefix}_$name${curId.getAndIncrement}"
-    }
+  def freshName(prefix: String): String = {
+    s"$prefix${curId.getAndIncrement}"
   }
 
   /**
