@@ -396,6 +396,10 @@ private[spark] class CoarseMesosSchedulerBackend(
       stopwatch.elapsed(TimeUnit.MILLISECONDS) < shutdownTimeoutMS) {
       Thread.sleep(100)
     }
+    if(slaveIdsWithExecutors.nonEmpty) {
+      logWarning(s"${slaveIdsWithExecutors.size} executors still running. "
+        + "Proceeding with mesos driver stop.")
+    }
     if (mesosDriver != null) {
       mesosDriver.stop()
     }
