@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingA
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.sources.HadoopFsRelation
 
-
 /**
  * :: Experimental ::
  * Interface used to write a [[DataFrame]] to external storage systems (e.g. file systems,
