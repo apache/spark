@@ -802,27 +802,22 @@ private[sql] object ParquetRelation extends Logging {
           if (footers.isEmpty) {
             Iterator.empty
           } else {
-            val pathsAndSchemata = footers.map { footer =>
-              footer.getFile -> ParquetRelation.readSchemaFromFooter(footer, converter)
-            }
-
-            pathsAndSchemata.foldLeft(StructType(Nil)) { case (mergedSoFar, (file, schema)) =>
+            var mergedSchema = StructType(Nil)
+            footers.foreach { footer =>
+              val schema = ParquetRelation.readSchemaFromFooter(footer, converter)
               try {
-                mergedSoFar.merge(schema)
+                mergedSchema = mergedSchema.merge(schema)
               } catch {
                 case cause: Throwable =>
                   throw new SparkException(
-                    s"""Failed merging schema of file $file:
+                    s"""Failed merging schema of file ${footer.getFile}:
                        |${schema.treeString}
                      """.stripMargin,
                     cause
                   )
               }
             }
-
-            footers.map { footer =>
-              ParquetRelation.readSchemaFromFooter(footer, converter)
-            }.reduceLeftOption(_ merge _).iterator
+            Iterator.single(mergedSchema)
           }
         }.collect()
 
