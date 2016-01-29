@@ -807,14 +807,9 @@ private[sql] object ParquetRelation extends Logging {
               val schema = ParquetRelation.readSchemaFromFooter(footer, converter)
               try {
                 mergedSchema = mergedSchema.merge(schema)
-              } catch {
-                case cause: Throwable =>
-                  throw new SparkException(
-                    s"""Failed merging schema of file ${footer.getFile}:
-                       |${schema.treeString}
-                     """.stripMargin,
-                    cause
-                  )
+              } catch { case cause: SparkException =>
+                throw new SparkException(
+                  s"Failed merging schema of file ${footer.getFile}:\n${schema.treeString}", cause)
               }
             }
             Iterator.single(mergedSchema)
