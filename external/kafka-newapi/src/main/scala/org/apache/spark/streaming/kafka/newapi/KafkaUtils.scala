@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.base.Charsets.UTF_8
-import kafka.common.TopicAndPartition
 import net.razorvine.pickle.{ IObjectPickler, Opcodes, Pickler }
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
@@ -405,9 +404,6 @@ object KafkaUtils {
   def createOffsetRange(topic: String, partition: JInt, fromOffset: JLong, untilOffset: JLong):
     OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
 
-  def createTopicAndPartition(topic: String, partition: JInt): TopicAndPartition =
-    TopicAndPartition(topic, partition)
-
   private[kafka] def getFromOffsets(
       kafkaParams: Map[String, String],
       topics: Set[String]): Map[TopicPartition, Long] = {
@@ -527,9 +523,6 @@ private[kafka] class KafkaUtilsPythonHelper {
 
   def createOffsetRange(topic: String, partition: JInt, fromOffset: JLong, untilOffset: JLong):
     OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
-
-  def createTopicAndPartition(topic: String, partition: JInt): TopicPartition =
-    new TopicPartition(topic, partition)
 
   def offsetRangesOfKafkaRDD(rdd: RDD[_]): JList[OffsetRange] = {
     val parentRDDs = rdd.getNarrowAncestors

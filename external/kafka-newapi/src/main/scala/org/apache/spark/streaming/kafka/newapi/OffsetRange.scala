@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.kafka.newapi
 
-import kafka.common.TopicAndPartition
 import org.apache.kafka.common.TopicPartition
 
 /**
@@ -36,7 +35,7 @@ trait HasOffsetRanges {
 }
 
 /**
- * Represents a range of offsets from a single Kafka TopicAndPartition. Instances of this class
+ * Represents a range of offsets from a single Kafka TopicPartition. Instances of this class
  * can be created with `OffsetRange.create()`.
  * @param topic Kafka topic name
  * @param partition Kafka partition id
@@ -60,9 +59,6 @@ final class OffsetRange private(
     ) = {
     this(topic, partition, fromOffset, untilOffset, null)
   }
-
-  /** Kafka TopicAndPartition object, for convenience */
-  def topicAndPartition(): TopicAndPartition = TopicAndPartition(topic, partition)
 
   def topicPartition(): TopicPartition = new TopicPartition(topic, partition)
 
@@ -100,10 +96,10 @@ object OffsetRange {
     new OffsetRange(topic, partition, fromOffset, untilOffset)
 
   def create(
-      topicAndPartition: TopicAndPartition,
+      topicPartition: TopicPartition,
       fromOffset: Long,
       untilOffset: Long): OffsetRange =
-    new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
+    new OffsetRange(topicPartition.topic(), topicPartition.partition(), fromOffset, untilOffset)
 
   def apply(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
     new OffsetRange(topic, partition, fromOffset, untilOffset)
