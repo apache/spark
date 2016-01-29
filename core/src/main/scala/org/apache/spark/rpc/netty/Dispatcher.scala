@@ -179,6 +179,15 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
   }
 
   def awaitTermination(): Unit = {
+    if (Thread.currentThread().getName.startsWith("dispatcher-event-loop")) {
+      logError("Wrong stop thread:!!!!!")
+    }
+    val id = Thread.currentThread().getId
+    for (t <- Thread.getAllStackTraces.keySet.asScala) {
+      if (!t.isDaemon && t.getId != id) {
+        logError("Non daemon thread!!!!: " + t.getName)
+      }
+    }
     threadpool.awaitTermination(Long.MaxValue, TimeUnit.MILLISECONDS)
   }
 
