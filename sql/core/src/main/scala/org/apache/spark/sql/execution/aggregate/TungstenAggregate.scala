@@ -215,17 +215,19 @@ case class TungstenAggregate(
 
     ctx.currentVars = bufVars ++ input
     // TODO: support subexpression elimination
-    val updates = updateExpr.zipWithIndex.map { case (e, i) =>
-      val ev = BindReferences.bindReference[Expression](e, inputAttrs).gen(ctx)
+    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).gen(ctx))
+    // aggregate buffer should be updated atomic
+    val updates = aggVals.zipWithIndex.map { case (ev, i) =>
       s"""
-         | ${ev.code}
          | ${bufVars(i).isNull} = ${ev.isNull};
          | ${bufVars(i).value} = ${ev.value};
        """.stripMargin
     }
 
     s"""
-       | // do aggregate and update aggregation buffer
+       | // do aggregate
+       | ${aggVals.map(_.code).mkString("\n")}
+       | // update aggregation buffer
        | ${updates.mkString("")}
      """.stripMargin
   }
