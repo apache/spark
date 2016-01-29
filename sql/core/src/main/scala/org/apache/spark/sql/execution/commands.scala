@@ -408,3 +408,13 @@ case class DescribeFunction(
     }
   }
 }
+
+case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.setCurrentDatabase(databaseName)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}

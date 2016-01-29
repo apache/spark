@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -227,6 +228,14 @@ private[hive] class ClientWrapper(
 
   override def currentDatabase: String = withHiveState {
     state.getCurrentDatabase
+  }
+
+  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
+    if (getDatabaseOption(databaseName).isDefined) {
+      state.setCurrentDatabase(databaseName)
+    } else {
+      throw new NoSuchDatabaseException
+    }
   }
 
   override def createDatabase(database: HiveDatabase): Unit = withHiveState {

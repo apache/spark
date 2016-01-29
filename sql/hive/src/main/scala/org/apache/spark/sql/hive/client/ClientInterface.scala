@@ -109,6 +109,9 @@ private[hive] trait ClientInterface {
   /** Returns the name of the active database. */
   def currentDatabase: String
 
+  /** Sets the name of current database. */
+  def setCurrentDatabase(databaseName: String): Unit
+
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
   def getDatabase(name: String): HiveDatabase = {
     getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException)
