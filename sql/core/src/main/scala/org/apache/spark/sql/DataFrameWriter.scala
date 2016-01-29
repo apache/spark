@@ -154,7 +154,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-<<<<<<< b72611f20a03c790b6fd341b6ffdb3b5437609ee
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
