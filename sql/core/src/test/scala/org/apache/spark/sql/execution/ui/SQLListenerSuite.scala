@@ -26,8 +26,9 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
-import org.apache.spark.sql.execution.metric.LongSQLMetricValue
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.ui.SparkUI
 
 class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
@@ -335,7 +336,42 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
   }
 
+  test("SPARK-13055: history listener only tracks SQL metrics") {
+    val listener = new SQLHistoryListener(sparkContext.conf, mock(classOf[SparkUI]))
+    // We need to post other events for the listener to track our accumulators.
+    // These are largely just boilerplate unrelated to what we're trying to test.
+    val df = createTestDataFrame
+    val executionStart = SparkListenerSQLExecutionStart(
+      0, "", "", "", SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan), 0)
+    val stageInfo = createStageInfo(0, 0)
+    val jobStart = SparkListenerJobStart(0, 0, Seq(stageInfo), createProperties(0))
+    val stageSubmitted = SparkListenerStageSubmitted(stageInfo)
+    // This task has both accumulators that are SQL metrics and accumulators that are not.
+    // The listener should only track the ones that are actually SQL metrics.
+    val sqlMetric = SQLMetrics.createLongMetric(sparkContext, "beach umbrella")
+    val nonSqlMetric = sparkContext.accumulator[Int](0, "baseball")
+    val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.localValue), None)
+    val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.localValue), None)
+    val taskInfo = createTaskInfo(0, 0)
+    taskInfo.accumulables ++= Seq(sqlMetricInfo, nonSqlMetricInfo)
+    val taskEnd = SparkListenerTaskEnd(0, 0, "just-a-task", null, taskInfo, null)
+    listener.onOtherEvent(executionStart)
+    listener.onJobStart(jobStart)
+    listener.onStageSubmitted(stageSubmitted)
+    // Before SPARK-13055, this throws ClassCastException because the history listener would
+    // assume that the accumulator value is of type Long, but this may not be true for
+    // accumulators that are not SQL metrics.
+    listener.onTaskEnd(taskEnd)
+    val trackedAccums = listener.stageIdToStageMetrics.values.flatMap { stageMetrics =>
+      stageMetrics.taskIdToMetricUpdates.values.flatMap(_.accumulatorUpdates)
+    }
+    // Listener tracks only SQL metrics, not other accumulators
+    assert(trackedAccums.size === 1)
+    assert(trackedAccums.head === sqlMetricInfo)
+  }
+
 }
+
 
 class SQLListenerMemoryLeakSuite extends SparkFunSuite {
 

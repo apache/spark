@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
@@ -354,6 +354,28 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         assert(metricValues.values.toSeq === Seq("2"))
       }
     }
+  }
+
+  test("metrics can be loaded by history server") {
+    val metric = new LongSQLMetric("zanzibar", LongSQLMetricParam)
+    metric += 10L
+    val metricInfo = metric.toInfo(Some(metric.localValue), None)
+    metricInfo.update match {
+      case Some(v: LongSQLMetricValue) => assert(v.value === 10L)
+      case Some(v) => fail(s"metric value was not a LongSQLMetricValue: ${v.getClass.getName}")
+      case _ => fail("metric update is missing")
+    }
+    assert(metricInfo.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    // After serializing to JSON, the original value type is lost, but we can still
+    // identify that it's a SQL metric from the metadata
+    val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
+    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(metricInfoJson)
+    metricInfoDeser.update match {
+      case Some(v: String) => assert(v.toLong === 10L)
+      case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
+      case _ => fail("deserialized metric update is missing")
+    }
+    assert(metricInfoDeser.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
   }
 
 }

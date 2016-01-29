@@ -551,8 +551,6 @@ private[spark] object TaskMetricsSuite extends Assertions {
    * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
    * info as an accumulator update.
    */
-  def makeInfo(a: Accumulable[_, _]): AccumulableInfo = {
-    new AccumulableInfo(a.id, a.name, Some(a.value), None, a.isInternal, a.countFailedValues)
-  }
+  def makeInfo(a: Accumulable[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
 
 }

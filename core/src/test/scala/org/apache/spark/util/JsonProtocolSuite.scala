@@ -374,15 +374,18 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("AccumulableInfo backward compatibility") {
     // "Internal" property of AccumulableInfo was added in 1.5.1
     val accumulableInfo = makeAccumulableInfo(1, internal = true, countFailedValues = true)
-    val oldJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
-      .removeField({ _._1 == "Internal" })
+    val accumulableInfoJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
+    val oldJson = accumulableInfoJson.removeField({ _._1 == "Internal" })
     val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
     assert(!oldInfo.internal)
     // "Count Failed Values" property of AccumulableInfo was added in 2.0.0
-    val oldJson2 = JsonProtocol.accumulableInfoToJson(accumulableInfo)
-      .removeField({ _._1 == "Count Failed Values" })
+    val oldJson2 = accumulableInfoJson.removeField({ _._1 == "Count Failed Values" })
     val oldInfo2 = JsonProtocol.accumulableInfoFromJson(oldJson2)
     assert(!oldInfo2.countFailedValues)
+    // "Metadata" property of AccumulableInfo was added in 2.0.0
+    val oldJson3 = accumulableInfoJson.removeField({ _._1 == "Metadata" })
+    val oldInfo3 = JsonProtocol.accumulableInfoFromJson(oldJson3)
+    assert(oldInfo3.metadata.isEmpty)
   }
 
   test("ExceptionFailure backward compatibility: accumulator updates") {
@@ -820,9 +823,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def makeAccumulableInfo(
       id: Int,
       internal: Boolean = false,
-      countFailedValues: Boolean = false): AccumulableInfo =
+      countFailedValues: Boolean = false,
+      metadata: Option[String] = None): AccumulableInfo =
     new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
-      internal, countFailedValues)
+      internal, countFailedValues, metadata)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
