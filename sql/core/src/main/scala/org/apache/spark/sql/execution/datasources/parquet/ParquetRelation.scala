@@ -817,7 +817,20 @@ private[sql] object ParquetRelation extends Logging {
           }
         }.collect()
 
-    partiallyMergedSchemas.reduceLeftOption(_ merge _)
+    if (partiallyMergedSchemas.isEmpty) {
+      None
+    } else {
+      var finalSchema = partiallyMergedSchemas.head
+      partiallyMergedSchemas.tail.foreach { schema =>
+        try {
+          finalSchema = finalSchema.merge(schema)
+        } catch { case cause: SparkException =>
+          throw new SparkException(
+            s"Failed merging schema:\n${schema.treeString}", cause)
+        }
+      }
+      Some(finalSchema)
+    }
   }
 
   /**
