@@ -22,7 +22,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
-public final class BitArray {
+final class BitArray {
   private final long[] data;
   private long bitCount;
 
