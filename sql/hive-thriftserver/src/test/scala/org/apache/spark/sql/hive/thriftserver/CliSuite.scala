@@ -183,7 +183,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "CREATE DATABASE hive_test_db;"
         -> "OK",
       "USE hive_test_db;"
-        -> "OK",
+        -> "",
       "CREATE TABLE hive_test(key INT, val STRING);"
         -> "OK",
       "SHOW TABLES;"
