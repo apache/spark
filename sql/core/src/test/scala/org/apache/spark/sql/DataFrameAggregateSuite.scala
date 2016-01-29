@@ -153,6 +153,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("agg without groups and functions") {
+    checkAnswer(
+      testData2.agg(lit(1)),
+      Row(1)
+    )
+  }
+
   test("average") {
     checkAnswer(
       testData2.agg(avg('a), mean('a)),
