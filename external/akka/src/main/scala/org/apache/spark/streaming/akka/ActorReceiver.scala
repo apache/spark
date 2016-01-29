@@ -294,12 +294,11 @@ private[akka] case class ByteBufferData(bytes: ByteBuffer) extends ActorReceiver
  * }}}
  */
 private[akka] class ActorReceiverSupervisor[T: ClassTag](
-     actorSystemCreator: () => ActorSystem,
-     props: Props,
-     name: String,
-     storageLevel: StorageLevel,
-     receiverSupervisorStrategy: SupervisorStrategy)
-  extends Receiver[T](storageLevel) with Logging {
+    actorSystemCreator: () => ActorSystem,
+    props: Props,
+    name: String,
+    storageLevel: StorageLevel,
+    receiverSupervisorStrategy: SupervisorStrategy) extends Receiver[T](storageLevel) with Logging {
 
   private lazy val actorSystem = actorSystemCreator()
   protected lazy val actorSupervisor = actorSystem.actorOf(Props(new Supervisor),
