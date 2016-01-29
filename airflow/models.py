@@ -589,6 +589,7 @@ class TaskInstance(Base):
         installed. This command is part of the message sent to executors by
         the orchestrator.
         """
+        dag = self.task.dag
         iso = self.execution_date.isoformat()
         cmd = "airflow run {self.dag_id} {self.task_id} {iso} "
         cmd += "--mark_success " if mark_success else ""
@@ -601,11 +602,8 @@ class TaskInstance(Base):
         cmd += "--raw " if raw else ""
         if task_start_date:
             cmd += "-s " + task_start_date.isoformat() + ' '
-        if (
-                not pickle_id and self.task.dag and
-                self.task.dag.full_filepath and
-                not os.path.isabs(self.task.dag.full_filepath)):
-            cmd += "-sd DAGS_FOLDER/{self.task.dag.filepath} "
+        if not pickle_id and dag and dag.full_filepath:
+            cmd += "-sd DAGS_FOLDER/{dag.filepath} "
         return cmd.format(**locals())
 
     @property
