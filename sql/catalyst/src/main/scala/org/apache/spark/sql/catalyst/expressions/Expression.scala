@@ -320,7 +320,7 @@ abstract class UnaryExpression extends Expression {
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
-   * null, and if not not null, use `f` to generate the expression.
+   * null, and if not null, use `f` to generate the expression.
    *
    * As an example, the following does a boolean inversion (i.e. NOT).
    * {{{
@@ -350,21 +350,23 @@ abstract class UnaryExpression extends Expression {
       ev: ExprCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
-    if (nullable) {
-      eval.code + s"""
-        boolean ${ev.isNull} = ${eval.isNull};
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        if (!${eval.isNull}) {
-          ${f(eval.value)}
-        }
-      """
+
+    val declareIsNull = if (nullable) {
+      // If this expression is nullable, which means the `f` may need to change `ev.isNull` even if
+      // child is not nullable, so we make `ev.isNull` a variable here.
+      s"boolean ${ev.isNull} = ${eval.isNull};"
     } else {
+      // If this expression is not nullable, which means `ev.isNull` will always be false, thus we
+      // don't need to declare the isNull variable.
       ev.isNull = "false"
-      eval.code + s"""
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        ${f(eval.value)}
-      """
+      ""
     }
+
+    s"""
+      ${eval.code}
+      $declareIsNull
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+    """ + ctx.genNullCheck(child.nullable, eval.isNull)(f(eval.value))
   }
 
   override def sql: String = s"($prettyName(${child.sql}))"
@@ -442,30 +444,30 @@ abstract class BinaryExpression extends Expression {
       f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val resultCode = f(eval1.value, eval2.value)
-    if (nullable) {
-      s"""
-        ${eval1.code}
-        boolean ${ev.isNull} = ${eval1.isNull};
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        if (!${ev.isNull}) {
-          ${eval2.code}
-          if (!${eval2.isNull}) {
-            $resultCode
-          } else {
-            ${ev.isNull} = true;
-          }
-        }
-      """
 
+    val declareIsNull = if (nullable) {
+      // If this expression is nullable, which means the `f` may need to change `ev.isNull` even if
+      // child is not nullable, so we make `ev.isNull` a variable here.
+      s"boolean ${ev.isNull} = true;"
     } else {
+      // If this expression is not nullable, which means `ev.isNull` will always be false, thus we
+      // don't need to declare the `ev.isNull` variable.
       ev.isNull = "false"
-      s"""
-        ${eval1.code}
-        ${eval2.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode
-      """
+      ""
+    }
+
+    s"""
+      $declareIsNull
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+    """ + eval1.code + ctx.genNullCheck(left.nullable, eval1.isNull) {
+      eval2.code + ctx.genNullCheck(right.nullable, eval2.isNull) {
+        val setNotNull = if (nullable) s"${ev.isNull} = false;" else ""
+        val resultCode = f(eval1.value, eval2.value)
+        s"""
+          $setNotNull // resultCode could change nullability, so this should sit before it.
+          $resultCode
+        """
+      }
     }
   }
 
@@ -581,32 +583,32 @@ abstract class TernaryExpression extends Expression {
     ev: ExprCode,
     f: (String, String, String) => String): String = {
     val evals = children.map(_.gen(ctx))
-    val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
-    if (nullable) {
-      s"""
-        ${evals(0).code}
-        boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        if (!${evals(0).isNull}) {
-          ${evals(1).code}
-          if (!${evals(1).isNull}) {
-            ${evals(2).code}
-            if (!${evals(2).isNull}) {
-              ${ev.isNull} = false;  // resultCode could change nullability
-              $resultCode
-            }
-          }
-        }
-      """
+
+    val declareIsNull = if (nullable) {
+      // If this expression is nullable, which means the `f` may need to change `ev.isNull` even if
+      // child is not nullable, so we make `ev.isNull` a variable here.
+      s"boolean ${ev.isNull} = true;"
     } else {
+      // If this expression is not nullable, which means `ev.isNull` will always be false, thus we
+      // don't need to declare the `ev.isNull` variable.
       ev.isNull = "false"
-      s"""
-        ${evals(0).code}
-        ${evals(1).code}
-        ${evals(2).code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode
-      """
+      ""
+    }
+
+    s"""
+      $declareIsNull
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+    """ + evals(0).code + ctx.genNullCheck(children(0).nullable, evals(0).isNull) {
+      evals(1).code + ctx.genNullCheck(children(1).nullable, evals(1).isNull) {
+        evals(2).code + ctx.genNullCheck(children(2).nullable, evals(2).isNull) {
+          val setNotNull = if (nullable) s"${ev.isNull} = false;" else ""
+          val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
+          s"""
+            $setNotNull // resultCode could change nullability, so this should sit before it.
+            $resultCode
+          """
+        }
+      }
     }
   }
 
