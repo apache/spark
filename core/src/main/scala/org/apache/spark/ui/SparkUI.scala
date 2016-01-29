@@ -114,6 +114,8 @@ private[spark] class SparkUI private (
         attemptId = None,
         startTime = new Date(startTime),
         endTime = new Date(-1),
+        duration = 0,
+        lastUpdated = new Date(startTime),
         sparkUser = "",
         completed = false
       ))

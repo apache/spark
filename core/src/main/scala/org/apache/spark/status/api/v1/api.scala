@@ -35,6 +35,8 @@ class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
     val startTime: Date,
     val endTime: Date,
+    val lastUpdated: Date,
+    val duration: Long,
     val sparkUser: String,
     val completed: Boolean = false)
 
