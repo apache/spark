@@ -49,7 +49,7 @@ abstract class Covariance(left: Expression, right: Expression) extends Declarati
     /* ck = */ Literal(0.0)
   )
 
-  override val updateExpressions: Seq[Expression] = {
+  override lazy val updateExpressions: Seq[Expression] = {
     val n = count + Literal(1.0)
     val dx = left - xAvg
     val dy = right - yAvg
@@ -101,17 +101,18 @@ abstract class Covariance(left: Expression, right: Expression) extends Declarati
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
-      If(EqualTo(count, Literal(1.0)), Literal(Double.NaN),
-        ck / (count - Literal(1.0))))
+      ck / count)
   }
 
   override def prettyName: String = "covar_pop"
 }
 
+
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
-      ck / count)
+      If(EqualTo(count, Literal(1.0)), Literal(Double.NaN),
+        ck / (count - Literal(1.0))))
   }
 
   override def prettyName: String = "covar_samp"

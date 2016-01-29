@@ -94,7 +94,7 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
         /* m2 = */ If(IsNull(child), m2, newM2),
         /* m3 = */ If(IsNull(child), m3, newM3),
         /* m4 = */ If(IsNull(child), m4, newM4)
-      )
+      ).take(momentOrder + 1)
     } else {
       Seq(
         /* count = */ n,
@@ -102,8 +102,8 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
         /* m2 = */ newM2,
         /* m3 = */ newM3,
         /* m4 = */ newM4
-      )
-    }.take(momentOrder + 1)
+      ).take(momentOrder + 1)
+    }
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
