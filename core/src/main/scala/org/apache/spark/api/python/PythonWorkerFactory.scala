@@ -17,10 +17,13 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStreamWriter}
+import java.io._
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
+import java.util.{UUID, Arrays}
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -29,7 +32,10 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
 
-private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
+import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
+
+private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String], conf: SparkConf)
   extends Logging {
 
   import PythonWorkerFactory._
@@ -46,6 +52,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
   val idleWorkers = new mutable.Queue[Socket]()
   var lastActivity = 0L
+  val virtualEnvSetup = new AtomicBoolean(false)
+  var virtualEnvDir: Option[String] = _
   new MonitorThread().start()
 
   var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
@@ -54,6 +62,14 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
+
+  synchronized {
+    if (conf.getBoolean("spark.pyspark.virtualenv.enabled", false) && !virtualEnvSetup.get()) {
+      createVirtualEnv()
+      initVirutalEnv()
+      virtualEnvSetup.set(true)
+    }
+  }
 
   def create(): Socket = {
     if (useDaemon) {
@@ -65,6 +81,61 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       createThroughDaemon()
     } else {
       createSimpleWorker()
+    }
+  }
+
+  class StreamGobbler(is:InputStream, isError: Boolean) extends Thread {
+
+    var output: List[String] = _
+
+    override def run() : Unit = {
+      import scala.collection.JavaConverters._
+      try {
+        val isr = new InputStreamReader(is);
+        val br = new BufferedReader(isr);
+        val lines = Source.fromInputStream(is).bufferedReader().lines()
+        output = lines.iterator().asScala.toList
+        output.foreach(log.info)
+      } catch  {
+        case ioe :IOException => ioe.printStackTrace();
+      }
+    }
+  }
+
+
+  def createVirtualEnv(): Unit = {
+    virtualEnvDir = Some(UUID.randomUUID().toString)
+    val pb = new ProcessBuilder(
+      Arrays.asList(conf.get("spark.pyspark.virtualenv.path","virtualenv"),
+      "-p", pythonExec,
+      "--no-site-packages", virtualEnvDir.get))
+    val proc = pb.start()
+    val stderr = new StreamGobbler(proc.getErrorStream, true)
+    stderr.start()
+    val stdin = new StreamGobbler(proc.getInputStream, false)
+    stdin.start()
+    val exitCode = proc.waitFor()
+    if (exitCode != 0) {
+      throw new RuntimeException(stdin.output + "\n" + stderr.output)
+    }
+  }
+
+  def initVirutalEnv(): Unit = {
+    val pyspark_requirement =
+      if (conf.get("spark.master").contains("local"))
+        conf.get("spark.pyspark.virtualenv.requirements")
+      else
+        conf.get("spark.pyspark.virtualenv.requirements").split("/").last
+    val pb = new ProcessBuilder(Arrays.asList(virtualEnvDir.get + "/bin/pip", "install",
+      "-r" , pyspark_requirement))
+    val proc = pb.start()
+    val stderr = new StreamGobbler(proc.getErrorStream, true)
+    stderr.start()
+    val stdin = new StreamGobbler(proc.getInputStream, false)
+    stdin.start()
+    val exitCode = proc.waitFor()
+    if (exitCode != 0) {
+      throw new RuntimeException(stdin.output + "\n" + stderr.output)
     }
   }
 
@@ -111,7 +182,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 
       // Create and start the worker
-      val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", "pyspark.worker"))
+      val realPythonExec = if (virtualEnvDir.isDefined) virtualEnvDir.get + "/bin/python"
+        else pythonExec
+      val pb = new ProcessBuilder(Arrays.asList(realPythonExec,
+        "-m", "pyspark.worker"))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)
@@ -154,7 +228,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", "pyspark.daemon"))
+        val realPythonExec = if (virtualEnvDir.isDefined) virtualEnvDir.get + "/bin/python"
+        else pythonExec
+        val pb = new ProcessBuilder(Arrays.asList(realPythonExec, "-m", "pyspark.daemon"))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
