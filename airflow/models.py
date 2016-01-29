@@ -2111,6 +2111,14 @@ class DAG(LoggingMixin):
         return [t.task_id for t in self.tasks]
 
     @property
+    def active_task_ids(self):
+        return [t.task_id for t in self.tasks if not t.adhoc]
+
+    @property
+    def active_task(self):
+        return [t for t in self.tasks if not t.adhoc]
+
+    @property
     def filepath(self):
         """
         File location of where the dag object is instantiated
@@ -2192,10 +2200,10 @@ class DAG(LoggingMixin):
             self.logger.info("Checking state for {}".format(run))
             task_instances = session.query(TI).filter(
                 TI.dag_id == run.dag_id,
-                TI.task_id.in_(self.task_ids),
+                TI.task_id.in_(self.active_task_ids),
                 TI.execution_date == run.execution_date,
             ).all()
-            if len(task_instances) == len(self.tasks):
+            if len(task_instances) == len(self.active_tasks):
                 task_states = [ti.state for ti in task_instances]
                 if State.FAILED in task_states:
                     self.logger.info('Marking run {} failed'.format(run))
