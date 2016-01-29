@@ -265,7 +265,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   // Get the bucket ID based on the bucketing values.
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
   private def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    lazy val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
     mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
     val bucketIdGeneration = UnsafeProjection.create(
       HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
